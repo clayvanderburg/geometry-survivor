@@ -47,7 +47,7 @@ export class SoundEngine {
     this.bpm = TUNING.musicBpm || 132;
     if (this.ctx) {
       if (this.musicGain) {
-        this.musicGain.gain.setTargetAtTime(TUNING.musicVolume ?? 1.35, this.ctx.currentTime, 0.03);
+        this.musicGain.gain.setTargetAtTime(TUNING.musicVolume ?? 0.4, this.ctx.currentTime, 0.03);
       }
       if (this.sfxGain) {
         this.sfxGain.gain.setTargetAtTime(TUNING.sfxVolume ?? 0.38, this.ctx.currentTime, 0.03);
@@ -94,7 +94,7 @@ export class SoundEngine {
 
     // High-output Music Bus
     this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = TUNING.musicVolume ?? 1.35;
+    this.musicGain.gain.value = TUNING.musicVolume ?? 0.4;
     this.musicFilter.connect(this.musicGain);
     this.musicGain.connect(this.masterGain);
 

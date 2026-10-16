@@ -874,7 +874,7 @@ class Game {
     if (p.dashCooldown > 0) return;
 
     p.dashTimer = 0.22;
-    p.dashCooldown = Math.max(0.2, (TUNING.dashCooldownBase ?? 1.25) - (p.weapons.dashNova || 0) * 0.14);
+    p.dashCooldown = Math.max(0.2, (TUNING.dashCooldownBase ?? 1.5) - (p.weapons.dashNova || 0) * 0.14);
     p.invuln = Math.max(p.invuln, 0.32);
 
     const moveAngle = (Math.abs(p.vx) + Math.abs(p.vy) > 0.2)
@@ -1899,8 +1899,8 @@ class Game {
       shieldHue = 348;
     }
 
-    const baseRadius = p.radius * (TUNING.shieldRadiusMult ?? 1.95) + beatPulse * 3.2;
-    const thickMult = TUNING.shieldThicknessMult ?? 1.0;
+    const baseRadius = p.radius * (TUNING.shieldRadiusMult ?? 2.55) + beatPulse * 3.2;
+    const thickMult = TUNING.shieldThicknessMult ?? 0.3;
     const coreThickness = (1.6 + hpRatio * 4.2) * thickMult;
     const glowThickness = (5.0 + hpRatio * 10.5 + beatPulse * 3) * thickMult;
     const dangerPulse = hpRatio < 0.32 ? 0.55 + Math.sin(performance.now() * 0.02) * 0.35 : 1.0;

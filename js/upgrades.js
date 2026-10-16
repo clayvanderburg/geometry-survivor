@@ -221,8 +221,8 @@ export function rollUpgrades(player, count = 3) {
 
     if (!u.isSynergy && remaining > 1) {
       const roll = Math.random();
-      const baseTriple = TUNING.tripleLevelChance ?? 0.0025;
-      const baseDouble = TUNING.doubleLevelChance ?? 0.015;
+      const baseTriple = TUNING.tripleLevelChance ?? 0.035;
+      const baseDouble = TUNING.doubleLevelChance ?? 0.1;
       const tripleChance = Math.min(0.45, baseTriple * luck);
       const doubleChance = Math.min(0.75, tripleChance + baseDouble * luck);
 

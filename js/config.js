@@ -1,9 +1,9 @@
 // Centralized Live Tuning Configuration & Cross-Tab Sync for VECTRA // SURVIVOR
-const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v2';
+const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v3';
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
-  shipRadius: 16,
+  shipRadius: 15,
   moveSpeed: 5.0,
   drillScale: 1.15,
   miningSpeed: 75,
@@ -21,15 +21,15 @@ export const DEFAULT_TUNING = {
   bulletSpeed: 14.0,
   bulletRadius: 3.8,
   bulletColorHue: 186,
-  shieldRadiusMult: 2.25,
-  shieldThicknessMult: 1.0,
+  shieldRadiusMult: 2.55,
+  shieldThicknessMult: 0.3,
   shieldRegenRate: 1.2,
-  dashCooldownBase: 1.25,
+  dashCooldownBase: 1.5,
 
   // 3. Luck, Multi-Level Rolls & Chest Jackpots
   baseLuck: 1.0,
-  doubleLevelChance: 0.015,
-  tripleLevelChance: 0.0025,
+  doubleLevelChance: 0.1,
+  tripleLevelChance: 0.035,
   chestDropMult: 1.0,
   goldVeinChestChance: 0.004,
   chestDoubleChance: 0.075,
@@ -46,7 +46,7 @@ export const DEFAULT_TUNING = {
   maxWaveCores: 3,
 
   // 5. Audio, Enemies & Visual FX
-  musicVolume: 1.35,
+  musicVolume: 0.4,
   sfxVolume: 0.38,
   musicBpm: 132,
   screenShakeMult: 1.0,
@@ -81,7 +81,7 @@ export const TUNING_SCHEMA = [
       { key: 'bulletRadius', label: 'Projectile Thickness', type: 'range', min: 2.0, max: 12.0, step: 0.2, unit: 'px' },
       { key: 'bulletColorHue', label: 'Blaster Neon Hue', type: 'range', min: 0, max: 360, step: 2, unit: '°' },
       { key: 'shieldRadiusMult', label: 'Shield Circle Size', type: 'range', min: 1.2, max: 3.6, step: 0.05, unit: 'x' },
-      { key: 'shieldThicknessMult', label: 'Shield Ring Thickness', type: 'range', min: 0.3, max: 3.0, step: 0.1, unit: 'x' },
+      { key: 'shieldThicknessMult', label: 'Shield Ring Thickness', type: 'range', min: 0.1, max: 3.0, step: 0.05, unit: 'x' },
       { key: 'shieldRegenRate', label: 'Shield Passive Regen', type: 'range', min: 0, max: 15, step: 0.2, unit: 'HP/s' },
       { key: 'dashCooldownBase', label: 'Dash Cooldown', type: 'range', min: 0.2, max: 3.5, step: 0.05, unit: 's' }
     ]
