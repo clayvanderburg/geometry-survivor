@@ -2,7 +2,7 @@
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
-const A = 0, B = 1, START = 9, UP = 12, RIGHT = 15;
+const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
@@ -67,6 +67,21 @@ const A = 0, B = 1, START = 9, UP = 12, RIGHT = 15;
     await press(B);
     await expect('PLAYING', 'B resumes');
 
+    // Damage-number toggle sits under Resume: d-pad down + A flips it and persists the choice.
+    await press(START);
+    await expect('PAUSED', 'Start pauses again');
+    await page.waitForTimeout(400);
+    await press(DOWN);
+    const toggleId = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
+    if (toggleId !== 'btn-pause-dmgnums') throw Error(`Down from Resume should reach the damage-number toggle, got ${toggleId}`);
+    await press(A);
+    const toggled = await page.evaluate(() => ({ on: __game.damageNumbers.enabled, saved: localStorage.getItem('vexolith_damage_numbers'), label: document.getElementById('btn-pause-dmgnums').textContent }));
+    if (toggled.on || toggled.saved !== '0' || !toggled.label.includes('OFF')) throw Error(`A should turn damage numbers off and persist it: ${JSON.stringify(toggled)}`);
+    await press(A);
+    if (!(await page.evaluate(() => __game.damageNumbers.enabled))) throw Error('A again should turn damage numbers back on');
+    await press(B);
+    await expect('PLAYING', 'B resumes after toggling');
+
     await page.evaluate(() => { const g = __game; g.openRelicChest({ x: g.player.x, y: g.player.y, isSuper: false }); });
     await expect('CHEST', 'chest opens');
     await page.waitForTimeout(400);
@@ -82,6 +97,6 @@ const A = 0, B = 1, START = 9, UP = 12, RIGHT = 15;
     await page.screenshot({ path: 'controller-gameplay.png' });
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + resume, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + damage-number toggle + resume, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

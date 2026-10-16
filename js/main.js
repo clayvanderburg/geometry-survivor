@@ -4,6 +4,7 @@ import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.j
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager } from './enemies.js';
+import { DamageNumbers } from './damage-numbers.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -18,6 +19,21 @@ import {
   getAgentTuningPayload,
   sendSandboxCommand
 } from './config.js';
+
+// Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
+// Unknown archetypes fall back to tier 1; anything flagged isBoss is tier 4.
+const DEATH_TIER = { swarmer: 0, mini_splitter: 0, weaver: 1, pinwheel: 1, splitter: 2, blackhole: 3, boss: 4 };
+const DEATH_FX = [
+  { intensity: 0.8, shake: 0, hitStop: 0 },   // 0: swarm fodder — quick pop, no shake
+  { intensity: 1.15, shake: 0, hitStop: 0 },  // 1: pinwheel/weaver — adds a white-hot core flash
+  { intensity: 1.5, shake: 4, hitStop: 0 },   // 2: splitter — inner debris shatter + embers
+  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: black hole (elite) — wide second ring
+  { intensity: 3.0, shake: 18, hitStop: 3 }   // 4: boss — everything, plus a chroma flash
+];
+// Knockback impulses (px/tick for a 10px-radius hull; mass scales with radius²). Bosses are immune.
+const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
+const KNOCKBACK_MAX = 4;
+const HIT_STOP_MAX_TICKS = 3;
 
 export class Game {
   constructor() {
@@ -40,6 +56,7 @@ export class Game {
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.enemyManager = new EnemyManager();
+    this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
 
     this.state = 'TITLE'; // TITLE, PLAYING, UPGRADE, CHEST, GAMEOVER
@@ -50,6 +67,7 @@ export class Game {
     this.mouse = { x: this.width * 0.5, y: this.height * 0.5, down: false };
     this.shake = 0;
     this.chromaFlash = 0;
+    this.hitStopTicks = 0;
     this.shieldRotation = 0;
     this.lastRunHighlightId = null;
 
@@ -147,9 +165,11 @@ export class Game {
     this.camY = centerY - this.height * 0.5;
 
     this.particles.clear();
+    this.damageNumbers?.clear();
     this.grid.reset();
     this.shake = 0;
     this.chromaFlash = 0;
+    this.hitStopTicks = 0;
     this.fireAccumulator = 0;
     this.missileTimer = 0;
     this.lightningTimer = 0;
@@ -269,6 +289,10 @@ export class Game {
           this.togglePause();
           return;
         }
+        if (code === 'KeyN') {
+          this.toggleDamageNumbers();
+          return;
+        }
       }
 
       if (this.state === 'PLAYING') {
@@ -292,6 +316,9 @@ export class Game {
         }
         if (code === 'KeyM') {
           this.toggleAudio();
+        }
+        if (code === 'KeyN') {
+          this.toggleDamageNumbers();
         }
       }
 
@@ -374,11 +401,14 @@ export class Game {
     const resumeBtn = document.getElementById('btn-resume-game');
     const pauseTunerBtn = document.getElementById('btn-pause-tuner');
     const pauseRestartBtn = document.getElementById('btn-pause-restart');
+    const pauseDmgNumsBtn = document.getElementById('btn-pause-dmgnums');
 
     if (pauseBtn) pauseBtn.addEventListener('click', () => this.togglePause());
     if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
     if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
+    if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
+    this.syncDamageNumbersButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -682,6 +712,20 @@ export class Game {
     btn.classList.toggle('active', on);
   }
 
+  toggleDamageNumbers() {
+    this.damageNumbers.toggle();
+    this.syncDamageNumbersButton();
+  }
+
+  syncDamageNumbersButton() {
+    const btn = document.getElementById('btn-pause-dmgnums');
+    if (!btn || !this.damageNumbers) return;
+    const on = this.damageNumbers.enabled;
+    btn.textContent = `🔢 DAMAGE NUMBERS: ${on ? 'ON' : 'OFF'} [N]`;
+    btn.classList.toggle('active', on);
+    btn.setAttribute?.('aria-pressed', String(on));
+  }
+
   resetInput() {
     this.keys = {};
     this.mouse.down = false;
@@ -970,8 +1014,9 @@ export class Game {
     p.invuln = Math.max(p.invuln, 1.2);
 
     this.sound.playSupernova();
-    this.shake = 22 * (TUNING.screenShakeMult ?? 1.0);
+    this.addShake(22);
     this.chromaFlash = 0.75;
+    this.requestHitStop(2);
 
     // Fixed world-space reach (the old 1920x1080 value) so window size and zoom don't change the blast.
     const maxR = 1430;
@@ -984,8 +1029,10 @@ export class Game {
       if (e.dead) continue;
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
       if (e.isBoss) {
-        e.hp -= e.maxHp * 0.4;
+        const dmg = e.maxHp * 0.4;
+        e.hp -= dmg;
         e.hitFlash = 1;
+        this.damageNumbers?.add(e, dmg, 'supernova');
         if (e.hp <= 0) this.killEnemy(e, true);
       } else {
         this.killEnemy(e, true);
@@ -1000,21 +1047,52 @@ export class Game {
   }
 
   // Weapons and explosions ONLY damage enemies — never asteroids!
-  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190) {
+  // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
+  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area) {
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       const dx = e.x - cx;
       const dy = e.y - cy;
-      if (dx * dx + dy * dy <= (radius + e.radius) * (radius + e.radius)) {
-        e.hp -= dmg;
-        e.hitFlash = 1;
-        if (e.hp <= 0) {
-          this.killEnemy(e);
-        }
+      const dSq = dx * dx + dy * dy;
+      if (dSq <= (radius + e.radius) * (radius + e.radius)) {
+        const d = Math.sqrt(dSq) || 1;
+        this.hitEnemy(e, dmg, source, (dx / d) * knock, (dy / d) * knock);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
+  }
+
+  // Single entry point for weapon damage: HP, hit flash, damage number, knockback and kill.
+  // (kx, ky) is a knockback impulse in px/tick for a 10px-radius hull; heavier hulls move less.
+  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+    e.hp -= dmg;
+    e.hitFlash = Math.max(e.hitFlash || 0, flash);
+    this.damageNumbers?.add(e, dmg, source);
+    if ((kx || ky) && !e.isBoss) {
+      const k = (TUNING.knockbackMult ?? 1.0) * 100 / (e.radius * e.radius);
+      let nx = (e.knockX || 0) + kx * k;
+      let ny = (e.knockY || 0) + ky * k;
+      const mag = Math.hypot(nx, ny);
+      if (mag > KNOCKBACK_MAX) {
+        nx *= KNOCKBACK_MAX / mag;
+        ny *= KNOCKBACK_MAX / mag;
+      }
+      e.knockX = nx;
+      e.knockY = ny;
+    }
+    if (e.hp <= 0) this.killEnemy(e);
+  }
+
+  // Screen shake is reserved for heavy moments; every source goes through the user's multiplier.
+  addShake(amount) {
+    this.shake = Math.max(this.shake || 0, Math.min(24, amount) * (TUNING.screenShakeMult ?? 1.0));
+  }
+
+  // Freeze the simulation for a few fixed ticks (never more than 3) on big moments only.
+  requestHitStop(ticks) {
+    const want = Math.min(HIT_STOP_MAX_TICKS, Math.round(ticks * (TUNING.hitStopMult ?? 1.0)));
+    this.hitStopTicks = Math.max(this.hitStopTicks || 0, want);
   }
 
   killEnemy(e, fromBomb = false) {
@@ -1026,15 +1104,31 @@ export class Game {
     enemies.splice(enemyIndex, 1);
     this.kills++;
 
-    const intensity = e.isBoss ? 3.0 : e.type === 'blackhole' ? 2.2 : e.type === 'splitter' ? 1.5 : 1.0;
+    const tier = e.isBoss ? 4 : DEATH_TIER[e.type] ?? 1;
+    const fx = DEATH_FX[tier];
+    const intensity = fx.intensity;
     this.sound.playExplosion(intensity);
-    this.shake = Math.min(24, Math.max(this.shake, 3.2 * intensity * (TUNING.screenShakeMult ?? 1.0)));
+    if (fx.shake > 0) this.addShake(fx.shake);
+    if (fx.hitStop > 0) this.requestHitStop(fx.hitStop);
 
     this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, intensity);
     const sparkCount = fromBomb ? 18 : Math.floor(26 * intensity);
     this.particles.spawnExplosionSparks(e.x, e.y, sparkCount, e.hue, 2.5, 14 * Math.sqrt(intensity), 2.3);
     this.particles.spawnShockwave(e.x, e.y, 48 * intensity, e.hue, 3 * intensity, 0.34);
     this.grid.applyImpulse(e.x, e.y, 26 * intensity, 115 * intensity, e.hue);
+
+    // Heavier hulls stack extra layers; supernova mass-kills skip them (except elites/bosses).
+    if (!fromBomb || tier >= 3) {
+      if (tier >= 1) this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+      if (tier >= 2) {
+        this.particles.spawnPolygonShatter(e.x, e.y, e.radius * 0.55, e.sides, -e.rotation, e.hue, intensity * 0.55);
+        this.particles.spawnExplosionSparks(e.x, e.y, 6 * tier, 48, 1.5, 6, 3.2);
+      }
+      if (tier >= 3) {
+        this.particles.spawnShockwave(e.x, e.y, 110 * intensity, e.hue, 2.5 + tier, 0.65);
+        this.chromaFlash = Math.max(this.chromaFlash || 0, tier === 4 ? 0.45 : 0.16);
+      }
+    }
 
     if (e.type === 'splitter' && !fromBomb) {
       const waveScale = this.getWaveScale();
@@ -1084,7 +1178,9 @@ export class Game {
           pierce: 1,
           hue: 48,
           radius: 4,
-          life: 0.45
+          life: 0.45,
+          source: 'other',
+          knock: KNOCKBACK.shrapnel
         });
       }
     }
@@ -1279,13 +1375,14 @@ export class Game {
         const e = hit.enemy;
         if (e.dead) continue;
         b.hitEnemies.add(e);
-        e.hp -= b.damage;
-        e.hitFlash = 1;
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
         const hy = y0 + (b.y - y0) * hit.t;
-        this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(b.vy, b.vx), 1.1, 5, e.hue, 7);
-        if (e.hp <= 0) this.killEnemy(e);
+        const travel = Math.atan2(b.vy, b.vx);
+        this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
+        this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
+        const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
+        this.hitEnemy(e, b.damage, b.source || 'blaster', b.vx * kb, b.vy * kb);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
@@ -1410,14 +1507,13 @@ export class Game {
 
       this.particles.spawnLightning(currX, currY, target.x, target.y, 275);
       this.particles.spawnExplosionSparks(target.x, target.y, 8, 275, 2, 7, 1.8);
+      const arc = Math.sqrt(bestDistSq) || 1;
+      const kx = ((target.x - currX) / arc) * KNOCKBACK.lightning;
+      const ky = ((target.y - currY) / arc) * KNOCKBACK.lightning;
       currX = target.x;
       currY = target.y;
 
-      target.hp -= p.stats.damage * (1.4 + level * 0.35);
-      target.hitFlash = 1;
-      if (target.hp <= 0) {
-        this.killEnemy(target);
-      }
+      this.hitEnemy(target, p.stats.damage * (1.4 + level * 0.35), 'lightning', kx, ky);
     }
   }
 
@@ -1630,6 +1726,7 @@ export class Game {
   update(dt) {
     this.grid.update(this.camX, this.camY, this.width, this.height);
     this.particles.update(dt, this.worldWidth, this.worldHeight);
+    this.damageNumbers?.update(dt);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 45);
     if (this.chromaFlash > 0) this.chromaFlash = Math.max(0, this.chromaFlash - dt * 2.2);
     this.shieldRotation += dt * 1.4;
@@ -1646,6 +1743,12 @@ export class Game {
 
     if (gp?.pressed(PAD.START)) {
       this.togglePause();
+      return;
+    }
+
+    // Hit-stop: big moments freeze the simulation for a few fixed ticks while sparks keep blooming.
+    if (this.hitStopTicks > 0) {
+      this.hitStopTicks--;
       return;
     }
     if (gp?.pressed(PAD.X)) this.toggleAutoFire();
@@ -1847,10 +1950,9 @@ export class Game {
           const dx = e.x - ox;
           const dy = e.y - oy;
           if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
-            e.hp -= p.stats.damage * 0.35;
-            e.hitFlash = 0.6;
+            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (e.hp <= 0) this.killEnemy(e);
+            this.hitEnemy(e, p.stats.damage * 0.35, 'orbital', 0, 0, 0.6);
           }
         }
       }
@@ -1893,7 +1995,7 @@ export class Game {
       if (detonated) {
         this.particles.spawnShockwave(m.x, m.y, 75, m.hue, 3.5, 0.3);
         this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
-        this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue);
+        this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
         if (p.weapons.stormProtocol) {
           this.fireChainLightning(2, m.x, m.y);
@@ -1926,9 +2028,7 @@ export class Game {
             e.vy += (dy / d) * 0.85;
           }
           if (d < sg.radius + e.radius + 18) {
-            e.hp -= sg.damage;
-            e.hitFlash = 0.5;
-            if (e.hp <= 0) this.killEnemy(e);
+            this.hitEnemy(e, sg.damage, 'singularity', 0, 0, 0.5);
           }
         }
       }
@@ -1936,7 +2036,7 @@ export class Game {
       if (sg.life <= 0) {
         this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius * 0.85, sg.hue, 5, 0.42);
         this.particles.spawnExplosionSparks(sg.x, sg.y, 38, sg.hue, 3, 14, 2.4);
-        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * 14, sg.hue);
+        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * 14, sg.hue, 'singularity');
         this.singularities.splice(i, 1);
       }
     }
@@ -1955,7 +2055,7 @@ export class Game {
           p.hp -= hitDmg;
           p.invuln = 0.65;
           this.multiplier = Math.max(1.0, this.multiplier * 0.75);
-          this.shake = 16;
+          this.addShake(16);
           this.chromaFlash = 0.5;
           this.sound.playExplosion(1.8);
           this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
@@ -2363,6 +2463,7 @@ export class Game {
 
     // 5. Draw Sparks, Shatter Shards, Shockwaves & Lightning in World Space
     this.particles.draw(ctx, this.camX, this.camY, this.width, this.height);
+    this.damageNumbers.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Close Camera Transform
     ctx.restore();

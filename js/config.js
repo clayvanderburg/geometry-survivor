@@ -53,7 +53,13 @@ export const DEFAULT_TUNING = {
   screenShakeMult: 1.0,
   gridWarpMult: 1.0,
   enemySpeedMult: 1.0,
-  enemyHpMult: 1.0
+  enemyHpMult: 1.0,
+
+  // 6. Hit Feedback & Damage Numbers
+  knockbackMult: 1.0,
+  hitStopMult: 1.0,
+  damageNumberCap: 48,
+  damageNumberScale: 1.0
 };
 
 export const TUNING_SCHEMA = [
@@ -123,6 +129,15 @@ export const TUNING_SCHEMA = [
       { key: 'gridWarpMult', label: 'Neon Grid Warp Force', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
       { key: 'enemySpeedMult', label: 'Enemy Speed Multiplier', type: 'range', min: 0.4, max: 2.5, step: 0.05, unit: 'x' },
       { key: 'enemyHpMult', label: 'Enemy HP Multiplier', type: 'range', min: 0.3, max: 3.0, step: 0.1, unit: 'x' }
+    ]
+  },
+  {
+    group: '💥 Hit Feedback & Damage Numbers',
+    items: [
+      { key: 'knockbackMult', label: 'Enemy Hit Knockback', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
+      { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
+      { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
+      { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
     ]
   }
 ];

@@ -46,8 +46,13 @@ npm start
    - Spend **Void Cores (❖)** harvested during runs on 6 permanent Armory upgrades persisted in `localStorage` (`vectra_survivor_save_v2`).
 
 7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + `[T]` Drawer)**
-   - Exposes 38 live parameters across 5 categories (*Crab Ship & Drill-Claws*, *Weapons & Shield*, *Luck & Chests*, *Asteroids & Economy*, *Audio & Visual FX*) with real-time cross-tab sync via `BroadcastChannel` + `localStorage`.
+   - Exposes 47 live parameters across 6 categories (*Crab Ship & Drill-Claws*, *Weapons & Shield*, *Luck & Chests*, *Asteroids & Economy*, *Audio & Visual FX*, *Hit Feedback & Damage Numbers*) with real-time cross-tab sync via `BroadcastChannel` + `localStorage`.
    - Includes instant Sandbox triggers (`Spawn Chest`, `Trigger Level-Up`, `+50 Cores`, `Spawn Boss`, `Regenerate Asteroids`, `Full Heal`) and a 1-click **📋 COPY TUNING FOR AGENT** button.
+
+8. **Damage & Hit Feedback (`js/damage-numbers.js`, `hitEnemy` in `js/main.js`)**
+   - **Floating damage numbers** (on by default; toggle in the pause menu or with `[N]`, saved in `localStorage` as `vexolith_damage_numbers`). Rapid hits on one enemy from one weapon merge into a single rising total (new number after a 0.3 s gap or 1 s burst), live numbers are capped (`damageNumberCap`, default 48) and stacked at most three deep per spot, size grows gently with damage, and colour shows the source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, supernova gold, other (shrapnel, dash nova, bore, black-hole burst) white.
+   - **Impacts**: white-hot hit flash + hull pop, a pooled cross-flare at each projectile hit, and mass-scaled knockback (decaying displacement; bosses immune, orbitals/singularities never push).
+   - **Kills by durability tier**: swarmers pop, pinwheels/weavers add a core flash, splitters shed debris + embers and shake lightly, black holes add a wide ring + 1-tick hit-stop, bosses add a chroma flash + 3-tick hit-stop. Supernova uses a 2-tick hit-stop. All shake goes through `screenShakeMult`; hit-stop is capped at 3 fixed ticks (`hitStopMult`).
 
 ---
 
@@ -65,7 +70,8 @@ npm start
 - `js/upgrades.js` — In-run upgrade pool, Golden Synergies (*Tectonic Claw Bore*, *Pulsar Helix*, *Storm Protocol*), and Luck-scaled `+2`/`+3` level jump rolls.
 - `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign) and Void Armory meta-upgrades.
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
-- `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, and floating text.
+- `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, pooled hit-impact flares, and floating text.
+- `js/damage-numbers.js` — Pooled, canvas-drawn floating damage numbers (per-enemy/per-source aggregation, live cap, persisted toggle).
 - `js/audio.js` — Procedural WebAudio synthwave sequencer and SFX engine.
 
 ## Engineering checks
