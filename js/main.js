@@ -7,7 +7,9 @@ import { EnemyManager } from './enemies.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
-import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
+import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
+import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import {
   TUNING,
@@ -810,17 +812,17 @@ export class Game {
     this.sessionCores += bonusCores;
     this.progression.addCores(bonusCores);
 
-    // Pick random available upgrades and automatically apply them!
+    // Pick random available upgrades and install them through the same path as level-up picks.
+    // Each card is described just before install, so it shows exactly what this cache changed.
+    // 5x jackpots use compact cards (fewer stat rows, no summary) so both rows fit one screen.
+    const compact = rewardCount > 3;
     const awarded = [];
     for (let i = 0; i < rewardCount; i++) {
       const pool = rollUpgrades(this.player, 3);
       if (pool.length === 0) break;
       const chosen = pool[0];
+      awarded.push(describeUpgrade(this.player, chosen, compact ? COMPACT_MAX_ROWS : undefined));
       this.applyUpgrade(chosen);
-      awarded.push({
-        ...chosen,
-        newLevel: this.player.upgradeLevels[chosen.id]
-      });
     }
 
     document.getElementById('chest-tier-subtitle').textContent = tierSub;
@@ -830,25 +832,13 @@ export class Game {
 
     const gridEl = document.getElementById('chest-rewards-grid');
     gridEl.innerHTML = '';
+    gridEl.classList[compact ? 'add' : 'remove']('compact');
 
-    awarded.forEach((upg, idx) => {
+    awarded.forEach((d, idx) => {
       const card = document.createElement('div');
-      card.className = `upgrade-option ${upg.isSynergy ? 'rarity-synergy' : 'jump-2'}`;
-      card.innerHTML = `
-        <div>
-          <div class="upg-top">
-            <span class="upg-key">FREE #${idx + 1}</span>
-            <span class="upg-badge" style="color:${upg.badgeColor}; border:1px solid ${upg.badgeColor}66; background:${upg.badgeColor}18">
-              ${upg.category}
-            </span>
-          </div>
-          <div class="upg-name">${upg.name}</div>
-          <div class="upg-desc">${upg.desc}</div>
-        </div>
-        <div class="upg-level" style="color:var(--gold)">
-          ${upg.isSynergy ? '★ GOLDEN SYNERGY UNLOCKED ★' : `INSTALLED → LEVEL ${upg.newLevel}`}
-        </div>
-      `;
+      const view = renderUpgradeCard(d, `FREE #${idx + 1}`, true);
+      card.className = `${view.className} installed`;
+      card.innerHTML = view.html;
       gridEl.appendChild(card);
     });
 
@@ -931,8 +921,8 @@ export class Game {
 
     // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore) {
-      this.particles.spawnShockwave(rock.x, rock.y, 135, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, 135, this.player.stats.damage * 2.6, 48);
+      this.particles.spawnShockwave(rock.x, rock.y, W.tectonicBlastRadius, 48, 4.5, 0.35);
+      this.damageEnemiesInRadius(rock.x, rock.y, W.tectonicBlastRadius, this.player.stats.damage * W.tectonicDamageMult, 48);
     }
   }
 
@@ -941,7 +931,7 @@ export class Game {
     if (p.dashCooldown > 0) return;
 
     p.dashTimer = 0.22;
-    p.dashCooldown = Math.max(0.2, (TUNING.dashCooldownBase ?? 1.5) - (p.weapons.dashNova || 0) * 0.14);
+    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, 0.32);
 
@@ -957,9 +947,9 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
     if (p.weapons.dashNova > 0) {
-      const novaRadius = 140 + p.weapons.dashNova * 35;
+      const novaRadius = W.novaRadius(p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, novaRadius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, novaRadius, 35 * p.weapons.dashNova, 160);
+      this.damageEnemiesInRadius(p.x, p.y, novaRadius, W.novaDamage(p.weapons.dashNova), 160);
     }
   }
 
@@ -1071,8 +1061,8 @@ export class Game {
     }
 
     const shrapnelLv = this.player.weapons.shrapnel || 0;
-    if (shrapnelLv > 0 && !fromBomb && Math.random() < 0.45 + shrapnelLv * 0.12) {
-      const shardCount = 3 + shrapnelLv;
+    if (shrapnelLv > 0 && !fromBomb && Math.random() < W.shrapnelChance(shrapnelLv)) {
+      const shardCount = W.shrapnelShards(shrapnelLv);
       for (let s = 0; s < shardCount; s++) {
         const a = (s * Math.PI * 2) / shardCount + Math.random() * 0.3;
         this.bullets.push({
@@ -1080,7 +1070,7 @@ export class Game {
           y: e.y,
           vx: Math.cos(a) * 11.5,
           vy: Math.sin(a) * 11.5,
-          damage: this.player.stats.damage * 0.75,
+          damage: this.player.stats.damage * W.shrapnelDamageMult,
           pierce: 1,
           hue: 48,
           radius: 4,
@@ -1295,13 +1285,7 @@ export class Game {
   }
 
   applyUpgrade(upg) {
-    const current = this.player.upgradeLevels[upg.id] || 0;
-    const jump = Math.min(upg.levelJump || 1, upg.maxLevel - current);
-    for (let k = 0; k < jump; k++) {
-      this.player.upgradeLevels[upg.id] = current + k + 1;
-      upg.apply(this.player);
-    }
-    return jump;
+    return applyUpgradeLevels(this.player, upg);
   }
 
   processPendingLevelUps() {
@@ -1341,14 +1325,14 @@ export class Game {
 
     if (p.weapons.pulsarHelix) {
       this.helixAngle += 0.48;
-      for (let arm = 0; arm < 2; arm++) {
+      for (let arm = 0; arm < W.helixArms; arm++) {
         const ha = this.helixAngle + arm * Math.PI;
         this.bullets.push({
           x: p.x,
           y: p.y,
           vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
-          damage: p.stats.damage * 0.8,
+          damage: p.stats.damage * W.helixDamageMult,
           pierce: p.stats.pierce,
           hue: 48,
           radius: 4.5,
@@ -1363,7 +1347,7 @@ export class Game {
 
   fireSwarmMissiles(level) {
     const p = this.player;
-    const count = 1 + level;
+    const count = W.missileSalvo(level);
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       this.missiles.push({
@@ -1371,8 +1355,8 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: 9.5 + level * 0.8,
-        damage: p.stats.damage * (1.8 + level * 0.35),
+        speed: W.missileSpeed(level),
+        damage: p.stats.damage * W.missileDamageMult(level),
         hue: p.weapons.stormProtocol ? 52 : 325,
         trail: [],
         life: 3.2
@@ -1385,7 +1369,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     if (enemies.length === 0) return;
 
-    const bounces = 3 + level * 2;
+    const bounces = W.lightningJumps(level);
     const hitSet = new Set();
     let currX = originX;
     let currY = originY;
@@ -1413,7 +1397,7 @@ export class Game {
       currX = target.x;
       currY = target.y;
 
-      target.hp -= p.stats.damage * (1.4 + level * 0.35);
+      target.hp -= p.stats.damage * W.lightningDamageMult(level);
       target.hitFlash = 1;
       if (target.hp <= 0) {
         this.killEnemy(target);
@@ -1430,9 +1414,9 @@ export class Game {
       y: p.y,
       vx: Math.cos(angle) * 4.2,
       vy: Math.sin(angle) * 4.2,
-      radius: 14 + level * 3,
-      pullRadius: 150 + level * 25,
-      damage: p.stats.damage * (0.35 + level * 0.12),
+      radius: W.singularityCoreRadius(level),
+      pullRadius: W.singularityPullRadius(level),
+      damage: p.stats.damage * W.singularityDamageMult(level),
       life: 2.6,
       hue: 290
     });
@@ -1459,36 +1443,10 @@ export class Game {
     container.innerHTML = '';
 
     this.currentChoices.forEach((upg, idx) => {
-      const curLv = this.player.upgradeLevels[upg.id] || 0;
-      const jump = upg.levelJump || 1;
-      const jumpClass = upg.isSynergy ? 'rarity-synergy' : jump === 3 ? 'jump-3' : jump === 2 ? 'jump-2' : '';
-
-      let levelFooter = `LEVEL ${curLv} → ${curLv + jump}`;
-      if (upg.isSynergy) {
-        levelFooter = '★ GOLDEN SYNERGY ★';
-      } else if (jump === 3) {
-        levelFooter = `★★ EPIC LUCKY ROLL: +3 LEVELS! (${curLv} → ${curLv + 3}) ★★`;
-      } else if (jump === 2) {
-        levelFooter = `★ RARE LUCKY ROLL: +2 LEVELS! (${curLv} → ${curLv + 2}) ★`;
-      }
-
+      const view = renderUpgradeCard(describeUpgrade(this.player, upg), `[${idx + 1}]`);
       const card = document.createElement('div');
-      card.className = `upgrade-option ${jumpClass}`;
-      card.innerHTML = `
-        <div>
-          <div class="upg-top">
-            <span class="upg-key">[${idx + 1}]</span>
-            <span class="upg-badge" style="color:${upg.badgeColor}; border:1px solid ${upg.badgeColor}66; background:${upg.badgeColor}18">
-              ${upg.category} ${jump > 1 ? `// +${jump} LVLS!` : ''}
-            </span>
-          </div>
-          <div class="upg-name">${upg.name}</div>
-          <div class="upg-desc">${upg.desc}</div>
-        </div>
-        <div class="upg-level" style="color:${jump === 3 ? '#00ffaa' : jump === 2 ? '#ff66b2' : 'var(--emerald)'}">
-          ${levelFooter}
-        </div>
-      `;
+      card.className = view.className;
+      card.innerHTML = view.html;
       card.addEventListener('click', () => this.selectUpgrade(idx));
       container.appendChild(card);
     });
@@ -1508,7 +1466,7 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, upg.badgeColor, 15);
+    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, (RARITY[upg.rarity] || RARITY.common).color, 15);
     this.processPendingLevelUps();
     this.updateHUD();
   }
@@ -1810,7 +1768,7 @@ export class Game {
       this.missileTimer -= dt;
       if (this.missileTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireSwarmMissiles(p.weapons.missiles);
-        this.missileTimer = Math.max(0.65, 1.9 - p.weapons.missiles * 0.22);
+        this.missileTimer = W.missileCooldown(p.weapons.missiles);
       }
     }
 
@@ -1818,7 +1776,7 @@ export class Game {
       this.lightningTimer -= dt;
       if (this.lightningTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireChainLightning(p.weapons.lightning);
-        this.lightningTimer = Math.max(0.55, 1.65 - p.weapons.lightning * 0.2);
+        this.lightningTimer = W.lightningCooldown(p.weapons.lightning);
       }
     }
 
@@ -1826,14 +1784,14 @@ export class Game {
       this.singularityTimer -= dt;
       if (this.singularityTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireSingularity(p.weapons.singularity);
-        this.singularityTimer = Math.max(2.2, 4.5 - p.weapons.singularity * 0.5);
+        this.singularityTimer = W.singularityCooldown(p.weapons.singularity);
       }
     }
 
     if (p.weapons.orbitals > 0) {
-      this.orbitalAngle += dt * (3.2 + p.weapons.orbitals * 0.4);
-      const orbCount = 1 + p.weapons.orbitals;
-      const orbRadius = 62 + p.weapons.orbitals * 6;
+      this.orbitalAngle += dt * W.orbitalSpin(p.weapons.orbitals);
+      const orbCount = W.orbitalBlades(p.weapons.orbitals);
+      const orbRadius = W.orbitalRadius(p.weapons.orbitals);
       const enemies = this.enemyManager.enemies;
 
       for (let o = 0; o < orbCount; o++) {
@@ -1847,7 +1805,7 @@ export class Game {
           const dx = e.x - ox;
           const dy = e.y - oy;
           if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
-            e.hp -= p.stats.damage * 0.35;
+            e.hp -= p.stats.damage * W.orbitalDamageMult;
             e.hitFlash = 0.6;
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
             if (e.hp <= 0) this.killEnemy(e);
@@ -1891,12 +1849,12 @@ export class Game {
       }
 
       if (detonated) {
-        this.particles.spawnShockwave(m.x, m.y, 75, m.hue, 3.5, 0.3);
+        this.particles.spawnShockwave(m.x, m.y, W.missileBlastRadius, m.hue, 3.5, 0.3);
         this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
-        this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue);
+        this.damageEnemiesInRadius(m.x, m.y, W.missileBlastRadius, m.damage, m.hue);
 
         if (p.weapons.stormProtocol) {
-          this.fireChainLightning(2, m.x, m.y);
+          this.fireChainLightning(W.stormChainLevel, m.x, m.y);
         }
 
         this.missiles.splice(i, 1);
@@ -1936,7 +1894,7 @@ export class Game {
       if (sg.life <= 0) {
         this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius * 0.85, sg.hue, 5, 0.42);
         this.particles.spawnExplosionSparks(sg.x, sg.y, 38, sg.hue, 3, 14, 2.4);
-        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * 14, sg.hue);
+        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * W.singularityCollapseMult, sg.hue);
         this.singularities.splice(i, 1);
       }
     }
@@ -2074,7 +2032,8 @@ export class Game {
     for (const upg of UPGRADE_POOL) {
       const lv = p.upgradeLevels[upg.id];
       if (lv) {
-        tags.push(`<span class="weapon-tag ${upg.isSynergy ? 'evolved' : ''}">${upg.name} ${upg.isSynergy ? '★' : 'v' + lv}</span>`);
+        // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
+        tags.push(`<span class="weapon-tag rarity-${upg.rarity}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
       }
     }
     weaponsBar.innerHTML = tags.join('');
@@ -2330,8 +2289,8 @@ export class Game {
       this.drawPlayerShield(ctx, p, beatPulse);
 
       if (p.weapons.orbitals > 0) {
-        const orbCount = 1 + p.weapons.orbitals;
-        const orbRadius = 62 + p.weapons.orbitals * 6;
+        const orbCount = W.orbitalBlades(p.weapons.orbitals);
+        const orbRadius = W.orbitalRadius(p.weapons.orbitals);
         for (let o = 0; o < orbCount; o++) {
           const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
           const ox = p.x + Math.cos(oa) * orbRadius;

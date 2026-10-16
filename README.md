@@ -35,7 +35,8 @@ npm start
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**
    - **Multi-Level Upgrades**: Level-up cards have a rare, Luck-scaled chance (`10% * luck` for `+2 Levels`, `3.5% * luck` for `+3 Levels`, before caps) to jump multiple levels at once.
-   - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades).
+   - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades). Caches install through the same `applyUpgradeLevels` path as level-up picks, so they share one `player.upgradeLevels` state.
+   - **Readable Cards (`js/upgrade-cards.js`)**: Every level-up and cache card shows an enlarged headline (e.g. `+2 PROJECTILES`), a short summary and exact **before → after** stats, computed by installing the upgrade (including its rolled level jump) on a copy of the player. Weapon formulas live in `js/weapon-scaling.js` so cards and gameplay can't drift. Rarity sets the card border/name color (common gray, uncommon green, rare blue, epic purple, legendary gold for synergies); a lucky `+2`/`+3` roll is a separate magenta ribbon. Cards, caches and HUD tags all use the same `LV n` wording.
 
 5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
    - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.

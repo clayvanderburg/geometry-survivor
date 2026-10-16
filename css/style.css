@@ -199,9 +199,13 @@ html, body {
   color: var(--cyan);
 }
 
-.weapon-tag.evolved {
-  border-color: var(--gold);
-  color: var(--gold);
+/* HUD tags share the card rarity colors (see .rarity-* below). */
+.weapon-tag[class*="rarity-"] {
+  border-color: var(--rarity-soft);
+  color: var(--rarity);
+}
+
+.weapon-tag.rarity-legendary {
   background: rgba(255, 204, 0, 0.14);
 }
 
@@ -687,37 +691,75 @@ html, body {
   gap: 16px;
 }
 
+/* Rarity palette: common white/gray, uncommon green, rare blue, epic purple, legendary gold.
+   Rarity owns the card border, name and badge color; lucky +2/+3 level rolls get a separate ribbon. */
+.rarity-common { --rarity: #c9d4e4; --rarity-soft: rgba(201, 212, 228, 0.3); --rarity-bg: rgba(30, 36, 52, 0.94); }
+.rarity-uncommon { --rarity: #00ff88; --rarity-soft: rgba(0, 255, 136, 0.32); --rarity-bg: rgba(6, 40, 30, 0.94); }
+.rarity-rare { --rarity: #3d9bff; --rarity-soft: rgba(61, 155, 255, 0.36); --rarity-bg: rgba(10, 26, 60, 0.94); }
+.rarity-epic { --rarity: #b565ff; --rarity-soft: rgba(181, 101, 255, 0.38); --rarity-bg: rgba(36, 14, 60, 0.94); }
+.rarity-legendary { --rarity: #ffcc00; --rarity-soft: rgba(255, 204, 0, 0.4); --rarity-bg: rgba(48, 36, 8, 0.94); }
+
 .upgrade-option {
   position: relative;
-  background: linear-gradient(180deg, rgba(16, 24, 48, 0.92), rgba(8, 12, 26, 0.96));
-  border: 1px solid rgba(0, 243, 255, 0.35);
+  background: linear-gradient(180deg, var(--rarity-bg), rgba(8, 12, 26, 0.97) 55%);
+  border: 2px solid var(--rarity);
   border-radius: 12px;
-  padding: 20px 18px;
+  padding: 18px 16px 14px;
   cursor: pointer;
   text-align: left;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: all 0.16s ease;
+  box-shadow: 0 0 18px var(--rarity-soft);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .upgrade-option:hover {
   transform: translateY(-5px);
-  border-color: var(--cyan);
-  box-shadow: 0 8px 28px rgba(0, 243, 255, 0.3);
+  box-shadow: 0 8px 30px var(--rarity-soft), 0 0 22px var(--rarity-soft);
 }
 
-.upgrade-option.rarity-synergy {
-  border-color: var(--gold);
-  background: linear-gradient(180deg, rgba(45, 34, 10, 0.92), rgba(14, 12, 24, 0.96));
-  box-shadow: 0 0 24px rgba(255, 204, 0, 0.25);
+/* Cache rewards are already installed: informational, not clickable. */
+.upgrade-option.installed {
+  cursor: default;
+}
+
+.upgrade-option.installed:hover {
+  transform: none;
+}
+
+/* Lucky multi-level roll: a magenta ribbon, deliberately outside the rarity palette. */
+.upg-jump-ribbon {
+  position: absolute;
+  top: -11px;
+  right: 12px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #ff007f, #ff4fa8);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(255, 0, 127, 0.75);
+}
+
+.jump-3 .upg-jump-ribbon {
+  outline: 1px solid #fff;
+  animation: jump-ribbon-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes jump-ribbon-pulse {
+  from { box-shadow: 0 0 10px rgba(255, 0, 127, 0.6); }
+  to { box-shadow: 0 0 24px rgba(255, 0, 127, 1); }
 }
 
 .upg-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .upg-key {
@@ -728,36 +770,157 @@ html, body {
   background: rgba(0, 243, 255, 0.15);
   border: 1px solid rgba(0, 243, 255, 0.5);
   color: var(--cyan);
+  white-space: nowrap;
 }
 
 .upg-badge {
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.2px;
   padding: 3px 8px;
   border-radius: 4px;
   text-transform: uppercase;
+  color: var(--rarity);
+  border: 1px solid var(--rarity-soft);
+  background: rgba(0, 0, 0, 0.3);
+  text-align: right;
 }
 
 .upg-name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
-  color: #fff;
-  margin-bottom: 8px;
+  color: var(--rarity);
+  margin-bottom: 4px;
 }
 
-.upg-desc {
-  font-size: 13px;
+.upg-headline {
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 0 12px var(--rarity-soft);
+  margin-bottom: 6px;
+}
+
+.upg-summary {
+  font-size: 12.5px;
   color: #b8c7e0;
-  line-height: 1.45;
-  margin-bottom: 14px;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.upg-stats {
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.upg-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.upg-stat-label {
+  color: #9fb0cc;
+}
+
+.upg-stat-val {
+  color: #8494b2;
+  white-space: nowrap;
+}
+
+.upg-stat-val b {
+  color: #fff;
+  font-weight: 800;
+}
+
+.upg-stat-more {
+  color: #7a8ba8;
+  font-style: italic;
 }
 
 .upg-level {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.5px;
-  color: var(--emerald);
+  color: #dbe6f5;
+}
+
+.upg-max {
+  color: var(--text-dim);
+}
+
+.jump-2 .upg-level,
+.jump-3 .upg-level {
+  color: #ff66b2;
+}
+
+/* Cache rewards: center however many cards the jackpot installed. */
+#chest-rewards-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+  justify-content: center;
+}
+
+/* 5x jackpots wrap to two rows: trim each card so the whole cache and its Claim button fit 720px. */
+#chest-rewards-grid.compact {
+  gap: 14px 16px;
+}
+
+#chest-rewards-grid.compact .upgrade-option {
+  padding: 12px 14px 10px;
+}
+
+#chest-rewards-grid.compact .upg-top {
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-name {
+  margin-bottom: 2px;
+}
+
+#chest-rewards-grid.compact .upg-headline {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-summary {
+  display: none;
+}
+
+#chest-rewards-grid.compact .upg-stats {
+  margin-bottom: 8px;
+}
+
+#chest-rewards-grid.compact .upg-stat {
+  padding: 2px 0;
+}
+
+@media (max-width: 760px) {
+  .upgrade-card {
+    padding: 18px 14px;
+  }
+
+  .upgrade-title {
+    font-size: 26px;
+  }
+
+  .upgrade-hint {
+    margin-bottom: 16px;
+  }
+
+  .upgrade-choices-grid,
+  #chest-rewards-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .upg-headline {
+    font-size: 19px;
+  }
 }
 
 /* Game Over Stats Row */
@@ -860,18 +1023,6 @@ html, body {
   border: 1px solid rgba(0, 255, 136, 0.55);
   border-radius: 99px;
   text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
-}
-
-.upgrade-option.jump-2 {
-  border-color: var(--magenta);
-  background: linear-gradient(180deg, rgba(48, 12, 42, 0.94), rgba(10, 12, 26, 0.96));
-  box-shadow: 0 0 22px rgba(255, 0, 127, 0.28);
-}
-
-.upgrade-option.jump-3 {
-  border-color: #00ffaa;
-  background: linear-gradient(180deg, rgba(10, 48, 42, 0.94), rgba(18, 14, 34, 0.96));
-  box-shadow: 0 0 28px rgba(0, 255, 170, 0.38);
 }
 
 .jump-pill {

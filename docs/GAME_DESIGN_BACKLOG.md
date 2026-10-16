@@ -41,6 +41,7 @@
 - Enable **reroll** and **reserve/lock for a later selection** on level-up, with limits.
 - Proposed funding: in-run mining mineral spent on rerolls/reserves, independent of persistent Power Cores; escalating costs and/or limited reserve slots. Naming and costs TBD.
 - Investigate whether supply cache level grants and normal level-up cards share correct weapon-level state; distinguish UI display bug from actual progression bug.
+  - **Investigated:** caches and level-up cards share one `player.upgradeLevels` (regression test in `tests/upgrade-cards.test.js`). The confusion was display-only: every cache card used the magenta "+2 lucky roll" styling regardless of the real jump, said "INSTALLED → LEVEL n" with no starting level, and the HUD used "v n". Cards, caches and HUD now all say `LV a → LV b` / `LV n`, with exact before → after stats and a separate lucky-roll ribbon.
 
 ## 4. Evolutions, overclocks and synergies
 - Audit existing evolution/synergy work before extending.
