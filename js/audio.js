@@ -5,6 +5,8 @@ export class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    const savedVol = Number(localStorage.getItem('vectra_master_vol'));
+    this.masterVolumePct = !Number.isNaN(savedVol) && localStorage.getItem('vectra_master_vol') !== null ? savedVol : 100;
     this.masterGain = null;
     this.musicGain = null;
     this.musicCompressor = null;
@@ -27,6 +29,20 @@ export class SoundEngine {
     this.schedulerId = null;
   }
 
+  getMasterGainValue() {
+    return this.enabled ? 0.85 * (this.masterVolumePct / 100) : 0;
+  }
+
+  setMasterVolume(pct) {
+    this.masterVolumePct = Math.max(0, Math.min(200, Number(pct)));
+    try {
+      localStorage.setItem('vectra_master_vol', String(this.masterVolumePct));
+    } catch (_e) {}
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(this.getMasterGainValue(), this.ctx.currentTime, 0.03);
+    }
+  }
+
   applyTuning() {
     this.bpm = TUNING.musicBpm || 132;
     if (this.ctx) {
@@ -35,6 +51,9 @@ export class SoundEngine {
       }
       if (this.sfxGain) {
         this.sfxGain.gain.setTargetAtTime(TUNING.sfxVolume ?? 0.38, this.ctx.currentTime, 0.03);
+      }
+      if (this.masterGain) {
+        this.masterGain.gain.setTargetAtTime(this.getMasterGainValue(), this.ctx.currentTime, 0.03);
       }
     }
   }
@@ -59,7 +78,7 @@ export class SoundEngine {
     this.musicCompressor.release.setValueAtTime(0.12, this.ctx.currentTime);
 
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = this.enabled ? 0.85 : 0;
+    this.masterGain.gain.value = this.getMasterGainValue();
     this.masterGain.connect(this.musicCompressor);
     this.musicCompressor.connect(this.ctx.destination);
 
@@ -85,7 +104,7 @@ export class SoundEngine {
   toggle() {
     this.enabled = !this.enabled;
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.enabled ? 0.85 : 0, this.ctx.currentTime, 0.04);
+      this.masterGain.gain.setTargetAtTime(this.getMasterGainValue(), this.ctx.currentTime, 0.04);
     }
     return this.enabled;
   }

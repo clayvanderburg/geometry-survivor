@@ -237,7 +237,20 @@ class Game {
         return;
       }
 
+      if (this.state === 'PAUSED') {
+        if (code === 'KeyP' || code === 'Escape' || code === 'Space') {
+          e.preventDefault();
+          this.togglePause();
+          return;
+        }
+      }
+
       if (this.state === 'PLAYING') {
+        if (code === 'KeyP' || code === 'Escape') {
+          e.preventDefault();
+          this.togglePause();
+          return;
+        }
         if (code === 'Space' || code === 'ShiftLeft' || code === 'ShiftRight') {
           e.preventDefault();
           this.triggerDash();
@@ -272,7 +285,13 @@ class Game {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('#tuner-drawer'))) {
+      if (
+        e.target &&
+        (e.target.tagName === 'INPUT' ||
+          e.target.tagName === 'BUTTON' ||
+          e.target.closest('#tuner-drawer') ||
+          e.target.closest('.hud-vol-pill'))
+      ) {
         return;
       }
       this.sound.init();
@@ -307,6 +326,62 @@ class Game {
     document.getElementById('btn-autofire').addEventListener('click', () => this.toggleAutoFire());
     document.getElementById('btn-autoaim').addEventListener('click', () => this.toggleAutoAim());
     document.getElementById('btn-sound').addEventListener('click', () => this.toggleAudio());
+
+    const pauseBtn = document.getElementById('btn-pause');
+    const resumeBtn = document.getElementById('btn-resume-game');
+    const pauseTunerBtn = document.getElementById('btn-pause-tuner');
+    const pauseRestartBtn = document.getElementById('btn-pause-restart');
+
+    if (pauseBtn) pauseBtn.addEventListener('click', () => this.togglePause());
+    if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
+    if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
+    if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
+
+    // Volume Sliders (HUD & Pause Menu)
+    const hudVolSlider = document.getElementById('hud-volume-slider');
+    const hudVolLabel = document.getElementById('hud-volume-label');
+    const pauseVolSlider = document.getElementById('pause-volume-slider');
+    const pauseVolLabel = document.getElementById('pause-volume-label');
+    const pauseMusicSlider = document.getElementById('pause-music-slider');
+    const pauseMusicLabel = document.getElementById('pause-music-label');
+    const pauseSfxSlider = document.getElementById('pause-sfx-slider');
+    const pauseSfxLabel = document.getElementById('pause-sfx-label');
+
+    const syncMasterVolUI = (pct) => {
+      this.sound.init();
+      this.sound.setMasterVolume(pct);
+      if (hudVolSlider && document.activeElement !== hudVolSlider) hudVolSlider.value = pct;
+      if (pauseVolSlider && document.activeElement !== pauseVolSlider) pauseVolSlider.value = pct;
+      if (hudVolLabel) hudVolLabel.textContent = `${pct}%`;
+      if (pauseVolLabel) pauseVolLabel.textContent = `${pct}%`;
+    };
+
+    if (hudVolSlider) {
+      hudVolSlider.value = this.sound.masterVolumePct;
+      if (hudVolLabel) hudVolLabel.textContent = `${this.sound.masterVolumePct}%`;
+      hudVolSlider.addEventListener('input', (e) => syncMasterVolUI(Number(e.target.value)));
+    }
+    if (pauseVolSlider) {
+      pauseVolSlider.value = this.sound.masterVolumePct;
+      if (pauseVolLabel) pauseVolLabel.textContent = `${this.sound.masterVolumePct}%`;
+      pauseVolSlider.addEventListener('input', (e) => syncMasterVolUI(Number(e.target.value)));
+    }
+    if (pauseMusicSlider) {
+      pauseMusicSlider.value = TUNING.musicVolume;
+      if (pauseMusicLabel) pauseMusicLabel.textContent = `${Number(TUNING.musicVolume).toFixed(2)}x`;
+      pauseMusicSlider.addEventListener('input', (e) => {
+        updateTuningKey('musicVolume', e.target.value);
+        if (pauseMusicLabel) pauseMusicLabel.textContent = `${Number(e.target.value).toFixed(2)}x`;
+      });
+    }
+    if (pauseSfxSlider) {
+      pauseSfxSlider.value = TUNING.sfxVolume;
+      if (pauseSfxLabel) pauseSfxLabel.textContent = `${Number(TUNING.sfxVolume).toFixed(2)}x`;
+      pauseSfxSlider.addEventListener('input', (e) => {
+        updateTuningKey('sfxVolume', e.target.value);
+        if (pauseSfxLabel) pauseSfxLabel.textContent = `${Number(e.target.value).toFixed(2)}x`;
+      });
+    }
 
     const tunerBtn = document.getElementById('btn-tuner-toggle');
     const closeTunerBtn = document.getElementById('btn-close-tuner');
@@ -544,8 +619,34 @@ class Game {
     this.sound.init();
     const on = this.sound.toggle();
     const btn = document.getElementById('btn-sound');
-    btn.textContent = `MUSIC & SFX: ${on ? 'ON' : 'OFF'} [M]`;
+    btn.textContent = `AUDIO: ${on ? 'ON' : 'OFF'} [M]`;
     btn.classList.toggle('active', on);
+  }
+
+  togglePause() {
+    if (this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
+    const pauseModal = document.getElementById('pause-modal');
+    const pauseBtn = document.getElementById('btn-pause');
+
+    if (this.state === 'PLAYING') {
+      this.state = 'PAUSED';
+      this.keys.clear();
+      this.mouse.down = false;
+      this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
+      if (pauseModal) pauseModal.classList.remove('hidden');
+      if (pauseBtn) {
+        pauseBtn.textContent = '▶ RESUME [P]';
+        pauseBtn.classList.add('active');
+      }
+    } else if (this.state === 'PAUSED') {
+      this.state = 'PLAYING';
+      this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
+      if (pauseModal) pauseModal.classList.add('hidden');
+      if (pauseBtn) {
+        pauseBtn.textContent = '⏸ PAUSE [P]';
+        pauseBtn.classList.remove('active');
+      }
+    }
   }
 
   startGame() {
@@ -554,6 +655,13 @@ class Game {
     document.getElementById('gameover-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.add('hidden');
     document.getElementById('chest-modal').classList.add('hidden');
+    const pauseModal = document.getElementById('pause-modal');
+    if (pauseModal) pauseModal.classList.add('hidden');
+    const pauseBtn = document.getElementById('btn-pause');
+    if (pauseBtn) {
+      pauseBtn.textContent = '⏸ PAUSE [P]';
+      pauseBtn.classList.remove('active');
+    }
 
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.fillStyle = '#030308';
@@ -2297,7 +2405,7 @@ class Game {
     ctx.restore();
 
     // 6. Screen-Space Tactical Sector Radar Minimap
-    if (this.state === 'PLAYING' || this.state === 'UPGRADE' || this.state === 'CHEST') {
+    if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST') {
       this.drawMinimap(ctx);
     }
 

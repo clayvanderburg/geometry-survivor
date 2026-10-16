@@ -56,9 +56,15 @@
             </div>
           </div>
           <div class="quick-toggles">
+            <button id="btn-pause" class="hud-btn" title="Pause / Resume Game [P / ESC]">⏸ PAUSE [P]</button>
             <button id="btn-autofire" class="hud-btn active" title="Toggle Auto-Fire [F]">AUTO-FIRE: ON [F]</button>
             <button id="btn-autoaim" class="hud-btn" title="Toggle Auto-Aim [C]">AUTO-AIM: OFF [C]</button>
-            <button id="btn-sound" class="hud-btn active" title="Toggle Synth Audio & Music [M]">MUSIC &amp; SFX: ON [M]</button>
+            <button id="btn-sound" class="hud-btn active" title="Toggle Synth Audio & Music [M]">AUDIO: ON [M]</button>
+            <div class="hud-vol-pill" title="Master Volume">
+              <span>🔊</span>
+              <input id="hud-volume-slider" type="range" min="0" max="200" step="5" value="100" />
+              <span id="hud-volume-label">100%</span>
+            </div>
             <button id="btn-tuner-toggle" class="hud-btn" style="border-color:var(--gold); color:var(--gold);" title="Toggle Live Parameter Tuner [T]">⚙ TUNER [T]</button>
           </div>
         </div>
@@ -66,6 +72,41 @@
 
       <!-- Combo / Boss Banner -->
       <div id="center-banner" class="center-banner hidden"></div>
+    </div>
+
+    <!-- Pause Modal Overlay -->
+    <div id="pause-modal" class="modal-overlay hidden">
+      <div class="modal-card upgrade-card" style="max-width:480px; text-align:center;">
+        <div class="upgrade-header">
+          <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
+          <h2 class="upgrade-title">SYSTEM PAUSED</h2>
+          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume</p>
+        </div>
+
+        <div class="pause-audio-box">
+          <div class="pause-slider-row">
+            <span>🔊 MASTER VOLUME</span>
+            <input id="pause-volume-slider" type="range" min="0" max="200" step="5" value="100" />
+            <span id="pause-volume-label" class="drawer-val">100%</span>
+          </div>
+          <div class="pause-slider-row">
+            <span>🎵 MUSIC LEVEL</span>
+            <input id="pause-music-slider" type="range" min="0" max="3" step="0.05" value="1.35" />
+            <span id="pause-music-label" class="drawer-val">1.35x</span>
+          </div>
+          <div class="pause-slider-row">
+            <span>💥 SFX LEVEL</span>
+            <input id="pause-sfx-slider" type="range" min="0" max="2" step="0.02" value="0.38" />
+            <span id="pause-sfx-label" class="drawer-val">0.38x</span>
+          </div>
+        </div>
+
+        <div class="title-actions" style="display:flex; flex-direction:column; gap:12px; margin-top:18px;">
+          <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
+          <button id="btn-pause-tuner" class="neon-btn" style="border-color:var(--gold); color:var(--gold); padding:12px 18px; font-size:13px;">⚙ TOGGLE LIVE TUNING DRAWER [T]</button>
+          <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
+        </div>
+      </div>
     </div>
 
     <!-- In-Game Slide-Over Live Tuner & Sandbox Drawer -->
@@ -134,7 +175,7 @@
             <div class="controls-mini">
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
-              <span><b>Space / R-Click:</b> Phase Dash</span>
+              <span><b>[P] / [ESC]:</b> Pause Mission</span>
               <span><b>[T] Key:</b> Live Tuning Studio</span>
             </div>
           </div>
