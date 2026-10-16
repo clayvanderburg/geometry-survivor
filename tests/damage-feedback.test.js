@@ -104,6 +104,35 @@ test('a packed cluster stacks numbers into at most three lanes instead of overpr
   assert.ok(dn.add(enemy('swarmer', { x: 200, y: 200 }), 10, 'singularity'));
 });
 
+test('a number riding its target never slides onto another live number, and wide totals keep clear', () => {
+  storage.clear(); resetTuning();
+  const dn = new DamageNumbers();
+  const pulled = enemy('swarmer', { x: 100, y: 200 });
+  const anchor = enemy('swarmer', { x: 300, y: 200 });
+  const a = dn.add(pulled, 10, 'singularity');
+  const b = dn.add(anchor, 10, 'singularity');
+  const before = { x: a.x, y: a.y };
+  // A singularity drags the first target right under the second number while it keeps grinding.
+  pulled.x = anchor.x;
+  dn.update(1 / 60);
+  dn.add(pulled, 10, 'singularity');
+  assert.equal(a.text, '20', 'the total still merges');
+  assert.deepEqual({ x: a.x, y: a.y }, before, 'but it holds its spot instead of overprinting');
+  assert.equal(b.text, '10');
+
+  // Free to follow when the destination is clear.
+  pulled.x = 160;
+  dn.update(1 / 60);
+  dn.add(pulled, 10, 'singularity');
+  assert.equal(a.x, 160 + a.ox);
+
+  // A 4-digit total blocks a neighbour 30px away that a 2-digit one would not.
+  const wide = new DamageNumbers();
+  wide.add(enemy('boss', { x: 500, radius: 10 }), 2203, 'singularity');
+  const next = wide.add(enemy('swarmer', { x: 530 }), 10, 'singularity');
+  assert.ok(next.oy < 0, 'stepped up a lane instead of fusing into one long number');
+});
+
 test('damage numbers toggle persists across sessions and survives blocked storage', () => {
   storage.clear(); resetTuning();
   const dn = new DamageNumbers();

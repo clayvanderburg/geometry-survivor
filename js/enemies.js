@@ -184,6 +184,7 @@ export class EnemyManager {
           hitFlash: 0,
           knockX: 0,
           knockY: 0,
+          dmgNum: null, // last floating damage number (DamageNumbers fast path)
           trail: [],
           isBoss: !!c.isBoss,
           pulsePhase: Math.random() * Math.PI * 2

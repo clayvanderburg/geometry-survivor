@@ -100,14 +100,20 @@ export class DamageNumbers {
       n.sinceHit = 0;
       n.life = LIFE;
       n.pop = 1;
-      // Ride along with the target while it is still being hit; drift only once hits stop.
-      n.x = e.x + n.ox;
-      n.y = e.y - e.radius - 6 + n.oy;
-      n.rise *= 0.5;
+      // Ride along with the target while it is still being hit (drift only once hits stop), unless
+      // that would slide onto another live number — pulled clusters (singularity) then stay legible.
+      const nx = e.x + n.ox;
+      const ny = e.y - e.radius - 6 + n.oy;
+      const rise = n.rise * 0.5;
+      if (!this.blocked(nx, ny - rise, n.text.length, n.size, n)) {
+        n.x = nx;
+        n.y = ny;
+        n.rise = rise;
+      }
     } else {
       if (n) n.target = null; // retire the old burst; it keeps floating as a finished total
       const ox = ((this.count * 7) % 11) - 5; // tiny deterministic jitter
-      const oy = this.freeLane(e.x + ox, e.y - e.radius - 6);
+      const oy = this.freeLane(e.x + ox, e.y - e.radius - 6, formatDamage(amount).length, damageFontSize(amount));
       if (oy === null) return null;
       n = this.acquire();
       n.target = e;
@@ -132,21 +138,31 @@ export class DamageNumbers {
   // Packed swarms put many targets on one spot: step a new number up (at most 3 lanes) past any
   // live number already printed there, so values stack into a short column instead of overprinting.
   // Returns null when every lane is taken — that spot is already saturated with readable numbers.
-  freeLane(x, y) {
+  freeLane(x, y, chars = 2, size = 15) {
+    const step = Math.max(14, Math.round(size * 0.8 * (TUNING.damageNumberScale ?? 1.0)));
     let oy = 0;
     for (let lane = 0; lane < 3; lane++) {
-      let blocked = false;
-      for (let i = 0; i < this.count; i++) {
-        const c = this.pool[i];
-        if (Math.abs(c.x - x) < 20 && Math.abs(c.y - c.rise - (y + oy)) < 12) {
-          blocked = true;
-          break;
-        }
-      }
-      if (!blocked) return oy;
-      oy -= 14;
+      if (!this.blocked(x, y + oy, chars, size)) return oy;
+      oy -= step;
     }
     return null;
+  }
+
+  // Would a `chars`-wide label of `size` px drawn at (x, y) collide with a live number (other than
+  // `self`)? Widths come from each label's drawn size (heavy digits are ~0.62em wide, plus
+  // the outline and a small gap so adjacent totals never fuse into one long number), so wide
+  // totals like "2203" keep clear of their neighbours too.
+  blocked(x, y, chars, size, self = null) {
+    const scale = TUNING.damageNumberScale ?? 1.0;
+    const halfW = chars * size * 0.33 * scale + 3;
+    for (let i = 0; i < this.count; i++) {
+      const c = this.pool[i];
+      if (c === self) continue;
+      const cs = c.size * scale;
+      if (Math.abs(c.x - x) < halfW + c.text.length * cs * 0.33 + 3 &&
+          Math.abs(c.y - c.rise - y) < Math.max(12, 0.75 * Math.max(size * scale, cs))) return true;
+    }
+    return false;
   }
 
   // Take a free pool slot, or recycle the number closest to expiring when the cap is reached.
