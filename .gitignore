@@ -4,3 +4,7 @@ soak-*.png
 VALIDATION_RESULTS.json
 AUDIO_VALIDATION_RESULTS.json
 audio-validation.json
+
+# Netlify local state and build output
+.netlify
+dist/
