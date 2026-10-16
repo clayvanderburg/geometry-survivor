@@ -9,7 +9,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
-import { describeUpgrade, renderUpgradeCard } from './upgrade-cards.js';
+import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import {
   TUNING,
@@ -814,15 +814,16 @@ export class Game {
 
     // Pick random available upgrades and install them through the same path as level-up picks.
     // Each card is described just before install, so it shows exactly what this cache changed.
+    // 5x jackpots use compact cards (fewer stat rows, no summary) so both rows fit one screen.
+    const compact = rewardCount > 3;
     const awarded = [];
     for (let i = 0; i < rewardCount; i++) {
       const pool = rollUpgrades(this.player, 3);
       if (pool.length === 0) break;
       const chosen = pool[0];
-      awarded.push(describeUpgrade(this.player, chosen));
+      awarded.push(describeUpgrade(this.player, chosen, compact ? COMPACT_MAX_ROWS : undefined));
       this.applyUpgrade(chosen);
     }
-    this.chestRewards = awarded;
 
     document.getElementById('chest-tier-subtitle').textContent = tierSub;
     document.getElementById('chest-tier-title').textContent = tierTitle;
@@ -831,6 +832,7 @@ export class Game {
 
     const gridEl = document.getElementById('chest-rewards-grid');
     gridEl.innerHTML = '';
+    gridEl.classList[compact ? 'add' : 'remove']('compact');
 
     awarded.forEach((d, idx) => {
       const card = document.createElement('div');

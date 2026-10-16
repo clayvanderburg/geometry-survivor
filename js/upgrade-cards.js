@@ -7,6 +7,8 @@ import { RARITY, applyUpgradeLevels, levelJumpChances } from './upgrades.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
 
 const MAX_ROWS = 6;
+// Jackpot caches with more than 3 rewards wrap to two rows of cards; fewer rows keep them on one screen.
+export const COMPACT_MAX_ROWS = 3;
 const int = (v) => String(Math.round(v));
 const dec1 = (v) => (Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(1));
 const secs = (v) => `${v.toFixed(2)}s`;
@@ -116,8 +118,8 @@ function headlineText(row, before, after) {
 }
 
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
-// Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond MAX_ROWS.
-export function describeUpgrade(player, upg) {
+// Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond maxRows.
+export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const fromLevel = player.upgradeLevels[upg.id] || 0;
   const before = readRows(player);
   const copy = deepCopy(player);
@@ -152,8 +154,8 @@ export function describeUpgrade(player, upg) {
     toLevel: fromLevel + jump,
     maxLevel: upg.maxLevel,
     headline,
-    rows: changed.slice(0, MAX_ROWS).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
-    hiddenRows: Math.max(0, changed.length - MAX_ROWS)
+    rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
+    hiddenRows: Math.max(0, changed.length - maxRows)
   };
 }
 

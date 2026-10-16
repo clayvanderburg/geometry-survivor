@@ -181,3 +181,19 @@ test('weapons fire with the shared scaling the cards preview', () => {
   assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(3));
   assert.equal(g.missiles[0].speed, W.missileSpeed(3));
 });
+
+test('5x jackpot caches use compact cards so both rows of rewards fit one screen', () => {
+  const g = game();
+  // First draw lands the penta tier; later draws tie, so rewards install in pool order:
+  // Rotary Claw twice, then Tectonic Claw Bore (4 changed stats).
+  withRandom([0.0001], () => g.openRelicChest({ guaranteedSuper: false }));
+  const grid = elements.get('chest-rewards-grid');
+  const cards = grid.children.slice(-5);
+  assert.equal(cards.length, 5);
+  for (const card of cards) {
+    assert.ok((card.innerHTML.match(/class="upg-stat"/g) || []).length <= 3, 'compact cards list at most 3 rows');
+  }
+  assert.ok(cards.some((card) => /\+1 more stat improved/.test(card.innerHTML)), 'trimmed rows are still counted');
+  // Normal-size caches and level-up cards keep the full row list.
+  assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic')).rows.length, 4);
+});

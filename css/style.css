@@ -865,6 +865,40 @@ html, body {
   justify-content: center;
 }
 
+/* 5x jackpots wrap to two rows: trim each card so the whole cache and its Claim button fit 720px. */
+#chest-rewards-grid.compact {
+  gap: 14px 16px;
+}
+
+#chest-rewards-grid.compact .upgrade-option {
+  padding: 12px 14px 10px;
+}
+
+#chest-rewards-grid.compact .upg-top {
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-name {
+  margin-bottom: 2px;
+}
+
+#chest-rewards-grid.compact .upg-headline {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-summary {
+  display: none;
+}
+
+#chest-rewards-grid.compact .upg-stats {
+  margin-bottom: 8px;
+}
+
+#chest-rewards-grid.compact .upg-stat {
+  padding: 2px 0;
+}
+
 @media (max-width: 760px) {
   .upgrade-card {
     padding: 18px 14px;
