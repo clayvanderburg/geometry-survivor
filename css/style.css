@@ -419,7 +419,7 @@ html, body {
 .glitch-subtitle {
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 4px;
+  letter-spacing: clamp(1px, 0.6vw, 4px);
   color: var(--cyan);
   margin-bottom: 4px;
   text-shadow: 0 0 10px var(--cyan);
@@ -431,9 +431,9 @@ html, body {
 }
 
 .neon-title {
-  font-size: 40px;
+  font-size: clamp(22px, 6.5vw, 40px);
   font-weight: 900;
-  letter-spacing: 5px;
+  letter-spacing: clamp(2px, 0.8vw, 5px);
   color: #ffffff;
   text-shadow: 0 0 18px var(--cyan), 0 0 36px rgba(0, 243, 255, 0.45);
 }
@@ -1012,4 +1012,20 @@ html, body {
   width: 100%;
   accent-color: var(--cyan);
   cursor: pointer;
+}
+
+/* Controller focus highlight (menus navigated with d-pad / left stick) */
+.gp-focus {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 18px rgba(255, 204, 0, 0.55) !important;
+}
+
+.upgrade-option.gp-focus {
+  transform: translateY(-5px);
+}
+
+/* Narrow screens: stack the core wallet under the title so the logo keeps its width. */
+@media (max-width: 600px) {
+  .hub-header { flex-wrap: wrap; gap: 12px; }
 }

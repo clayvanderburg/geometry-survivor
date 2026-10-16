@@ -1,16 +1,16 @@
 import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
-import { drawPlayerShield, drawCrabShip } from './ship-renderer.js';
+import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager } from './enemies.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
+import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import {
   TUNING,
-  DEFAULT_TUNING,
   TUNING_SCHEMA,
   updateTuningKey,
   resetTuningToDefaults,
@@ -36,6 +36,7 @@ export class Game {
 
     this.sound = new SoundEngine();
     this.progression = new ProgressionManager();
+    this.progression.onExternalChange = () => this.renderHubUI();
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.enemyManager = new EnemyManager();
@@ -51,6 +52,13 @@ export class Game {
     this.chromaFlash = 0;
     this.shieldRotation = 0;
     this.lastRunHighlightId = null;
+
+    // Controller state: previous-tick buttons for press edges, and DOM menu focus.
+    this.gpButtons = [];
+    this.gpActive = false;
+    this.menuNav = new MenuNavigator();
+    this.menuState = null;
+    this.menuGrace = 0;
 
     this.currentChoices = [];
     this.bindEvents();
@@ -216,7 +224,12 @@ export class Game {
       const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
         (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
       if (editingText) return;
-      if (focused?.type === 'range' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) return;
+      if (focused?.type === 'range' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+        if (this.state !== 'PLAYING') return;
+        e.preventDefault();
+      }
+      // Space on a focused button/link activates that control instead of a menu shortcut.
+      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
 
       this.sound.init();
       const code = e.code;
@@ -224,7 +237,7 @@ export class Game {
       // Held movement is stateful; abilities and toggles fire only on the initial press.
       if (e.repeat) return;
 
-      if (this.state === 'TITLE' && code === 'Space') {
+      if (this.state === 'TITLE' && code === 'Space' && !onControl) {
         e.preventDefault();
         this.startGame();
         return;
@@ -236,7 +249,7 @@ export class Game {
         return;
       }
 
-      if (this.state === 'GAMEOVER' && code === 'Space') {
+      if (this.state === 'GAMEOVER' && code === 'Space' && !onControl) {
         e.preventDefault();
         commitGameOverName();
         this.startGame();
@@ -251,7 +264,7 @@ export class Game {
       }
 
       if (this.state === 'PAUSED') {
-        if (code === 'KeyP' || code === 'Escape' || code === 'Space') {
+        if (code === 'KeyP' || code === 'Escape' || (code === 'Space' && !onControl)) {
           e.preventDefault();
           this.togglePause();
           return;
@@ -307,6 +320,11 @@ export class Game {
     window.addEventListener('mousemove', (e) => {
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
+      // Deliberate mouse use hands aiming and menu focus back from the controller.
+      if (this.gpActive && Math.abs(e.movementX ?? 0) + Math.abs(e.movementY ?? 0) > 3) {
+        this.gpActive = false;
+        this.menuNav?.clear();
+      }
     });
 
     window.addEventListener('mousedown', (e) => {
@@ -463,13 +481,17 @@ export class Game {
     if (copyBtn) {
       copyBtn.addEventListener('click', async () => {
         const payload = getAgentTuningPayload();
-        const text = `Here is my VECTRA // SURVIVOR tuning preset:\n\`\`\`json\n${JSON.stringify(
+        const text = `Here is my VEXOLITH // SURVIVOR tuning preset:\n\`\`\`json\n${JSON.stringify(
           payload.modifiedCount > 0 ? payload.changes : payload.fullTuning,
           null,
           2
         )}\n\`\`\``;
-        await navigator.clipboard.writeText(text);
-        copyBtn.textContent = '✓ COPIED TO CLIPBOARD!';
+        try {
+          await navigator.clipboard.writeText(text);
+          copyBtn.textContent = '✓ COPIED TO CLIPBOARD!';
+        } catch {
+          copyBtn.textContent = '✗ COPY FAILED';
+        }
         setTimeout(() => { copyBtn.textContent = '📋 COPY TUNING FOR AGENT'; }, 1500);
       });
     }
@@ -510,6 +532,14 @@ export class Game {
       p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
     }
 
+    for (const key of ['musicVolume', 'sfxVolume']) {
+      const id = key === 'musicVolume' ? 'music' : 'sfx';
+      const slider = document.getElementById(`pause-${id}-slider`);
+      const label = document.getElementById(`pause-${id}-label`);
+      if (slider && document.activeElement !== slider) slider.value = TUNING[key];
+      if (label) label.textContent = `${Number(TUNING[key]).toFixed(2)}x`;
+    }
+
     // Sync drawer UI readouts if open
     TUNING_SCHEMA.forEach((group) => {
       group.items.forEach((item) => {
@@ -540,8 +570,11 @@ export class Game {
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
         const bp = this.spawnAroundPlayer(420, 620);
-        this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale());
-        this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
+        if (this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
+        } else {
+          this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
+        }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
         this.particles.spawnFloatText(p.x, p.y - 24, '☄ ASTEROID SECTOR REGENERATED!', '#00ffaa', 15);
@@ -940,7 +973,8 @@ export class Game {
     this.shake = 22 * (TUNING.screenShakeMult ?? 1.0);
     this.chromaFlash = 0.75;
 
-    const maxR = Math.hypot(this.width, this.height) * 0.65;
+    // Fixed world-space reach (the old 1920x1080 value) so window size and zoom don't change the blast.
+    const maxR = 1430;
     this.particles.spawnShockwave(p.x, p.y, maxR, 190, 9, 0.7);
     this.particles.spawnShockwave(p.x, p.y, maxR * 0.55, 325, 6, 0.5);
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
@@ -983,11 +1017,10 @@ export class Game {
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
   }
 
-  killEnemy(index, fromBomb = false) {
+  killEnemy(e, fromBomb = false) {
     const enemies = this.enemyManager.enemies;
-    const enemyIndex = typeof index === 'number' ? index : enemies.indexOf(index);
-    const e = enemies[enemyIndex];
-    if (!e || e.dead) return;
+    const enemyIndex = enemies.indexOf(e);
+    if (enemyIndex === -1 || e.dead) return;
 
     e.dead = true;
     enemies.splice(enemyIndex, 1);
@@ -1111,11 +1144,17 @@ export class Game {
   }
 
   spawnAroundPlayer(minDist = 440, maxDist = 760) {
+    const p = this.player;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
+      // Final attempt aims at the world centre, which always has room beyond minDist.
+      const angle = attempt === 7
+        ? Math.atan2(this.worldHeight / 2 - p.y, this.worldWidth / 2 - p.x)
+        : Math.random() * Math.PI * 2;
       const dist = minDist + Math.random() * (maxDist - minDist);
-      const x = Math.max(90, Math.min(this.worldWidth - 90, this.player.x + Math.cos(angle) * dist));
-      const y = Math.max(90, Math.min(this.worldHeight - 90, this.player.y + Math.sin(angle) * dist));
+      const x = Math.max(90, Math.min(this.worldWidth - 90, p.x + Math.cos(angle) * dist));
+      const y = Math.max(90, Math.min(this.worldHeight - 90, p.y + Math.sin(angle) * dist));
+      // Edge clamping can pull the point back onto the player.
+      if (attempt < 7 && Math.hypot(x - p.x, y - p.y) < minDist) continue;
 
       const nearby = this.asteroidManager.getNearbyAsteroids(x, y, 1);
       let blocked = false;
@@ -1127,11 +1166,9 @@ export class Game {
       }
       if (!blocked || attempt === 7) return { x, y };
     }
-    return { x: this.player.x + 500, y: this.player.y };
   }
 
   processPendingBossSpawns() {
-    this.pendingBossSpawns ||= [];
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.spawnAroundPlayer(520, 780);
@@ -1232,7 +1269,13 @@ export class Game {
       hits.sort((a, b) => a.t - b.t || Number(!!b.rock) - Number(!!a.rock));
       let blocked = false;
       for (const hit of hits) {
-        if (hit.rock) { blocked = true; break; }
+        if (hit.rock) {
+          blocked = true;
+          const hx = x0 + (b.x - x0) * hit.t;
+          const hy = y0 + (b.y - y0) * hit.t;
+          this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          break;
+        }
         const e = hit.enemy;
         if (e.dead) continue;
         b.hitEnemies.add(e);
@@ -1337,15 +1380,15 @@ export class Game {
     }
   }
 
-  fireChainLightning(level) {
+  fireChainLightning(level, originX = this.player.x, originY = this.player.y) {
     const p = this.player;
     const enemies = this.enemyManager.enemies;
     if (enemies.length === 0) return;
 
     const bounces = 3 + level * 2;
     const hitSet = new Set();
-    let currX = p.x;
-    let currY = p.y;
+    let currX = originX;
+    let currY = originY;
 
     for (let b = 0; b < bounces; b++) {
       let bestIdx = -1;
@@ -1491,7 +1534,7 @@ export class Game {
     const result = this.progression.recordRun({
       name: currentPilotName,
       score: this.score,
-      multiplier: this.multiplier,
+      multiplier: +this.multiplier.toFixed(1),
       wave: this.wave,
       kills: this.kills,
       timeStr
@@ -1531,23 +1574,57 @@ export class Game {
   }
 
   pollGamepad() {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gp = Array.from(pads).find(pad => pad && pad.connected !== false);
-    if (!gp) {
+    const pad = readGamepad(this.gpButtons);
+    this.gpButtons = pad ? pad.buttons : [];
+    if (!pad) {
       this.gpDashLatch = false;
       this.gpBombLatch = false;
       return null;
     }
-
-    const deadzone = (v) => (Math.abs(v) > 0.18 ? v : 0);
+    if (pad.active) this.gpActive = true;
     return {
-      moveX: deadzone(gp.axes[0] || 0),
-      moveY: deadzone(gp.axes[1] || 0),
-      aimX: deadzone(gp.axes[2] || 0),
-      aimY: deadzone(gp.axes[3] || 0),
-      dash: gp.buttons[4]?.pressed || gp.buttons[6]?.pressed || gp.buttons[0]?.pressed,
-      bomb: gp.buttons[5]?.pressed || gp.buttons[7]?.pressed || gp.buttons[1]?.pressed
+      ...pad,
+      dash: pad.buttons[PAD.A] || pad.buttons[PAD.LB] || pad.buttons[PAD.LT],
+      bomb: pad.buttons[PAD.B] || pad.buttons[PAD.RB] || pad.buttons[PAD.RT]
     };
+  }
+
+  // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
+  // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
+  updateMenuController(gp, dt) {
+    const menus = {
+      TITLE: ['title-modal', 'btn-start-game'],
+      UPGRADE: ['upgrade-modal', null],
+      CHEST: ['chest-modal', 'btn-claim-chest'],
+      PAUSED: ['pause-modal', 'btn-resume-game'],
+      GAMEOVER: ['gameover-modal', 'btn-restart-game']
+    };
+    if (this.menuState !== this.state) {
+      this.menuState = this.state;
+      this.menuGrace = 0.3;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+
+    const menu = menus[this.state];
+    if (!gp || !menu || !this.gpActive || !this.menuNav) return;
+    const root = document.getElementById(menu[0]);
+    if (!root) return;
+    const primary = menu[1] ? document.getElementById(menu[1]) : null;
+    this.menuNav.update(root, gp, dt, primary);
+    if (this.menuGrace > 0) return;
+
+    if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    } else if (gp.pressed(PAD.START)) {
+      this.sound.init();
+      if (this.state === 'PAUSED') this.togglePause();
+      else if (primary) primary.click();
+      else this.menuNav.activate();
+    } else if (gp.pressed(PAD.B) && this.state === 'PAUSED') {
+      this.togglePause();
+    }
   }
 
   update(dt) {
@@ -1557,7 +1634,22 @@ export class Game {
     if (this.chromaFlash > 0) this.chromaFlash = Math.max(0, this.chromaFlash - dt * 2.2);
     this.shieldRotation += dt * 1.4;
 
-    if (this.state !== 'PLAYING') return;
+    const gp = this.pollGamepad();
+    const stateBefore = this.state;
+    this.updateMenuController(gp, dt);
+    if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
+      // A button held through a menu must not fire a dash or nova (or re-pause) as play starts.
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
+
+    if (gp?.pressed(PAD.START)) {
+      this.togglePause();
+      return;
+    }
+    if (gp?.pressed(PAD.X)) this.toggleAutoFire();
+    if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
@@ -1580,7 +1672,7 @@ export class Game {
 
       if (this.asteroidManager.asteroids.length < 360) {
         const repPt = this.spawnAroundPlayer(850, 1400);
-        this.asteroidManager.spawnCluster(repPt.x, repPt.y);
+        this.asteroidManager.spawnCluster(repPt.x, repPt.y, { x: this.player.x, y: this.player.y, radius: 250 });
         this.asteroidManager.rebuildSpatialHash();
       }
 
@@ -1599,6 +1691,7 @@ export class Game {
 
     const p = this.player;
     if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
+    if (p.shieldFlash > 0) p.shieldFlash = Math.max(0, p.shieldFlash - dt * 2.4);
     if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
 
     if (p.hp < p.maxHp) {
@@ -1613,7 +1706,6 @@ export class Game {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) inputX -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) inputX += 1;
 
-    const gp = this.pollGamepad();
     if (gp) {
       if (Math.abs(gp.moveX) > 0 || Math.abs(gp.moveY) > 0) {
         inputX = gp.moveX;
@@ -1679,9 +1771,9 @@ export class Game {
       } else {
         p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
       }
-    } else {
+    } else if (!this.gpActive) {
       p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
-    }
+    } // On a controller with the right stick released, the turret holds its last heading.
 
     // Orient Crab Carapace & Twin Drill-Claws toward movement direction (or nearest rock being drilled)
     const speedMag = Math.hypot(p.vx, p.vy);
@@ -1804,7 +1896,7 @@ export class Game {
         this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue);
 
         if (p.weapons.stormProtocol) {
-          this.fireChainLightning(2);
+          this.fireChainLightning(2, m.x, m.y);
         }
 
         this.missiles.splice(i, 1);
@@ -1855,14 +1947,14 @@ export class Game {
 
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
-      const dist = Math.hypot(e.x - p.x, e.y - p.y);
-      const shieldRadius = p.radius * 1.9;
-      if (dist < e.radius + shieldRadius - 2) {
+      // Contact uses the same hull-hugging outline the shield draws.
+      if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
+          p.shieldFlash = 1;
           const hitDmg = (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
           p.hp -= hitDmg;
           p.invuln = 0.65;
-          this.multiplier = Math.max(1.0, +(this.multiplier * 0.75).toFixed(1));
+          this.multiplier = Math.max(1.0, this.multiplier * 0.75);
           this.shake = 16;
           this.chromaFlash = 0.5;
           this.sound.playExplosion(1.8);
@@ -1927,7 +2019,7 @@ export class Game {
           this.particles.spawnFloatText(p.x, p.y - 22, `+${amt} ❖ VOID CORE`, '#d68fff', 14);
         }
 
-        this.multiplier = +(this.multiplier + 0.1 * p.stats.xpMultiplier).toFixed(1);
+        this.multiplier += 0.1 * p.stats.xpMultiplier;
         p.xp += g.xp * p.stats.xpMultiplier;
         this.score += Math.round(10 * this.multiplier);
         this.geoms.splice(i, 1);
@@ -2070,7 +2162,10 @@ export class Game {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = 'rgba(3, 4, 11, 0.5)';
+    // Afterglow fades per unit time (half per 60 Hz tick). The 0.38 floor keeps high-refresh displays
+    // from stacking redrawn glow too bright while still giving them longer trails than before.
+    const fade = Math.max(0.38, 1 - Math.pow(0.5, (this.frameSeconds ?? 1 / 60) * 60));
+    ctx.fillStyle = `rgba(3, 4, 11, ${fade})`;
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.save();
@@ -2212,14 +2307,14 @@ export class Game {
 
     for (let i = 0; i < this.missiles.length; i++) {
       const m = this.missiles[i];
-      if (m.trail.length > 1) {
-        ctx.strokeStyle = `hsla(${m.hue}, 100%, 62%, 0.55)`;
-        ctx.lineWidth = 2.5;
+      // Tapered exhaust: brighter and thicker toward the missile.
+      for (let t = 1; t < m.trail.length; t++) {
+        const k = t / (m.trail.length - 1);
+        ctx.strokeStyle = `hsla(${m.hue}, 100%, ${60 + k * 12}%, ${0.2 + k * 0.55})`;
+        ctx.lineWidth = 1.2 + k * 2.4;
         ctx.beginPath();
-        ctx.moveTo(m.trail[0].x, m.trail[0].y);
-        for (let t = 1; t < m.trail.length; t++) {
-          ctx.lineTo(m.trail[t].x, m.trail[t].y);
-        }
+        ctx.moveTo(m.trail[t - 1].x, m.trail[t - 1].y);
+        ctx.lineTo(m.trail[t].x, m.trail[t].y);
         ctx.stroke();
       }
       ctx.fillStyle = '#ffffff';
@@ -2287,6 +2382,8 @@ export class Game {
   }
 
   loop(now) {
+    this.frameSeconds = this.lastFrameAt === undefined ? 1 / 60 : Math.min(0.1, (now - this.lastFrameAt) / 1000);
+    this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
     requestAnimationFrame((t) => this.loop(t));

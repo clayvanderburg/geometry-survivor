@@ -34,3 +34,42 @@ Based on master 2b1a50831f84aba7fe735bf49ca11518d0e8a87b. Gameplay design and ba
 - Fixed scheduled bosses being discarded at the population cap; five scheduling/budget regression checks cover retries, FIFO, original strength, admission priority and restart reset.
 - Actual offline synthesis exposed full-scale overshoots during explosion bursts and extreme legal gains. Final output protection now preserves the linear region below 0.8 and saturates overloads around 0.98 after the compressor. No subjective listening claim is made.
 - 35 regression tests now pass. See VALIDATION.md for the extended browser/audio results.
+
+# Second audit — 2026-10-16
+
+Gameplay design and tuning values are preserved; card text was changed to match existing effects rather than rebalancing.
+
+## Correctness
+- Spawns near a wall or corner are re-checked after clamping, so enemies, bosses and wave rock clusters keep their minimum distance from the player.
+- New sectors and wave clusters keep every rock (not just cluster centres) clear of the player; rocks leave a passable gap at the arena wall.
+- Rock pushout re-clamps the ship and enemies to the arena.
+- Storm Protocol chain lightning starts at the missile blast instead of the ship.
+- Score multiplier keeps full precision; per-pickup rounding had erased small XP-multiplier gains and over-rounded others. Display and leaderboard still show one decimal.
+- Larger enemies (pinwheels, splitters, bosses) now separate from every neighbour; odd-indexed pairs could fully overlap.
+- Rock lookups size their cell range from reach and the largest rock, so high mining-range or rock-size tuning can't miss rocks.
+- Supernova uses a fixed world radius (the previous 1920x1080 value) instead of scaling with window size or browser zoom.
+- Bullets hitting rock now show impact sparks.
+
+## UI and input
+- Arrow keys keep moving the ship during play when a volume slider has focus.
+- Space on a focused button activates that button on the title, game-over and pause screens.
+- Pause-menu Music/SFX sliders follow changes from the drawer, Studio and reset.
+- Save data reloads when another tab writes it, so a second tab can't overwrite armory purchases or scores.
+- Sandbox +Boss reports when the enemy cap blocked the spawn; Copy Tuning reports clipboard failure.
+- Chest 3x/5x jackpot sliders can return to their defaults (step 0.001).
+- Corrected card text: Rotary Claw Overclock, Phase Nova Thrusters, Pulsar Helix, Fortune & Vacuum Array, Deep-Core Mining Rig.
+
+## Rendering and cleanup
+- Grid forces only apply inside the simulated camera region; offscreen points previously accumulated unbounded velocity and tore the grid when revealed. Implosions respect the Grid Warp slider.
+- Shatter shards are clamped inside the arena.
+- Removed unused code: `damageRocksInRadius`, black-hole `absorbed`, `killEnemy` index path, unreachable spawn fallback, unused import.
+
+## Validation
+- 40 Node tests pass, including 5 new regression tests that fail on the previous code.
+- Headless Chrome smoke passes; seeded 600-second accelerated soak reached wave 28 with no errors.
+
+## Known, not changed
+- Controller input is only read during play; level-up, chest, pause and game-over screens need keyboard/mouse.
+- Contact hitbox (1.9x radius) is smaller than the drawn shield ring (2.55x default); may be intentional leniency.
+- Screen-fade trails are shorter on high-refresh displays. A time-scaled fade would also brighten glow, so this needs a visual decision.
+- At the 200-enemy cap, splitter children can be dropped (documented cap behaviour).

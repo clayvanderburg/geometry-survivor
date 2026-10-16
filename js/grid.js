@@ -43,15 +43,25 @@ export class WarpGrid {
       point.y = point.oy;
       point.vx = point.vy = point.energy = 0;
     }
+    this.simBounds = null;
+  }
+
+  // Restricts forces to the region update() integrates; offscreen points would otherwise
+  // accumulate velocity indefinitely and snap when the camera arrives.
+  forceBounds(px, py, radius) {
+    const b = this.simBounds;
+    return {
+      minCol: Math.max(b ? b.minC : 1, Math.floor((px - radius) / this.spacing)),
+      maxCol: Math.min(b ? b.maxC : this.cols - 2, Math.ceil((px + radius) / this.spacing)),
+      minRow: Math.max(b ? b.minR : 1, Math.floor((py - radius) / this.spacing)),
+      maxRow: Math.min(b ? b.maxR : this.rows - 2, Math.ceil((py + radius) / this.spacing))
+    };
   }
 
   applyImpulse(px, py, force, radius, hue = 190) {
     force *= (TUNING.gridWarpMult ?? 1.0);
     const rSq = radius * radius;
-    const minCol = Math.max(1, Math.floor((px - radius) / this.spacing));
-    const maxCol = Math.min(this.cols - 2, Math.ceil((px + radius) / this.spacing));
-    const minRow = Math.max(1, Math.floor((py - radius) / this.spacing));
-    const maxRow = Math.min(this.rows - 2, Math.ceil((py + radius) / this.spacing));
+    const { minCol, maxCol, minRow, maxRow } = this.forceBounds(px, py, radius);
 
     for (let r = minRow; r <= maxRow; r++) {
       const rowOffset = r * this.cols;
@@ -74,11 +84,9 @@ export class WarpGrid {
   }
 
   applyImplosion(px, py, force, radius, hue = 330, swirl = 0.25) {
+    force *= (TUNING.gridWarpMult ?? 1.0);
     const rSq = radius * radius;
-    const minCol = Math.max(1, Math.floor((px - radius) / this.spacing));
-    const maxCol = Math.min(this.cols - 2, Math.ceil((px + radius) / this.spacing));
-    const minRow = Math.max(1, Math.floor((py - radius) / this.spacing));
-    const maxRow = Math.min(this.rows - 2, Math.ceil((py + radius) / this.spacing));
+    const { minCol, maxCol, minRow, maxRow } = this.forceBounds(px, py, radius);
 
     for (let r = minRow; r <= maxRow; r++) {
       const rowOffset = r * this.cols;
@@ -112,6 +120,7 @@ export class WarpGrid {
     const maxC = Math.min(cols - 2, Math.ceil((camX + viewW) / sp) + 4);
     const minR = Math.max(1, Math.floor(camY / sp) - 4);
     const maxR = Math.min(rows - 2, Math.ceil((camY + viewH) / sp) + 4);
+    this.simBounds = { minC, maxC, minR, maxR };
 
     for (let r = minR; r <= maxR; r++) {
       const rowOffset = r * cols;

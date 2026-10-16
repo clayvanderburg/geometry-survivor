@@ -1,0 +1,95 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+globalThis.window = { addEventListener() {} };
+globalThis.localStorage = { getItem() { return null; }, setItem() {} };
+globalThis.BroadcastChannel = undefined;
+globalThis.Event ??= class { constructor(type) { this.type = type; } };
+const { readGamepad, pickInDirection, MenuNavigator, PAD } = await import('../js/gamepad.js');
+
+const rect = (left, top, width = 100, height = 40) => ({ left, top, width, height });
+function setPad(pressed = [], axes = [0, 0, 0, 0]) {
+  const buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) }));
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { getGamepads: () => [{ connected: true, axes, buttons }] } });
+}
+function fakeEl(r, extra = {}) {
+  const classes = new Set();
+  return {
+    clicks: 0, ...extra,
+    classList: { add: c => classes.add(c), remove: c => classes.delete(c), has: c => classes.has(c) },
+    getClientRects: () => [r], getBoundingClientRect: () => r,
+    click() { this.clicks++; }, dispatchEvent() {}
+  };
+}
+const root = (els) => ({ querySelectorAll: () => els });
+
+test('press edges fire once per physical press', () => {
+  setPad([PAD.A]);
+  const first = readGamepad([]);
+  assert.equal(first.pressed(PAD.A), true);
+  assert.equal(readGamepad(first.buttons).pressed(PAD.A), false);
+});
+
+test('d-pad and left stick both produce menu directions', () => {
+  setPad([PAD.DOWN]);
+  assert.equal(readGamepad().navY, 1);
+  setPad([], [-0.9, 0, 0, 0]);
+  assert.equal(readGamepad().navX, -1);
+  setPad([], [0.3, 0, 0, 0]);
+  assert.equal(readGamepad().navX, 0, 'small stick drift must not navigate');
+});
+
+test('directional pick prefers the item in line over a diagonal one', () => {
+  const from = rect(0, 0);
+  const rects = [rect(300, 0), rect(150, 120), rect(-300, 0)];
+  assert.equal(pickInDirection(from, rects, 1, 0), 0);
+  assert.equal(pickInDirection(from, rects, 0, 1), 1);
+  assert.equal(pickInDirection(from, rects, -1, 0), 2);
+  assert.equal(pickInDirection(from, rects, 0, -1), -1);
+});
+
+test('navigator focuses the primary control, moves with auto-repeat, and activates', () => {
+  const left = fakeEl(rect(0, 0)), mid = fakeEl(rect(200, 0)), right = fakeEl(rect(400, 0));
+  const nav = new MenuNavigator();
+  const idle = { navX: 0, navY: 0 }, east = { navX: 1, navY: 0 };
+  nav.update(root([left, mid, right]), idle, 1 / 60, mid);
+  assert.equal(nav.focused, mid);
+  assert.ok(mid.classList.has('gp-focus'));
+  nav.update(root([left, mid, right]), east, 1 / 60, mid);
+  assert.equal(nav.focused, right);
+  nav.update(root([left, mid, right]), idle, 1 / 60, mid);
+  nav.update(root([left, mid, right]), { navX: -1, navY: 0 }, 1 / 60, mid);
+  nav.update(root([left, mid, right]), { navX: -1, navY: 0 }, 1 / 60, mid);
+  assert.equal(nav.focused, mid, 'held direction waits for the repeat delay');
+  nav.activate();
+  assert.equal(mid.clicks, 1);
+});
+
+test('left/right on a focused slider changes its value instead of moving focus', () => {
+  const slider = fakeEl(rect(0, 0), { type: 'range', min: '0', max: '2', step: '0.1', value: '1' });
+  const other = fakeEl(rect(200, 0));
+  const nav = new MenuNavigator();
+  nav.update(root([slider, other]), { navX: 1, navY: 0 }, 1 / 60, slider);
+  assert.equal(nav.focused, slider);
+  assert.equal(Number(slider.value), 1.2);
+  nav.activate();
+  assert.equal(slider.clicks, 0);
+});
+
+test('pressing A to launch a run does not also dash on the next tick', async () => {
+  const g = {};
+  const launch = fakeEl(rect(0, 0));
+  launch.click = () => { g.game.state = 'PLAYING'; };
+  const element = () => ({ textContent: '', innerHTML: '', style: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild() {} });
+  globalThis.document = { getElementById: (id) => (id === 'title-modal' ? root([launch]) : id === 'btn-start-game' ? launch : element()), createElement: element };
+  const { Game } = await import('../js/main.js');
+  setPad([PAD.A]);
+  g.game = Object.assign(Object.create(Game.prototype), {
+    state: 'TITLE', gpButtons: [], gpActive: true, menuNav: new MenuNavigator(), menuState: 'TITLE', menuGrace: 0,
+    grid: { update() {} }, particles: { update() {} }, sound: { init() {} }, shake: 0, chromaFlash: 0, shieldRotation: 0,
+    camX: 0, camY: 0, width: 1280, height: 720
+  });
+  g.game.update(1 / 60);
+  assert.equal(g.game.state, 'PLAYING');
+  assert.equal(g.game.gpDashLatch, true, 'held A is latched, so gameplay will not read it as a fresh dash');
+});

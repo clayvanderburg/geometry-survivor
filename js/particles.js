@@ -213,8 +213,14 @@ export class ParticleSystem {
       sh.angle += sh.vRot;
       sh.life -= dt;
 
-      if (sh.x < 6 || sh.x > width - 6) sh.vx *= -0.8;
-      if (sh.y < 6 || sh.y > height - 6) sh.vy *= -0.8;
+      if (sh.x < 6 || sh.x > width - 6) {
+        sh.vx *= -0.8;
+        sh.x = Math.max(6, Math.min(width - 6, sh.x));
+      }
+      if (sh.y < 6 || sh.y > height - 6) {
+        sh.vy *= -0.8;
+        sh.y = Math.max(6, Math.min(height - 6, sh.y));
+      }
 
       if (sh.life <= 0) {
         this.shards[i] = this.shards[this.shards.length - 1];
@@ -271,7 +277,7 @@ export class ParticleSystem {
     for (let i = 0; i < this.afterimages.length; i++) {
       const ai = this.afterimages[i];
       if (!visible(ai.x, ai.y, ai.radius * 1.4)) continue;
-      const alpha = (ai.life / ai.maxLife) * 0.55;
+      const alpha = (ai.life / ai.maxLife) * 0.7;
       ctx.save();
       ctx.translate(ai.x, ai.y);
       ctx.rotate(ai.angle);

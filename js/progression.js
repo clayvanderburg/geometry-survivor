@@ -40,7 +40,7 @@ export const META_UPGRADES = [
     maxRank: 6,
     baseCost: 8,
     costScale: 1.55,
-    desc: '+18% LUCK (multi-level rolls & rare chests) and +22% Pickup Radius per rank.'
+    desc: '+18% LUCK (multi-level rolls & rare chests), +22% Pickup Radius and +10% XP per rank.'
   },
   {
     id: 'bombs',
@@ -60,12 +60,12 @@ export const META_UPGRADES = [
     maxRank: 6,
     baseCost: 10,
     costScale: 1.6,
-    desc: '+22% Asteroid Mining Speed & +20% Void Core harvest yield per rank.'
+    desc: '+22% Asteroid Mining Speed & +20% Void Core drops from enemies and run bounty per rank.'
   }
 ];
 
 const DEFAULT_HIGHSCORES = [
-  { id: 'seed-1', name: 'VECTRA // PRIME', score: 125000, multiplier: 14.5, wave: 10, kills: 420, timeStr: '03:40' },
+  { id: 'seed-1', name: 'VEXOLITH // PRIME', score: 125000, multiplier: 14.5, wave: 10, kills: 420, timeStr: '03:40' },
   { id: 'seed-2', name: 'VOID // HUNTER', score: 48500, multiplier: 8.4, wave: 6, kills: 210, timeStr: '02:12' },
   { id: 'seed-3', name: 'NEON // DRIFTER', score: 18200, multiplier: 4.2, wave: 3, kills: 95, timeStr: '01:05' }
 ];
@@ -106,6 +106,13 @@ export function normalizeSave(value) {
 export class ProgressionManager {
   constructor() {
     this.data = this.load();
+    this.onExternalChange = null;
+    // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
+    globalThis.addEventListener?.('storage', (e) => {
+      if (e.key !== SAVE_KEY) return;
+      this.data = this.load();
+      this.onExternalChange?.();
+    });
   }
 
   load() {
