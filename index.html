@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VECTRA // VOID SURVIVOR</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD Overlay -->
+    <div id="hud">
+      <div class="hud-top">
+        <div class="hud-left">
+          <div class="stat-label">SCORE</div>
+          <div id="score-display" class="stat-value">0</div>
+          <div class="left-badges">
+            <div id="multiplier-display" class="multiplier-badge">x1.0</div>
+            <div id="luck-hud-display" class="luck-badge" title="Luck boosts +2/+3 Multi-Level Upgrades & Relic Chest Drops">🍀 100% LUCK</div>
+            <div id="cores-hud-display" class="cores-badge" title="Void Cores harvested for permanent Armory upgrades">❖ 0 CORES</div>
+          </div>
+        </div>
+
+        <div class="hud-center">
+          <div class="wave-row">
+            <span id="wave-display">WAVE 1</span>
+            <span class="separator">//</span>
+            <span id="timer-display">00:00</span>
+          </div>
+          <div class="xp-bar-container">
+            <div id="xp-bar-fill"></div>
+            <div id="level-display">LVL 1</div>
+          </div>
+          <div id="active-weapons-bar" class="weapons-bar"></div>
+        </div>
+
+        <div class="hud-right">
+          <div class="bars-wrapper">
+            <div class="bar-group">
+              <span class="bar-label">SHIELD</span>
+              <div class="hp-bar-outer">
+                <div id="hp-bar-fill"></div>
+              </div>
+              <span id="hp-text">100/100</span>
+            </div>
+            <div class="ability-group">
+              <div class="ability-pill" id="dash-indicator" title="Dash [Space / Right-Click]">
+                <span class="key-hint">SPACE</span> DASH
+                <div class="cooldown-fill" id="dash-cd"></div>
+              </div>
+              <div class="ability-pill" id="nova-indicator" title="Supernova Bomb [E / Q]">
+                <span class="key-hint">E</span> SUPERNOVA (<span id="bombs-count">2</span>)
+              </div>
+            </div>
+          </div>
+          <div class="quick-toggles">
+            <button id="btn-autofire" class="hud-btn active" title="Toggle Auto-Fire [F]">AUTO-FIRE: ON [F]</button>
+            <button id="btn-autoaim" class="hud-btn" title="Toggle Auto-Aim [C]">AUTO-AIM: OFF [C]</button>
+            <button id="btn-sound" class="hud-btn active" title="Toggle Synth Audio & Music [M]">MUSIC &amp; SFX: ON [M]</button>
+            <button id="btn-tuner-toggle" class="hud-btn" style="border-color:var(--gold); color:var(--gold);" title="Toggle Live Parameter Tuner [T]">⚙ TUNER [T]</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Combo / Boss Banner -->
+      <div id="center-banner" class="center-banner hidden"></div>
+    </div>
+
+    <!-- In-Game Slide-Over Live Tuner & Sandbox Drawer -->
+    <div id="tuner-drawer" class="tuner-drawer hidden">
+      <div class="tuner-drawer-header">
+        <div>
+          <div style="font-size:13px; font-weight:800; color:var(--cyan); letter-spacing:1.5px;">⚙ LIVE TUNING STUDIO</div>
+          <div style="font-size:10px; color:#8ba3c7;">Changes apply live! Copy &amp; paste to Agent when happy.</div>
+        </div>
+        <button id="btn-close-tuner" class="hud-btn">✕ [T]</button>
+      </div>
+      <div class="tuner-drawer-actions">
+        <button id="btn-drawer-copy" class="hud-btn active" style="border-color:var(--gold); color:var(--gold);">📋 COPY TUNING FOR AGENT</button>
+        <button id="btn-drawer-reset" class="hud-btn" style="border-color:var(--magenta); color:#ff77b7;">↺ RESET</button>
+        <a href="tuner.html" target="_blank" class="hud-btn" style="text-decoration:none; text-align:center;">↗ FULL STUDIO TAB</a>
+      </div>
+      <div class="tuner-sandbox-bar">
+        <button class="hud-btn" data-sbx="SPAWN_CHEST">★ +Chest</button>
+        <button class="hud-btn" data-sbx="FORCE_LEVELUP">⬆ +Level</button>
+        <button class="hud-btn" data-sbx="ADD_CORES">❖ +50 Cores</button>
+        <button class="hud-btn" data-sbx="SPAWN_BOSS">⚠ +Boss</button>
+        <button class="hud-btn" data-sbx="HEAL_FULL">🛡 Heal</button>
+      </div>
+      <div id="drawer-tuner-body" class="tuner-drawer-body"></div>
+    </div>
+
+    <!-- Start / Title & Hub Modal -->
+    <div id="title-modal" class="modal-overlay">
+      <div class="modal-card hub-card">
+        <div class="hub-header">
+          <div>
+            <div class="glitch-subtitle">GEOMETRIC SWARM &amp; ASTEROID EXCAVATION ROGUELITE</div>
+            <h1 class="neon-title">VECTRA<span>//</span>SURVIVOR</h1>
+          </div>
+          <div class="wallet-pill">
+            <span class="wallet-icon">❖</span>
+            <div>
+              <div class="wallet-label">VOID CORES BANKED</div>
+              <div id="hub-cores-count" class="wallet-value">15</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hub-columns">
+          <!-- Left: Permanent Armory (Meta-Progression) -->
+          <div class="hub-panel">
+            <div class="panel-header">
+              <span class="panel-title">❖ VOID ARMORY // PERMANENT UPGRADES</span>
+              <span class="panel-sub">Persists across all sessions</span>
+            </div>
+            <div id="armory-grid" class="armory-grid"></div>
+          </div>
+
+          <!-- Right: Highscore Leaderboard & Pilot Callsign -->
+          <div class="hub-panel">
+            <div class="panel-header">
+              <span class="panel-title">★ HIGHSCORE BOARD</span>
+              <span class="panel-sub">Top Arena Runs</span>
+            </div>
+            <div class="name-entry-bar" style="margin-bottom:10px;">
+              <label for="title-pilot-name" class="name-label">PILOT CALLSIGN:</label>
+              <input id="title-pilot-name" type="text" maxlength="18" class="name-input" placeholder="MADKING" value="MADKING" />
+            </div>
+            <div id="highscore-list" class="highscore-list"></div>
+
+            <div class="controls-mini">
+              <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
+              <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
+              <span><b>Space / R-Click:</b> Phase Dash</span>
+              <span><b>[T] Key:</b> Live Tuning Studio</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="title-actions" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+          <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
+          <a href="tuner.html" target="_blank" class="neon-btn" style="text-decoration:none; border-color:var(--gold); color:var(--gold); padding:14px 20px; font-size:13px;">⚙ OPEN TUNING STUDIO</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Level Up Upgrade Modal -->
+    <div id="upgrade-modal" class="modal-overlay hidden">
+      <div class="modal-card upgrade-card">
+        <div class="upgrade-header">
+          <div class="glitch-subtitle">GEOM RESONANCE ACHIEVED</div>
+          <h2 class="upgrade-title">SYSTEM EVOLUTION</h2>
+          <p class="upgrade-hint">Press <span>[1]</span> <span>[2]</span> <span>[3]</span> or Click to Evolve</p>
+        </div>
+        <div id="upgrade-choices" class="upgrade-choices-grid"></div>
+      </div>
+    </div>
+
+    <!-- Vampire Survivors Style Relic Chest Jackpot Modal -->
+    <div id="chest-modal" class="modal-overlay hidden">
+      <div class="modal-card upgrade-card">
+        <div class="upgrade-header">
+          <div id="chest-tier-subtitle" class="glitch-subtitle" style="color:var(--gold)">★ RELIC SUPPLY CACHE UNLOCKED ★</div>
+          <h2 id="chest-tier-title" class="upgrade-title" style="text-shadow: 0 0 22px var(--gold);">TRIPLE JACKPOT!</h2>
+          <p id="chest-bonus-desc" class="upgrade-hint">All systems below have been automatically installed!</p>
+        </div>
+        <div id="chest-rewards-grid" class="upgrade-choices-grid"></div>
+        <div class="title-actions" style="margin-top:22px;">
+          <button id="btn-claim-chest" class="neon-btn primary-btn">CLAIM REWARDS [SPACE / CLICK]</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Modal (with Name Input, Run Summary, Armory & Highscores) -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+      <div class="modal-card hub-card">
+        <div class="hub-header">
+          <div>
+            <div id="gameover-subtitle" class="glitch-subtitle danger-text">SHIELD COLLAPSED // SESSION COMPLETE</div>
+            <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
+          </div>
+          <div class="wallet-pill">
+            <span class="wallet-icon">❖</span>
+            <div>
+              <div class="wallet-label">TOTAL VOID CORES</div>
+              <div id="go-cores-count" class="wallet-value">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="gameover-stats" class="gameover-stats"></div>
+
+        <div class="hub-columns">
+          <div class="hub-panel">
+            <div class="panel-header">
+              <span class="panel-title">❖ SPEND VOID CORES // ARMORY</span>
+              <span class="panel-sub">Upgrade ship for next launch</span>
+            </div>
+            <div id="go-armory-grid" class="armory-grid"></div>
+          </div>
+
+          <div class="hub-panel">
+            <div class="panel-header">
+              <span class="panel-title">★ HIGHSCORE BOARD</span>
+              <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
+            </div>
+            <div class="name-entry-bar" style="margin-bottom:10px;">
+              <label for="go-pilot-name" class="name-label">ENTER NAME:</label>
+              <input id="go-pilot-name" type="text" maxlength="18" class="name-input" placeholder="ENTER NAME" />
+              <button id="btn-save-name" class="save-name-btn">SAVE</button>
+            </div>
+            <div id="go-highscore-list" class="highscore-list"></div>
+          </div>
+        </div>
+
+        <div class="title-actions">
+          <button id="btn-restart-game" class="neon-btn primary-btn">RELAUNCH SHIP [SPACE / CLICK]</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
