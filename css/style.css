@@ -1223,8 +1223,9 @@ html, body {
   transform: translateY(-5px);
 }
 
-/* Short screens: a slimmer boss title card so it stays clear of the ship at screen centre. */
-@media (max-height: 700px) {
+/* Short screens (up to 1366x768 laptops): a slimmer boss title card so it stays clear of the ship at
+   screen centre even under a warning strip and stacked boss bars. */
+@media (max-height: 820px) {
   .boss-card { top: calc(100% + 10px); padding: 6px 16px 8px; }
   .boss-card-name { font-size: clamp(20px, 4vw, 30px); letter-spacing: 4px; }
   .boss-card-epithet { font-size: 12px; }

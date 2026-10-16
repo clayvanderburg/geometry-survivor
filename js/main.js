@@ -2368,6 +2368,7 @@ export class Game {
   // warned spawn points (with their countdown) and toward live bosses that are off-screen.
   drawBossIndicators(ctx) {
     let soonest = Infinity;
+    this.edgeArrowTop = null; // Measured lazily, only on frames that actually draw an edge arrow.
     ctx.save();
     ctx.font = '900 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -2393,17 +2394,27 @@ export class Game {
     ctx.restore();
   }
 
+  // Bottom of the top HUD block (+ room for the arrow head) in canvas pixels. The DOM has already been
+  // written for this frame, so this read is the same layout the browser would run before painting.
+  measureEdgeArrowTop() {
+    this.hudTopEl ??= document.querySelector?.('.hud-top') || null;
+    const bottom = this.hudTopEl?.getBoundingClientRect?.().bottom;
+    return Number.isFinite(bottom) ? bottom + 34 : Math.max(150, this.height * 0.25);
+  }
+
   drawEdgeArrow(ctx, wx, wy, color, label) {
     const sx = wx - this.camX;
     const sy = wy - this.camY;
     if (sx >= 0 && sx <= this.width && sy >= 0 && sy <= this.height) return; // On-screen: the world art reads.
-    // Ray from screen centre to the target, clipped to an inset frame whose top edge sits below the
-    // HUD, warning strip and stacked boss bars.
+    // Ray from screen centre to the target, clipped to an inset frame whose top edge sits just below
+    // the HUD, warning strip and stacked boss bars (measured, so the arrow stays at the edge on any
+    // screen height instead of landing on the ship).
     const cx = this.width * 0.5;
     const cy = this.height * 0.5;
     const dx = sx - cx;
     const dy = sy - cy;
-    const top = Math.min(cy - 40, Math.max(150, this.height * 0.4));
+    this.edgeArrowTop ??= this.measureEdgeArrowTop();
+    const top = Math.min(cy - 40, this.edgeArrowTop);
     const kx = dx > 0 ? (this.width - 46 - cx) / dx : dx < 0 ? (46 - cx) / dx : Infinity;
     const ky = dy > 0 ? (this.height - 46 - cy) / dy : dy < 0 ? (top - cy) / dy : Infinity;
     const k = Math.min(kx, ky);

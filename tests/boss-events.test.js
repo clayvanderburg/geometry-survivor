@@ -279,3 +279,21 @@ test('music drops out during a boss warning and adds the boss riff while one is 
   assert.equal(engine.bossStage, 2);
   assert.equal(count(bar(), 'playBossStab'), 0);
 });
+
+test('an off-screen boss arrow above the player sits just under the measured HUD, not on the ship', () => {
+  const { g } = bossGame();
+  document.querySelector = sel => (sel === '.hud-top' ? { getBoundingClientRect: () => ({ bottom: 170 }) } : null);
+  const translates = [];
+  const ctx = new Proxy({ translate: (x, y) => translates.push([x, y]) }, { get: (t, k) => t[k] ?? (() => {}), set: () => true });
+  g.enemyManager.enemies.push({ isBoss: true, x: g.camX + g.width / 2, y: g.camY - 600 });
+  g.drawBossIndicators(ctx);
+  assert.deepEqual(translates, [[g.width / 2, 170 + 34]]);
+
+  // A short window still keeps the arrow at least 40px above centre.
+  delete g.hudTopEl;
+  document.querySelector = () => ({ getBoundingClientRect: () => ({ bottom: 400 }) });
+  translates.length = 0;
+  g.drawBossIndicators(ctx);
+  assert.deepEqual(translates, [[g.width / 2, g.height / 2 - 40]]);
+  delete document.querySelector;
+});
