@@ -1,3 +1,6 @@
+import { SpatialIndex } from './spatial-index.js';
+import { FixedStepClock } from './clock.js';
+import { drawPlayerShield, drawCrabShip } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager } from './enemies.js';
@@ -16,7 +19,7 @@ import {
   sendSandboxCommand
 } from './config.js';
 
-class Game {
+export class Game {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
@@ -59,11 +62,12 @@ class Game {
       this.applyLiveTuning(sandboxAction);
     });
 
-    this.lastTime = performance.now();
+    this.frameClock = new FixedStepClock(performance.now());
     requestAnimationFrame((t) => this.loop(t));
   }
 
   resetRun() {
+    this.resetInput();
     const bonuses = this.progression.getBonuses();
 
     this.score = 0;
@@ -133,6 +137,10 @@ class Game {
     this.camX = centerX - this.width * 0.5;
     this.camY = centerY - this.height * 0.5;
 
+    this.particles.clear();
+    this.grid.reset();
+    this.shake = 0;
+    this.chromaFlash = 0;
     this.fireAccumulator = 0;
     this.missileTimer = 0;
     this.lightningTimer = 0;
@@ -203,13 +211,17 @@ class Game {
     });
 
     window.addEventListener('keydown', (e) => {
-      if (document.activeElement && document.activeElement.tagName === 'INPUT') {
-        return;
-      }
+      const focused = document.activeElement;
+      const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
+        (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
+      if (editingText) return;
+      if (focused?.type === 'range' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) return;
 
       this.sound.init();
       const code = e.code;
       this.keys[code] = true;
+      // Held movement is stateful; abilities and toggles fire only on the initial press.
+      if (e.repeat) return;
 
       if (this.state === 'TITLE' && code === 'Space') {
         e.preventDefault();
@@ -277,6 +289,18 @@ class Game {
 
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
+    });
+
+    const releaseInput = () => {
+      this.frameClock?.reset(performance.now());
+      this.resetInput();
+      if (this.state === 'PLAYING') this.togglePause();
+    };
+    window.addEventListener('blur', releaseInput);
+    window.addEventListener('focus', () => this.frameClock?.reset(performance.now()));
+    document.addEventListener('visibilitychange', () => {
+      this.frameClock?.reset(performance.now());
+      if (document.hidden) releaseInput();
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -592,10 +616,11 @@ class Game {
         row.className = `hs-row ${isCurrent ? 'hs-current' : ''}`;
         row.innerHTML = `
           <span class="hs-rank">#${idx + 1}</span>
-          <span class="hs-name">${entry.name} ${isCurrent ? '★ NEW' : ''}</span>
+          <span class="hs-name"></span>
           <span class="hs-meta">W${entry.wave} · x${Number(entry.multiplier).toFixed(1)} · ${entry.timeStr}</span>
           <span class="hs-score">${Number(entry.score).toLocaleString()}</span>
         `;
+        row.querySelector('.hs-name').textContent = entry.name + (isCurrent ? ' ★ NEW' : '');
         listEl.appendChild(row);
       });
     });
@@ -623,6 +648,13 @@ class Game {
     btn.classList.toggle('active', on);
   }
 
+  resetInput() {
+    this.keys = {};
+    this.mouse.down = false;
+    this.gpDashLatch = false;
+    this.gpBombLatch = false;
+  }
+
   togglePause() {
     if (this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
     const pauseModal = document.getElementById('pause-modal');
@@ -630,7 +662,7 @@ class Game {
 
     if (this.state === 'PLAYING') {
       this.state = 'PAUSED';
-      this.keys.clear();
+      this.resetInput();
       this.mouse.down = false;
       this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
       if (pauseModal) pauseModal.classList.remove('hidden');
@@ -750,8 +782,7 @@ class Game {
       const pool = rollUpgrades(this.player, 3);
       if (pool.length === 0) break;
       const chosen = pool[0];
-      this.player.upgradeLevels[chosen.id] = (this.player.upgradeLevels[chosen.id] || 0) + 1;
-      chosen.apply(this.player);
+      this.applyUpgrade(chosen);
       awarded.push({
         ...chosen,
         newLevel: this.player.upgradeLevels[chosen.id]
@@ -792,10 +823,12 @@ class Game {
   }
 
   closeChestModal() {
+    if (this.state !== 'CHEST') return;
     document.getElementById('chest-modal').classList.add('hidden');
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 48, 5, 0.45);
+    this.processPendingLevelUps();
     this.updateHUD();
   }
 
@@ -875,6 +908,7 @@ class Game {
 
     p.dashTimer = 0.22;
     p.dashCooldown = Math.max(0.2, (TUNING.dashCooldownBase ?? 1.5) - (p.weapons.dashNova || 0) * 0.14);
+    p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, 0.32);
 
     const moveAngle = (Math.abs(p.vx) + Math.abs(p.vy) > 0.2)
@@ -911,15 +945,15 @@ class Game {
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
 
     const enemies = this.enemyManager.enemies;
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
+    for (const e of [...enemies].reverse()) {
+      if (e.dead) continue;
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
       if (e.isBoss) {
         e.hp -= e.maxHp * 0.4;
         e.hitFlash = 1;
-        if (e.hp <= 0) this.killEnemy(i, true);
+        if (e.hp <= 0) this.killEnemy(e, true);
       } else {
-        this.killEnemy(i, true);
+        this.killEnemy(e, true);
       }
     }
 
@@ -933,15 +967,15 @@ class Game {
   // Weapons and explosions ONLY damage enemies — never asteroids!
   damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190) {
     const enemies = this.enemyManager.enemies;
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
+    for (const e of [...enemies].reverse()) {
+      if (e.dead) continue;
       const dx = e.x - cx;
       const dy = e.y - cy;
       if (dx * dx + dy * dy <= (radius + e.radius) * (radius + e.radius)) {
         e.hp -= dmg;
         e.hitFlash = 1;
         if (e.hp <= 0) {
-          this.killEnemy(i);
+          this.killEnemy(e);
         }
       }
     }
@@ -950,10 +984,12 @@ class Game {
 
   killEnemy(index, fromBomb = false) {
     const enemies = this.enemyManager.enemies;
-    const e = enemies[index];
-    if (!e) return;
+    const enemyIndex = typeof index === 'number' ? index : enemies.indexOf(index);
+    const e = enemies[enemyIndex];
+    if (!e || e.dead) return;
 
-    enemies.splice(index, 1);
+    e.dead = true;
+    enemies.splice(enemyIndex, 1);
     this.kills++;
 
     const intensity = e.isBoss ? 3.0 : e.type === 'blackhole' ? 2.2 : e.type === 'splitter' ? 1.5 : 1.0;
@@ -1136,6 +1172,94 @@ class Game {
     return best;
   }
 
+  // Return the first intersection along a projectile's movement segment.
+  segmentHitTime(x0, y0, x1, y1, cx, cy, radius) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const ox = x0 - cx, oy = y0 - cy;
+    const c = ox * ox + oy * oy - radius * radius;
+    if (c <= 0) return 0;
+    const a = dx * dx + dy * dy;
+    if (a === 0) return null;
+    const b = 2 * (ox * dx + oy * dy);
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    return t >= 0 && t <= 1 ? t : null;
+  }
+
+  updateBullets(dt) {
+    const manager = this.asteroidManager;
+    const maxRockRadius = manager.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
+    this.projectileEnemyIndex ||= new SpatialIndex();
+    this.projectileEnemyIndex.rebuild(this.enemyManager.enemies);
+    const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.radius), 0);
+    // Death effects may append shrapnel; those projectiles start moving next tick.
+    const pending = this.bullets;
+    this.bullets = [];
+    for (const b of pending) {
+      const x0 = b.x, y0 = b.y;
+      b.x += b.vx;
+      b.y += b.vy;
+      b.life -= dt;
+      b.hitEnemies ||= new Set();
+      const hits = [];
+      const segmentRadius = Math.hypot(b.x - x0, b.y - y0) / 2;
+      const midX = (x0 + b.x) / 2, midY = (y0 + b.y) / 2;
+      for (const e of this.projectileEnemyIndex.query(midX, midY, segmentRadius + maxEnemyRadius + b.radius)) {
+        if (e.dead || b.hitEnemies.has(e)) continue;
+        const t = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.radius + b.radius);
+        if (t !== null) hits.push({ t, enemy: e });
+      }
+      const cells = Math.ceil((Math.hypot(b.x - x0, b.y - y0) / 2 + maxRockRadius + b.radius) / manager.cellSize);
+      for (const rock of manager.getNearbyAsteroids((x0 + b.x) / 2, (y0 + b.y) / 2, cells)) {
+        if (rock.hp <= 0) continue;
+        const t = this.segmentHitTime(x0, y0, b.x, b.y, rock.x, rock.y, rock.radius + b.radius);
+        if (t !== null) hits.push({ t, rock });
+      }
+      // Cover wins ties so enemies cannot be hit through a rock surface.
+      hits.sort((a, b) => a.t - b.t || Number(!!b.rock) - Number(!!a.rock));
+      let blocked = false;
+      for (const hit of hits) {
+        if (hit.rock) { blocked = true; break; }
+        const e = hit.enemy;
+        if (e.dead) continue;
+        b.hitEnemies.add(e);
+        e.hp -= b.damage;
+        e.hitFlash = 1;
+        b.pierce--;
+        const hx = x0 + (b.x - x0) * hit.t;
+        const hy = y0 + (b.y - y0) * hit.t;
+        this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(b.vy, b.vx), 1.1, 5, e.hue, 7);
+        if (e.hp <= 0) this.killEnemy(e);
+        if (b.pierce <= 0) break;
+      }
+      if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
+        this.bullets.push(b);
+      }
+    }
+  }
+
+  applyUpgrade(upg) {
+    const current = this.player.upgradeLevels[upg.id] || 0;
+    const jump = Math.min(upg.levelJump || 1, upg.maxLevel - current);
+    for (let k = 0; k < jump; k++) {
+      this.player.upgradeLevels[upg.id] = current + k + 1;
+      upg.apply(this.player);
+    }
+    return jump;
+  }
+
+  processPendingLevelUps() {
+    if (this.state !== 'PLAYING') return;
+    const p = this.player;
+    while (p.xp >= p.xpToNext && this.state === 'PLAYING') {
+      p.xp -= p.xpToNext;
+      p.level++;
+      p.xpToNext = Math.round(p.xpToNext * 1.32 + 6);
+      this.triggerLevelUp();
+    }
+  }
+
   firePrimaryWeapon() {
     const p = this.player;
     const count = p.stats.bulletCount;
@@ -1237,7 +1361,7 @@ class Game {
       target.hp -= p.stats.damage * (1.4 + level * 0.35);
       target.hitFlash = 1;
       if (target.hp <= 0) {
-        this.killEnemy(bestIdx);
+        this.killEnemy(target);
       }
     }
   }
@@ -1318,20 +1442,19 @@ class Game {
   }
 
   selectUpgrade(index) {
+    if (this.state !== 'UPGRADE') return;
     const upg = this.currentChoices[index];
     if (!upg) return;
 
-    const jump = upg.levelJump || 1;
-    for (let k = 0; k < jump; k++) {
-      this.player.upgradeLevels[upg.id] = (this.player.upgradeLevels[upg.id] || 0) + 1;
-      upg.apply(this.player);
-    }
+    const jump = this.applyUpgrade(upg);
+    this.currentChoices = [];
 
     document.getElementById('upgrade-modal').classList.add('hidden');
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
     this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, upg.badgeColor, 15);
+    this.processPendingLevelUps();
     this.updateHUD();
   }
 
@@ -1397,8 +1520,12 @@ class Game {
 
   pollGamepad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gp = pads[0];
-    if (!gp) return null;
+    const gp = Array.from(pads).find(pad => pad && pad.connected !== false);
+    if (!gp) {
+      this.gpDashLatch = false;
+      this.gpBombLatch = false;
+      return null;
+    }
 
     const deadzone = (v) => (Math.abs(v) > 0.18 ? v : 0);
     return {
@@ -1492,8 +1619,8 @@ class Game {
     } else {
       const mag = Math.hypot(inputX, inputY);
       if (mag > 0) {
-        const nx = inputX / mag;
-        const ny = inputY / mag;
+        const nx = inputX / Math.max(1, mag);
+        const ny = inputY / Math.max(1, mag);
         p.vx = p.vx * 0.78 + nx * p.stats.moveSpeed * 0.22;
         p.vy = p.vy * 0.78 + ny * p.stats.moveSpeed * 0.22;
 
@@ -1611,59 +1738,23 @@ class Game {
         const oy = p.y + Math.sin(oa) * orbRadius;
 
         // Orbiting blades ONLY shred enemies — never asteroids!
-        for (let i = enemies.length - 1; i >= 0; i--) {
-          const e = enemies[i];
+        for (const e of [...enemies].reverse()) {
+          if (e.dead) continue;
           const dx = e.x - ox;
           const dy = e.y - oy;
           if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
             e.hp -= p.stats.damage * 0.35;
             e.hitFlash = 0.6;
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (e.hp <= 0) this.killEnemy(i);
+            if (e.hp <= 0) this.killEnemy(e);
           }
         }
       }
     }
 
-    // 5. Update Bullets
+    // 5. Sweep projectiles against enemies and cover in travel order.
+    this.updateBullets(dt);
     const enemies = this.enemyManager.enemies;
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const b = this.bullets[i];
-      b.x += b.vx;
-      b.y += b.vy;
-      b.life -= dt;
-
-      if (Math.random() < 0.22) {
-        this.grid.applyImpulse(b.x, b.y, 2.2, 28, b.hue);
-      }
-
-      if (b.x < 10 || b.x > this.worldWidth - 10 || b.y < 10 || b.y > this.worldHeight - 10 || b.life <= 0) {
-        this.particles.spawnExplosionSparks(b.x, b.y, 4, b.hue, 1.5, 5, 1.4);
-        this.bullets.splice(i, 1);
-        continue;
-      }
-
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
-        const dx = e.x - b.x;
-        const dy = e.y - b.y;
-        const hitR = e.radius + b.radius;
-        if (dx * dx + dy * dy <= hitR * hitR) {
-          e.hp -= b.damage;
-          e.hitFlash = 1;
-          b.pierce--;
-          this.particles.spawnDirectionalSparks(b.x, b.y, Math.atan2(b.vy, b.vx), 1.1, 5, e.hue, 7);
-
-          if (e.hp <= 0) {
-            this.killEnemy(j);
-          }
-          if (b.pierce <= 0) {
-            this.bullets.splice(i, 1);
-            break;
-          }
-        }
-      }
-    }
 
     // 6. Update Homing Swarm Missiles
     for (let i = this.missiles.length - 1; i >= 0; i--) {
@@ -1687,8 +1778,8 @@ class Game {
       if (m.trail.length > 10) m.trail.shift();
 
       let detonated = m.life <= 0;
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
+      for (const e of [...enemies].reverse()) {
+        if (e.dead) continue;
         if (Math.hypot(e.x - m.x, e.y - m.y) <= e.radius + 10) {
           detonated = true;
           break;
@@ -1720,8 +1811,8 @@ class Game {
       this.grid.applyImplosion(sg.x, sg.y, 18, sg.pullRadius, sg.hue, 0.45);
       this.particles.applyGravityWell(sg.x, sg.y, 1.8, sg.pullRadius);
 
-      for (let j = enemies.length - 1; j >= 0; j--) {
-        const e = enemies[j];
+      for (const e of [...enemies].reverse()) {
+        if (e.dead) continue;
         const dx = sg.x - e.x;
         const dy = sg.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
@@ -1733,7 +1824,7 @@ class Game {
           if (d < sg.radius + e.radius + 18) {
             e.hp -= sg.damage;
             e.hitFlash = 0.5;
-            if (e.hp <= 0) this.killEnemy(j);
+            if (e.hp <= 0) this.killEnemy(e);
           }
         }
       }
@@ -1750,8 +1841,8 @@ class Game {
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
 
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
+    for (const e of [...enemies].reverse()) {
+      if (e.dead) continue;
       const dist = Math.hypot(e.x - p.x, e.y - p.y);
       const shieldRadius = p.radius * 1.9;
       if (dist < e.radius + shieldRadius - 2) {
@@ -1767,7 +1858,7 @@ class Game {
           this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
 
           if (!e.isBoss) {
-            this.killEnemy(i);
+            this.killEnemy(e);
           }
           if (p.hp <= 0) {
             p.hp = 0;
@@ -1830,10 +1921,7 @@ class Game {
         this.geoms.splice(i, 1);
 
         if (p.xp >= p.xpToNext) {
-          p.xp -= p.xpToNext;
-          p.level++;
-          p.xpToNext = Math.round(p.xpToNext * 1.32 + 6);
-          this.triggerLevelUp();
+          this.processPendingLevelUps();
           break;
         }
         continue;
@@ -1873,7 +1961,7 @@ class Game {
       : 'linear-gradient(90deg, #00f3ff, #00ffaa)';
     document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
 
-    const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / 1.25) * 100) : 100;
+    const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
 
@@ -1889,243 +1977,11 @@ class Game {
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
-    const hpRatio = Math.max(0, Math.min(1, p.hp / p.maxHp));
-    let shieldHue = 185;
-    if (hpRatio > 0.65) {
-      shieldHue = 165 + (hpRatio - 0.65) * 65;
-    } else if (hpRatio > 0.32) {
-      shieldHue = 38 + ((hpRatio - 0.32) / 0.33) * 85;
-    } else {
-      shieldHue = 348;
-    }
-
-    const baseRadius = p.radius * (TUNING.shieldRadiusMult ?? 2.55) + beatPulse * 3.2;
-    const thickMult = TUNING.shieldThicknessMult ?? 0.3;
-    const coreThickness = (1.6 + hpRatio * 4.2) * thickMult;
-    const glowThickness = (5.0 + hpRatio * 10.5 + beatPulse * 3) * thickMult;
-    const dangerPulse = hpRatio < 0.32 ? 0.55 + Math.sin(performance.now() * 0.02) * 0.35 : 1.0;
-
-    ctx.save();
-    ctx.translate(p.x, p.y);
-
-    const grad = ctx.createRadialGradient(0, 0, p.radius * 0.4, 0, 0, baseRadius);
-    grad.addColorStop(0, `hsla(${shieldHue}, 100%, 60%, 0.03)`);
-    grad.addColorStop(0.75, `hsla(${shieldHue}, 100%, 60%, ${0.08 + hpRatio * 0.1})`);
-    grad.addColorStop(1, `hsla(${shieldHue}, 100%, 70%, ${0.24 * dangerPulse})`);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = `hsla(${shieldHue}, 100%, 58%, ${(0.22 + hpRatio * 0.28) * dangerPulse})`;
-    ctx.lineWidth = glowThickness;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const startAngle = -Math.PI * 0.5 + Math.sin(this.shieldRotation * 0.5) * 0.2;
-    const endAngle = startAngle + Math.PI * 2 * Math.max(0.08, hpRatio);
-    ctx.strokeStyle = `hsla(${shieldHue}, 100%, 78%, ${0.92 * dangerPulse})`;
-    ctx.lineWidth = coreThickness;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, startAngle, endAngle);
-    ctx.stroke();
-
-    const nodeCount = 4;
-    for (let i = 0; i < nodeCount; i++) {
-      const na = this.shieldRotation + (i * Math.PI * 2) / nodeCount;
-      const nx = Math.cos(na) * baseRadius;
-      const ny = Math.sin(na) * baseRadius;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(nx, ny, 1.5 + hpRatio * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
+    drawPlayerShield(ctx, p, beatPulse, TUNING, this.shieldRotation);
   }
 
   drawCrabShip(ctx, p) {
-    const r = p.radius;
-    const flashAlpha = p.invuln > 0 && Math.floor(performance.now() / 50) % 2 === 0 ? 0.45 : 1;
-    const drilling = this.asteroidManager.isDrilling;
-    const drillScale = p.stats.drillScale || 1.0;
-
-    const carapaceCol = TUNING.carapaceColor || '#00f3ff';
-    const innerCol = TUNING.innerArmorColor || '#00ffaa';
-    const drillIdleCol = TUNING.drillIdleColor || '#00f3ff';
-    const drillActiveCol = TUNING.drillActiveColor || '#00ffaa';
-    const drillJawCol = TUNING.drillJawColor || '#ffcc00';
-
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.globalAlpha = flashAlpha;
-
-    // 1. Rotate Crab Body, Legs & Twin Drill-Claws along p.drillAngle
-    ctx.save();
-    ctx.rotate(p.drillAngle || p.angle);
-
-    // 1a. Six Geometric Scuttling Crab Legs (3 Left, 3 Right)
-    const legOffsets = [-0.42, 0.0, 0.42];
-    ctx.strokeStyle = carapaceCol;
-    ctx.lineWidth = 2.2;
-    for (let side = -1; side <= 1; side += 2) {
-      for (let l = 0; l < 3; l++) {
-        const scutt = Math.sin((p.walkCycle || 0) + l * 2.1 + (side > 0 ? Math.PI : 0)) * 2.4;
-        const baseX = legOffsets[l] * r * 0.85;
-        const baseY = side * r * 0.88;
-        const kneeX = baseX - r * 0.15 + scutt * 0.6;
-        const kneeY = side * r * 1.42;
-        const tipX = baseX - r * 0.48 + scutt;
-        const tipY = side * r * 1.72;
-
-        ctx.beginPath();
-        ctx.moveTo(baseX, baseY);
-        ctx.lineTo(kneeX, kneeY);
-        ctx.lineTo(tipX, tipY);
-        ctx.stroke();
-      }
-    }
-
-    // 1b. Wide Geometric Crab Carapace (Hexagonal Armored Shell)
-    for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
-      ctx.globalAlpha = (pass === 0 ? 0.65 : 1.0) * flashAlpha;
-      ctx.lineWidth = pass === 0 ? 6.5 : 2.5;
-
-      ctx.beginPath();
-      ctx.moveTo(r * 0.78, -r * 0.55);   // Front-left brow
-      ctx.lineTo(r * 0.25, -r * 1.12);   // Wide left carapace wing
-      ctx.lineTo(-r * 0.68, -r * 0.88);  // Rear-left corner
-      ctx.lineTo(-r * 0.92, 0);          // Rear thruster tail
-      ctx.lineTo(-r * 0.68, r * 0.88);   // Rear-right corner
-      ctx.lineTo(r * 0.25, r * 1.12);    // Wide right carapace wing
-      ctx.lineTo(r * 0.78, r * 0.55);    // Front-right brow
-      ctx.lineTo(r * 0.92, 0);           // Front rostrum nose
-      ctx.closePath();
-      ctx.stroke();
-    }
-    ctx.globalAlpha = flashAlpha;
-
-    // Inner Carapace Armor Facets
-    ctx.strokeStyle = innerCol;
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(r * 0.52, -r * 0.35);
-    ctx.lineTo(-r * 0.45, -r * 0.52);
-    ctx.lineTo(-r * 0.62, 0);
-    ctx.lineTo(-r * 0.45, r * 0.52);
-    ctx.lineTo(r * 0.52, r * 0.35);
-    ctx.closePath();
-    ctx.stroke();
-
-    // 1c. Twin Front Crab Pincer Arms + Spinning Conical Rotary Drills!
-    const drillSpin = p.drillSpin || 0;
-    const drillColor = drilling ? drillActiveCol : drillIdleCol;
-    const drillCoreColor = drilling ? '#ffffff' : '#b8fff0';
-
-    for (let side = -1; side <= 1; side += 2) {
-      ctx.save();
-      // Shoulder joint at front corners of the crab carapace
-      const shoulderX = r * 0.62;
-      const shoulderY = side * r * 0.76;
-      const elbowX = r * 1.15;
-      const elbowY = side * r * 1.05;
-
-      // Articulated Crab Claw Arm
-      ctx.strokeStyle = carapaceCol;
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.moveTo(shoulderX, shoulderY);
-      ctx.lineTo(elbowX, elbowY);
-      ctx.stroke();
-
-      // Translate to the Claw's Rotary Drill Mount at the front pincer position
-      const vibrateX = drilling ? (Math.random() - 0.5) * 2.4 : 0;
-      const vibrateY = drilling ? (Math.random() - 0.5) * 2.4 : 0;
-      const clawX = r * 1.42 + vibrateX;
-      const clawY = side * r * 0.78 + vibrateY;
-
-      ctx.translate(clawX, clawY);
-      // Angle the two crab drill-claws slightly inward like pincers (pinching tighter when drilling!)
-      const pinchAngle = -side * (drilling ? 0.28 : 0.16);
-      ctx.rotate(pinchAngle);
-      ctx.scale(drillScale, drillScale);
-
-      // Outer Crab Pincer Jaw Brackets framing the drill
-      ctx.strokeStyle = drilling ? drillJawCol : innerCol;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(-4, -7.5);
-      ctx.lineTo(4, -8.5);
-      ctx.moveTo(-4, 7.5);
-      ctx.lineTo(4, 8.5);
-      ctx.stroke();
-
-      // Conical Rotary Drill Bit Outline (Base at x=0, sharp drill point at x=16)
-      const drillLen = 16.5;
-      const drillHalfW = 6.2;
-
-      for (let pass = 0; pass < 2; pass++) {
-        ctx.strokeStyle = pass === 0 ? drillColor : drillCoreColor;
-        ctx.lineWidth = pass === 0 ? 4.8 : 2.0;
-        ctx.beginPath();
-        ctx.moveTo(drillLen, 0);               // Sharp rotary drill tip
-        ctx.lineTo(0, -drillHalfW);            // Upper drill base
-        ctx.lineTo(-3.5, 0);                   // Rear spindle hub
-        ctx.lineTo(0, drillHalfW);             // Lower drill base
-        ctx.closePath();
-        ctx.stroke();
-      }
-
-      // Animated Spinning Helical Drill Threads inside the cone!
-      ctx.strokeStyle = drilling ? drillJawCol : innerCol;
-      ctx.lineWidth = 1.7;
-      ctx.beginPath();
-      for (let t = 0; t < 3; t++) {
-        // Scroll threads from base (0) to tip (1) as the drill spins
-        const phase = ((drillSpin * 0.35 + t / 3) % 1 + 1) % 1;
-        const tx = phase * (drillLen - 2);
-        const halfSpan = drillHalfW * (1 - phase);
-        ctx.moveTo(tx, -halfSpan);
-        ctx.lineTo(tx + 2.2, halfSpan);
-      }
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    ctx.restore(); // End Crab Body & Drill-Claw orientation
-
-    // 2. Central 360° Rotating Plasma Blaster Turret (aims toward p.angle)
-    ctx.save();
-    ctx.rotate(p.angle);
-
-    ctx.strokeStyle = carapaceCol;
-    ctx.lineWidth = 2.2;
-    // Twin Turret Barrels
-    ctx.beginPath();
-    ctx.moveTo(2, -3.5);
-    ctx.lineTo(r * 0.95, -3.5);
-    ctx.moveTo(2, 3.5);
-    ctx.lineTo(r * 0.95, 3.5);
-    ctx.stroke();
-
-    // Central Diamond Turret Hub
-    ctx.fillStyle = '#051024';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2.0;
-    ctx.beginPath();
-    ctx.moveTo(r * 0.45, 0);
-    ctx.lineTo(0, -r * 0.38);
-    ctx.lineTo(-r * 0.38, 0);
-    ctx.lineTo(0, r * 0.38);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.restore();
-    ctx.restore();
+    drawCrabShip(ctx, p, TUNING, this.asteroidManager.isDrilling);
   }
 
   drawMinimap(ctx) {
@@ -2360,7 +2216,7 @@ class Game {
       ctx.fill();
     }
 
-    this.enemyManager.draw(ctx);
+    this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
@@ -2399,7 +2255,7 @@ class Game {
     ctx.restore();
 
     // 5. Draw Sparks, Shatter Shards, Shockwaves & Lightning in World Space
-    this.particles.draw(ctx);
+    this.particles.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Close Camera Transform
     ctx.restore();
@@ -2419,14 +2275,12 @@ class Game {
   }
 
   loop(now) {
-    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
-    this.lastTime = now;
-    this.update(dt);
+    this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
     requestAnimationFrame((t) => this.loop(t));
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  new Game();
-});
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => new Game());
+}

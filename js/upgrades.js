@@ -207,11 +207,11 @@ export function rollUpgrades(player, count = 3) {
 
   const luck = player.stats.luck || 1.0;
 
-  const shuffled = [...available].sort((a, b) => {
-    const scoreA = (a.isSynergy ? 0.35 * luck : 0) + Math.random();
-    const scoreB = (b.isSynergy ? 0.35 * luck : 0) + Math.random();
-    return scoreB - scoreA;
-  });
+  // Sample once per candidate; sorting must use a consistent comparator.
+  const shuffled = available
+    .map((upgrade) => ({ upgrade, score: Math.random() + (upgrade.isSynergy ? 0.35 * luck : 0) }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ upgrade }) => upgrade);
 
   // Roll Multi-Level Jump (+1, +2, or +3 levels at once!) — genuinely rare & exciting!
   return shuffled.slice(0, count).map((u) => {

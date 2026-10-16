@@ -5,10 +5,10 @@ A browser-based geometric twin-stick roguelite & asteroid-excavation survival ga
 ## Quick Start (Local Dev Server)
 
 ```powershell
-npx --yes http-server -p 8095 -c-1 --cors
+npm start
 ```
-- **Play Game**: `http://127.0.0.1:8095`
-- **Standalone Live Tuning & Dev Sandbox Studio**: `http://127.0.0.1:8095/tuner.html` (or press **`[T]`** in-game to toggle the slide-over Tuner Drawer).
+- **Play Game**: `http://127.0.0.1:8096`
+- **Standalone Live Tuning & Dev Sandbox Studio**: `http://127.0.0.1:8096/tuner.html` (or press **`[T]`** in-game to toggle the slide-over Tuner Drawer).
 
 ---
 
@@ -34,7 +34,7 @@ npx --yes http-server -p 8095 -c-1 --cors
    - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache.
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**
-   - **Multi-Level Upgrades**: Level-up cards have a rare, Luck-scaled chance (`1.5% * luck` for `+2 Levels`, `0.25% * luck` for `+3 Levels`) to jump multiple levels at once.
+   - **Multi-Level Upgrades**: Level-up cards have a rare, Luck-scaled chance (`10% * luck` for `+2 Levels`, `3.5% * luck` for `+3 Levels`, before caps) to jump multiple levels at once.
    - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades).
 
 5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
@@ -65,3 +65,13 @@ npx --yes http-server -p 8095 -c-1 --cors
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
 - `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, and floating text.
 - `js/audio.js` — Procedural WebAudio synthwave sequencer and SFX engine.
+
+## Engineering checks
+
+Requires Node.js 20 or newer; runtime and tests have no package dependencies. Run `npm test` for regression checks. GitHub Actions runs the same checks on pushes and pull requests.
+
+The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy neighbors, projectile avoidance, and primary projectile collisions use spatial queries. Enemy capacity includes active and pending spawns (default 200). Game and Studio share `js/ship-renderer.js`. Saved tuning and progression are normalized on load.
+
+Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder.
+
+See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.

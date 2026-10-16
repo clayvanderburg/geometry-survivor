@@ -9,6 +9,10 @@ export class ParticleSystem {
     this.afterimages = [];
   }
 
+  clear() {
+    for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages']) this[key].length = 0;
+  }
+
   // Burst of velocity-stretched neon line sparks (Geometry Wars signature explosion)
   spawnExplosionSparks(x, y, count, hue, speedMin = 3, speedMax = 16, size = 2.2) {
     for (let i = 0; i < count; i++) {
@@ -257,7 +261,8 @@ export class ParticleSystem {
     }
   }
 
-  draw(ctx) {
+  draw(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
+    const visible = (x, y, r) => x + r >= camX && y + r >= camY && x - r <= camX + viewW && y - r <= camY + viewH;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
@@ -265,6 +270,7 @@ export class ParticleSystem {
     // 1. Draw Dash Afterimages
     for (let i = 0; i < this.afterimages.length; i++) {
       const ai = this.afterimages[i];
+      if (!visible(ai.x, ai.y, ai.radius * 1.4)) continue;
       const alpha = (ai.life / ai.maxLife) * 0.55;
       ctx.save();
       ctx.translate(ai.x, ai.y);
@@ -285,6 +291,7 @@ export class ParticleSystem {
     // 2. Draw Expanding Shockwave Rings
     for (let i = 0; i < this.shockwaves.length; i++) {
       const sw = this.shockwaves[i];
+      if (!visible(sw.x, sw.y, sw.radius + sw.lineWidth * 3)) continue;
       const alpha = Math.max(0, sw.life / sw.maxLife);
       // Outer neon halo
       ctx.strokeStyle = `hsla(${sw.hue}, 100%, 60%, ${alpha * 0.55})`;
@@ -304,6 +311,7 @@ export class ParticleSystem {
     // 3. Draw Geometric Shatter Shards
     for (let i = 0; i < this.shards.length; i++) {
       const sh = this.shards[i];
+      if (!visible(sh.x, sh.y, sh.len)) continue;
       const alpha = Math.max(0, sh.life / sh.maxLife);
       const dx = Math.cos(sh.angle) * sh.len * 0.5;
       const dy = Math.sin(sh.angle) * sh.len * 0.5;
@@ -319,6 +327,7 @@ export class ParticleSystem {
     // 4. Draw Velocity-Stretched Sparks
     for (let i = 0; i < this.sparks.length; i++) {
       const s = this.sparks[i];
+      if (!visible(s.x, s.y, Math.hypot(s.vx, s.vy) * 2.3 + s.size)) continue;
       const alpha = Math.max(0, s.life / s.maxLife);
       const tailX = s.x - s.vx * 2.3;
       const tailY = s.y - s.vy * 2.3;
@@ -334,6 +343,7 @@ export class ParticleSystem {
     // 5. Draw Chain Lightning Arcs
     for (let i = 0; i < this.lightnings.length; i++) {
       const l = this.lightnings[i];
+      if (!l.segments.some(seg => Math.max(seg.x1, seg.x2) >= camX && Math.min(seg.x1, seg.x2) <= camX + viewW && Math.max(seg.y1, seg.y2) >= camY && Math.min(seg.y1, seg.y2) <= camY + viewH)) continue;
       const alpha = l.life / l.maxLife;
       ctx.strokeStyle = `hsla(${l.hue}, 100%, 75%, ${alpha})`;
       ctx.lineWidth = 3.2;
@@ -350,10 +360,11 @@ export class ParticleSystem {
     }
 
     // 6. Floating Text Popups
-    ctx.font = '900 13px system-ui, sans-serif';
     ctx.textAlign = 'center';
     for (let i = 0; i < this.floatTexts.length; i++) {
       const ft = this.floatTexts[i];
+      if (!visible(ft.x, ft.y, ft.text.length * ft.size)) continue;
+      ctx.font = `900 ${ft.size}px system-ui, sans-serif`;
       const alpha = Math.max(0, ft.life / ft.maxLife);
       ctx.fillStyle = ft.color;
       ctx.globalAlpha = alpha;

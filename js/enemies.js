@@ -1,19 +1,27 @@
 // Geometric Enemy Archetypes & Emergent Boids Swarm Intelligence
 import { TUNING } from './config.js';
+import { SpatialIndex } from './spatial-index.js';
 
 export class EnemyManager {
-  constructor() {
+  constructor({ maxEnemies = 200 } = {}) {
+    const budget = Number(maxEnemies);
+    this.maxEnemies = Number.isFinite(budget) ? Math.max(1, Math.floor(budget)) : 200;
+    this.enemyIndex = new SpatialIndex(128);
+    this.bulletIndex = new SpatialIndex(128);
     this.enemies = [];
     this.spawnIndicators = [];
   }
 
   clear() {
+    this.enemyIndex.rebuild([]);
+    this.bulletIndex.rebuild([]);
     this.enemies = [];
     this.spawnIndicators = [];
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style)
   queueSpawn(type, x, y, waveScale = 1, extra = {}) {
+    if (this.enemies.length + this.spawnIndicators.length >= this.maxEnemies) return false;
     const config = this.getArchetype(type, waveScale, extra);
     const hpMult = TUNING.enemyHpMult ?? 1.0;
     const spdMult = TUNING.enemySpeedMult ?? 1.0;
@@ -28,6 +36,7 @@ export class EnemyManager {
       timer: extra.instant ? 0.02 : 0.55,
       maxTimer: 0.55
     });
+    return true;
   }
 
   // Spawn a coordinated Boid Swarm pack
@@ -183,6 +192,10 @@ export class EnemyManager {
 
     const enemies = this.enemies;
     const len = enemies.length;
+    this.enemyIndex.rebuild(enemies);
+    this.bulletIndex.rebuild(bullets);
+    const enemyOrder = new Map(enemies.map((enemy, index) => [enemy, index]));
+    const maxRadius = enemies.reduce((max, enemy) => Math.max(max, enemy.radius), 0);
 
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
@@ -204,11 +217,11 @@ export class EnemyManager {
         let cohX = 0, cohY = 0;
         let neighbors = 0;
 
-        // Sample nearby enemies for fast O(N) bounded flocking
+        // Query only nearby enemies while retaining the original sampling parity.
         const step = len > 90 ? 2 : 1;
-        for (let j = i % step; j < len; j += step) {
-          if (i === j) continue;
-          const other = enemies[j];
+        for (const other of this.enemyIndex.query(e.x, e.y, 80)) {
+          const j = enemyOrder.get(other);
+          if (i === j || j % step !== i % step) continue;
           const ox = other.x - e.x;
           const oy = other.y - e.y;
           const dSq = ox * ox + oy * oy;
@@ -252,8 +265,7 @@ export class EnemyManager {
         // Emerald Weaver: dodges incoming player bullets!
         let dodgeX = 0;
         let dodgeY = 0;
-        for (let bIdx = 0; bIdx < bullets.length; bIdx++) {
-          const b = bullets[bIdx];
+        for (const b of this.bulletIndex.query(e.x, e.y, 120)) {
           const bx = e.x - b.x;
           const by = e.y - b.y;
           const dSq = bx * bx + by * by;
@@ -282,9 +294,8 @@ export class EnemyManager {
         particles.applyGravityWell(e.x, e.y, 1.4, pullRadius);
 
         // Gently tug nearby non-blackhole enemies into orbit
-        for (let j = 0; j < len; j++) {
-          if (i === j) continue;
-          const other = enemies[j];
+        for (const other of this.enemyIndex.query(e.x, e.y, pullRadius)) {
+          if (e === other) continue;
           if (other.type === 'blackhole' || other.isBoss) continue;
           const gx = e.x - other.x;
           const gy = e.y - other.y;
@@ -298,9 +309,9 @@ export class EnemyManager {
       } else {
         // Pinwheels, Splitters, Mini-Splitters, Bosses
         let softSepX = 0, softSepY = 0;
-        for (let j = 0; j < len; j += 2) {
-          if (i === j) continue;
-          const other = enemies[j];
+        for (const other of this.enemyIndex.query(e.x, e.y, e.radius + maxRadius + 6)) {
+          const j = enemyOrder.get(other);
+          if (i === j || j % 2 !== 0) continue;
           const ox = e.x - other.x;
           const oy = e.y - other.y;
           const minD = e.radius + other.radius + 6;
@@ -336,6 +347,8 @@ export class EnemyManager {
       if (e.y < pad) { e.y = pad; e.vy *= -0.8; }
       if (e.y > height - pad) { e.y = height - pad; e.vy *= -0.8; }
 
+      this.enemyIndex.update(e);
+
       // Save short neon ribbon trail for fast movers
       if (e.type === 'swarmer' || e.type === 'weaver' || e.type === 'mini_splitter') {
         e.trail.push({ x: e.x, y: e.y });
@@ -344,13 +357,15 @@ export class EnemyManager {
     }
   }
 
-  draw(ctx) {
+  draw(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
+    const visible = (x, y, r) => x + r >= camX && y + r >= camY && x - r <= camX + viewW && y - r <= camY + viewH;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
     // 1. Draw Materializing Spawn Rings
     for (let i = 0; i < this.spawnIndicators.length; i++) {
       const sp = this.spawnIndicators[i];
+      if (!visible(sp.x, sp.y, sp.config.radius * 2.6 + 4)) continue;
       const t = 1 - sp.timer / sp.maxTimer;
       const r = sp.config.radius * (2.6 - t * 1.6);
       ctx.strokeStyle = `hsla(${sp.config.hue}, 100%, 65%, ${t * 0.85})`;
@@ -363,6 +378,8 @@ export class EnemyManager {
     // 2. Draw Enemies
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
+      const padding = e.radius * 1.4 + 24;
+      if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
       const pulse = 1 + Math.sin(e.pulsePhase) * 0.08;
       const r = e.radius * pulse;
       const color = e.hitFlash > 0

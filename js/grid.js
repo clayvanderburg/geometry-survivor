@@ -37,6 +37,14 @@ export class WarpGrid {
     }
   }
 
+  reset() {
+    for (const point of this.points) {
+      point.x = point.ox;
+      point.y = point.oy;
+      point.vx = point.vy = point.energy = 0;
+    }
+  }
+
   applyImpulse(px, py, force, radius, hue = 190) {
     force *= (TUNING.gridWarpMult ?? 1.0);
     const rSq = radius * radius;

@@ -130,18 +130,32 @@ export const TUNING = { ...DEFAULT_TUNING };
 const listeners = new Set();
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('vectra_tuning_sync') : null;
 
+const schemaByKey = new Map(TUNING_SCHEMA.flatMap(group => group.items).map(item => [item.key, item]));
+
+export function normalizeTuningValue(key, value) {
+  const fallback = DEFAULT_TUNING[key];
+  const schema = schemaByKey.get(key);
+  if (typeof fallback === 'number') {
+    if (typeof value !== 'number' && typeof value !== 'string') return fallback;
+    if (typeof value === 'string' && !value.trim()) return fallback;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.min(schema.max, Math.max(schema.min, numeric));
+  }
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+export function normalizeTuning(values) {
+  const source = values && typeof values === 'object' && !Array.isArray(values) ? values : {};
+  return Object.fromEntries(Object.keys(DEFAULT_TUNING).map(key => [key, normalizeTuningValue(key, source[key])]));
+}
+
 export function loadTuning() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      Object.keys(DEFAULT_TUNING).forEach((k) => {
-        if (parsed[k] !== undefined) {
-          TUNING[k] = parsed[k];
-        }
-      });
-    }
+    Object.assign(TUNING, normalizeTuning(raw ? JSON.parse(raw) : {}));
   } catch (e) {
+    Object.assign(TUNING, DEFAULT_TUNING);
     console.warn('Failed to load tuning config:', e);
   }
   return TUNING;
@@ -160,9 +174,8 @@ export function saveTuning(notifyChannel = true) {
 }
 
 export function updateTuningKey(key, value) {
-  if (!(key in DEFAULT_TUNING)) return;
-  const defVal = DEFAULT_TUNING[key];
-  TUNING[key] = typeof defVal === 'number' ? Number(value) : String(value);
+  if (!Object.hasOwn(DEFAULT_TUNING, key)) return;
+  TUNING[key] = normalizeTuningValue(key, value);
   saveTuning(true);
 }
 
@@ -205,7 +218,7 @@ export function getAgentTuningPayload() {
 if (channel) {
   channel.addEventListener('message', (ev) => {
     if (ev.data?.type === 'TUNING_UPDATED' && ev.data.tuning) {
-      Object.assign(TUNING, ev.data.tuning);
+      Object.assign(TUNING, normalizeTuning(ev.data.tuning));
       listeners.forEach((fn) => fn(TUNING));
     } else if (ev.data?.type === 'SANDBOX_ACTION') {
       listeners.forEach((fn) => fn(TUNING, ev.data.action));

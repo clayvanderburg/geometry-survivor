@@ -1,0 +1,12 @@
+{
+  "name": "vectra-survivor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node tools/serve.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
