@@ -38,11 +38,12 @@ test('a scheduled boss waits for a full enemy cap and enters after a slot opens'
 
 test('multiple delayed bosses retain FIFO wave scaling, announce only admission, and never duplicate', () => {
   const g = cappedWaveGame();
-  const banners = []; g.showBanner = message => banners.push(message);
+  // The boss warning (klaxon + HUD strip) is the announcement; it must fire only on admission.
+  let warnings = 0; g.sound = { ...silent, playBossWarning() { warnings++; }, setMusicState() {} };
   g.update(1 / 60);
   const wave3Scale = g.getWaveScale();
   assert.deepEqual(g.pendingBossSpawns.map(request => request.wave), [3]);
-  assert.equal(banners.filter(message => message.includes('DREADNOUGHT')).length, 0);
+  assert.equal(warnings, 0);
   g.wave = 5; g.waveTimer = 22;
   g.update(1 / 60);
   const wave6Scale = g.getWaveScale();
@@ -54,10 +55,10 @@ test('multiple delayed bosses retain FIFO wave scaling, announce only admission,
   assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale, 650 * wave6Scale]);
   assert.equal(g.pendingBossSpawns.length, 0);
   assert.equal(g.enemyManager.enemies.length + g.enemyManager.spawnIndicators.length, 200);
-  assert.equal(banners.filter(message => message.includes('DREADNOUGHT')).length, 2);
+  assert.equal(warnings, 2);
   g.update(1 / 60);
   assert.equal(g.enemyManager.spawnIndicators.length, 2);
-  assert.equal(banners.filter(message => message.includes('DREADNOUGHT')).length, 2);
+  assert.equal(warnings, 2);
 });
 
 test('restarting clears delayed bosses and previous pending indicators', () => {

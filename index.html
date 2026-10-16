@@ -68,10 +68,54 @@
             <button id="btn-tuner-toggle" class="hud-btn" style="border-color:var(--gold); color:var(--gold);" title="Toggle Live Parameter Tuner [T]">⚙ TUNER [T]</button>
           </div>
         </div>
+
+        <!-- Boss Encounter: warning countdown strip + stacked boss health bars -->
+        <div id="boss-hud" class="boss-hud hidden">
+          <div id="boss-warning" class="boss-warning hidden">
+            <span class="boss-warning-icon">⚠ WARNING ⚠</span>
+            <span id="boss-warning-text" class="boss-warning-text"></span>
+            <span id="boss-warning-eta" class="boss-warning-eta">T-3.0s</span>
+          </div>
+          <div id="boss-bars" class="boss-bars hidden">
+            <div id="boss-bar-0" class="boss-bar-row hidden">
+              <div class="boss-bar-head">
+                <span id="boss-bar-name-0" class="boss-bar-name"></span>
+                <span id="boss-bar-epithet-0" class="boss-bar-epithet"></span>
+                <span id="boss-bar-hp-0" class="boss-bar-hp"></span>
+              </div>
+              <div class="boss-bar-track"><div id="boss-bar-fill-0" class="boss-bar-fill"></div></div>
+            </div>
+            <div id="boss-bar-1" class="boss-bar-row hidden">
+              <div class="boss-bar-head">
+                <span id="boss-bar-name-1" class="boss-bar-name"></span>
+                <span id="boss-bar-epithet-1" class="boss-bar-epithet"></span>
+                <span id="boss-bar-hp-1" class="boss-bar-hp"></span>
+              </div>
+              <div class="boss-bar-track"><div id="boss-bar-fill-1" class="boss-bar-fill"></div></div>
+            </div>
+            <div id="boss-bar-2" class="boss-bar-row hidden">
+              <div class="boss-bar-head">
+                <span id="boss-bar-name-2" class="boss-bar-name"></span>
+                <span id="boss-bar-epithet-2" class="boss-bar-epithet"></span>
+                <span id="boss-bar-hp-2" class="boss-bar-hp"></span>
+              </div>
+              <div class="boss-bar-track"><div id="boss-bar-fill-2" class="boss-bar-fill"></div></div>
+            </div>
+            <div id="boss-bar-more" class="boss-bar-more hidden"></div>
+          </div>
+          <!-- Boss arrival / defeat title card, anchored just below the bars -->
+          <div id="boss-card" class="boss-card hidden">
+            <div id="boss-card-kicker" class="boss-card-kicker"></div>
+            <div id="boss-card-name" class="boss-card-name"></div>
+            <div id="boss-card-epithet" class="boss-card-epithet"></div>
+            <div id="boss-card-detail" class="boss-card-detail"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Combo / Boss Banner -->
       <div id="center-banner" class="center-banner hidden"></div>
+
     </div>
 
     <!-- Pause Modal Overlay -->

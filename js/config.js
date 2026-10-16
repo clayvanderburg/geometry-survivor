@@ -53,7 +53,12 @@ export const DEFAULT_TUNING = {
   screenShakeMult: 1.0,
   gridWarpMult: 1.0,
   enemySpeedMult: 1.0,
-  enemyHpMult: 1.0
+  enemyHpMult: 1.0,
+
+  // 6. Boss Encounters (presentation only; boss stats and rewards are unchanged)
+  bossWarningTime: 3.0,
+  bossHitStop: 0.1,
+  bossSlowMo: 0.5
 };
 
 export const TUNING_SCHEMA = [
@@ -123,6 +128,14 @@ export const TUNING_SCHEMA = [
       { key: 'gridWarpMult', label: 'Neon Grid Warp Force', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
       { key: 'enemySpeedMult', label: 'Enemy Speed Multiplier', type: 'range', min: 0.4, max: 2.5, step: 0.05, unit: 'x' },
       { key: 'enemyHpMult', label: 'Enemy HP Multiplier', type: 'range', min: 0.3, max: 3.0, step: 0.1, unit: 'x' }
+    ]
+  },
+  {
+    group: '⚠ Boss Encounters',
+    items: [
+      { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
+      { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
+      { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' }
     ]
   }
 ];

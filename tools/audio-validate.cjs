@@ -84,6 +84,9 @@ const path = require('node:path');
         engine.playDash();
         engine.playLevelUp();
         engine.playSupernova();
+        engine.playBossWarning();
+        engine.playBossArrival();
+        engine.playBossDefeat();
         for (let i = 0; i < 8; i++) engine.playGeomPickup(i % 2 === 0);
         for (let i = 0; i < explosions; i++) engine.playExplosion(1.5);
       };
@@ -91,6 +94,8 @@ const path = require('node:path');
         for (const spec of [
           { name: 'default_music', explosions: 0, boosted: false },
           { name: 'muffled_menu_music', explosions: 0, boosted: false, muffled: true },
+          { name: 'boss_warning_drop_music', explosions: 0, boosted: false, boss: 1 },
+          { name: 'maximum_allowed_gains_boss_fight_music_and_all_sfx', explosions: 1, boosted: true, boss: 2 },
           { name: 'muted_music_and_all_sfx', explosions: 1, boosted: false, muted: true },
           { name: 'default_music_and_all_sfx', explosions: 1, boosted: false },
           { name: 'default_simultaneous_32_splitter_explosions', explosions: 32, boosted: false },
@@ -99,6 +104,7 @@ const path = require('node:path');
         ]) {
           const { engine, offline } = create(8.5, spec.boosted);
           if (spec.muffled) engine.setMusicState({ intensity: 1, muffled: true });
+          if (spec.boss) engine.setMusicState({ intensity: 1, boss: spec.boss });
           if (spec.muted) engine.toggle();
           music(engine);
           if (spec.explosions) effects(engine, spec.explosions);

@@ -3,7 +3,7 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager } from './enemies.js';
+import { EnemyManager, BOSS_NAME } from './enemies.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -18,6 +18,21 @@ import {
   getAgentTuningPayload,
   sendSandboxCommand
 } from './config.js';
+
+// Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
+const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
+const BOSS_CARD_TIME = 2.8;
+const BOSS_BAR_ROWS = 3;
+
+// "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
+export function bossEpithet(wave) {
+  const rank = BOSS_RANKS[Math.max(0, Math.min(BOSS_RANKS.length - 1, Math.floor(wave / 3) - 1))];
+  return `WAVE ${wave} ${rank}`;
+}
+
+const setHidden = (el, hidden) => {
+  if (el) el.classList[hidden ? 'add' : 'remove']('hidden');
+};
 
 export class Game {
   constructor() {
@@ -89,6 +104,11 @@ export class Game {
     this.waveTimer = 0;
     this.spawnCooldown = 0.6;
     this.pendingBossSpawns = [];
+    this.bossCard = null;
+    this.bossCardTimer = 0;
+    this.hitStopTicks = 0;
+    this.slowMoTicks = 0;
+    this.bossFlash = 0;
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -569,10 +589,9 @@ export class Game {
         this.renderHubUI();
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
+        // Same warning -> entrance event as a scheduled boss.
         const bp = this.spawnAroundPlayer(420, 620);
-        if (this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale())) {
-          this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
-        } else {
+        if (!this.queueBossEncounter(bp, this.getWaveScale(), `WAVE ${this.wave} SANDBOX SIMULACRUM`)) {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
@@ -735,7 +754,7 @@ export class Game {
 
     this.resetRun();
     this.state = 'PLAYING';
-    this.sound.setMusicState({ intensity: 0.35, muffled: false });
+    this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
 
     this.grid.applyImpulse(this.player.x, this.player.y, 48, 260, 188);
     this.particles.spawnShockwave(this.player.x, this.player.y, 240, 188, 5, 0.5);
@@ -1055,8 +1074,11 @@ export class Game {
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
+    let bossBombGain = 0;
     if (e.isBoss) {
+      const bombsBefore = this.player.bombs;
       this.player.bombs = Math.min(9, this.player.bombs + 1);
+      bossBombGain = this.player.bombs - bombsBefore;
       this.spawnRelicChest(e.x, e.y, true);
     } else if (!fromBomb && this.chests.length < 3) {
       const chestChance = (
@@ -1091,6 +1113,7 @@ export class Game {
 
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
+    if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
 
     const geomCount = e.isBoss ? 14 : e.type === 'blackhole' ? 4 : e.type === 'splitter' ? 2 : 1;
     for (let g = 0; g < geomCount; g++) {
@@ -1172,10 +1195,159 @@ export class Game {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.spawnAroundPlayer(520, 780);
-      if (!this.enemyManager.queueSpawn('boss', bp.x, bp.y, scheduled.waveScale)) break;
+      if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
       this.pendingBossSpawns.shift();
-      this.showBanner('⚠ PRISMATIC DREADNOUGHT DETECTED ⚠');
     }
+  }
+
+  // Admission reserves the boss's enemy slot at once and the warning plays out on that reserved
+  // spawn ring, so a boss that has been announced can never be refused by the cap on arrival.
+  queueBossEncounter(pos, waveScale, epithet) {
+    const warmup = TUNING.bossWarningTime ?? 3.0;
+    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, { warmup, name: BOSS_NAME, epithet })) return false;
+    this.sound.playBossWarning();
+    return true;
+  }
+
+  contactDamage(e) {
+    return (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  showBossCard(kind, kicker, e, detail) {
+    this.bossCardSerial = (this.bossCardSerial || 0) + 1;
+    this.bossCard = { id: this.bossCardSerial, kind, kicker, name: e.name || BOSS_NAME, epithet: e.epithet || '', detail };
+    this.bossCardTimer = BOSS_CARD_TIME;
+  }
+
+  // Entrance: layered shockwaves, a hard grid shove, capped screen shake and the title card.
+  onBossArrived(e) {
+    this.shake = Math.min(24, Math.max(this.shake, 20 * (TUNING.screenShakeMult ?? 1.0)));
+    this.chromaFlash = Math.max(this.chromaFlash, 0.6);
+    this.particles.spawnShockwave(e.x, e.y, 560, 48, 8, 0.8);
+    this.particles.spawnShockwave(e.x, e.y, 320, e.hue, 5, 0.55);
+    this.particles.spawnExplosionSparks(e.x, e.y, 48, 48, 3, 18, 2.6);
+    this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
+    this.sound.playBossArrival();
+    const hp = Math.round(e.maxHp).toLocaleString();
+    this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+  }
+
+  // Defeat payoff: hit-stop then half-speed slow-mo (counted in fixed ticks), a gold flash,
+  // layered shockwaves and a banner listing the exact rewards.
+  onBossDefeated(e, pts, bombGain) {
+    this.hitStopTicks = Math.round((TUNING.bossHitStop ?? 0.1) * 60);
+    this.slowMoTicks = Math.round((TUNING.bossSlowMo ?? 0.5) * 60);
+    this.bossFlash = 1;
+    this.shake = Math.min(24, Math.max(this.shake, 24 * (TUNING.screenShakeMult ?? 1.0)));
+    this.particles.spawnShockwave(e.x, e.y, 680, 48, 10, 0.9);
+    this.particles.spawnShockwave(e.x, e.y, 420, 185, 6, 0.65);
+    this.particles.spawnShockwave(e.x, e.y, 220, 325, 5, 0.45);
+    this.particles.spawnExplosionSparks(e.x, e.y, 70, 48, 4, 22, 3);
+    this.grid.applyImpulse(e.x, e.y, 110, 600, 48);
+    this.sound.playBossDefeat();
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE'];
+    if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
+    this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
+  }
+
+  // Boss-kill time dilation in whole 60 Hz ticks: hit-stop holds every tick, then slow-mo holds
+  // every other tick (half speed). Skipping ticks instead of scaling dt keeps per-tick motion exact.
+  consumeTimeDilation() {
+    if (this.hitStopTicks > 0) {
+      this.hitStopTicks--;
+      return true;
+    }
+    if (this.slowMoTicks > 0) {
+      this.slowMoTicks--;
+      return this.slowMoTicks % 2 === 1;
+    }
+    return false;
+  }
+
+  // 0 = no boss, 1 = boss warning counting down, 2 = boss alive (drives the music layers).
+  getBossStage() {
+    if (this.enemyManager.enemies.some(e => e.isBoss && !e.dead)) return 2;
+    return (this.enemyManager.spawnIndicators || []).some(sp => sp.config?.isBoss) ? 1 : 0;
+  }
+
+  // HUD snapshot: live bosses as stacked bars, plus the soonest pending warning's countdown.
+  getBossHudModel() {
+    const bosses = this.enemyManager.enemies.filter(e => e.isBoss && !e.dead);
+    let shown = bosses;
+    if (bosses.length > BOSS_BAR_ROWS) {
+      // Too many to stack: keep the nearest few, still in arrival order so rows don't reshuffle.
+      const p = this.player;
+      const distSq = e => (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      const nearest = new Set([...bosses].sort((a, b) => distSq(a) - distSq(b)).slice(0, BOSS_BAR_ROWS));
+      shown = bosses.filter(e => nearest.has(e));
+    }
+
+    let soonest = null;
+    let warningCount = 0;
+    for (const sp of this.enemyManager.spawnIndicators || []) {
+      if (!sp.config?.isBoss) continue;
+      warningCount++;
+      if (!soonest || sp.timer < soonest.timer) soonest = sp;
+    }
+
+    return {
+      visible: bosses.length > 0,
+      rows: shown.map(e => ({
+        name: e.name || BOSS_NAME,
+        epithet: e.epithet || '',
+        hp: Math.max(0, Math.ceil(e.hp)),
+        maxHp: Math.round(e.maxHp),
+        pct: Math.max(0, Math.min(1, e.hp / e.maxHp))
+      })),
+      overflow: bosses.length - shown.length,
+      warning: soonest
+        ? { count: warningCount, eta: Math.max(0, soonest.timer), name: soonest.config.name || BOSS_NAME, epithet: soonest.config.epithet || '' }
+        : null
+    };
+  }
+
+  updateBossHUD(model) {
+    const card = this.bossCardTimer > 0 ? this.bossCard : null;
+    setHidden(document.getElementById('boss-hud'), !model.warning && !model.visible && !card);
+    const warnEl = document.getElementById('boss-warning');
+    setHidden(warnEl, !model.warning);
+    if (model.warning) {
+      const w = model.warning;
+      document.getElementById('boss-warning-text').textContent = w.count > 1
+        ? `${w.count} BOSSES INBOUND // NEXT: ${w.name}`
+        : `${w.name} INBOUND // ${w.epithet}`;
+      document.getElementById('boss-warning-eta').textContent = `T-${w.eta.toFixed(1)}s`;
+    }
+
+    setHidden(document.getElementById('boss-bars'), !model.visible);
+    for (let i = 0; i < BOSS_BAR_ROWS; i++) {
+      const row = model.rows[i];
+      setHidden(document.getElementById(`boss-bar-${i}`), !row);
+      if (!row) continue;
+      document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
+      document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
+      document.getElementById(`boss-bar-hp-${i}`).textContent = `${row.hp.toLocaleString()} / ${row.maxHp.toLocaleString()}`;
+      document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
+    }
+    const moreEl = document.getElementById('boss-bar-more');
+    setHidden(moreEl, model.overflow <= 0);
+    if (model.overflow > 0) moreEl.textContent = `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`;
+
+    const cardEl = document.getElementById('boss-card');
+    if (card && card.id !== this.bossCardShownId) {
+      this.bossCardShownId = card.id;
+      document.getElementById('boss-card-kicker').textContent = card.kicker;
+      document.getElementById('boss-card-name').textContent = card.name;
+      document.getElementById('boss-card-epithet').textContent = card.epithet ? `— ${card.epithet} —` : '';
+      document.getElementById('boss-card-detail').textContent = card.detail;
+      // Re-run the entrance animation even when one card replaces another that is still showing.
+      cardEl.className = `boss-card boss-card-${card.kind}`;
+      cardEl.style.animation = 'none';
+      void cardEl.offsetWidth;
+      cardEl.style.animation = '';
+    }
+    setHidden(cardEl, !card);
+    if (cardEl) cardEl.classList[card && this.bossCardTimer < 0.45 ? 'add' : 'remove']('boss-card-out');
   }
 
   spawnWavePack() {
@@ -1515,7 +1687,7 @@ export class Game {
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
-    this.sound.setMusicState({ intensity: 0.3, muffled: true });
+    this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.playSupernova();
 
     const mins = Math.floor(this.elapsedTime / 60);
@@ -1628,10 +1800,15 @@ export class Game {
   }
 
   update(dt) {
-    this.grid.update(this.camX, this.camY, this.width, this.height);
-    this.particles.update(dt, this.worldWidth, this.worldHeight);
+    // A boss-kill hit-stop/slow-mo tick freezes the world, grid and particles together.
+    const held = this.state === 'PLAYING' && this.consumeTimeDilation();
+    if (!held) {
+      this.grid.update(this.camX, this.camY, this.width, this.height);
+      this.particles.update(dt, this.worldWidth, this.worldHeight);
+    }
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 45);
     if (this.chromaFlash > 0) this.chromaFlash = Math.max(0, this.chromaFlash - dt * 2.2);
+    if (this.bossFlash > 0) this.bossFlash = Math.max(0, this.bossFlash - dt * 2.4);
     this.shieldRotation += dt * 1.4;
 
     const gp = this.pollGamepad();
@@ -1651,6 +1828,12 @@ export class Game {
     if (gp?.pressed(PAD.X)) this.toggleAutoFire();
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
 
+    if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
+    if (held) {
+      this.updateHUD();
+      return;
+    }
+
     this.elapsedTime += dt;
     this.waveTimer += dt;
 
@@ -1659,7 +1842,9 @@ export class Game {
       1.0,
       0.32 + (enemyCount / 50) * 0.42 + ((this.multiplier - 1) / 15) * 0.18 + (this.wave - 1) * 0.05
     );
-    this.sound.setMusicState({ intensity: dynamicIntensity, muffled: false });
+    // Boss warning drops the mix out; a live boss pins it at full intensity with the boss riff.
+    const bossStage = this.getBossStage();
+    this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
     // Escalate waves every 22 seconds
     if (this.waveTimer >= 22) {
@@ -1942,7 +2127,16 @@ export class Game {
     }
 
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers
+    // Warned boss spawns tear at the grid harder as their countdown runs out.
+    for (const sp of this.enemyManager.spawnIndicators) {
+      if (sp.config.isBoss) this.grid.applyImplosion(sp.x, sp.y, 1.2 + 3 * (1 - sp.timer / sp.maxTimer), 210, 348, 0.6);
+    }
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    const arrivals = this.enemyManager.bossArrivals;
+    if (arrivals?.length) {
+      for (const boss of arrivals) this.onBossArrived(boss);
+      arrivals.length = 0;
+    }
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
 
     for (const e of [...enemies].reverse()) {
@@ -1951,7 +2145,7 @@ export class Game {
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           p.shieldFlash = 1;
-          const hitDmg = (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+          const hitDmg = this.contactDamage(e);
           p.hp -= hitDmg;
           p.invuln = 0.65;
           this.multiplier = Math.max(1.0, this.multiplier * 0.75);
@@ -1975,10 +2169,12 @@ export class Game {
     }
 
     // 9. Update Relic Supply Caches (Vampire Survivors Chests!)
+    // Pickup waits out a boss kill's slow-mo and defeat card so the cache modal never cuts off the payoff.
+    const chestsArmed = !(this.slowMoTicks > 0) && !(this.bossCard?.kind === 'defeat' && this.bossCardTimer > 0.45);
     for (let i = this.chests.length - 1; i >= 0; i--) {
       const ch = this.chests[i];
       ch.rotation += dt * 1.8;
-      if (Math.hypot(p.x - ch.x, p.y - ch.y) < p.radius * 2.1 + 18) {
+      if (chestsArmed && Math.hypot(p.x - ch.x, p.y - ch.y) < p.radius * 2.1 + 18) {
         this.chests.splice(i, 1);
         this.openRelicChest(ch);
         return;
@@ -2078,6 +2274,8 @@ export class Game {
       }
     }
     weaponsBar.innerHTML = tags.join('');
+
+    this.updateBossHUD(this.getBossHudModel());
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -2132,6 +2330,18 @@ export class Game {
       ctx.fillRect(mx + e.x * scaleX - sz * 0.5, my + e.y * scaleY - sz * 0.5, sz, sz);
     }
 
+    // Boss warnings: a pulsing hazard ring on each reserved spawn point
+    const indicators = this.enemyManager.spawnIndicators;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < indicators.length; i++) {
+      const sp = indicators[i];
+      if (!sp.config.isBoss) continue;
+      ctx.strokeStyle = Math.cos(sp.timer * Math.PI * 5) > 0 ? '#ff2a55' : '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(mx + sp.x * scaleX, my + sp.y * scaleY, 4 + (sp.timer % 0.5) * 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // 4. Camera Viewport Box
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
     ctx.lineWidth = 1;
@@ -2152,6 +2362,78 @@ export class Game {
     ctx.fillStyle = 'rgba(0, 243, 255, 0.75)';
     ctx.fillText('SECTOR RADAR // DRILL ACTIVE', mx + 6, my + 11);
     ctx.restore();
+  }
+
+  // Screen-space boss cues: a pulsing red frame while a warning counts down, and edge arrows toward
+  // warned spawn points (with their countdown) and toward live bosses that are off-screen.
+  drawBossIndicators(ctx) {
+    let soonest = Infinity;
+    ctx.save();
+    ctx.font = '900 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const indicators = this.enemyManager.spawnIndicators;
+    for (let i = 0; i < indicators.length; i++) {
+      const sp = indicators[i];
+      if (!sp.config.isBoss) continue;
+      soonest = Math.min(soonest, sp.timer);
+      const flash = Math.cos(sp.timer * Math.PI * 5) > 0;
+      this.drawEdgeArrow(ctx, sp.x, sp.y, flash ? '#ff2a55' : '#ffcc00', `⚠ ${sp.timer.toFixed(1)}s`);
+    }
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
+    }
+    if (soonest < Infinity) {
+      const pulse = 0.5 + 0.5 * Math.cos(soonest * Math.PI * 5);
+      ctx.strokeStyle = `rgba(255, 42, 85, ${0.16 + pulse * 0.38})`;
+      ctx.lineWidth = 14;
+      ctx.strokeRect(7, 7, this.width - 14, this.height - 14);
+    }
+    ctx.restore();
+  }
+
+  drawEdgeArrow(ctx, wx, wy, color, label) {
+    const sx = wx - this.camX;
+    const sy = wy - this.camY;
+    if (sx >= 0 && sx <= this.width && sy >= 0 && sy <= this.height) return; // On-screen: the world art reads.
+    // Ray from screen centre to the target, clipped to an inset frame whose top edge sits below the
+    // HUD, warning strip and stacked boss bars.
+    const cx = this.width * 0.5;
+    const cy = this.height * 0.5;
+    const dx = sx - cx;
+    const dy = sy - cy;
+    const top = Math.min(cy - 40, Math.max(150, this.height * 0.4));
+    const kx = dx > 0 ? (this.width - 46 - cx) / dx : dx < 0 ? (46 - cx) / dx : Infinity;
+    const ky = dy > 0 ? (this.height - 46 - cy) / dy : dy < 0 ? (top - cy) / dy : Infinity;
+    const k = Math.min(kx, ky);
+    const ax = cx + dx * k;
+    const ay = cy + dy * k;
+    const ang = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(-12, -16);
+    ctx.lineTo(-5, 0);
+    ctx.lineTo(-12, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Label sits further inward than the arrow so it never overlaps it, even in corners.
+    const lx = ax - Math.cos(ang) * 56;
+    const ly = ay - Math.sin(ang) * 34;
+    ctx.fillStyle = 'rgba(3, 4, 11, 0.75)';
+    ctx.fillRect(lx - 30, ly - 9, 60, 18);
+    ctx.fillStyle = color;
+    ctx.fillText(label, lx, ly);
   }
 
   draw() {
@@ -2367,9 +2649,18 @@ export class Game {
     // Close Camera Transform
     ctx.restore();
 
-    // 6. Screen-Space Tactical Sector Radar Minimap
+    // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues
     if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST') {
       this.drawMinimap(ctx);
+      this.drawBossIndicators(ctx);
+    }
+
+    if (this.bossFlash > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
     }
 
     if (this.chromaFlash > 0.01) {
