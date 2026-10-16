@@ -1,0 +1,4 @@
+# Netlify publishes only the playable game; tests, tools and dev docs stay out of the site.
+[build]
+  command = "rm -rf dist && mkdir dist && cp -r index.html tuner.html css js dist/"
+  publish = "dist"
