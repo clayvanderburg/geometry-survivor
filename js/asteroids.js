@@ -27,13 +27,14 @@ export class AsteroidManager {
         cy += (cy < centerY ? -440 : 440);
       }
 
-      this.spawnCluster(cx, cy);
+      this.spawnCluster(cx, cy, { x: centerX, y: centerY, radius: 250 });
     }
 
     this.rebuildSpatialHash();
   }
 
-  spawnCluster(cx, cy) {
+  // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
+  spawnCluster(cx, cy, avoid = null) {
     const numRocks = 18 + Math.floor(Math.random() * 18);
     const mainAngle = Math.random() * Math.PI * 2;
     const elongation = 1.2 + Math.random() * 1.4;
@@ -48,19 +49,24 @@ export class AsteroidManager {
       const ry = cy + Math.sin(spreadA) * dist + (Math.random() - 0.5) * 45;
 
       const radius = (26 + Math.random() * 22) * sizeMult;
+      // Leave a wall gap wide enough for the ship to pass.
+      const edge = Math.max(80, radius + 60);
+      const x = Math.max(edge, Math.min(this.worldWidth - edge, rx));
+      const y = Math.max(edge, Math.min(this.worldHeight - edge, ry));
+      if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < radius + avoid.radius) continue;
 
       let tooClose = false;
       for (let j = 0; j < placed.length; j++) {
         const other = placed[j];
         const minDist = (radius + other.radius) * 0.68;
-        if (Math.hypot(rx - other.x, ry - other.y) < minDist) {
+        if (Math.hypot(x - other.x, y - other.y) < minDist) {
           tooClose = true;
           break;
         }
       }
       if (tooClose) continue;
 
-      const distFromCore = Math.hypot(rx - cx, ry - cy);
+      const distFromCore = Math.hypot(x - cx, y - cy);
       const roll = Math.random();
       let oreType = 'rock';
       let maxHp = (40 + radius * 1.05) * hpMult;
@@ -92,8 +98,8 @@ export class AsteroidManager {
       }
 
       const rock = {
-        x: Math.max(80, Math.min(this.worldWidth - 80, rx)),
-        y: Math.max(80, Math.min(this.worldHeight - 80, ry)),
+        x,
+        y,
         radius,
         sides,
         verts,
@@ -112,6 +118,7 @@ export class AsteroidManager {
 
   rebuildSpatialHash() {
     this.spatialGrid.clear();
+    this.maxRockRadius = this.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
     for (let i = 0; i < this.asteroids.length; i++) {
       const a = this.asteroids[i];
       const gx = Math.floor(a.x / this.cellSize);
@@ -120,6 +127,11 @@ export class AsteroidManager {
       if (!this.spatialGrid.has(key)) this.spatialGrid.set(key, []);
       this.spatialGrid.get(key).push(a);
     }
+  }
+
+  // Cell range that covers every rock whose surface is within `reach` of a point.
+  cellsFor(reach) {
+    return Math.ceil((reach + (this.maxRockRadius || 0)) / this.cellSize);
   }
 
   getNearbyAsteroids(x, y, rangeCells = 2) {
@@ -150,9 +162,10 @@ export class AsteroidManager {
       }
     }
 
-    const nearbyPlayerRocks = this.getNearbyAsteroids(player.x, player.y, 2);
     const miningDps = player.stats.miningSpeed || 75;
     const drillReach = player.stats.miningRange || 43; // Close-quarters physical claw-drill reach!
+    // Claw tips sit ~1.73 hull radii from the centre; upgraded reach can exceed the old fixed ±2 cells.
+    const nearbyPlayerRocks = this.getNearbyAsteroids(player.x, player.y, Math.max(2, this.cellsFor(drillReach + player.radius * 1.75)));
 
     // Calculate the world positions of the Crab Ship's Left & Right Front Drill Claws
     const clawHeading = player.drillAngle !== undefined ? player.drillAngle : player.angle;
@@ -221,11 +234,15 @@ export class AsteroidManager {
         player.y += (dy / dist) * overlap;
       }
     }
+    // Pushout must not move the ship past the arena wall (same pad as Game.update).
+    const playerPad = player.radius + 24;
+    player.x = Math.max(playerPad, Math.min(this.worldWidth - playerPad, player.x));
+    player.y = Math.max(playerPad, Math.min(this.worldHeight - playerPad, player.y));
 
     // 2. Bullets vs Asteroids: Weapons DO NOT mine asteroids! Asteroids act as solid cover.
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
-      const nearBullet = this.getNearbyAsteroids(b.x, b.y, 1);
+      const nearBullet = this.getNearbyAsteroids(b.x, b.y, this.cellsFor(b.radius));
       for (let j = 0; j < nearBullet.length; j++) {
         const rock = nearBullet[j];
         if (rock.hp <= 0) continue;
@@ -243,7 +260,7 @@ export class AsteroidManager {
     // 3. Enemies vs Asteroids (Enemies are blocked and funneled through your carved tunnels!)
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, 1);
+      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius));
       for (let j = 0; j < nearEnemy.length; j++) {
         const rock = nearEnemy[j];
         if (rock.hp <= 0) continue;
@@ -266,6 +283,10 @@ export class AsteroidManager {
           }
         }
       }
+      // Keep pushout inside the arena (same pad as EnemyManager's wall clamp).
+      const pad = e.radius + 8;
+      e.x = Math.max(pad, Math.min(this.worldWidth - pad, e.x));
+      e.y = Math.max(pad, Math.min(this.worldHeight - pad, e.y));
     }
 
     // 4. Process Shattered Rocks
@@ -274,30 +295,6 @@ export class AsteroidManager {
         const rock = this.asteroids[i];
         if (rock.hp <= 0) {
           this.asteroids.splice(i, 1);
-          onRockShattered(rock);
-        }
-      }
-      this.rebuildSpatialHash();
-    }
-  }
-
-  // Only used when Phase Dashing directly through rock with Drill Claws
-  damageRocksInRadius(cx, cy, radius, dmg, onRockShattered) {
-    const nearby = this.getNearbyAsteroids(cx, cy, Math.ceil(radius / this.cellSize) + 1);
-    let destroyedAny = false;
-    for (let i = 0; i < nearby.length; i++) {
-      const rock = nearby[i];
-      if (rock.hp <= 0) continue;
-      if (Math.hypot(rock.x - cx, rock.y - cy) <= radius + rock.radius) {
-        rock.hp -= dmg;
-        rock.hitFlash = 1;
-        if (rock.hp <= 0) destroyedAny = true;
-      }
-    }
-    if (destroyedAny) {
-      for (let i = this.asteroids.length - 1; i >= 0; i--) {
-        if (this.asteroids[i].hp <= 0) {
-          const rock = this.asteroids.splice(i, 1)[0];
           onRockShattered(rock);
         }
       }

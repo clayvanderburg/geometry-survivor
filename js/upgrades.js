@@ -8,7 +8,7 @@ export const UPGRADE_POOL = [
     category: 'DRILL CLAWS',
     badgeColor: '#00ffaa',
     maxLevel: 6,
-    desc: '+50% Twin Drill-Claw Mining Speed and +20% Rotary Claw Size & Reach.',
+    desc: '+50% Twin Drill-Claw Mining Speed, +20% Claw Reach and +15% Rotary Claw Size.',
     apply(player) {
       player.stats.miningSpeed *= 1.5;
       player.stats.miningRange *= 1.2;
@@ -136,7 +136,7 @@ export const UPGRADE_POOL = [
     category: 'UTILITY',
     badgeColor: '#00f3ff',
     maxLevel: 5,
-    desc: '+16% Move Speed, +35 Shield Repair, and Phase Dash unleashes a shattering shockwave.',
+    desc: '+16% Move Speed, +25 Max Shield, +45 Shield Repair, and Phase Dash unleashes a shattering shockwave.',
     apply(player) {
       player.stats.moveSpeed *= 1.16;
       player.maxHp += 25;
@@ -173,7 +173,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
-    desc: 'EVOLUTION: Your ship continuously emits a 360° counter-rotating spiral of plasma bolts!',
+    desc: 'EVOLUTION: +15% Fire Rate, and every volley also fires a rotating twin-arm spiral of plasma bolts!',
     apply(player) {
       player.weapons.pulsarHelix = 1;
       player.stats.fireRate *= 1.15;

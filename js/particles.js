@@ -213,8 +213,14 @@ export class ParticleSystem {
       sh.angle += sh.vRot;
       sh.life -= dt;
 
-      if (sh.x < 6 || sh.x > width - 6) sh.vx *= -0.8;
-      if (sh.y < 6 || sh.y > height - 6) sh.vy *= -0.8;
+      if (sh.x < 6 || sh.x > width - 6) {
+        sh.vx *= -0.8;
+        sh.x = Math.max(6, Math.min(width - 6, sh.x));
+      }
+      if (sh.y < 6 || sh.y > height - 6) {
+        sh.vy *= -0.8;
+        sh.y = Math.max(6, Math.min(height - 6, sh.y));
+      }
 
       if (sh.life <= 0) {
         this.shards[i] = this.shards[this.shards.length - 1];

@@ -124,8 +124,7 @@ export class EnemyManager {
           hue: 348, // Crimson Singularity
           score: 250,
           xp: 8,
-          vRot: 0.04,
-          absorbed: 0
+          vRot: 0.04
         };
       case 'boss':
         return {
@@ -181,7 +180,6 @@ export class EnemyManager {
           vRot: c.vRot,
           hitFlash: 0,
           trail: [],
-          absorbed: c.absorbed || 0,
           isBoss: !!c.isBoss,
           pulsePhase: Math.random() * Math.PI * 2
         });
@@ -289,8 +287,8 @@ export class EnemyManager {
         // Crimson Gravity Well: warps the grid inward & pulls nearby enemies/sparks
         e.vx = (e.vx + dirX * 0.12) * 0.94;
         e.vy = (e.vy + dirY * 0.12) * 0.94;
-        const pullRadius = 185 + e.absorbed * 12;
-        grid.applyImplosion(e.x, e.y, 14 + e.absorbed * 2, pullRadius, 348, 0.35);
+        const pullRadius = 185;
+        grid.applyImplosion(e.x, e.y, 14, pullRadius, 348, 0.35);
         particles.applyGravityWell(e.x, e.y, 1.4, pullRadius);
 
         // Gently tug nearby non-blackhole enemies into orbit
@@ -311,7 +309,7 @@ export class EnemyManager {
         let softSepX = 0, softSepY = 0;
         for (const other of this.enemyIndex.query(e.x, e.y, e.radius + maxRadius + 6)) {
           const j = enemyOrder.get(other);
-          if (i === j || j % 2 !== 0) continue;
+          if (i === j) continue;
           const ox = e.x - other.x;
           const oy = e.y - other.y;
           const minD = e.radius + other.radius + 6;

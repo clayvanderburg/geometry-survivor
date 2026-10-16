@@ -10,7 +10,6 @@ import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import {
   TUNING,
-  DEFAULT_TUNING,
   TUNING_SCHEMA,
   updateTuningKey,
   resetTuningToDefaults,
@@ -36,6 +35,7 @@ export class Game {
 
     this.sound = new SoundEngine();
     this.progression = new ProgressionManager();
+    this.progression.onExternalChange = () => this.renderHubUI();
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.enemyManager = new EnemyManager();
@@ -216,7 +216,12 @@ export class Game {
       const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
         (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
       if (editingText) return;
-      if (focused?.type === 'range' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) return;
+      if (focused?.type === 'range' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+        if (this.state !== 'PLAYING') return;
+        e.preventDefault();
+      }
+      // Space on a focused button/link activates that control instead of a menu shortcut.
+      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
 
       this.sound.init();
       const code = e.code;
@@ -224,7 +229,7 @@ export class Game {
       // Held movement is stateful; abilities and toggles fire only on the initial press.
       if (e.repeat) return;
 
-      if (this.state === 'TITLE' && code === 'Space') {
+      if (this.state === 'TITLE' && code === 'Space' && !onControl) {
         e.preventDefault();
         this.startGame();
         return;
@@ -236,7 +241,7 @@ export class Game {
         return;
       }
 
-      if (this.state === 'GAMEOVER' && code === 'Space') {
+      if (this.state === 'GAMEOVER' && code === 'Space' && !onControl) {
         e.preventDefault();
         commitGameOverName();
         this.startGame();
@@ -251,7 +256,7 @@ export class Game {
       }
 
       if (this.state === 'PAUSED') {
-        if (code === 'KeyP' || code === 'Escape' || code === 'Space') {
+        if (code === 'KeyP' || code === 'Escape' || (code === 'Space' && !onControl)) {
           e.preventDefault();
           this.togglePause();
           return;
@@ -468,8 +473,12 @@ export class Game {
           null,
           2
         )}\n\`\`\``;
-        await navigator.clipboard.writeText(text);
-        copyBtn.textContent = '✓ COPIED TO CLIPBOARD!';
+        try {
+          await navigator.clipboard.writeText(text);
+          copyBtn.textContent = '✓ COPIED TO CLIPBOARD!';
+        } catch {
+          copyBtn.textContent = '✗ COPY FAILED';
+        }
         setTimeout(() => { copyBtn.textContent = '📋 COPY TUNING FOR AGENT'; }, 1500);
       });
     }
@@ -510,6 +519,14 @@ export class Game {
       p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
     }
 
+    for (const key of ['musicVolume', 'sfxVolume']) {
+      const id = key === 'musicVolume' ? 'music' : 'sfx';
+      const slider = document.getElementById(`pause-${id}-slider`);
+      const label = document.getElementById(`pause-${id}-label`);
+      if (slider && document.activeElement !== slider) slider.value = TUNING[key];
+      if (label) label.textContent = `${Number(TUNING[key]).toFixed(2)}x`;
+    }
+
     // Sync drawer UI readouts if open
     TUNING_SCHEMA.forEach((group) => {
       group.items.forEach((item) => {
@@ -540,8 +557,11 @@ export class Game {
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
         const bp = this.spawnAroundPlayer(420, 620);
-        this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale());
-        this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
+        if (this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
+        } else {
+          this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
+        }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
         this.particles.spawnFloatText(p.x, p.y - 24, '☄ ASTEROID SECTOR REGENERATED!', '#00ffaa', 15);
@@ -940,7 +960,8 @@ export class Game {
     this.shake = 22 * (TUNING.screenShakeMult ?? 1.0);
     this.chromaFlash = 0.75;
 
-    const maxR = Math.hypot(this.width, this.height) * 0.65;
+    // Fixed world-space reach (the old 1920x1080 value) so window size and zoom don't change the blast.
+    const maxR = 1430;
     this.particles.spawnShockwave(p.x, p.y, maxR, 190, 9, 0.7);
     this.particles.spawnShockwave(p.x, p.y, maxR * 0.55, 325, 6, 0.5);
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
@@ -983,11 +1004,10 @@ export class Game {
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
   }
 
-  killEnemy(index, fromBomb = false) {
+  killEnemy(e, fromBomb = false) {
     const enemies = this.enemyManager.enemies;
-    const enemyIndex = typeof index === 'number' ? index : enemies.indexOf(index);
-    const e = enemies[enemyIndex];
-    if (!e || e.dead) return;
+    const enemyIndex = enemies.indexOf(e);
+    if (enemyIndex === -1 || e.dead) return;
 
     e.dead = true;
     enemies.splice(enemyIndex, 1);
@@ -1111,11 +1131,17 @@ export class Game {
   }
 
   spawnAroundPlayer(minDist = 440, maxDist = 760) {
+    const p = this.player;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
+      // Final attempt aims at the world centre, which always has room beyond minDist.
+      const angle = attempt === 7
+        ? Math.atan2(this.worldHeight / 2 - p.y, this.worldWidth / 2 - p.x)
+        : Math.random() * Math.PI * 2;
       const dist = minDist + Math.random() * (maxDist - minDist);
-      const x = Math.max(90, Math.min(this.worldWidth - 90, this.player.x + Math.cos(angle) * dist));
-      const y = Math.max(90, Math.min(this.worldHeight - 90, this.player.y + Math.sin(angle) * dist));
+      const x = Math.max(90, Math.min(this.worldWidth - 90, p.x + Math.cos(angle) * dist));
+      const y = Math.max(90, Math.min(this.worldHeight - 90, p.y + Math.sin(angle) * dist));
+      // Edge clamping can pull the point back onto the player.
+      if (attempt < 7 && Math.hypot(x - p.x, y - p.y) < minDist) continue;
 
       const nearby = this.asteroidManager.getNearbyAsteroids(x, y, 1);
       let blocked = false;
@@ -1127,11 +1153,9 @@ export class Game {
       }
       if (!blocked || attempt === 7) return { x, y };
     }
-    return { x: this.player.x + 500, y: this.player.y };
   }
 
   processPendingBossSpawns() {
-    this.pendingBossSpawns ||= [];
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.spawnAroundPlayer(520, 780);
@@ -1232,7 +1256,13 @@ export class Game {
       hits.sort((a, b) => a.t - b.t || Number(!!b.rock) - Number(!!a.rock));
       let blocked = false;
       for (const hit of hits) {
-        if (hit.rock) { blocked = true; break; }
+        if (hit.rock) {
+          blocked = true;
+          const hx = x0 + (b.x - x0) * hit.t;
+          const hy = y0 + (b.y - y0) * hit.t;
+          this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          break;
+        }
         const e = hit.enemy;
         if (e.dead) continue;
         b.hitEnemies.add(e);
@@ -1337,15 +1367,15 @@ export class Game {
     }
   }
 
-  fireChainLightning(level) {
+  fireChainLightning(level, originX = this.player.x, originY = this.player.y) {
     const p = this.player;
     const enemies = this.enemyManager.enemies;
     if (enemies.length === 0) return;
 
     const bounces = 3 + level * 2;
     const hitSet = new Set();
-    let currX = p.x;
-    let currY = p.y;
+    let currX = originX;
+    let currY = originY;
 
     for (let b = 0; b < bounces; b++) {
       let bestIdx = -1;
@@ -1491,7 +1521,7 @@ export class Game {
     const result = this.progression.recordRun({
       name: currentPilotName,
       score: this.score,
-      multiplier: this.multiplier,
+      multiplier: +this.multiplier.toFixed(1),
       wave: this.wave,
       kills: this.kills,
       timeStr
@@ -1580,7 +1610,7 @@ export class Game {
 
       if (this.asteroidManager.asteroids.length < 360) {
         const repPt = this.spawnAroundPlayer(850, 1400);
-        this.asteroidManager.spawnCluster(repPt.x, repPt.y);
+        this.asteroidManager.spawnCluster(repPt.x, repPt.y, { x: this.player.x, y: this.player.y, radius: 250 });
         this.asteroidManager.rebuildSpatialHash();
       }
 
@@ -1804,7 +1834,7 @@ export class Game {
         this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue);
 
         if (p.weapons.stormProtocol) {
-          this.fireChainLightning(2);
+          this.fireChainLightning(2, m.x, m.y);
         }
 
         this.missiles.splice(i, 1);
@@ -1862,7 +1892,7 @@ export class Game {
           const hitDmg = (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
           p.hp -= hitDmg;
           p.invuln = 0.65;
-          this.multiplier = Math.max(1.0, +(this.multiplier * 0.75).toFixed(1));
+          this.multiplier = Math.max(1.0, this.multiplier * 0.75);
           this.shake = 16;
           this.chromaFlash = 0.5;
           this.sound.playExplosion(1.8);
@@ -1927,7 +1957,7 @@ export class Game {
           this.particles.spawnFloatText(p.x, p.y - 22, `+${amt} ❖ VOID CORE`, '#d68fff', 14);
         }
 
-        this.multiplier = +(this.multiplier + 0.1 * p.stats.xpMultiplier).toFixed(1);
+        this.multiplier += 0.1 * p.stats.xpMultiplier;
         p.xp += g.xp * p.stats.xpMultiplier;
         this.score += Math.round(10 * this.multiplier);
         this.geoms.splice(i, 1);

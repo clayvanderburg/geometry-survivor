@@ -95,8 +95,8 @@ export const TUNING_SCHEMA = [
       { key: 'chestDropMult', label: 'Enemy Chest Drop Mult', type: 'range', min: 0, max: 10.0, step: 0.1, unit: 'x' },
       { key: 'goldVeinChestChance', label: 'Gold Vein Chest Chance', type: 'range', min: 0, max: 0.2, step: 0.002, unit: 'prob' },
       { key: 'chestDoubleChance', label: 'Chest 2x Jackpot Chance', type: 'range', min: 0, max: 0.6, step: 0.005, unit: 'prob' },
-      { key: 'chestTripleChance', label: 'Chest 3x Jackpot Chance', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'prob' },
-      { key: 'chestPentaChance', label: 'Chest 5x Mega Chance', type: 'range', min: 0, max: 0.2, step: 0.002, unit: 'prob' }
+      { key: 'chestTripleChance', label: 'Chest 3x Jackpot Chance', type: 'range', min: 0, max: 0.4, step: 0.001, unit: 'prob' },
+      { key: 'chestPentaChance', label: 'Chest 5x Mega Chance', type: 'range', min: 0, max: 0.2, step: 0.001, unit: 'prob' }
     ]
   },
   {
