@@ -1532,7 +1532,7 @@ export class Game {
   // Grid funnels and spiralling infall streams for every well (visual only).
   updateWellEffects() {
     const radius = TUNING.blackholePullRadius ?? 200;
-    const margin = 260;
+    const margin = Math.max(260, radius); // streams spawn up to 0.9 × pull radius from their well
     const onScreen = (x, y) => x > this.camX - margin && x < this.camX + this.width + margin &&
       y > this.camY - margin && y < this.camY + this.height + margin;
     for (let i = 0; i < this.gravityWells.length; i++) {

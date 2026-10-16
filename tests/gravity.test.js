@@ -89,30 +89,33 @@ test('an idle ship is visibly tugged inside a black hole, with more pull nearer 
 
 test('the ship always escapes stacked black holes at base move speed, even from the event horizon', () => {
   const maxPull = TUNING_SCHEMA.flatMap(group => group.items).find(item => item.key === 'blackholePlayerPull').max;
-  for (const pull of [DEFAULT_TUNING.blackholePlayerPull, maxPull]) {
-    TUNING.blackholePlayerPull = pull;
-    const { game, manager } = arena();
-    game.player.stats.moveSpeed = DEFAULT_TUNING.moveSpeed;
-    // Worst case: three wells stacked on one spot, ship starting against the horizon.
-    const wells = [0, 1, 2].map(() => addEnemy(manager, 'blackhole', 2000, 2000));
-    for (const w of wells) w.hp = w.maxHp = 1e9;
-    game.player.x = 2000 + wells[0].radius + game.player.radius;
-    game.keys.KeyD = true;
-    const cap = playerPullCap(game.player.stats.moveSpeed);
-    let last = game.player.x - wells[0].x;
-    for (let t = 0; t < 240; t++) {
-      game.update(1 / 60);
-      const dist = game.player.x - wells[0].x;
-      if (t > 2) assert.ok(dist > last, `pull ${pull}: ship lost ground at tick ${t}`);
-      // Gravity never removes more than the capped share of thrust per tick.
-      assert.ok(game.player.gravityTug <= cap + 1e-12);
-      last = dist;
+  try {
+    for (const pull of [DEFAULT_TUNING.blackholePlayerPull, maxPull]) {
+      TUNING.blackholePlayerPull = pull;
+      const { game, manager } = arena();
+      game.player.stats.moveSpeed = DEFAULT_TUNING.moveSpeed;
+      // Worst case: three wells stacked on one spot, ship starting against the horizon.
+      const wells = [0, 1, 2].map(() => addEnemy(manager, 'blackhole', 2000, 2000));
+      for (const w of wells) w.hp = w.maxHp = 1e9;
+      game.player.x = 2000 + wells[0].radius + game.player.radius;
+      game.keys.KeyD = true;
+      const cap = playerPullCap(game.player.stats.moveSpeed);
+      let last = game.player.x - wells[0].x;
+      for (let t = 0; t < 240; t++) {
+        game.update(1 / 60);
+        const dist = game.player.x - wells[0].x;
+        if (t > 2) assert.ok(dist > last, `pull ${pull}: ship lost ground at tick ${t}`);
+        // Gravity never removes more than the capped share of thrust per tick.
+        assert.ok(game.player.gravityTug <= cap + 1e-12);
+        last = dist;
+      }
+      assert.ok(last > TUNING.blackholePullRadius, `pull ${pull}: ship still trapped ${last.toFixed(0)}px from the wells after 4s`);
+      // Worst-case terminal speed against a capped pull is (1 - share) of move speed, faster than a chasing well.
+      assert.ok((1 - PLAYER_ESCAPE_THRUST_SHARE) * DEFAULT_TUNING.moveSpeed > wells[0].speed);
     }
-    assert.ok(last > TUNING.blackholePullRadius, `pull ${pull}: ship still trapped ${last.toFixed(0)}px from the wells after 4s`);
-    // Worst-case terminal speed against a capped pull is (1 - share) of move speed, faster than a chasing well.
-    assert.ok((1 - PLAYER_ESCAPE_THRUST_SHARE) * DEFAULT_TUNING.moveSpeed > wells[0].speed);
+  } finally {
+    TUNING.blackholePlayerPull = DEFAULT_TUNING.blackholePlayerPull; // keep later tests on defaults even if this fails
   }
-  TUNING.blackholePlayerPull = DEFAULT_TUNING.blackholePlayerPull;
 });
 
 test('dashing ignores black-hole tug', () => {
