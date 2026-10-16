@@ -9,6 +9,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
+import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
   TUNING,
   TUNING_SCHEMA,
@@ -18,6 +19,12 @@ import {
   getAgentTuningPayload,
   sendSandboxCommand
 } from './config.js';
+
+// Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
+const SINGULARITY_IMPLODE_TIME = 0.35;
+// Grid funnel depth (px at the core) for enemy black holes and player singularities.
+const BLACKHOLE_GRID_DEPTH = 220;
+const SINGULARITY_GRID_DEPTH = 260;
 
 export class Game {
   constructor() {
@@ -160,6 +167,7 @@ export class Game {
     this.bullets = [];
     this.missiles = [];
     this.singularities = [];
+    this.gravityWells = [];
     this.geoms = [];
     this.chests = []; // Vampire Survivors style Relic Supply Caches!
 
@@ -574,6 +582,11 @@ export class Game {
           this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
         } else {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
+        }
+      } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
+        const bp = this.spawnAroundPlayer(300, 380);
+        if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner('⚠ ENEMY CAP REACHED — BLACK HOLE NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -1425,17 +1438,179 @@ export class Game {
     const p = this.player;
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
+    const pullRadius = 150 + level * 25;
     this.singularities.push({
       x: p.x,
       y: p.y,
       vx: Math.cos(angle) * 4.2,
       vy: Math.sin(angle) * 4.2,
       radius: 14 + level * 3,
-      pullRadius: 150 + level * 25,
-      damage: p.stats.damage * (0.35 + level * 0.12),
+      pullRadius,
+      // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
+      // the payoff is the collapse pulse over 85% of the pull radius.
+      damage: p.stats.damage * (0.14 + level * 0.05),
+      collapseRadius: pullRadius * 0.85,
+      collapseDamage: p.stats.damage * (10 + level * 5) * (TUNING.singularityCollapseMult ?? 1.0),
       life: 2.6,
+      maxLife: 2.6,
+      spin: 0,
       hue: 290
     });
+  }
+
+  // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
+  collectGravityWells() {
+    const wells = this.gravityWells || (this.gravityWells = []);
+    wells.length = 0;
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      if (enemies[i].type === 'blackhole' && !enemies[i].dead) wells.push(enemies[i]);
+    }
+    return wells;
+  }
+
+  // Enemy black holes tug the ship. The summed pull is capped to a share of the ship's own thrust
+  // (see gravity.js), so holding away from any stack of wells always escapes at base move speed.
+  applyWellPullToPlayer(p) {
+    const wells = this.gravityWells;
+    p.gravityTug = 0;
+    if (!wells || wells.length === 0) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    const strength = TUNING.blackholePlayerPull ?? 0.4;
+    let ax = 0;
+    let ay = 0;
+    for (let i = 0; i < wells.length; i++) {
+      const w = wells[i];
+      if (w.dead) continue;
+      const dx = w.x - p.x;
+      const dy = w.y - p.y;
+      const k = wellPullScale(dx, dy, radius, strength, w.radius);
+      ax += dx * k;
+      ay += dy * k;
+    }
+    const mag = Math.hypot(ax, ay);
+    if (mag === 0) return;
+    const cap = playerPullCap(p.stats.moveSpeed);
+    if (mag > cap) {
+      ax *= cap / mag;
+      ay *= cap / mag;
+    }
+    p.vx += ax;
+    p.vy += ay;
+    p.gravityTug = Math.min(mag, cap);
+  }
+
+  // Enemy black holes bend passing shots slightly; speed is preserved so range and damage are unchanged.
+  bendProjectilesInWells() {
+    const wells = this.gravityWells;
+    const strength = TUNING.blackholeBulletBend ?? 0.22;
+    if (!wells || wells.length === 0 || strength <= 0) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      let ax = 0;
+      let ay = 0;
+      for (let j = 0; j < wells.length; j++) {
+        const w = wells[j];
+        if (w.dead) continue;
+        const dx = w.x - b.x;
+        const dy = w.y - b.y;
+        const k = wellPullScale(dx, dy, radius, strength, w.radius);
+        ax += dx * k;
+        ay += dy * k;
+      }
+      if (ax === 0 && ay === 0) continue;
+      const speed = Math.hypot(b.vx, b.vy);
+      b.vx += ax;
+      b.vy += ay;
+      const bent = Math.hypot(b.vx, b.vy) || 1;
+      b.vx *= speed / bent;
+      b.vy *= speed / bent;
+    }
+  }
+
+  // Grid funnels and spiralling infall streams for every well (visual only).
+  updateWellEffects() {
+    const radius = TUNING.blackholePullRadius ?? 200;
+    const margin = 260;
+    const onScreen = (x, y) => x > this.camX - margin && x < this.camX + this.width + margin &&
+      y > this.camY - margin && y < this.camY + this.height + margin;
+    for (let i = 0; i < this.gravityWells.length; i++) {
+      const w = this.gravityWells[i];
+      if (w.dead) continue;
+      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, radius, w.hue, 0.22);
+      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, radius * 0.9, w.hue, 1);
+    }
+    for (let i = 0; i < this.singularities.length; i++) {
+      const sg = this.singularities[i];
+      this.grid.applyWell(sg.x, sg.y, SINGULARITY_GRID_DEPTH, sg.pullRadius, sg.hue, 0.35);
+      if (onScreen(sg.x, sg.y)) this.particles.spawnInfall(sg, sg.pullRadius * 0.9, sg.hue, 2);
+    }
+  }
+
+  // Player Vortex Singularities: drag enemies into a swirling clump, then implode in a damage pulse.
+  updateSingularities(dt) {
+    const enemies = this.enemyManager.enemies;
+    const basePull = TUNING.singularityPull ?? 0.75;
+    for (let i = this.singularities.length - 1; i >= 0; i--) {
+      const sg = this.singularities[i];
+      sg.x += sg.vx;
+      sg.y += sg.vy;
+      sg.vx *= 0.985;
+      sg.vy *= 0.985;
+      sg.life -= dt;
+
+      const imploding = sg.life <= SINGULARITY_IMPLODE_TIME;
+      if (imploding && !sg.implodeCued) {
+        sg.implodeCued = true;
+        this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius, sg.hue, 3, SINGULARITY_IMPLODE_TIME, true);
+      }
+      sg.spin = (sg.spin || 0) + dt * (imploding ? 16 : 5);
+      const pull = basePull * (imploding ? 1.8 : 1);
+      this.particles.applyGravityWell(sg.x, sg.y, 1.8, sg.pullRadius);
+
+      const pullSq = sg.pullRadius * sg.pullRadius;
+      for (const e of [...enemies].reverse()) {
+        if (e.dead) continue;
+        const dx = sg.x - e.x;
+        const dy = sg.y - e.y;
+        const dSq = dx * dx + dy * dy;
+        if (dSq >= pullSq) continue;
+        if (!e.isBoss) {
+          // Inward drag with a vortex twist: the drift bypasses the enemy's own speed cap, and the
+          // same pull also bends its steering so flocks turn into the vortex instead of fighting it.
+          const k = wellPullScale(dx, dy, sg.pullRadius, pull, sg.radius);
+          e.gvx = (e.gvx || 0) + (dx - dy * 0.35) * k;
+          e.gvy = (e.gvy || 0) + (dy + dx * 0.35) * k;
+          e.vx += dx * k;
+          e.vy += dy * k;
+        }
+        const reach = sg.radius + e.radius + 18;
+        if (dSq < reach * reach) {
+          e.hp -= sg.damage;
+          e.hitFlash = 0.5;
+          if (e.hp <= 0) this.killEnemy(e);
+        }
+      }
+
+      if (sg.life <= 0) {
+        this.collapseSingularity(sg);
+        this.singularities.splice(i, 1);
+      }
+    }
+  }
+
+  collapseSingularity(sg) {
+    sg.dead = true;
+    const r = sg.collapseRadius ?? sg.pullRadius * 0.85;
+    const dmg = sg.collapseDamage ?? sg.damage * 14;
+    this.sound.playImplosion();
+    this.shake = Math.min(24, Math.max(this.shake, 7 * (TUNING.screenShakeMult ?? 1.0)));
+    this.particles.spawnShockwave(sg.x, sg.y, r, sg.hue, 6, 0.45);
+    this.particles.spawnShockwave(sg.x, sg.y, r * 0.45, 200, 4, 0.26);
+    this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
+    this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
+    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue);
   }
 
   triggerLevelUp() {
@@ -1698,7 +1873,8 @@ export class Game {
       p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2));
     }
 
-    // 1. Player Movement
+    // 1. Player Movement (enemy black holes tug the ship, capped so it can always escape)
+    this.collectGravityWells();
     let inputX = 0;
     let inputY = 0;
     if (this.keys['KeyW'] || this.keys['ArrowUp']) inputY -= 1;
@@ -1719,6 +1895,7 @@ export class Game {
 
     if (p.dashTimer > 0) {
       p.dashTimer -= dt;
+      p.gravityTug = 0; // Dashes cut straight through gravity wells
       this.particles.spawnAfterimage(p.x, p.y, p.angle, p.radius, 188);
     } else {
       const mag = Math.hypot(inputX, inputY);
@@ -1744,6 +1921,7 @@ export class Game {
         p.vx *= 0.82;
         p.vy *= 0.82;
       }
+      this.applyWellPullToPlayer(p);
     }
 
     p.x += p.vx;
@@ -1856,7 +2034,8 @@ export class Game {
       }
     }
 
-    // 5. Sweep projectiles against enemies and cover in travel order.
+    // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
+    this.bendProjectilesInWells();
     this.updateBullets(dt);
     const enemies = this.enemyManager.enemies;
 
@@ -1903,43 +2082,9 @@ export class Game {
       }
     }
 
-    // 7. Update Player Vortex Singularities
-    for (let i = this.singularities.length - 1; i >= 0; i--) {
-      const sg = this.singularities[i];
-      sg.x += sg.vx;
-      sg.y += sg.vy;
-      sg.vx *= 0.985;
-      sg.vy *= 0.985;
-      sg.life -= dt;
-
-      this.grid.applyImplosion(sg.x, sg.y, 18, sg.pullRadius, sg.hue, 0.45);
-      this.particles.applyGravityWell(sg.x, sg.y, 1.8, sg.pullRadius);
-
-      for (const e of [...enemies].reverse()) {
-        if (e.dead) continue;
-        const dx = sg.x - e.x;
-        const dy = sg.y - e.y;
-        const d = Math.hypot(dx, dy) || 1;
-        if (d < sg.pullRadius) {
-          if (!e.isBoss) {
-            e.vx += (dx / d) * 0.85;
-            e.vy += (dy / d) * 0.85;
-          }
-          if (d < sg.radius + e.radius + 18) {
-            e.hp -= sg.damage;
-            e.hitFlash = 0.5;
-            if (e.hp <= 0) this.killEnemy(e);
-          }
-        }
-      }
-
-      if (sg.life <= 0) {
-        this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius * 0.85, sg.hue, 5, 0.42);
-        this.particles.spawnExplosionSparks(sg.x, sg.y, 38, sg.hue, 3, 14, 2.4);
-        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * 14, sg.hue);
-        this.singularities.splice(i, 1);
-      }
-    }
+    // 7. Update Player Vortex Singularities, then grid funnels & infall streams for every well
+    this.updateSingularities(dt);
+    this.updateWellEffects();
 
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
@@ -2002,6 +2147,19 @@ export class Game {
         g.vx = g.vx * 0.75 + (dx / dist) * pullSpd * 0.35;
         g.vy = g.vy * 0.75 + (dy / dist) * pullSpd * 0.35;
       } else {
+        // Loose geoms drift into enemy black holes: kill the well to cash in the pile.
+        const wells = this.gravityWells;
+        if (wells && wells.length) {
+          const wellRadius = TUNING.blackholePullRadius ?? 200;
+          const wellPull = TUNING.blackholePickupPull ?? 0.3;
+          for (let w = 0; w < wells.length; w++) {
+            const well = wells[w];
+            if (well.dead) continue;
+            const k = wellPullScale(well.x - g.x, well.y - g.y, wellRadius, wellPull, well.radius * 0.6);
+            g.vx += (well.x - g.x) * k;
+            g.vy += (well.y - g.y) * k;
+          }
+        }
         g.vx *= 0.92;
         g.vy *= 0.92;
       }
@@ -2190,6 +2348,9 @@ export class Game {
     // 3. Draw Destructible Asteroid Clusters & Active Mining Laser Beams
     this.asteroidManager.draw(ctx, this.camX, this.camY, this.width, this.height);
 
+    // Event horizons: opaque discs under the additive layer so wells read as holes punched in the grid.
+    this.drawWellHorizons(ctx);
+
     // 4. Draw Geoms, Relic Chests, Singularities, Bullets, Missiles, Enemies & Player in Additive Mode
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -2271,18 +2432,7 @@ export class Game {
     }
 
     for (let i = 0; i < this.singularities.length; i++) {
-      const sg = this.singularities[i];
-      ctx.strokeStyle = `hsla(${sg.hue}, 100%, 68%, 0.9)`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(sg.x, sg.y, sg.radius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = `hsla(${sg.hue}, 100%, 55%, 0.25)`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(sg.x, sg.y, sg.pullRadius * 0.45, 0, Math.PI * 2);
-      ctx.stroke();
+      this.drawSingularity(ctx, this.singularities[i], beatPulse);
     }
 
     for (let i = 0; i < this.bullets.length; i++) {
@@ -2327,6 +2477,7 @@ export class Game {
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
+      this.drawGravityTethers(ctx, p);
       this.drawPlayerShield(ctx, p, beatPulse);
 
       if (p.weapons.orbitals > 0) {
@@ -2379,6 +2530,105 @@ export class Game {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
+  }
+
+  singularityCoreRadius(sg) {
+    const implode = Math.max(0, 1 - sg.life / SINGULARITY_IMPLODE_TIME);
+    return sg.radius * (1 - implode * 0.5);
+  }
+
+  drawWellHorizons(ctx) {
+    const inView = (x, y, r) => x + r >= this.camX && y + r >= this.camY &&
+      x - r <= this.camX + this.width && y - r <= this.camY + this.height;
+    ctx.save();
+    ctx.fillStyle = 'rgba(1, 1, 5, 0.94)';
+    ctx.beginPath();
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.type !== 'blackhole' || !inView(e.x, e.y, e.radius)) continue;
+      ctx.moveTo(e.x + e.radius * 0.9, e.y);
+      ctx.arc(e.x, e.y, e.radius * 0.9, 0, Math.PI * 2);
+    }
+    for (let i = 0; i < this.singularities.length; i++) {
+      const sg = this.singularities[i];
+      const r = this.singularityCoreRadius(sg) * 0.95;
+      if (!inView(sg.x, sg.y, r)) continue;
+      ctx.moveTo(sg.x + r, sg.y);
+      ctx.arc(sg.x, sg.y, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Vortex Singularity: pull rim, spinning accretion arcs (thicker on the beat), white photon ring.
+  // During the final wind-up the core shrinks and the arcs spin up before the collapse pulse.
+  drawSingularity(ctx, sg, beatPulse = 0) {
+    const reach = sg.pullRadius + 8;
+    if (sg.x + reach < this.camX || sg.y + reach < this.camY || sg.x - reach > this.camX + this.width || sg.y - reach > this.camY + this.height) return;
+    const implode = Math.max(0, 1 - sg.life / SINGULARITY_IMPLODE_TIME);
+    const coreR = this.singularityCoreRadius(sg);
+    ctx.save();
+    ctx.translate(sg.x, sg.y);
+
+    ctx.strokeStyle = `hsla(${sg.hue}, 100%, 62%, ${0.16 + beatPulse * 0.14})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, sg.pullRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.rotate(sg.spin || 0);
+    for (let k = 0; k < 3; k++) {
+      const arcR = coreR * (1.75 + k * 0.6);
+      const start = k * 2.1;
+      ctx.strokeStyle = `hsla(${sg.hue + k * 22}, 100%, ${66 + implode * 20}%, ${0.8 - k * 0.15})`;
+      ctx.lineWidth = 2.8 - k * 0.6 + beatPulse * 1.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, arcR, start, start + 1.9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, arcR, start + Math.PI, start + Math.PI + 1.2);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = `hsla(${sg.hue}, 100%, 70%, 0.5)`;
+    ctx.lineWidth = 5 + implode * 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR * 1.08, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6 + implode * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Marching dashes from the ship toward each black hole that is tugging it, brighter as the pull grows.
+  drawGravityTethers(ctx, p) {
+    const wells = this.gravityWells;
+    if (!wells || wells.length === 0 || !(p.gravityTug > 0)) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    ctx.save();
+    ctx.setLineDash([4, 9]);
+    ctx.lineDashOffset = -(this.elapsedTime || 0) * 40;
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < wells.length; i++) {
+      const w = wells[i];
+      if (w.dead) continue;
+      const d = Math.hypot(w.x - p.x, w.y - p.y);
+      const f = wellFalloff(d, radius);
+      if (f <= 0 || d < 1) continue;
+      const ux = (w.x - p.x) / d;
+      const uy = (w.y - p.y) / d;
+      ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.15 + f * 0.5})`;
+      ctx.beginPath();
+      ctx.moveTo(p.x + ux * (p.radius + 10), p.y + uy * (p.radius + 10));
+      ctx.lineTo(w.x - ux * w.radius * 1.2, w.y - uy * w.radius * 1.2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   loop(now) {
