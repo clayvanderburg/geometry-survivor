@@ -75,3 +75,5 @@ The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy n
 Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder.
 
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
+
+Extended checks (optional Playwright dependency): `node tools/soak-validate.cjs <playwright-module-path>` runs a seeded ten-minute accelerated simulation plus crowded 720p/4K draw checks. `node tools/audio-validate.cjs <playwright-module-path> audio-validation.json` renders actual Web Audio buffers and checks finite/non-silent output, mute, output headroom and clock recovery. Set `BROWSER_EXECUTABLE` to an installed Chromium browser if needed. Raw machine measurements and screenshots are ignored by Git. See [VALIDATION.md](VALIDATION.md).
