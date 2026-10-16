@@ -383,17 +383,22 @@
     onTuningChange(() => syncUIValues());
     buildUI();
 
-    // Live 60FPS Crab Ship & Shield Preview Renderer
+    import { drawPlayerShield, drawCrabShip } from './js/ship-renderer.js';
+
+    // Use the game's renderer so this preview cannot drift from gameplay.
     const pCanvas = document.getElementById('ship-preview-canvas');
     const pCtx = pCanvas.getContext('2d');
     const simDrillingChk = document.getElementById('chk-preview-drilling');
+    let previousPreviewTime = null;
     let previewSpin = 0;
     let previewWalk = 0;
     let turretAngle = 0;
 
     function renderPreview(now) {
-      previewSpin += simDrillingChk.checked ? 0.45 : 0.15;
-      previewWalk += 0.12;
+      const dt = previousPreviewTime === null ? 0 : Math.min(0.1, (now - previousPreviewTime) / 1000);
+      previousPreviewTime = now;
+      previewSpin += dt * (simDrillingChk.checked ? 34 : 11);
+      previewWalk += dt * 7.2;
       turretAngle = Math.sin(now * 0.0015) * 0.65;
 
       pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
@@ -423,143 +428,13 @@
         pCtx.restore();
       }
 
-      // Draw Shield Circle
-      pCtx.save();
-      pCtx.translate(cx, cy);
-      const shieldR = r * TUNING.shieldRadiusMult;
-      pCtx.strokeStyle = 'rgba(0, 243, 255, 0.35)';
-      pCtx.lineWidth = 8 * TUNING.shieldThicknessMult;
-      pCtx.beginPath();
-      pCtx.arc(0, 0, shieldR, 0, Math.PI * 2);
-      pCtx.stroke();
-
-      pCtx.strokeStyle = '#00ffaa';
-      pCtx.lineWidth = 3.5 * TUNING.shieldThicknessMult;
-      pCtx.beginPath();
-      pCtx.arc(0, 0, shieldR, -0.5, Math.PI * 1.3);
-      pCtx.stroke();
-
-      // Draw Crab Legs
-      const legOffsets = [-0.42, 0.0, 0.42];
-      pCtx.strokeStyle = TUNING.carapaceColor;
-      pCtx.lineWidth = 2.2;
-      for (let side = -1; side <= 1; side += 2) {
-        for (let l = 0; l < 3; l++) {
-          const scutt = Math.sin(previewWalk + l * 2.1 + (side > 0 ? Math.PI : 0)) * 2.4;
-          pCtx.beginPath();
-          pCtx.moveTo(legOffsets[l] * r * 0.85, side * r * 0.88);
-          pCtx.lineTo(legOffsets[l] * r * 0.85 - r * 0.15 + scutt * 0.6, side * r * 1.42);
-          pCtx.lineTo(legOffsets[l] * r * 0.85 - r * 0.48 + scutt, side * r * 1.72);
-          pCtx.stroke();
-        }
-      }
-
-      // Draw Crab Carapace
-      for (let pass = 0; pass < 2; pass++) {
-        pCtx.strokeStyle = pass === 0 ? TUNING.carapaceColor : '#ffffff';
-        pCtx.globalAlpha = pass === 0 ? 0.65 : 1.0;
-        pCtx.lineWidth = pass === 0 ? 6.5 : 2.5;
-        pCtx.beginPath();
-        pCtx.moveTo(r * 0.78, -r * 0.55);
-        pCtx.lineTo(r * 0.25, -r * 1.12);
-        pCtx.lineTo(-r * 0.68, -r * 0.88);
-        pCtx.lineTo(-r * 0.92, 0);
-        pCtx.lineTo(-r * 0.68, r * 0.88);
-        pCtx.lineTo(r * 0.25, r * 1.12);
-        pCtx.lineTo(r * 0.78, r * 0.55);
-        pCtx.lineTo(r * 0.92, 0);
-        pCtx.closePath();
-        pCtx.stroke();
-      }
-      pCtx.globalAlpha = 1;
-
-      // Inner Armor Facets
-      pCtx.strokeStyle = TUNING.innerArmorColor;
-      pCtx.lineWidth = 1.6;
-      pCtx.beginPath();
-      pCtx.moveTo(r * 0.52, -r * 0.35);
-      pCtx.lineTo(-r * 0.45, -r * 0.52);
-      pCtx.lineTo(-r * 0.62, 0);
-      pCtx.lineTo(-r * 0.45, r * 0.52);
-      pCtx.lineTo(r * 0.52, r * 0.35);
-      pCtx.closePath();
-      pCtx.stroke();
-
-      // Twin Front Drill-Claws
-      for (let side = -1; side <= 1; side += 2) {
-        pCtx.save();
-        pCtx.strokeStyle = TUNING.carapaceColor;
-        pCtx.lineWidth = 3.2;
-        pCtx.beginPath();
-        pCtx.moveTo(r * 0.62, side * r * 0.76);
-        pCtx.lineTo(r * 1.15, side * r * 1.05);
-        pCtx.stroke();
-
-        const vibX = drilling ? (Math.random() - 0.5) * 2.2 : 0;
-        const vibY = drilling ? (Math.random() - 0.5) * 2.2 : 0;
-        pCtx.translate(r * 1.42 + vibX, side * r * 0.78 + vibY);
-        pCtx.rotate(-side * (drilling ? 0.28 : 0.16));
-        pCtx.scale(drillScale, drillScale);
-
-        pCtx.strokeStyle = drilling ? TUNING.drillJawColor : TUNING.innerArmorColor;
-        pCtx.lineWidth = 2.2;
-        pCtx.beginPath();
-        pCtx.moveTo(-4, -7.5); pCtx.lineTo(4, -8.5);
-        pCtx.moveTo(-4, 7.5); pCtx.lineTo(4, 8.5);
-        pCtx.stroke();
-
-        const drillLen = 16.5;
-        const drillHalfW = 6.2;
-        for (let pass = 0; pass < 2; pass++) {
-          pCtx.strokeStyle = pass === 0 ? (drilling ? TUNING.drillActiveColor : TUNING.drillIdleColor) : '#ffffff';
-          pCtx.lineWidth = pass === 0 ? 4.8 : 2.0;
-          pCtx.beginPath();
-          pCtx.moveTo(drillLen, 0);
-          pCtx.lineTo(0, -drillHalfW);
-          pCtx.lineTo(-3.5, 0);
-          pCtx.lineTo(0, drillHalfW);
-          pCtx.closePath();
-          pCtx.stroke();
-        }
-
-        pCtx.strokeStyle = drilling ? TUNING.drillJawColor : TUNING.innerArmorColor;
-        pCtx.lineWidth = 1.7;
-        pCtx.beginPath();
-        for (let t = 0; t < 3; t++) {
-          const phase = ((previewSpin * 0.35 + t / 3) % 1 + 1) % 1;
-          const tx = phase * (drillLen - 2);
-          const halfSpan = drillHalfW * (1 - phase);
-          pCtx.moveTo(tx, -halfSpan);
-          pCtx.lineTo(tx + 2.2, halfSpan);
-        }
-        pCtx.stroke();
-        pCtx.restore();
-      }
-
-      // Rotating Turret
-      pCtx.save();
-      pCtx.rotate(turretAngle);
-      pCtx.strokeStyle = TUNING.carapaceColor;
-      pCtx.lineWidth = 2.2;
-      pCtx.beginPath();
-      pCtx.moveTo(2, -3.5); pCtx.lineTo(r * 0.95, -3.5);
-      pCtx.moveTo(2, 3.5); pCtx.lineTo(r * 0.95, 3.5);
-      pCtx.stroke();
-
-      pCtx.fillStyle = '#051024';
-      pCtx.strokeStyle = '#ffffff';
-      pCtx.lineWidth = 2.0;
-      pCtx.beginPath();
-      pCtx.moveTo(r * 0.45, 0);
-      pCtx.lineTo(0, -r * 0.38);
-      pCtx.lineTo(-r * 0.38, 0);
-      pCtx.lineTo(0, r * 0.38);
-      pCtx.closePath();
-      pCtx.fill();
-      pCtx.stroke();
-      pCtx.restore();
-
-      pCtx.restore();
+      const player = {
+        x: cx, y: cy, radius: r, hp: 100, maxHp: 100, invuln: 0,
+        angle: turretAngle, drillAngle: 0, drillSpin: previewSpin,
+        walkCycle: previewWalk, stats: { drillScale }
+      };
+      drawPlayerShield(pCtx, player, 0, TUNING, now * 0.0014, now);
+      drawCrabShip(pCtx, player, TUNING, drilling, now);
       requestAnimationFrame(renderPreview);
     }
     requestAnimationFrame(renderPreview);

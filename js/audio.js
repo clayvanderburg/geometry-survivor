@@ -5,8 +5,14 @@ export class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
-    const savedVol = Number(localStorage.getItem('vectra_master_vol'));
-    this.masterVolumePct = !Number.isNaN(savedVol) && localStorage.getItem('vectra_master_vol') !== null ? savedVol : 100;
+    this.masterVolumePct = 100;
+    try {
+      const stored = localStorage.getItem('vectra_master_vol');
+      const savedVol = Number(stored);
+      if (stored !== null && stored.trim() !== '' && Number.isFinite(savedVol)) {
+        this.masterVolumePct = Math.max(0, Math.min(200, savedVol));
+      }
+    } catch (_e) { /* Storage may be unavailable in private or embedded contexts. */ }
     this.masterGain = null;
     this.musicGain = null;
     this.musicCompressor = null;
@@ -25,7 +31,8 @@ export class SoundEngine {
     this.nextNoteTime = 0;
     this.intensity = 0.35; // 0.0 (calm) -> 1.0 (full swarm overdrive)
     this.isMuffled = false;
-    this.lastBeatTime = 0;
+    this.lastBeatTime = -Infinity;
+    this.pendingBeats = [];
     this.schedulerId = null;
   }
 
@@ -34,7 +41,9 @@ export class SoundEngine {
   }
 
   setMasterVolume(pct) {
-    this.masterVolumePct = Math.max(0, Math.min(200, Number(pct)));
+    const value = Number(pct);
+    if (!Number.isFinite(value)) return;
+    this.masterVolumePct = Math.max(0, Math.min(200, value));
     try {
       localStorage.setItem('vectra_master_vol', String(this.masterVolumePct));
     } catch (_e) {}
@@ -60,7 +69,7 @@ export class SoundEngine {
 
   init() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
       if (!this.isPlayingMusic) this.startMusic();
       return;
     }
@@ -122,6 +131,9 @@ export class SoundEngine {
 
   getBeatPulse() {
     if (!this.ctx || !this.enabled || !this.isPlayingMusic) return 0;
+    while (this.pendingBeats.length && this.pendingBeats[0] <= this.ctx.currentTime) {
+      this.lastBeatTime = this.pendingBeats.shift();
+    }
     const beatDur = 60 / this.bpm;
     const elapsed = this.ctx.currentTime - this.lastBeatTime;
     if (elapsed < 0 || elapsed > beatDur) return 0;
@@ -132,6 +144,8 @@ export class SoundEngine {
     if (!this.ctx || this.isPlayingMusic) return;
     this.isPlayingMusic = true;
     this.stepIndex = 0;
+    this.lastBeatTime = -Infinity;
+    this.pendingBeats = [];
     this.nextNoteTime = this.ctx.currentTime + 0.05;
     this.schedulerId = setInterval(() => this.scheduleMusic(), 25);
   }
@@ -139,11 +153,41 @@ export class SoundEngine {
   scheduleMusic() {
     if (!this.ctx || !this.isPlayingMusic) return;
     const secondsPer16th = 60 / this.bpm / 4;
-    while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+    const now = this.ctx.currentTime;
+    // Drop missed steps in constant time after a hidden tab or stalled main thread.
+    if (this.nextNoteTime < now) {
+      const missed = Math.ceil((now - this.nextNoteTime) / secondsPer16th);
+      this.nextNoteTime += missed * secondsPer16th;
+      this.stepIndex = (this.stepIndex + missed) % 64;
+    }
+    // Retain only the most recent audible beat plus the small lookahead queue.
+    while (this.pendingBeats.length && this.pendingBeats[0] <= now) {
+      this.lastBeatTime = this.pendingBeats.shift();
+    }
+    while (this.nextNoteTime < now + 0.1) {
       this.triggerStep(this.stepIndex, this.nextNoteTime, secondsPer16th);
       this.nextNoteTime += secondsPer16th;
       this.stepIndex = (this.stepIndex + 1) % 64;
     }
+  }
+
+  stopMusic() {
+    clearInterval(this.schedulerId);
+    this.schedulerId = null;
+    this.isPlayingMusic = false;
+    this.pendingBeats = [];
+    this.lastBeatTime = -Infinity;
+  }
+
+  async dispose() {
+    this.stopMusic();
+    const ctx = this.ctx;
+    this.ctx = null;
+    for (const key of ['masterGain', 'musicGain', 'musicCompressor', 'sfxGain', 'musicFilter']) {
+      this[key]?.disconnect();
+      this[key] = null;
+    }
+    if (ctx && ctx.state !== 'closed') await ctx.close();
   }
 
   midiToFreq(midi) {
@@ -162,7 +206,7 @@ export class SoundEngine {
 
     // 1. Heavy 4-on-the-floor Kick Drum
     if (stepInBar % 4 === 0) {
-      this.lastBeatTime = time;
+      this.pendingBeats.push(time);
       this.playKick(time);
     }
 

@@ -70,6 +70,39 @@ const DEFAULT_HIGHSCORES = [
   { id: 'seed-3', name: 'NEON // DRIFTER', score: 18200, multiplier: 4.2, wave: 3, kills: 95, timeStr: '01:05' }
 ];
 
+export function normalizePilotName(value) {
+  return typeof value === 'string' ? value.trim().toUpperCase().slice(0, 18) || 'MADKING' : 'MADKING';
+}
+
+function boundedInteger(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
+}
+
+export function normalizeSave(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const sourceRanks = source.ranks && typeof source.ranks === 'object' ? source.ranks : {};
+  const ranks = Object.fromEntries(META_UPGRADES.map(upgrade => [upgrade.id,
+    boundedInteger(sourceRanks[upgrade.id], 0, 0, upgrade.maxRank)]));
+  const savedScores = Array.isArray(source.highscores) ? source.highscores.filter(entry =>
+    entry && typeof entry === 'object' && typeof entry.score === 'number' && Number.isFinite(entry.score)
+  ).map((entry, index) => ({
+    id: typeof entry.id === 'string' ? entry.id : 'legacy-' + index,
+    name: normalizePilotName(entry.name),
+    score: boundedInteger(entry.score, 0),
+    multiplier: typeof entry.multiplier === 'number' && Number.isFinite(entry.multiplier) ? Math.max(1, entry.multiplier) : 1,
+    wave: boundedInteger(entry.wave, 1, 1),
+    kills: boundedInteger(entry.kills, 0),
+    timeStr: typeof entry.timeStr === 'string' && /^\d{2,}:\d{2}$/.test(entry.timeStr) ? entry.timeStr : '00:00'
+  })).sort((a, b) => b.score - a.score).slice(0, 8) : [];
+  return {
+    pilotName: normalizePilotName(source.pilotName),
+    cores: boundedInteger(source.cores, 15),
+    totalRuns: boundedInteger(source.totalRuns, 0),
+    ranks,
+    highscores: savedScores.length ? savedScores : DEFAULT_HIGHSCORES.map(entry => ({ ...entry }))
+  };
+}
+
 export class ProgressionManager {
   constructor() {
     this.data = this.load();
@@ -78,28 +111,11 @@ export class ProgressionManager {
   load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          pilotName: parsed.pilotName || 'MADKING',
-          cores: Math.max(0, Math.round(parsed.cores ?? 15)),
-          totalRuns: parsed.totalRuns ?? 0,
-          ranks: parsed.ranks || {},
-          highscores: Array.isArray(parsed.highscores) && parsed.highscores.length > 0
-            ? parsed.highscores
-            : [...DEFAULT_HIGHSCORES]
-        };
-      }
+      return normalizeSave(raw ? JSON.parse(raw) : {});
     } catch (e) {
       console.warn('Failed to load save data:', e);
+      return normalizeSave({});
     }
-    return {
-      pilotName: 'MADKING',
-      cores: 15,
-      totalRuns: 0,
-      ranks: {},
-      highscores: [...DEFAULT_HIGHSCORES]
-    };
   }
 
   save() {
@@ -111,7 +127,7 @@ export class ProgressionManager {
   }
 
   setPilotName(name) {
-    const clean = (name || '').trim().toUpperCase().slice(0, 18) || 'MADKING';
+    const clean = normalizePilotName(name);
     this.data.pilotName = clean;
     this.save();
     return clean;
@@ -143,7 +159,7 @@ export class ProgressionManager {
   }
 
   addCores(amount) {
-    this.data.cores += Math.max(0, Math.round(amount));
+    this.data.cores = Math.min(Number.MAX_SAFE_INTEGER, this.data.cores + boundedInteger(amount, 0, 0));
     this.save();
   }
 
@@ -165,7 +181,7 @@ export class ProgressionManager {
   recordRun({ name, score, multiplier, wave, kills, timeStr }) {
     this.data.totalRuns++;
     const cleanName = this.setPilotName(name || this.data.pilotName);
-    const entryId = 'run-' + Date.now();
+    const entryId = globalThis.crypto?.randomUUID?.() || 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2);
     const entry = {
       id: entryId,
       name: cleanName,
