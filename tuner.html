@@ -429,7 +429,8 @@
       }
 
       const player = {
-        x: cx, y: cy, radius: r, hp: 100, maxHp: 100, invuln: 0,
+        // Shield charge cycles so every damage colour state can be previewed.
+        x: cx, y: cy, radius: r, hp: 55 + 45 * Math.cos(now * 0.0005), maxHp: 100, invuln: 0,
         angle: turretAngle, drillAngle: 0, drillSpin: previewSpin,
         walkCycle: previewWalk, stats: { drillScale }
       };

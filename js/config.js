@@ -21,8 +21,9 @@ export const DEFAULT_TUNING = {
   bulletSpeed: 14.0,
   bulletRadius: 3.8,
   bulletColorHue: 186,
-  shieldRadiusMult: 2.55,
-  shieldThicknessMult: 0.3,
+  shieldHue: 222,
+  shieldPadding: 0.38,
+  shieldThickness: 1.0,
   shieldRegenRate: 1.2,
   dashCooldownBase: 1.5,
 
@@ -80,8 +81,9 @@ export const TUNING_SCHEMA = [
       { key: 'bulletSpeed', label: 'Projectile Velocity', type: 'range', min: 5, max: 32, step: 0.5, unit: '' },
       { key: 'bulletRadius', label: 'Projectile Thickness', type: 'range', min: 2.0, max: 12.0, step: 0.2, unit: 'px' },
       { key: 'bulletColorHue', label: 'Blaster Neon Hue', type: 'range', min: 0, max: 360, step: 2, unit: '°' },
-      { key: 'shieldRadiusMult', label: 'Shield Circle Size', type: 'range', min: 1.2, max: 3.6, step: 0.05, unit: 'x' },
-      { key: 'shieldThicknessMult', label: 'Shield Ring Thickness', type: 'range', min: 0.1, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'shieldHue', label: 'Shield Barrier Hue', type: 'range', min: 0, max: 360, step: 2, unit: '°' },
+      { key: 'shieldPadding', label: 'Shield Outline Padding (Hitbox)', type: 'range', min: 0.1, max: 1.2, step: 0.02, unit: 'x' },
+      { key: 'shieldThickness', label: 'Shield Barrier Thickness', type: 'range', min: 0.2, max: 3.0, step: 0.05, unit: 'x' },
       { key: 'shieldRegenRate', label: 'Shield Passive Regen', type: 'range', min: 0, max: 15, step: 0.2, unit: 'HP/s' },
       { key: 'dashCooldownBase', label: 'Dash Cooldown', type: 'range', min: 0.2, max: 3.5, step: 0.05, unit: 's' }
     ]

@@ -1013,3 +1013,14 @@ html, body {
   accent-color: var(--cyan);
   cursor: pointer;
 }
+
+/* Controller focus highlight (menus navigated with d-pad / left stick) */
+.gp-focus {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 18px rgba(255, 204, 0, 0.55) !important;
+}
+
+.upgrade-option.gp-focus {
+  transform: translateY(-5px);
+}

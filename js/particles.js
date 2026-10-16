@@ -277,7 +277,7 @@ export class ParticleSystem {
     for (let i = 0; i < this.afterimages.length; i++) {
       const ai = this.afterimages[i];
       if (!visible(ai.x, ai.y, ai.radius * 1.4)) continue;
-      const alpha = (ai.life / ai.maxLife) * 0.55;
+      const alpha = (ai.life / ai.maxLife) * 0.7;
       ctx.save();
       ctx.translate(ai.x, ai.y);
       ctx.rotate(ai.angle);

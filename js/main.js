@@ -1,11 +1,12 @@
 import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
-import { drawPlayerShield, drawCrabShip } from './ship-renderer.js';
+import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager } from './enemies.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
+import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import {
@@ -51,6 +52,13 @@ export class Game {
     this.chromaFlash = 0;
     this.shieldRotation = 0;
     this.lastRunHighlightId = null;
+
+    // Controller state: previous-tick buttons for press edges, and DOM menu focus.
+    this.gpButtons = [];
+    this.gpActive = false;
+    this.menuNav = new MenuNavigator();
+    this.menuState = null;
+    this.menuGrace = 0;
 
     this.currentChoices = [];
     this.bindEvents();
@@ -312,6 +320,11 @@ export class Game {
     window.addEventListener('mousemove', (e) => {
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
+      // Deliberate mouse use hands aiming and menu focus back from the controller.
+      if (this.gpActive && Math.abs(e.movementX ?? 0) + Math.abs(e.movementY ?? 0) > 3) {
+        this.gpActive = false;
+        this.menuNav?.clear();
+      }
     });
 
     window.addEventListener('mousedown', (e) => {
@@ -1561,23 +1574,57 @@ export class Game {
   }
 
   pollGamepad() {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    const gp = Array.from(pads).find(pad => pad && pad.connected !== false);
-    if (!gp) {
+    const pad = readGamepad(this.gpButtons);
+    this.gpButtons = pad ? pad.buttons : [];
+    if (!pad) {
       this.gpDashLatch = false;
       this.gpBombLatch = false;
       return null;
     }
-
-    const deadzone = (v) => (Math.abs(v) > 0.18 ? v : 0);
+    if (pad.active) this.gpActive = true;
     return {
-      moveX: deadzone(gp.axes[0] || 0),
-      moveY: deadzone(gp.axes[1] || 0),
-      aimX: deadzone(gp.axes[2] || 0),
-      aimY: deadzone(gp.axes[3] || 0),
-      dash: gp.buttons[4]?.pressed || gp.buttons[6]?.pressed || gp.buttons[0]?.pressed,
-      bomb: gp.buttons[5]?.pressed || gp.buttons[7]?.pressed || gp.buttons[1]?.pressed
+      ...pad,
+      dash: pad.buttons[PAD.A] || pad.buttons[PAD.LB] || pad.buttons[PAD.LT],
+      bomb: pad.buttons[PAD.B] || pad.buttons[PAD.RB] || pad.buttons[PAD.RT]
     };
+  }
+
+  // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
+  // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
+  updateMenuController(gp, dt) {
+    const menus = {
+      TITLE: ['title-modal', 'btn-start-game'],
+      UPGRADE: ['upgrade-modal', null],
+      CHEST: ['chest-modal', 'btn-claim-chest'],
+      PAUSED: ['pause-modal', 'btn-resume-game'],
+      GAMEOVER: ['gameover-modal', 'btn-restart-game']
+    };
+    if (this.menuState !== this.state) {
+      this.menuState = this.state;
+      this.menuGrace = 0.3;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+
+    const menu = menus[this.state];
+    if (!gp || !menu || !this.gpActive || !this.menuNav) return;
+    const root = document.getElementById(menu[0]);
+    if (!root) return;
+    const primary = menu[1] ? document.getElementById(menu[1]) : null;
+    this.menuNav.update(root, gp, dt, primary);
+    if (this.menuGrace > 0) return;
+
+    if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    } else if (gp.pressed(PAD.START)) {
+      this.sound.init();
+      if (this.state === 'PAUSED') this.togglePause();
+      else if (primary) primary.click();
+      else this.menuNav.activate();
+    } else if (gp.pressed(PAD.B) && this.state === 'PAUSED') {
+      this.togglePause();
+    }
   }
 
   update(dt) {
@@ -1587,7 +1634,22 @@ export class Game {
     if (this.chromaFlash > 0) this.chromaFlash = Math.max(0, this.chromaFlash - dt * 2.2);
     this.shieldRotation += dt * 1.4;
 
-    if (this.state !== 'PLAYING') return;
+    const gp = this.pollGamepad();
+    const stateBefore = this.state;
+    this.updateMenuController(gp, dt);
+    if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
+      // A button held through a menu must not fire a dash or nova (or re-pause) as play starts.
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
+
+    if (gp?.pressed(PAD.START)) {
+      this.togglePause();
+      return;
+    }
+    if (gp?.pressed(PAD.X)) this.toggleAutoFire();
+    if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
@@ -1629,6 +1691,7 @@ export class Game {
 
     const p = this.player;
     if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
+    if (p.shieldFlash > 0) p.shieldFlash = Math.max(0, p.shieldFlash - dt * 2.4);
     if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
 
     if (p.hp < p.maxHp) {
@@ -1643,7 +1706,6 @@ export class Game {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) inputX -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) inputX += 1;
 
-    const gp = this.pollGamepad();
     if (gp) {
       if (Math.abs(gp.moveX) > 0 || Math.abs(gp.moveY) > 0) {
         inputX = gp.moveX;
@@ -1709,9 +1771,9 @@ export class Game {
       } else {
         p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
       }
-    } else {
+    } else if (!this.gpActive) {
       p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
-    }
+    } // On a controller with the right stick released, the turret holds its last heading.
 
     // Orient Crab Carapace & Twin Drill-Claws toward movement direction (or nearest rock being drilled)
     const speedMag = Math.hypot(p.vx, p.vy);
@@ -1885,10 +1947,10 @@ export class Game {
 
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
-      const dist = Math.hypot(e.x - p.x, e.y - p.y);
-      const shieldRadius = p.radius * 1.9;
-      if (dist < e.radius + shieldRadius - 2) {
+      // Contact uses the same hull-hugging outline the shield draws.
+      if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
+          p.shieldFlash = 1;
           const hitDmg = (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
           p.hp -= hitDmg;
           p.invuln = 0.65;
@@ -2100,7 +2162,10 @@ export class Game {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
-    ctx.fillStyle = 'rgba(3, 4, 11, 0.5)';
+    // Afterglow fades per unit time (half per 60 Hz tick). The 0.38 floor keeps high-refresh displays
+    // from stacking redrawn glow too bright while still giving them longer trails than before.
+    const fade = Math.max(0.38, 1 - Math.pow(0.5, (this.frameSeconds ?? 1 / 60) * 60));
+    ctx.fillStyle = `rgba(3, 4, 11, ${fade})`;
     ctx.fillRect(0, 0, this.width, this.height);
 
     ctx.save();
@@ -2242,14 +2307,14 @@ export class Game {
 
     for (let i = 0; i < this.missiles.length; i++) {
       const m = this.missiles[i];
-      if (m.trail.length > 1) {
-        ctx.strokeStyle = `hsla(${m.hue}, 100%, 62%, 0.55)`;
-        ctx.lineWidth = 2.5;
+      // Tapered exhaust: brighter and thicker toward the missile.
+      for (let t = 1; t < m.trail.length; t++) {
+        const k = t / (m.trail.length - 1);
+        ctx.strokeStyle = `hsla(${m.hue}, 100%, ${60 + k * 12}%, ${0.2 + k * 0.55})`;
+        ctx.lineWidth = 1.2 + k * 2.4;
         ctx.beginPath();
-        ctx.moveTo(m.trail[0].x, m.trail[0].y);
-        for (let t = 1; t < m.trail.length; t++) {
-          ctx.lineTo(m.trail[t].x, m.trail[t].y);
-        }
+        ctx.moveTo(m.trail[t - 1].x, m.trail[t - 1].y);
+        ctx.lineTo(m.trail[t].x, m.trail[t].y);
         ctx.stroke();
       }
       ctx.fillStyle = '#ffffff';
@@ -2317,6 +2382,8 @@ export class Game {
   }
 
   loop(now) {
+    this.frameSeconds = this.lastFrameAt === undefined ? 1 / 60 : Math.min(0.1, (now - this.lastFrameAt) / 1000);
+    this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
     requestAnimationFrame((t) => this.loop(t));

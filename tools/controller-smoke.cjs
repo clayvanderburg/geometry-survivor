@@ -1,0 +1,87 @@
+// Controller-only browser check: a simulated standard gamepad drives title, level-up, pause, chest and game over.
+// Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
+const { chromium } = require(process.argv[2] || 'playwright');
+const fs = require('node:fs/promises'), path = require('node:path');
+const A = 0, B = 1, START = 9, UP = 12, RIGHT = 15;
+
+(async () => {
+  const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const root = path.resolve(__dirname, '..');
+    await context.route('**/*', async route => {
+      const url = new URL(route.request().url());
+      if (url.hostname !== '127.0.0.1') return route.abort();
+      const file = path.resolve(root, '.' + (url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname)));
+      if (path.relative(root, file).startsWith('..')) return route.abort();
+      try {
+        let body = await fs.readFile(file);
+        if (url.pathname === '/js/main.js') body = Buffer.from(body.toString().replace('() => new Game()', '() => (globalThis.__game = new Game())'));
+        await route.fulfill({ body, contentType: ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' })[path.extname(file)] || 'application/octet-stream' });
+      } catch { await route.fulfill({ status: 404, body: 'Not found' }); }
+    });
+    const page = await context.newPage();
+    const errors = []; page.on('pageerror', e => errors.push(e.message));
+    await page.addInitScript(() => {
+      window.__pad = { buttons: Array(17).fill(false), axes: [0, 0, 0, 0] };
+      navigator.getGamepads = () => [{ connected: true, axes: window.__pad.axes, buttons: window.__pad.buttons.map(pressed => ({ pressed })) }];
+    });
+    await page.goto('http://127.0.0.1:8096');
+    await page.waitForTimeout(800);
+
+    const press = async (i) => {
+      await page.evaluate(i => { window.__pad.buttons[i] = true; }, i);
+      await page.waitForTimeout(90);
+      await page.evaluate(i => { window.__pad.buttons[i] = false; }, i);
+      await page.waitForTimeout(90);
+    };
+    const state = () => page.evaluate(() => __game.state);
+    const expect = async (want, step) => { const got = await state(); if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`); };
+
+    await press(A);
+    await expect('PLAYING', 'A on title launches the run');
+    await page.evaluate(() => { __game.player.invuln = 1e9; });
+    await page.waitForTimeout(400);
+
+    await page.evaluate(() => __game.triggerLevelUp());
+    await page.waitForTimeout(450);
+    await press(RIGHT);
+    const focusedCard = await page.evaluate(() => [...document.querySelectorAll('#upgrade-choices .upgrade-option')].findIndex(el => el.classList.contains('gp-focus')));
+    if (focusedCard !== 1) throw Error(`d-pad right should focus card 2, focused ${focusedCard + 1}`);
+    await page.screenshot({ path: 'controller-levelup.png' });
+    const picked = await page.evaluate(() => __game.currentChoices[1].id);
+    await press(A);
+    await expect('PLAYING', 'A on a card selects it');
+    if (!(await page.evaluate(id => (__game.player.upgradeLevels[id] || 0) > 0, picked))) throw Error('Selected card was not applied');
+
+    await press(START);
+    await expect('PAUSED', 'Start pauses');
+    await page.waitForTimeout(400);
+    await press(UP);
+    const slider = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
+    if (!slider?.includes('slider')) throw Error(`Up from Resume should reach a slider, got ${slider}`);
+    const before = await page.evaluate(id => Number(document.getElementById(id).value), slider);
+    await press(RIGHT);
+    const after = await page.evaluate(id => Number(document.getElementById(id).value), slider);
+    if (!(after > before)) throw Error('Right on a focused slider should raise it');
+    await press(B);
+    await expect('PLAYING', 'B resumes');
+
+    await page.evaluate(() => { const g = __game; g.openRelicChest({ x: g.player.x, y: g.player.y, isSuper: false }); });
+    await expect('CHEST', 'chest opens');
+    await page.waitForTimeout(400);
+    await press(A);
+    await expect('PLAYING', 'A claims the chest');
+
+    await page.evaluate(() => __game.triggerGameOver());
+    await expect('GAMEOVER', 'run ends');
+    await page.waitForTimeout(400);
+    await press(START);
+    await expect('PLAYING', 'Start relaunches from game over');
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: 'controller-gameplay.png' });
+
+    if (errors.length) throw Error(errors.join('\n'));
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + resume, chest claim, game-over relaunch; no page errors.');
+  } finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

@@ -386,14 +386,14 @@ export class EnemyManager {
       const glowColor = `hsla(${e.hue}, 100%, 55%, 0.42)`;
 
       // Ribbon Trail
-      if (e.trail.length > 1) {
-        ctx.strokeStyle = `hsla(${e.hue}, 100%, 60%, 0.28)`;
-        ctx.lineWidth = 2;
+      // Tapered ribbon: fades toward the tail, brightest at the enemy.
+      for (let t = 1; t < e.trail.length; t++) {
+        const k = t / (e.trail.length - 1);
+        ctx.strokeStyle = `hsla(${e.hue}, 100%, ${58 + k * 10}%, ${0.1 + k * 0.32})`;
+        ctx.lineWidth = 1.2 + k * 1.6;
         ctx.beginPath();
-        ctx.moveTo(e.trail[0].x, e.trail[0].y);
-        for (let t = 1; t < e.trail.length; t++) {
-          ctx.lineTo(e.trail[t].x, e.trail[t].y);
-        }
+        ctx.moveTo(e.trail[t - 1].x, e.trail[t - 1].y);
+        ctx.lineTo(e.trail[t].x, e.trail[t].y);
         ctx.stroke();
       }
 

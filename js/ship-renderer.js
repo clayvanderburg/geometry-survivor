@@ -1,56 +1,188 @@
 // Shared game and tuning-preview rendering. Animation state is supplied by the caller.
+
+// Andrew's monotone chain; returns the convex hull counter-clockwise (math orientation).
+function convexHull(points) {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const pt of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pt) <= 0) lower.pop();
+    lower.push(pt);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const pt = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pt) <= 0) upper.pop();
+    upper.push(pt);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+// Ship-local silhouette the shield hugs: drill claws, carapace wings, leg tips and tail.
+// Claw growth from upgrades is capped so bigger drills poke through instead of inflating the hitbox.
+const hullCache = new Map();
+function shipHull(r, drillScale) {
+  const ds = Math.min(drillScale || 1, 1.15);
+  const key = `${r}|${ds}`;
+  let hull = hullCache.get(key);
+  if (!hull) {
+    const pts = [[-r * 1.0, 0]];
+    for (const s of [-1, 1]) {
+      pts.push(
+        [r * 1.42 + 18 * ds, s * r * 0.5],        // drill-claw tips
+        [r * 1.42 + 2, s * (r * 0.78 + 8.5 * ds)], // pincer jaws
+        [r * 1.15, s * r * 1.12],                  // claw elbows
+        [-r * 0.15, s * r * 1.72],                 // leg tips
+        [-r * 0.84, s * r * 1.62],                 // rear leg tips
+        [-r * 0.92, s * r * 0.88]                  // rear carapace corners
+      );
+    }
+    hull = convexHull(pts);
+    if (hullCache.size > 32) hullCache.clear();
+    hullCache.set(key, hull);
+  }
+  return hull;
+}
+
+// The hull grown outward by `pad` with rounded corners, sampled as a closed polyline.
+function shieldOutline(hull, pad) {
+  const out = [];
+  const n = hull.length;
+  for (let i = 0; i < n; i++) {
+    const prev = hull[(i - 1 + n) % n], cur = hull[i], next = hull[(i + 1) % n];
+    const a1 = Math.atan2(-(cur[0] - prev[0]), cur[1] - prev[1]); // outward normal of incoming edge
+    let a2 = Math.atan2(-(next[0] - cur[0]), next[1] - cur[1]);   // outward normal of outgoing edge
+    while (a2 < a1) a2 += Math.PI * 2;
+    const steps = Math.max(1, Math.ceil((a2 - a1) / 0.35));
+    for (let k = 0; k <= steps; k++) {
+      const a = a1 + ((a2 - a1) * k) / steps;
+      out.push([cur[0] + Math.cos(a) * pad, cur[1] + Math.sin(a) * pad]);
+    }
+  }
+  return out;
+}
+
+function shieldPad(p, tuning) {
+  return p.radius * (tuning.shieldPadding ?? 0.38);
+}
+
+// Contact test against the drawn shield shape: true when a circle at (x, y) touches it.
+export function shieldTouches(p, tuning, x, y, radius) {
+  const hull = shipHull(p.radius, p.stats?.drillScale);
+  const a = -(p.drillAngle ?? p.angle ?? 0);
+  const dx = x - p.x, dy = y - p.y;
+  const lx = dx * Math.cos(a) - dy * Math.sin(a);
+  const ly = dx * Math.sin(a) + dy * Math.cos(a);
+
+  let inside = true;
+  let minDist = Infinity;
+  for (let i = 0; i < hull.length; i++) {
+    const [ax, ay] = hull[i];
+    const [bx, by] = hull[(i + 1) % hull.length];
+    const ex = bx - ax, ey = by - ay;
+    if (ex * (ly - ay) - ey * (lx - ax) < 0) inside = false;
+    const t = Math.max(0, Math.min(1, ((lx - ax) * ex + (ly - ay) * ey) / (ex * ex + ey * ey)));
+    minDist = Math.min(minDist, Math.hypot(lx - (ax + ex * t), ly - (ay + ey * t)));
+  }
+  return inside || minDist < shieldPad(p, tuning) + radius - 2;
+}
+
+function tracePath(ctx, pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+}
+
+// Healthy shields use the tunable hue; damage warms them toward amber, then critical red.
+function shieldHueFor(hpRatio, baseHue) {
+  const amber = 400; // 40° written past 360 so blending runs warm (violet → red → amber), not through the ship's cyan
+  const critical = 352;
+  if (hpRatio >= 0.6) return baseHue;
+  if (hpRatio >= 0.5) return baseHue + (amber - baseHue) * ((0.6 - hpRatio) / 0.1);
+  if (hpRatio >= 0.3) return amber;
+  if (hpRatio >= 0.24) return amber + (critical - amber) * ((0.3 - hpRatio) / 0.06);
+  return critical;
+}
+
 export function drawPlayerShield(ctx, p, beatPulse, tuning, shieldRotation = 0, now = performance.now()) {
     const hpRatio = Math.max(0, Math.min(1, p.hp / p.maxHp));
-    let shieldHue = 185;
-    if (hpRatio > 0.65) {
-      shieldHue = 165 + (hpRatio - 0.65) * 65;
-    } else if (hpRatio > 0.32) {
-      shieldHue = 38 + ((hpRatio - 0.32) / 0.33) * 85;
-    } else {
-      shieldHue = 348;
-    }
+    const hue = shieldHueFor(hpRatio, tuning.shieldHue ?? 222) % 360;
+    const critical = hpRatio < 0.3;
+    const dangerPulse = critical ? 0.6 + Math.sin(now * 0.02) * 0.3 : 1.0;
+    const flicker = critical && Math.random() < 0.08 ? 0.35 : 1.0;
+    const flash = Math.max(0, Math.min(1, p.shieldFlash || 0));
 
-    const baseRadius = p.radius * (tuning.shieldRadiusMult ?? 2.55) + beatPulse * 3.2;
-    const thickMult = tuning.shieldThicknessMult ?? 0.3;
-    const coreThickness = (1.6 + hpRatio * 4.2) * thickMult;
-    const glowThickness = (5.0 + hpRatio * 10.5 + beatPulse * 3) * thickMult;
-    const dangerPulse = hpRatio < 0.32 ? 0.55 + Math.sin(now * 0.02) * 0.35 : 1.0;
+    // Max shield above the 100 HP baseline thickens the barrier; current charge scales it within that.
+    const capacity = Math.sqrt(Math.max(1, Math.min(5, p.maxHp / 100)));
+    const thick = (tuning.shieldThickness ?? 1.0) * capacity;
+    const coreWidth = (1.4 + hpRatio * 2.2) * thick;
+    const glowWidth = (4.5 + hpRatio * 6 + beatPulse * 3) * thick;
+
+    const pad = shieldPad(p, tuning) + beatPulse * 2.4 + flash * 3;
+    const outline = shieldOutline(shipHull(p.radius, p.stats?.drillScale), pad);
+    let perimeter = 0;
+    for (let i = 0; i < outline.length; i++) {
+      const [ax, ay] = outline[i];
+      const [bx, by] = outline[(i + 1) % outline.length];
+      perimeter += Math.hypot(bx - ax, by - ay);
+    }
+    const flow = shieldRotation * 38; // charge and sparks circulate around the outline
 
     ctx.save();
     ctx.translate(p.x, p.y);
+    ctx.rotate(p.drillAngle ?? p.angle ?? 0);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
 
-    const grad = ctx.createRadialGradient(0, 0, p.radius * 0.4, 0, 0, baseRadius);
-    grad.addColorStop(0, `hsla(${shieldHue}, 100%, 60%, 0.03)`);
-    grad.addColorStop(0.75, `hsla(${shieldHue}, 100%, 60%, ${0.08 + hpRatio * 0.1})`);
-    grad.addColorStop(1, `hsla(${shieldHue}, 100%, 70%, ${0.24 * dangerPulse})`);
+    // 1. Soft interior field
+    const extent = p.radius * 2.6 + pad;
+    const grad = ctx.createRadialGradient(p.radius * 0.3, 0, p.radius * 0.5, p.radius * 0.3, 0, extent);
+    grad.addColorStop(0, `hsla(${hue}, 100%, 65%, 0)`);
+    grad.addColorStop(0.7, `hsla(${hue}, 100%, 62%, ${(0.05 + hpRatio * 0.07) * dangerPulse})`);
+    grad.addColorStop(1, `hsla(${hue}, 100%, 72%, ${(0.12 + hpRatio * 0.08 + flash * 0.2) * dangerPulse})`);
     ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
+    tracePath(ctx, outline);
     ctx.fill();
 
-    ctx.strokeStyle = `hsla(${shieldHue}, 100%, 58%, ${(0.22 + hpRatio * 0.28) * dangerPulse})`;
-    ctx.lineWidth = glowThickness;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
+    // 2. Outer glow (full outline, so the shield's shape always reads)
+    ctx.strokeStyle = `hsla(${hue}, 100%, 60%, ${(0.16 + hpRatio * 0.22 + beatPulse * 0.08) * dangerPulse * flicker})`;
+    ctx.lineWidth = glowWidth;
     ctx.stroke();
 
-    const startAngle = -Math.PI * 0.5 + Math.sin(shieldRotation * 0.5) * 0.2;
-    const endAngle = startAngle + Math.PI * 2 * Math.max(0.08, hpRatio);
-    ctx.strokeStyle = `hsla(${shieldHue}, 100%, 78%, ${0.92 * dangerPulse})`;
-    ctx.lineWidth = coreThickness;
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius, startAngle, endAngle);
+    // 3. Depleted section: faint, thin track
+    ctx.strokeStyle = `hsla(${hue}, 60%, 55%, ${0.22 * dangerPulse})`;
+    ctx.lineWidth = Math.max(1, coreWidth * 0.45);
     ctx.stroke();
 
-    const nodeCount = 4;
-    for (let i = 0; i < nodeCount; i++) {
-      const na = shieldRotation + (i * Math.PI * 2) / nodeCount;
-      const nx = Math.cos(na) * baseRadius;
-      const ny = Math.sin(na) * baseRadius;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(nx, ny, 1.5 + hpRatio * 1.5, 0, Math.PI * 2);
-      ctx.fill();
+    // 4. Charged section: bright arc whose length is the current shield percentage, flowing around the hull
+    ctx.setLineDash([perimeter * Math.max(0.06, hpRatio), perimeter]);
+    ctx.lineDashOffset = -flow;
+    ctx.strokeStyle = `hsla(${hue}, 100%, ${74 + beatPulse * 8}%, ${0.95 * dangerPulse * flicker})`;
+    ctx.lineWidth = coreWidth;
+    ctx.stroke();
+
+    // 5. Racing energy sparks (two short bright dashes travelling twice as fast)
+    const sparkLen = 5 + hpRatio * 5;
+    ctx.setLineDash([sparkLen, perimeter / 2 - sparkLen]);
+    ctx.lineDashOffset = -flow * 2.1;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${(0.55 + hpRatio * 0.35) * flicker})`;
+    ctx.lineWidth = coreWidth * 0.9 + 0.6;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 6. Impact flash: white rim plus a ripple that expands off the hull
+    if (flash > 0.01) {
+      ctx.strokeStyle = `rgba(255, 255, 255, ${flash * 0.85})`;
+      ctx.lineWidth = coreWidth + 1.5;
+      ctx.stroke();
+      const ripple = 1 + (1 - flash) * 0.55;
+      ctx.save();
+      ctx.scale(ripple, ripple);
+      ctx.strokeStyle = `hsla(${hue}, 100%, 70%, ${flash * 0.6})`;
+      ctx.lineWidth = 2 / ripple;
+      ctx.stroke();
+      ctx.restore();
     }
 
     ctx.restore();

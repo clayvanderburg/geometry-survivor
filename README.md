@@ -39,7 +39,7 @@ npm start
 
 5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
    - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.
-   - Health-reactive circular **Ship Shield Barrier** (`drawPlayerShield`) pulses to `getBeatPulse()` and shifts color/thickness with HP.
+   - **Hull-Hugging Shield Barrier** (`drawPlayerShield` in `js/ship-renderer.js`) wraps the crab's silhouette and is also the contact hitbox (`shieldTouches`). Its charged arc shows current shield %, thickness grows with max shield, color shifts blue → amber → critical red, and hits flash with a ripple. Hue, padding and thickness are tunable.
 
 6. **Persistent Highscore Board & Void Armory Meta-Progression (`js/progression.js`)**
    - Custom **Pilot Callsign / Name Entry** on Title and Game Over screens.
@@ -57,7 +57,9 @@ npm start
 - `tuner.html` — Standalone Live Tuning & Dev Sandbox Studio with live 60 FPS Crab-Ship & Shield preview canvas.
 - `css/style.css` — Neon glassmorphic HUD, modal, and Tuner Drawer styling.
 - `js/config.js` — Centralized `TUNING` state, `DEFAULT_TUNING`, `TUNING_SCHEMA`, `localStorage` persistence, and `BroadcastChannel` sync.
-- `js/main.js` — Core `Game` loop, Crab Ship renderer (`drawCrabShip`), Shield renderer (`drawPlayerShield`), Minimap (`drawMinimap`), weapons, and live tuning integration.
+- `js/main.js` — Core `Game` loop, Minimap (`drawMinimap`), weapons, and live tuning integration.
+- `js/ship-renderer.js` — Crab Ship renderer (`drawCrabShip`), shield renderer and shield hitbox, shared by game and Studio.
+- `js/gamepad.js` — Controller snapshots and d-pad/stick menu navigation. Full controller play: L-stick move, R-stick aim/fire, A dash, B supernova, X/Y auto-fire/auto-aim, Start pause; menus use d-pad + A, Start confirms, B resumes.
 - `js/asteroids.js` — Procedural asteroid cluster generation, spatial hash grid, and dedicated Twin Crab-Claw rotary drilling physics.
 - `js/enemies.js` — Enemy archetypes, Boids flocking, Weaver bullet-dodging, and boss behaviors.
 - `js/upgrades.js` — In-run upgrade pool, Golden Synergies (*Tectonic Claw Bore*, *Pulsar Helix*, *Storm Protocol*), and Luck-scaled `+2`/`+3` level jump rolls.
@@ -72,7 +74,7 @@ Requires Node.js 20 or newer; runtime and tests have no package dependencies. Ru
 
 The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy neighbors, projectile avoidance, and primary projectile collisions use spatial queries. Enemy capacity includes active and pending spawns (default 200). Game and Studio share `js/ship-renderer.js`. Saved tuning and progression are normalized on load.
 
-Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder.
+Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → pause → chest → game over with a simulated gamepad only.
 
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
 
