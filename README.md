@@ -30,7 +30,7 @@ npm start
    - **Boid Swarmers** (Magenta Diamonds): Flock using separation, alignment, cohesion, and swirl.
    - **Weavers** (Emerald Darts): Sense incoming player fire and dodge perpendicular to bullet trajectories.
    - **Pinwheels** (Violet Rotating Squares) & **Splitters** (Golden Hexagons that fracture into 3 fast mini-triangles).
-   - **Black Holes** (Crimson Singularities): Pull the grid, particles, and nearby enemies inward.
+   - **Black Holes** (Crimson Singularities): Funnel the grid, swirl enemies, pickups and sparks inward, bend passing shots, and tug your ship. The tug is capped below your thrust (`js/gravity.js`), so holding away always escapes. Strengths live in the tuner's *Gravity Wells & Singularities* group.
    - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache.
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**

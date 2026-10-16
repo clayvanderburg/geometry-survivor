@@ -1,6 +1,7 @@
 // Geometric Enemy Archetypes & Emergent Boids Swarm Intelligence
 import { TUNING } from './config.js';
 import { SpatialIndex } from './spatial-index.js';
+import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
 
 export class EnemyManager {
   constructor({ maxEnemies = 200 } = {}) {
@@ -168,6 +169,8 @@ export class EnemyManager {
           y: sp.y,
           vx: c.vx !== undefined ? c.vx : Math.cos(angle) * 1.5,
           vy: c.vy !== undefined ? c.vy : Math.sin(angle) * 1.5,
+          gvx: 0, // External gravity drift (black holes / singularities), applied past the speed cap
+          gvy: 0,
           hp: c.hp,
           maxHp: c.maxHp,
           speed: c.speed,
@@ -284,25 +287,22 @@ export class EnemyManager {
         e.vy = (e.vy + dirY * 0.45 + dodgeY) * 0.88;
         e.rotation = Math.atan2(e.vy, e.vx);
       } else if (e.type === 'blackhole') {
-        // Crimson Gravity Well: warps the grid inward & pulls nearby enemies/sparks
+        // Crimson Gravity Well: pulls nearby enemies/sparks (grid funnel, ship, bullet & geom pulls live in Game)
         e.vx = (e.vx + dirX * 0.12) * 0.94;
         e.vy = (e.vy + dirY * 0.12) * 0.94;
-        const pullRadius = 185;
-        grid.applyImplosion(e.x, e.y, 14, pullRadius, 348, 0.35);
+        const pullRadius = TUNING.blackholePullRadius ?? 200;
+        const enemyPull = TUNING.blackholeEnemyPull ?? 0.45;
         particles.applyGravityWell(e.x, e.y, 1.4, pullRadius);
 
-        // Gently tug nearby non-blackhole enemies into orbit
+        // Drag nearby non-blackhole enemies into a swirling orbit (drift bypasses their speed cap)
         for (const other of this.enemyIndex.query(e.x, e.y, pullRadius)) {
           if (e === other) continue;
           if (other.type === 'blackhole' || other.isBoss) continue;
           const gx = e.x - other.x;
           const gy = e.y - other.y;
-          const gdSq = gx * gx + gy * gy;
-          if (gdSq < pullRadius * pullRadius && gdSq > 25) {
-            const gd = Math.sqrt(gdSq);
-            other.vx += (gx / gd) * 0.25;
-            other.vy += (gy / gd) * 0.25;
-          }
+          const k = wellPullScale(gx, gy, pullRadius, enemyPull, e.radius);
+          other.gvx = (other.gvx || 0) + (gx - gy * 0.3) * k;
+          other.gvy = (other.gvy || 0) + (gy + gx * 0.3) * k;
         }
       } else {
         // Pinwheels, Splitters, Mini-Splitters, Bosses
@@ -335,8 +335,13 @@ export class EnemyManager {
         e.vy = (e.vy / curSpd) * e.speed;
       }
 
-      e.x += e.vx;
-      e.y += e.vy;
+      // Gravity drift rides on top of the capped steering, then bleeds off.
+      const gvx = e.gvx || 0;
+      const gvy = e.gvy || 0;
+      e.x += e.vx + gvx;
+      e.y += e.vy + gvy;
+      e.gvx = gvx * GRAVITY_DRIFT_DRAG;
+      e.gvy = gvy * GRAVITY_DRIFT_DRAG;
 
       // Arena wall bounce
       const pad = e.radius + 8;
@@ -376,7 +381,7 @@ export class EnemyManager {
     // 2. Draw Enemies
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
-      const padding = e.radius * 1.4 + 24;
+      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4 : e.radius * 1.4 + 24;
       if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
       const pulse = 1 + Math.sin(e.pulsePhase) * 0.08;
       const r = e.radius * pulse;
@@ -396,6 +401,8 @@ export class EnemyManager {
         ctx.lineTo(e.trail[t].x, e.trail[t].y);
         ctx.stroke();
       }
+
+      if (e.type === 'blackhole') this.drawBlackholeAura(ctx, e, r);
 
       ctx.save();
       ctx.translate(e.x, e.y);
@@ -473,6 +480,43 @@ export class EnemyManager {
       }
     }
 
+    ctx.restore();
+  }
+
+  // Accretion disc, photon ring and a faint dashed rim marking where the pull starts (no gradients).
+  drawBlackholeAura(ctx, e, r) {
+    const pullRadius = TUNING.blackholePullRadius ?? 200;
+    const spin = e.pulsePhase * 0.3;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+
+    // Pull rim: 24 slowly crawling dash arcs in one path (cheaper than setLineDash on a big circle)
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 66%, 0.34)`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    const dashStep = (Math.PI * 2) / 24;
+    for (let k = 0; k < 24; k++) {
+      const a0 = k * dashStep + spin * 0.12;
+      ctx.moveTo(Math.cos(a0) * pullRadius, Math.sin(a0) * pullRadius);
+      ctx.arc(0, 0, pullRadius, a0, a0 + dashStep * 0.35);
+    }
+    ctx.stroke();
+
+    // Two tilted, counter-rotating accretion ellipses: hot orange inside, crimson outside
+    for (let k = 0; k < 2; k++) {
+      ctx.strokeStyle = k === 0 ? 'hsla(22, 100%, 62%, 0.6)' : `hsla(${e.hue}, 100%, 66%, 0.42)`;
+      ctx.lineWidth = k === 0 ? 2.4 : 1.6;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * (2.05 + k * 0.55), r * (0.6 + k * 0.22), k === 0 ? spin : -spin * 0.7 + 1.1, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // White-hot photon ring hugging the event horizon
+    ctx.strokeStyle = 'rgba(255, 236, 242, 0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.74, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 }

@@ -551,6 +551,25 @@ export class SoundEngine {
     });
   }
 
+  // Singularity collapse: a quick falling "suck" sweep that lands on a sub-bass explosion.
+  playImplosion() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(640, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.2);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.14, t + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.25);
+    this.playExplosion(1.7);
+  }
+
   playLevelUp() {
     if (!this.enabled || !this.ctx) return;
     const t = this.ctx.currentTime;

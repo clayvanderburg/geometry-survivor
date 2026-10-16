@@ -15,12 +15,13 @@ export const WEAPON_SCALING = {
   lightningCooldown: (lv) => Math.max(0.55, 1.65 - lv * 0.2),
   stormChainLevel: 2,
 
-  // Vortex Singularity: damage is per tick on the core, then x collapseMult when it implodes
+  // Vortex Singularity: light per-tick core damage so packs clump, then a collapse pulse over 85% of the pull radius
   singularityCooldown: (lv) => Math.max(2.2, 4.5 - lv * 0.5),
   singularityCoreRadius: (lv) => 14 + lv * 3,
   singularityPullRadius: (lv) => 150 + lv * 25,
-  singularityDamageMult: (lv) => 0.35 + lv * 0.12,
-  singularityCollapseMult: 14,
+  singularityDamageMult: (lv) => 0.14 + lv * 0.05,
+  singularityCollapseDamageMult: (lv) => 10 + lv * 5,
+  singularityCollapseRadiusFrac: 0.85,
 
   // Aegis Orbiting Blades (damage per tick of contact)
   orbitalBlades: (lv) => 1 + lv,

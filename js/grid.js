@@ -108,6 +108,38 @@ export class WarpGrid {
     }
   }
 
+  // Smooth gravity funnel: each point is eased toward an inward offset that peaks near the core
+  // (measured from its rest position, never past the centre), so wells read as a deep, stable dent
+  // that follows a moving well instead of a tangle of over-pulled lines.
+  applyWell(px, py, depth, radius, hue = 330, swirl = 0.2) {
+    depth *= (TUNING.gridWarpMult ?? 1.0);
+    if (!(depth > 0) || !(radius > 0)) return;
+    const rSq = radius * radius;
+    const gain = 0.16;
+    const { minCol, maxCol, minRow, maxRow } = this.forceBounds(px, py, radius);
+
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowOffset = r * this.cols;
+      for (let c = minCol; c <= maxCol; c++) {
+        const pt = this.points[rowOffset + c];
+        const dx = px - pt.ox;
+        const dy = py - pt.oy;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < rSq && dSq > 1) {
+          const dist = Math.sqrt(dSq);
+          const t = 1 - dist / radius;
+          const sink = Math.min(dist * 0.8, depth * t * (1.5 - 0.5 * t)) / dist;
+          const tx = pt.ox + (dx - dy * swirl) * sink;
+          const ty = pt.oy + (dy + dx * swirl) * sink;
+          pt.vx += (tx - pt.x) * gain;
+          pt.vy += (ty - pt.y) * gain;
+          pt.energy = Math.min(1.5, Math.max(pt.energy, t * 2.2));
+          if (t > 0.08) pt.hue = hue;
+        }
+      }
+    }
+  }
+
   update(camX = 0, camY = 0, viewW = 1920, viewH = 1080) {
     const cols = this.cols;
     const rows = this.rows;

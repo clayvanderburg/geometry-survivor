@@ -46,7 +46,7 @@ export const STAT_ROWS = [
   { id: 'singularityPull', label: 'Pull radius', get: (p) => owned(p, 'singularity', W.singularityPullRadius), fmt: int, headline: 'count', unit: 'PULL RADIUS', newText: (a) => `BLACK HOLES // ${a} PULL RADIUS` },
   { id: 'singularityCooldown', label: 'Black hole cooldown', get: (p) => owned(p, 'singularity', W.singularityCooldown), fmt: secs },
   { id: 'singularityCore', label: 'Core radius', get: (p) => owned(p, 'singularity', W.singularityCoreRadius), fmt: int },
-  { id: 'singularityCollapse', label: 'Collapse damage', get: (p) => owned(p, 'singularity', (l) => p.stats.damage * W.singularityDamageMult(l) * W.singularityCollapseMult), fmt: dec1 },
+  { id: 'singularityCollapse', label: 'Collapse damage', get: (p) => owned(p, 'singularity', (l) => p.stats.damage * W.singularityCollapseDamageMult(l) * (TUNING.singularityCollapseMult ?? 1)), fmt: dec1 },
 
   // Aegis Orbiting Blades
   { id: 'orbitalBlades', label: 'Orbit blades', get: (p) => owned(p, 'orbitals', W.orbitalBlades), fmt: int, headline: 'count', unit: 'ORBIT BLADES' },
