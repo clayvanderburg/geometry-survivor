@@ -1,4 +1,4 @@
-# VECTRA // SURVIVOR
+# VEXOLITH // SURVIVOR
 
 A browser-based geometric twin-stick roguelite & asteroid-excavation survival game inspired by *Geometry Wars*, *Deep Rock Galactic: Survivor*, and *Vampire Survivors*.
 

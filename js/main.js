@@ -481,7 +481,7 @@ export class Game {
     if (copyBtn) {
       copyBtn.addEventListener('click', async () => {
         const payload = getAgentTuningPayload();
-        const text = `Here is my VECTRA // SURVIVOR tuning preset:\n\`\`\`json\n${JSON.stringify(
+        const text = `Here is my VEXOLITH // SURVIVOR tuning preset:\n\`\`\`json\n${JSON.stringify(
           payload.modifiedCount > 0 ? payload.changes : payload.fullTuning,
           null,
           2

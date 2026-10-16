@@ -1,4 +1,4 @@
-# VECTRA // SURVIVOR — Game Design & Playtesting Backlog
+# VEXOLITH // SURVIVOR — Game Design & Playtesting Backlog
 
 **Captured:** October 16, 2026  
 **Status:** Brainstorming / proposed design, not an implementation specification.  

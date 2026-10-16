@@ -1,4 +1,4 @@
-// Centralized Live Tuning Configuration & Cross-Tab Sync for VECTRA // SURVIVOR
+// Centralized Live Tuning Configuration & Cross-Tab Sync for VEXOLITH // SURVIVOR
 const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v3';
 
 export const DEFAULT_TUNING = {
@@ -210,7 +210,7 @@ export function getAgentTuningPayload() {
     }
   }
   return {
-    project: 'VECTRA // SURVIVOR',
+    project: 'VEXOLITH // SURVIVOR',
     modifiedCount: Object.keys(changed).length,
     changes: changed,
     fullTuning: { ...TUNING }
