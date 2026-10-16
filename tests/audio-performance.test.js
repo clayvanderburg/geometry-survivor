@@ -134,3 +134,36 @@ test('new run reset removes residual particle and grid impulses', () => {
   grid.reset();
   assert.ok(grid.points.every(point => point.x === point.ox && point.y === point.oy && point.vx === 0 && point.vy === 0 && point.energy === 0));
 });
+
+
+test('final audio safety stage preserves quiet gain and bounds overload after compressor', async () => {
+  const original = window.AudioContext;
+  const parameter = () => ({ value: 0, setValueAtTime() {}, setTargetAtTime() {} });
+  const node = () => ({ gain: parameter(), frequency: parameter(), Q: parameter(), destinations: [], connect(target) { this.destinations.push(target); }, disconnect() { this.disconnected = true; } });
+  const compressor = node();
+  for (const key of ['threshold', 'knee', 'ratio', 'attack', 'release']) compressor[key] = parameter();
+  const limiter = node();
+  const destination = {};
+  const ctx = { currentTime: 0, state: 'running', destination, createDynamicsCompressor: () => compressor, createWaveShaper: () => limiter, createGain: node, createBiquadFilter: node, close: async () => {} };
+  window.AudioContext = function () { return ctx; };
+  try {
+    const engine = new SoundEngine();
+    engine.startMusic = () => {};
+    engine.init();
+    assert.deepEqual(compressor.destinations, [limiter]);
+    assert.deepEqual(limiter.destinations, [destination]);
+    assert.equal(limiter.oversample, 'none');
+    const curve = limiter.curve;
+    for (let i = 0; i < curve.length; i++) {
+      const input = (i / (curve.length - 1)) * 2 - 1;
+      assert.ok(Number.isFinite(curve[i]));
+      assert.ok(Math.abs(curve[i]) <= 0.980001);
+      if (Math.abs(input) <= 0.8) assert.ok(Math.abs(curve[i] - input) < 1e-7);
+      assert.ok(Math.abs(curve[i]) <= Math.abs(input) + 1e-7, 'saturation must not amplify input');
+      if (i > 0) assert.ok(curve[i] >= curve[i - 1], 'transfer must be monotonic');
+    }
+    await engine.dispose();
+    assert.equal(limiter.disconnected, true);
+    assert.equal(engine.outputLimiter, null);
+  } finally { window.AudioContext = original; }
+});

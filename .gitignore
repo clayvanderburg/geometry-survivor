@@ -1,2 +1,6 @@
 node_modules/
 *-smoke.png
+soak-*.png
+VALIDATION_RESULTS.json
+AUDIO_VALIDATION_RESULTS.json
+audio-validation.json

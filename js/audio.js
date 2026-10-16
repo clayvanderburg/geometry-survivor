@@ -16,6 +16,7 @@ export class SoundEngine {
     this.masterGain = null;
     this.musicGain = null;
     this.musicCompressor = null;
+    this.outputLimiter = null;
     this.sfxGain = null;
     this.musicFilter = null;
 
@@ -89,7 +90,22 @@ export class SoundEngine {
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = this.getMasterGainValue();
     this.masterGain.connect(this.musicCompressor);
-    this.musicCompressor.connect(this.ctx.destination);
+    // The compressor controls dynamics but cannot guarantee a sample ceiling.
+    // Keep signals below 0.8 linear; smoothly saturate overload toward +/-0.98.
+    // WaveShaper clamps inputs outside its curve domain. No oversampling here:
+    // post-shaper resampling can overshoot an otherwise bounded sample curve.
+    this.outputLimiter = this.ctx.createWaveShaper();
+    const curve = new Float32Array(65537);
+    for (let i = 0; i < curve.length; i++) {
+      const input = (i / (curve.length - 1)) * 2 - 1;
+      const magnitude = Math.abs(input);
+      const excess = Math.max(0, (magnitude - 0.8) / 0.2);
+      curve[i] = Math.sign(input) * (magnitude - 0.02 * Math.pow(excess, 10));
+    }
+    this.outputLimiter.curve = curve;
+    this.outputLimiter.oversample = 'none';
+    this.musicCompressor.connect(this.outputLimiter);
+    this.outputLimiter.connect(this.ctx.destination);
 
     // Keep SFX tucked underneath the music so lasers/explosions never drown out the beat
     this.sfxGain = this.ctx.createGain();
@@ -183,7 +199,7 @@ export class SoundEngine {
     this.stopMusic();
     const ctx = this.ctx;
     this.ctx = null;
-    for (const key of ['masterGain', 'musicGain', 'musicCompressor', 'sfxGain', 'musicFilter']) {
+    for (const key of ['masterGain', 'musicGain', 'musicCompressor', 'outputLimiter', 'sfxGain', 'musicFilter']) {
       this[key]?.disconnect();
       this[key] = null;
     }

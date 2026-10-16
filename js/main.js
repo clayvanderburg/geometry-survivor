@@ -80,6 +80,7 @@ export class Game {
     this.wave = 1;
     this.waveTimer = 0;
     this.spawnCooldown = 0.6;
+    this.pendingBossSpawns = [];
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -1129,6 +1130,17 @@ export class Game {
     return { x: this.player.x + 500, y: this.player.y };
   }
 
+  processPendingBossSpawns() {
+    this.pendingBossSpawns ||= [];
+    while (this.pendingBossSpawns.length > 0) {
+      const scheduled = this.pendingBossSpawns[0];
+      const bp = this.spawnAroundPlayer(520, 780);
+      if (!this.enemyManager.queueSpawn('boss', bp.x, bp.y, scheduled.waveScale)) break;
+      this.pendingBossSpawns.shift();
+      this.showBanner('⚠ PRISMATIC DREADNOUGHT DETECTED ⚠');
+    }
+  }
+
   spawnWavePack() {
     if (this.enemyManager.enemies.length > 130) return;
 
@@ -1573,12 +1585,12 @@ export class Game {
       }
 
       if (this.wave % 3 === 0) {
-        const bp = this.spawnAroundPlayer(520, 780);
-        this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale());
-        this.showBanner(`⚠ PRISMATIC DREADNOUGHT DETECTED ⚠`);
+        this.pendingBossSpawns.push({ wave: this.wave, waveScale: this.getWaveScale() });
       }
     }
 
+    // Scheduled encounters retain their wave scaling and get the first free slots.
+    this.processPendingBossSpawns();
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnWavePack();

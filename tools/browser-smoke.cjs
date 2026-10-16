@@ -37,7 +37,14 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await tuner.goto('http://127.0.0.1:8096/tuner.html');
  await tuner.waitForTimeout(500);
  await tuner.screenshot({path:'tuner-smoke.png'});
+ const blocked = await context.newPage();
+ blocked.on('pageerror', e=>errors.push(e.message));
+ await blocked.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Storage unavailable','SecurityError');}}));
+ await blocked.goto('http://127.0.0.1:8096');
+ await blocked.locator('#btn-start-game').click();
+ await blocked.keyboard.press('p');
+ if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, blocked-storage boot; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
