@@ -1,14 +1,14 @@
 // Centralized Live Tuning Configuration & Cross-Tab Sync for VECTRA // SURVIVOR
-const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v1';
+const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v2';
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
-  shipRadius: 15,
-  moveSpeed: 5.4,
-  drillScale: 1.0,
-  miningSpeed: 135,
-  miningRange: 36,
-  dualClawBonus: 1.45,
+  shipRadius: 16,
+  moveSpeed: 5.0,
+  drillScale: 1.15,
+  miningSpeed: 75,
+  miningRange: 43,
+  dualClawBonus: 1.25,
   carapaceColor: '#00f3ff',
   innerArmorColor: '#00ffaa',
   drillIdleColor: '#00f3ff',
@@ -19,9 +19,9 @@ export const DEFAULT_TUNING = {
   baseDamage: 11,
   fireRate: 6.5,
   bulletSpeed: 14.0,
-  bulletRadius: 4.2,
+  bulletRadius: 3.8,
   bulletColorHue: 186,
-  shieldRadiusMult: 1.95,
+  shieldRadiusMult: 2.25,
   shieldThicknessMult: 1.0,
   shieldRegenRate: 1.2,
   dashCooldownBase: 1.25,
@@ -38,8 +38,8 @@ export const DEFAULT_TUNING = {
 
   // 4. World, Asteroids & Economy
   clusterCount: 38,
-  rockHpMult: 1.0,
-  rockSizeMult: 1.0,
+  rockHpMult: 1.6,
+  rockSizeMult: 1.15,
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,

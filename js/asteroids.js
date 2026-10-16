@@ -37,8 +37,8 @@ export class AsteroidManager {
     const numRocks = 18 + Math.floor(Math.random() * 18);
     const mainAngle = Math.random() * Math.PI * 2;
     const elongation = 1.2 + Math.random() * 1.4;
-    const sizeMult = TUNING.rockSizeMult ?? 1.0;
-    const hpMult = TUNING.rockHpMult ?? 1.0;
+    const sizeMult = TUNING.rockSizeMult ?? 1.15;
+    const hpMult = TUNING.rockHpMult ?? 1.6;
 
     const placed = [];
     for (let i = 0; i < numRocks; i++) {
@@ -151,8 +151,8 @@ export class AsteroidManager {
     }
 
     const nearbyPlayerRocks = this.getNearbyAsteroids(player.x, player.y, 2);
-    const miningDps = player.stats.miningSpeed || 125;
-    const drillReach = player.stats.miningRange || 52; // Close-quarters physical claw-drill reach!
+    const miningDps = player.stats.miningSpeed || 75;
+    const drillReach = player.stats.miningRange || 43; // Close-quarters physical claw-drill reach!
 
     // Calculate the world positions of the Crab Ship's Left & Right Front Drill Claws
     const clawHeading = player.drillAngle !== undefined ? player.drillAngle : player.angle;
@@ -186,7 +186,7 @@ export class AsteroidManager {
         this.drillingRocks.push(rock);
 
         // Both claws engaging same rock deals bonus twin-drill torque!
-        const dualBonus = (distLeft <= drillReach && distRight <= drillReach) ? (TUNING.dualClawBonus ?? 1.45) : 1.0;
+        const dualBonus = (distLeft <= drillReach && distRight <= drillReach) ? (TUNING.dualClawBonus ?? 1.25) : 1.0;
         rock.hp -= miningDps * dualBonus * dt;
         rock.hitFlash = 0.85;
 
