@@ -3,10 +3,10 @@
 // Ids missing from UPGRADE_POOL are ignored, and every upgrade also gets an automatic
 // "focus:<id>" strategy, so weapons added later are covered without editing this file.
 export const NAMED_STRATEGIES = [
-  { name: 'projectile', desc: 'Prism Split, Hyper-Capacitor, Phase Piercer, Pulsar Helix', priorities: ['multishot', 'firerate', 'pierce', 'evo_pulsar', 'thrusters', 'magnet'] },
-  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, then damage', priorities: ['missiles', 'lightning', 'evo_tempest', 'pierce', 'shrapnel', 'thrusters'] },
-  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee)', priorities: ['orbitals', 'thrusters', 'pierce', 'shrapnel', 'magnet'] },
-  { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['singularity', 'pierce', 'firerate', 'thrusters'] },
+  { name: 'projectile', desc: 'Prism Split, Hyper-Capacitor, Phase Piercer, Reactor Overdrive, Pulsar Helix', priorities: ['multishot', 'firerate', 'pierce', 'overdrive', 'evo_pulsar', 'thrusters', 'magnet'] },
+  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, then damage', priorities: ['missiles', 'lightning', 'evo_tempest', 'overdrive', 'shrapnel', 'thrusters'] },
+  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee)', priorities: ['orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'] },
+  { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['singularity', 'overdrive', 'firerate', 'thrusters'] },
   { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters'], pilot: { mineBias: 1.0 } },
   { name: 'random', desc: 'Uniformly random card picks', priorities: [] }
 ];

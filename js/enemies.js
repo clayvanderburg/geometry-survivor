@@ -132,10 +132,12 @@ export class EnemyManager {
           vRot: -0.045
         };
       case 'mini_splitter':
+        // Softened (balance report: splitters caused most deaths): lighter contact hit, a touch slower.
         return {
           hp: 14 * waveScale,
           maxHp: 14 * waveScale,
-          speed: 4.3,
+          speed: 3.8,
+          contactMult: 0.6,
           radius: 9,
           sides: 3,
           hue: 50,

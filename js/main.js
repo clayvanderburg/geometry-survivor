@@ -1125,8 +1125,12 @@ export class Game {
 
   // Weapons and explosions ONLY damage enemies — never asteroids!
   // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
+  // Blasts deal full damage to anything touching the center and fade linearly toward the rim
+  // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
+  // potential while crowds take less per head.
   damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area) {
     const enemies = this.enemyManager.enemies;
+    const edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       const dx = e.x - cx;
@@ -1134,7 +1138,8 @@ export class Game {
       const dSq = dx * dx + dy * dy;
       if (dSq <= (radius + e.radius) * (radius + e.radius)) {
         const d = Math.sqrt(dSq) || 1;
-        this.hitEnemy(e, dmg, source, (dx / d) * knock, (dy / d) * knock);
+        const reach = Math.max(0, Math.min(1, (d - e.radius) / radius));
+        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
@@ -1235,8 +1240,8 @@ export class Game {
         const a = e.rotation + (k * Math.PI * 2) / 3;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
           instant: true,
-          vx: Math.cos(a) * 6.5,
-          vy: Math.sin(a) * 6.5
+          vx: Math.cos(a) * 5,
+          vy: Math.sin(a) * 5
         });
       }
     }
@@ -1822,6 +1827,8 @@ export class Game {
         }
         const e = hit.enemy;
         if (e.dead) continue;
+        // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last.
+        const pierceMult = Math.pow(TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
         b.hitEnemies.add(e);
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
@@ -1830,7 +1837,7 @@ export class Game {
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
-        this.hitEnemy(e, b.damage, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb);
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
           this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 2.5, 0.22);
@@ -2545,7 +2552,7 @@ export class Game {
           if (e.dead) continue;
           const dx = e.x - ox;
           const dy = e.y - oy;
-          if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
+          if (dx * dx + dy * dy < (e.radius + W.orbitalBladeRadius) * (e.radius + W.orbitalBladeRadius)) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
             this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
@@ -3135,8 +3142,8 @@ export class Game {
           ctx.beginPath();
           for (let s = 0; s < 3; s++) {
             const sa = (s * Math.PI * 2) / 3;
-            const vx = Math.cos(sa) * 10;
-            const vy = Math.sin(sa) * 10;
+            const vx = Math.cos(sa) * 15;
+            const vy = Math.sin(sa) * 15;
             if (s === 0) ctx.moveTo(vx, vy);
             else ctx.lineTo(vx, vy);
           }

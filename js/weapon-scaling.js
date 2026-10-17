@@ -13,7 +13,7 @@ import { TUNING } from './config.js';
 export const DPS_TARGET = (lv) => 3 * Math.pow(lv, 1.5);
 
 // Reference target for orbit-blade contact: a typical swarmer hull plus the blade's hit radius.
-const ORBITAL_REF_CONTACT = 2 * (14 + 12);
+const ORBITAL_REF_CONTACT = 2 * (14 + 18);
 // Share of the singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 const SINGULARITY_LIFE_TICKS = 2.6 * 60;
@@ -49,8 +49,9 @@ export const WEAPON_SCALING = {
 
   // Aegis Orbiting Blades (damage per tick of contact; a pass lasts ORBITAL_REF_CONTACT px of arc)
   orbitalBlades: (lv) => 1 + lv,
-  orbitalRadius: (lv) => 62 + lv * 6,
-  orbitalSpin: (lv) => 3.2 + lv * 0.4,
+  orbitalRadius: (lv) => 95 + lv * 8,
+  orbitalSpin: (lv) => 4.4 + lv * 0.45,
+  orbitalBladeRadius: 18,
   orbitalDamageMult: (lv) => DPS_TARGET(lv) / (W.orbitalPassesContactTicksPerSec(lv)),
   orbitalPassesContactTicksPerSec: (lv) => W.orbitalBlades(lv) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(lv)) * 60,
 

@@ -213,19 +213,27 @@ test('resetRun clears every deployable', () => {
 });
 
 test('Siege Battery shells burst into neighbours through the shared bullet sweep', () => {
-  const hit = enemy(2100, 2000);
-  const near = enemy(2100, 2035);
-  const g = arena({ enemies: [hit, near] });
-  g.player.weapons.turret = 1;
-  g.player.weapons.mines = 1;
-  applyUpgradeLevels(g.player, byId('evo_siege'));
-  assert.equal(g.player.weapons.siegeBattery, 1);
-  g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
-  for (let t = 0; t < 30 && g.bullets.length; t++) g.updateBullets(DT);
-  const bolt = 10 * W.turretDamageMult(1);
-  assert.ok(Math.abs(hit.maxHp - hit.hp - bolt * (1 + W.siegeShellDamageMult)) < 1e-6, 'direct hit + burst');
-  assert.ok(Math.abs(near.maxHp - near.hp - bolt * W.siegeShellDamageMult) < 1e-6, 'neighbour takes the burst');
-  assert.equal(near.dmgNum.source, 'turret');
+  // Exact full-damage checks; blast edge falloff has its own test.
+  const savedFalloff = TUNING.splashEdgeFalloff;
+  TUNING.splashEdgeFalloff = 0;
+  try {
+    const hit = enemy(2100, 2000);
+    const near = enemy(2100, 2035);
+    const g = arena({ enemies: [hit, near] });
+    TUNING.splashEdgeFalloff = 0;
+    g.player.weapons.turret = 1;
+    g.player.weapons.mines = 1;
+    applyUpgradeLevels(g.player, byId('evo_siege'));
+    assert.equal(g.player.weapons.siegeBattery, 1);
+    g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
+    for (let t = 0; t < 30 && g.bullets.length; t++) g.updateBullets(DT);
+    const bolt = 10 * W.turretDamageMult(1);
+    assert.ok(Math.abs(hit.maxHp - hit.hp - bolt * (1 + W.siegeShellDamageMult)) < 1e-6, 'direct hit + burst');
+    assert.ok(Math.abs(near.maxHp - near.hp - bolt * W.siegeShellDamageMult) < 1e-6, 'neighbour takes the burst');
+    assert.equal(near.dmgNum.source, 'turret');
+  } finally {
+    TUNING.splashEdgeFalloff = savedFalloff;
+  }
 });
 
 test('deployable cards preview exact numbers and Siege Battery needs mines + turret', () => {

@@ -38,3 +38,34 @@ test('damage per hit never drops when a weapon levels up', () => {
     for (let lv = 2; lv <= top; lv++) assert.ok(f(lv) >= f(lv - 1) - 1e-9, `${id} LV ${lv - 1} -> ${lv}`);
   }
 });
+
+test('blasts deal full damage at the center and fade to 60% at the rim', async () => {
+  globalThis.window ??= { addEventListener() {} };
+  const { Game } = await import('../js/main.js');
+  const { TUNING } = await import('../js/config.js');
+  const mk = (x) => ({ type: 'swarmer', x, y: 0, hp: 1000, maxHp: 1000, radius: 10, hue: 1, score: 1, xp: 1 });
+  const center = mk(0), rim = mk(110);
+  const g = Object.assign(Object.create(Game.prototype), {
+    enemyManager: { enemies: [center, rim] }, grid: { applyImpulse() {} }, particles: new Proxy({}, { get: () => () => {} }),
+    sound: new Proxy({}, { get: () => () => {} }), player: null, killEnemy() {}
+  });
+  g.damageEnemiesInRadius(0, 0, 100, 100, 1, 'missile', 0);
+  assert.equal(1000 - center.hp, 100);
+  assert.ok(Math.abs((1000 - rim.hp) - 100 * (1 - TUNING.splashEdgeFalloff)) < 1e-9, `rim took ${1000 - rim.hp}`);
+});
+
+test('piercing bolts hit the first enemy for full damage and each one behind for 70% of the last', async () => {
+  const { Game } = await import('../js/main.js');
+  const { TUNING } = await import('../js/config.js');
+  const mk = (x) => ({ type: 'swarmer', x, y: 0, hp: 1000, maxHp: 1000, radius: 10, hue: 1, score: 1, xp: 1 });
+  const row = [mk(100), mk(140), mk(180)];
+  const silent = new Proxy({}, { get: () => () => {} });
+  const g = Object.assign(Object.create(Game.prototype), {
+    enemyManager: { enemies: row }, asteroidManager: { asteroids: [], cellSize: 140, getNearbyAsteroids() { return []; } },
+    grid: silent, particles: silent, sound: silent, player: null, worldWidth: 4200, worldHeight: 4200, killEnemy() {},
+    bullets: [{ x: 60, y: 0, vx: 150, vy: 0, damage: 100, pierce: 5, hue: 1, radius: 4, life: 1 }]
+  });
+  g.updateBullets(1 / 60);
+  const f = TUNING.pierceFalloff;
+  assert.deepEqual(row.map((e) => +(1000 - e.hp).toFixed(6)), [100, +(100 * f).toFixed(6), +(100 * f * f).toFixed(6)]);
+});

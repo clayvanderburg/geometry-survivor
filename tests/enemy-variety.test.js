@@ -236,39 +236,47 @@ test('enemy orbs are pooled, blocked by rock, absorbed by the shield and skip a 
 });
 
 test('shield plates block shots from the front; flank shots and area damage reach the hull', () => {
-  resetTuning();
-  const { game, manager } = arena();
-  const s = addEnemy(manager, 'shielder', 2400, 2000);
-  s.x = 2400; s.y = 2000; s.shieldAngle = Math.PI; // plates face the ship at (2000, 2000)
-  s.hp = s.maxHp = 1000;
-  const shoot = (x, y, vx, vy) => {
-    game.bullets = [{ x, y, vx, vy, damage: 10, pierce: 1, hue: 186, radius: 4, life: 1 }];
-    for (let t = 0; t < 30 && game.bullets.length; t++) game.updateBullets(1 / 60);
-  };
-  shoot(2300, 2000, 14, 0);
-  assert.equal(s.hp, 1000, 'a frontal shot is stopped by the plates');
-  assert.equal(s.shieldFlash, 1);
-  shoot(2500, 2000, -14, 0);
-  assert.equal(s.hp, 990, 'a shot from behind hits the hull');
-  shoot(2400, 1900, 0, 14);
-  assert.equal(s.hp, 980, 'a shot from the flank hits the hull');
-  game.damageEnemiesInRadius(2380, 2000, 60, 10);
-  assert.equal(s.hp, 970, 'area damage ignores the plates');
-  assert.equal(shieldBlocks(s, 2000, 2000, -1, 0), false, 'only inbound shots can be blocked');
-  assert.equal(shieldBlocks(s, 2000, 2000, 1, 0), true);
-
-  // A piercing shot that kills a hull in front of a shielder is not then stopped by dead plates.
-  const fodder = addEnemy(manager, 'swarmer', 2250, 2000);
-  fodder.x = 2250; fodder.y = 2000; fodder.hp = 1;
-  const doomed = addEnemy(manager, 'shielder', 2330, 2000);
-  doomed.x = 2330; doomed.y = 2000; doomed.shieldAngle = Math.PI; doomed.dead = false;
-  game.bullets = [{ x: 2200, y: 2000, vx: 150, vy: 0, damage: 10, pierce: 3, hue: 186, radius: 4, life: 1 }];
-  const kill = game.killEnemy.bind(game);
-  game.killEnemy = (e, b) => { kill(e, b); if (e === fodder) doomed.dead = true; };
-  game.updateBullets(1 / 60);
-  delete game.killEnemy;
-  assert.equal(doomed.shieldFlash, 0, 'plates of a hull that died mid-segment block nothing');
-  assert.equal(game.bullets.length, 1, 'the shot flies on');
+  // Exact full-damage checks; blast edge falloff has its own test.
+  const savedFalloff = TUNING.splashEdgeFalloff;
+  TUNING.splashEdgeFalloff = 0;
+  try {
+    resetTuning();
+    const { game, manager } = arena();
+    TUNING.splashEdgeFalloff = 0;
+    const s = addEnemy(manager, 'shielder', 2400, 2000);
+    s.x = 2400; s.y = 2000; s.shieldAngle = Math.PI; // plates face the ship at (2000, 2000)
+    s.hp = s.maxHp = 1000;
+    const shoot = (x, y, vx, vy) => {
+      game.bullets = [{ x, y, vx, vy, damage: 10, pierce: 1, hue: 186, radius: 4, life: 1 }];
+      for (let t = 0; t < 30 && game.bullets.length; t++) game.updateBullets(1 / 60);
+    };
+    shoot(2300, 2000, 14, 0);
+    assert.equal(s.hp, 1000, 'a frontal shot is stopped by the plates');
+    assert.equal(s.shieldFlash, 1);
+    shoot(2500, 2000, -14, 0);
+    assert.equal(s.hp, 990, 'a shot from behind hits the hull');
+    shoot(2400, 1900, 0, 14);
+    assert.equal(s.hp, 980, 'a shot from the flank hits the hull');
+    game.damageEnemiesInRadius(2380, 2000, 60, 10);
+    assert.equal(s.hp, 970, 'area damage ignores the plates');
+    assert.equal(shieldBlocks(s, 2000, 2000, -1, 0), false, 'only inbound shots can be blocked');
+    assert.equal(shieldBlocks(s, 2000, 2000, 1, 0), true);
+  
+    // A piercing shot that kills a hull in front of a shielder is not then stopped by dead plates.
+    const fodder = addEnemy(manager, 'swarmer', 2250, 2000);
+    fodder.x = 2250; fodder.y = 2000; fodder.hp = 1;
+    const doomed = addEnemy(manager, 'shielder', 2330, 2000);
+    doomed.x = 2330; doomed.y = 2000; doomed.shieldAngle = Math.PI; doomed.dead = false;
+    game.bullets = [{ x: 2200, y: 2000, vx: 150, vy: 0, damage: 10, pierce: 3, hue: 186, radius: 4, life: 1 }];
+    const kill = game.killEnemy.bind(game);
+    game.killEnemy = (e, b) => { kill(e, b); if (e === fodder) doomed.dead = true; };
+    game.updateBullets(1 / 60);
+    delete game.killEnemy;
+    assert.equal(doomed.shieldFlash, 0, 'plates of a hull that died mid-segment block nothing');
+    assert.equal(game.bullets.length, 1, 'the shot flies on');
+  } finally {
+    TUNING.splashEdgeFalloff = savedFalloff;
+  }
 });
 
 test('auto-aim prefers a hittable target over a shielder facing the ship, until it is flanked', () => {

@@ -81,10 +81,20 @@ export const UPGRADE_POOL = [
     tags: ['projectile', 'kinetic'],
     maxLevel: 6,
     headline: 'pierce',
-    summary: 'Bolts slice through more targets and hit harder. Damage scales every weapon.',
+    summary: 'Bolts slice through more targets: the first takes full damage, each one behind a little less.',
     apply(player) {
       player.stats.pierce += 2;
-      player.stats.damage *= 1.25;
+    }
+  },
+  {
+    id: 'overdrive',
+    name: 'Reactor Overdrive',
+    category: 'POWER',
+    maxLevel: 5,
+    headline: 'damage',
+    summary: 'Overclocks the reactor: every weapon hits harder.',
+    apply(player) {
+      player.stats.damage *= 1.12;
     }
   },
   {
