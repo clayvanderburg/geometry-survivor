@@ -88,6 +88,16 @@ const path = require('node:path');
         engine.playBossArrival();
         engine.playBossDefeat();
         for (let i = 0; i < 8; i++) engine.playGeomPickup(i % 2 === 0);
+        // Weapon SFX (each voice-limited; repeated calls exercise the limiter).
+        for (let i = 0; i < 4; i++) {
+          engine.playArcZap(15);
+          engine.playMissileLaunch(7);
+          engine.playMissileImpact();
+          engine.playSingularityLaunch();
+          engine.playDroneShot();
+          engine.playBladeHit();
+          engine.playShatter();
+        }
         for (let i = 0; i < explosions; i++) engine.playExplosion(1.5);
       };
       try {
