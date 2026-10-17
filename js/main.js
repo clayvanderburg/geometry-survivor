@@ -2533,7 +2533,7 @@ export class Game {
       const orbCount = W.orbitalBlades(p.weapons.orbitals);
       const orbRadius = W.orbitalRadius(p.weapons.orbitals);
       const enemies = this.enemyManager.enemies;
-      const bladeDamage = weaponDamage(p, 'orbital');
+      const bladeDamage = weaponDamage(p, 'orbital', p.weapons.orbitals);
 
       for (let o = 0; o < orbCount; o++) {
         const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;

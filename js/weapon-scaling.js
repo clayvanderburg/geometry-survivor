@@ -3,6 +3,21 @@
 // BEFORE -> AFTER numbers can never drift from what the weapon actually does.
 import { TUNING } from './config.js';
 
+// Weapon balance rule: every autonomous weapon has the same POTENTIAL DPS at the same level, in
+// multiples of the player's base damage per second. Potential = every attack lands on a target
+// (each missile, arc jump, mine, bolt, singularity core tick + collapse, and each orbit-blade pass
+// over an enemy sitting on the ring); splash on extra targets is not counted. Each weapon keeps its
+// own counts, cooldowns and ranges; its damage per hit is solved from this curve, so changing a
+// count or cooldown re-balances the hit damage automatically. How easy each weapon is to use
+// (tracking, range, uptime in real fights) is tuned separately.
+export const DPS_TARGET = (lv) => 3 * Math.pow(lv, 1.5);
+
+// Reference target for orbit-blade contact: a typical swarmer hull plus the blade's hit radius.
+const ORBITAL_REF_CONTACT = 2 * (14 + 12);
+// Share of the singularity's potential that comes from the collapse pulse (the rest is core grind).
+const SINGULARITY_COLLAPSE_SHARE = 0.45;
+const SINGULARITY_LIFE_TICKS = 2.6 * 60;
+
 export const WEAPON_SCALING = {
   // Prism Split (per level): extra blaster bolts, and extra angle between neighbouring bolts.
   // The spread is per gap, so the fan's total width grows with both bolt count and level.
@@ -14,29 +29,30 @@ export const WEAPON_SCALING = {
   // Swarm Micro-Missiles
   missileSalvo: (lv) => 1 + lv,
   missileSpeed: (lv) => 9.5 + lv * 0.8,
-  missileDamageMult: (lv) => 1.8 + lv * 0.35,
-  missileCooldown: (lv) => Math.max(0.65, 1.9 - lv * 0.22),
+  missileDamageMult: (lv) => DPS_TARGET(lv) * W.missileCooldown(lv) / W.missileSalvo(lv),
+  missileCooldown: (lv) => 1.9 - lv * 0.1,
   missileBlastRadius: 75,
 
   // Tesla Arc Emitter (Storm Protocol detonations chain at a fixed level)
   lightningJumps: (lv) => 3 + lv * 2,
-  lightningDamageMult: (lv) => 1.4 + lv * 0.35,
-  lightningCooldown: (lv) => Math.max(0.55, 1.65 - lv * 0.2),
+  lightningDamageMult: (lv) => DPS_TARGET(lv) * W.lightningCooldown(lv) / W.lightningJumps(lv),
+  lightningCooldown: (lv) => 1.65 - lv * 0.1,
   stormChainLevel: 2,
 
   // Vortex Singularity: light per-tick core damage so packs clump, then a collapse pulse over 85% of the pull radius
   singularityCooldown: (lv) => Math.max(2.2, 4.5 - lv * 0.5),
   singularityCoreRadius: (lv) => 14 + lv * 3,
   singularityPullRadius: (lv) => 150 + lv * 25,
-  singularityDamageMult: (lv) => 0.14 + lv * 0.05,
-  singularityCollapseDamageMult: (lv) => 10 + lv * 5,
+  singularityDamageMult: (lv) => DPS_TARGET(lv) * W.singularityCooldown(lv) * (1 - SINGULARITY_COLLAPSE_SHARE) / SINGULARITY_LIFE_TICKS,
+  singularityCollapseDamageMult: (lv) => DPS_TARGET(lv) * W.singularityCooldown(lv) * SINGULARITY_COLLAPSE_SHARE,
   singularityCollapseRadiusFrac: 0.85,
 
-  // Aegis Orbiting Blades (damage per tick of contact)
+  // Aegis Orbiting Blades (damage per tick of contact; a pass lasts ORBITAL_REF_CONTACT px of arc)
   orbitalBlades: (lv) => 1 + lv,
   orbitalRadius: (lv) => 62 + lv * 6,
   orbitalSpin: (lv) => 3.2 + lv * 0.4,
-  orbitalDamageMult: 0.35,
+  orbitalDamageMult: (lv) => DPS_TARGET(lv) / (W.orbitalPassesContactTicksPerSec(lv)),
+  orbitalPassesContactTicksPerSec: (lv) => W.orbitalBlades(lv) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(lv)) * 60,
 
   // Volatile Shatter
   shrapnelChance: (lv) => Math.min(1, 0.45 + lv * 0.12),
@@ -55,22 +71,24 @@ export const WEAPON_SCALING = {
   mineLifetime: (lv) => 9 + lv * 1.5,
   mineTriggerRadius: (lv) => 44 + lv * 4,
   mineBlastRadius: (lv) => 80 + lv * 10,
-  mineDamageMult: (lv) => 3.2 + lv * 0.7,
+  mineDamageMult: (lv) => DPS_TARGET(lv) * W.mineCooldown(lv),
 
   // Sentry Turret (deployable): planted at the ship, shoots the nearest enemy it can see past cover.
-  turretCooldown: (lv) => Math.max(4.5, 8.5 - lv * 0.6),
+  turretCooldown: (lv) => 8.5 - lv * 0.5,
   turretMaxActive: (lv) => 1 + Math.floor(lv / 3),
   turretDuration: (lv) => 5 + lv,
   turretRange: (lv) => 300 + lv * 25,
-  turretFireRate: (lv) => 2.6 + lv * 0.5,
-  turretDamageMult: (lv) => 0.8 + lv * 0.1,
+  turretFireRate: (lv) => 2.6 + lv * 0.45,
+  turretDamageMult: (lv) => DPS_TARGET(lv) / (W.turretAverageActive(lv) * W.turretFireRate(lv)),
+  // Mean live turrets: one per cooldown, each lasting its lifetime, never above the active cap.
+  turretAverageActive: (lv) => Math.min(W.turretMaxActive(lv), W.turretDuration(lv) / W.turretCooldown(lv)),
   turretBoltSpeed: 13,
 
   // Escort Drones (deployable): 1-3 gunships flying in formation behind the hull.
-  droneCount: (lv) => Math.min(3, 1 + Math.floor(lv / 2)),
+  droneCount: (lv) => Math.min(3, lv),
   droneFireRate: (lv) => 1.6 + lv * 0.3,
   droneRange: (lv) => 260 + lv * 20,
-  droneDamageMult: (lv) => 0.55 + lv * 0.08,
+  droneDamageMult: (lv) => DPS_TARGET(lv) / (W.droneCount(lv) * W.droneFireRate(lv)),
   droneBoltSpeed: 15,
 
   // Golden synergies
@@ -110,6 +128,18 @@ export const WEAPON_SCALING = {
 };
 
 const W = WEAPON_SCALING;
+
+// Potential DPS (x base damage) per autonomous weapon, from its counts, cooldowns and hit damage.
+// Tests hold every weapon to DPS_TARGET at every level; the balance tool reports it alongside real runs.
+export const POTENTIAL_DPS = {
+  missiles: (lv) => W.missileSalvo(lv) * W.missileDamageMult(lv) / W.missileCooldown(lv),
+  lightning: (lv) => W.lightningJumps(lv) * W.lightningDamageMult(lv) / W.lightningCooldown(lv),
+  singularity: (lv) => (W.singularityDamageMult(lv) * SINGULARITY_LIFE_TICKS + W.singularityCollapseDamageMult(lv)) / W.singularityCooldown(lv),
+  orbitals: (lv) => W.orbitalPassesContactTicksPerSec(lv) * W.orbitalDamageMult(lv),
+  mines: (lv) => W.mineDamageMult(lv) / W.mineCooldown(lv),
+  turret: (lv) => W.turretAverageActive(lv) * W.turretFireRate(lv) * W.turretDamageMult(lv),
+  drones: (lv) => W.droneCount(lv) * W.droneFireRate(lv) * W.droneDamageMult(lv)
+};
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
 // upgrade cards show them as chips. Keys are the weapons below, not damage-number sources.
@@ -165,7 +195,7 @@ export function weaponDamage(p, weapon, lv = 0) {
     case 'blaster': base = d; break;
     case 'helix': base = d * W.helixDamageMult; break;
     case 'shrapnel': base = d * W.shrapnelDamageMult; break;
-    case 'orbital': base = d * W.orbitalDamageMult; break;
+    case 'orbital': base = d * W.orbitalDamageMult(lv); break;
     case 'missile': base = d * W.missileDamageMult(lv); break;
     case 'lightning': base = d * W.lightningDamageMult(lv); break;
     case 'singularity': base = d * W.singularityDamageMult(lv); break;

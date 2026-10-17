@@ -72,7 +72,7 @@ export const STAT_ROWS = [
   // Aegis Orbiting Blades
   { id: 'orbitalBlades', label: 'Orbit blades', get: (p) => owned(p, 'orbitals', W.orbitalBlades), fmt: int, headline: 'count', unit: 'ORBIT BLADES' },
   { id: 'orbitalRadius', label: 'Orbit radius', get: (p) => owned(p, 'orbitals', W.orbitalRadius), fmt: int },
-  { id: 'orbitalDamage', label: 'Blade damage / tick', get: (p) => owned(p, 'orbitals', () => weaponDamage(p, 'orbital')), fmt: dec1 },
+  { id: 'orbitalDamage', label: 'Blade damage / tick', get: (p) => owned(p, 'orbitals', (l) => weaponDamage(p, 'orbital', l)), fmt: dec1 },
 
   // Volatile Shatter
   { id: 'shrapnelShards', label: 'Shards / burst', get: (p) => owned(p, 'shrapnel', W.shrapnelShards), fmt: int, headline: 'count', unit: 'SHARDS / BURST' },

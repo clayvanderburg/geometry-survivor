@@ -165,3 +165,11 @@ npm run balance -- --strategies orbital,focus:orbitals --runs 10 --weapon "orbit
 ```
 
 Known limits: one bot pilot, so skill-dependent and aim-dependent weapons are judged by how this bot plays. Auto-aim targets the nearest enemy, which undervalues manual aiming. The bot never plans routes through tunnels. Bench targets are all wave 6. Supernova use is scripted. 10 runs per strategy leave about ±1 min noise on medians, so use `--runs 20+` before acting on smaller differences.
+
+## Weapon DPS normalization (design decision, after phase 2)
+
+**Rule:** every autonomous weapon has the same *potential* DPS at the same level: `DPS_TARGET(L) = 3 · L^1.5 ×` base damage per second (3.0, 8.5, 15.6, 24.0, 33.5, 44.1 for L1–L6). Potential = every attack lands on a target (each missile, arc jump, mine, turret/drone bolt, singularity core tick + collapse, each blade pass over an enemy on the ring); splash on extra targets is not counted. How easy each weapon is to use is tuned separately.
+
+**How:** `js/weapon-scaling.js` keeps each weapon's counts, cooldowns and ranges and *solves* damage per hit from the curve (`POTENTIAL_DPS` mirrors the formulas). `tests/weapon-balance.test.js` holds every weapon within 1% of the curve, requires new weapon cards to join it, and checks damage per hit never drops on level-up. To keep per-hit damage rising, a few count curves were eased: missile cooldown `1.9 − 0.1·L`, Tesla Arc cooldown `1.65 − 0.1·L`, drones `min(3, L)`, turret cooldown `8.5 − 0.5·L`, turret fire rate `2.6 + 0.45·L`. Shrapnel (needs kills) and the dash nova (needs dashes) stay outside the curve.
+
+**Real fights (chase bench, 50 wave-6 chasers, own-source DPS at L3 / L6):** missiles 530 / 824, mines 449 / 588, singularity 727 / 852 (L5), orbitals 228 / 493, drones 140 / 296, lightning 163 / 401, turret 102 / 205. Area weapons still lead in crowds because splash isn't part of the potential; that is the "difficulty of use" layer left for tuning.
