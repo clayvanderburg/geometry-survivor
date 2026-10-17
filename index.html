@@ -122,6 +122,13 @@
         <div id="lt-card-name" class="lt-card-name"></div>
         <div id="lt-card-epithet" class="lt-card-epithet"></div>
         <div id="lt-card-detail" class="lt-card-detail"></div>
+        <div id="lt-card-link" class="lt-card-link"></div>
+      </div>
+
+      <!-- First-encounter toast: a hostile was just logged in the Field Guide -->
+      <div id="guide-toast" class="guide-toast hidden" role="status" aria-live="polite">
+        <span class="guide-toast-icon" aria-hidden="true">📖</span>
+        <span class="guide-toast-body"><b>FIELD GUIDE UPDATED</b><span id="guide-toast-text" class="guide-toast-text"></span></span>
       </div>
 
     </div>
@@ -156,9 +163,31 @@
         <div class="title-actions" style="display:flex; flex-direction:column; gap:12px; margin-top:18px;">
           <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
+          <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
           <button id="btn-pause-tuner" class="neon-btn" style="border-color:var(--gold); color:var(--gold); padding:12px 18px; font-size:13px;">⚙ TOGGLE LIVE TUNING DRAWER [T]</button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Field Guide: hostiles (unlocked on first encounter, live previews), mechanics and weapons -->
+    <div id="guide-modal" class="modal-overlay guide-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div class="modal-card guide-card">
+        <div class="guide-header">
+          <div>
+            <div class="glitch-subtitle">TACTICAL DATABASE // FIELD GUIDE</div>
+            <h2 id="guide-title" class="guide-title">📖 FIELD GUIDE</h2>
+            <div id="guide-progress" class="guide-progress"></div>
+          </div>
+          <button id="btn-guide-close" class="neon-btn guide-close-btn">◀ BACK [ESC]</button>
+        </div>
+        <div class="guide-tabs" role="tablist" aria-label="Field Guide sections">
+          <button class="guide-tab active" data-guide-tab="hostiles" role="tab" aria-selected="true">HOSTILES <span id="guide-tab-new" class="guide-tab-new"></span></button>
+          <button class="guide-tab" data-guide-tab="mechanics" role="tab" aria-selected="false">MECHANICS</button>
+          <button class="guide-tab" data-guide-tab="weapons" role="tab" aria-selected="false">WEAPONS</button>
+        </div>
+        <div id="guide-body" class="guide-body" tabindex="-1"></div>
+        <div class="guide-foot"><span><b>← →</b> / <b>LB RB</b> tabs</span><span><b>↑ ↓</b> / <b>D-pad</b> browse</span><span><b>ESC</b> / <b>B</b> back</span></div>
       </div>
     </div>
 
@@ -201,11 +230,14 @@
             <div class="glitch-subtitle">GEOMETRIC SWARM &amp; ASTEROID EXCAVATION ROGUELITE</div>
             <h1 class="neon-title">VEXOLITH<span>//</span><wbr>SURVIVOR</h1>
           </div>
-          <div class="wallet-pill">
-            <span class="wallet-icon">❖</span>
-            <div>
-              <div class="wallet-label">VOID CORES BANKED</div>
-              <div id="hub-cores-count" class="wallet-value">15</div>
+          <div class="hub-header-side">
+            <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
+            <div class="wallet-pill">
+              <span class="wallet-icon">❖</span>
+              <div>
+                <div class="wallet-label">VOID CORES BANKED</div>
+                <div id="hub-cores-count" class="wallet-value">15</div>
+              </div>
             </div>
           </div>
         </div>
@@ -236,7 +268,7 @@
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
-              <span><b>[T] Key:</b> Live Tuning Studio</span>
+              <span><b>[T] Key:</b> Live Tuning Studio · <b>[G]:</b> Field Guide</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
@@ -320,6 +352,7 @@
 
         <div class="title-actions">
           <button id="btn-restart-game" class="neon-btn primary-btn">RELAUNCH SHIP [SPACE / CLICK]</button>
+          <button id="btn-go-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-go" class="guide-btn-badge"></span></button>
         </div>
       </div>
     </div>

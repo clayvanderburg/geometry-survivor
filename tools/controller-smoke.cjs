@@ -1,8 +1,8 @@
-// Controller-only browser check: a simulated standard gamepad drives title, level-up, pause, chest and game over.
+// Controller-only browser check: a simulated standard gamepad drives title, level-up, pause, Field Guide, chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
-const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
+const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
@@ -82,6 +82,32 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await press(B);
     await expect('PLAYING', 'B resumes after toggling');
 
+    // Field Guide from pause: Down twice reaches its button, A opens it, RB switches tabs, the d-pad
+    // walks focus into the entries (scrolling the list), B backs out to the pause menu.
+    await press(START);
+    await expect('PAUSED', 'Start pauses for the guide');
+    await page.waitForTimeout(400);
+    await press(DOWN);
+    await press(DOWN);
+    const guideBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
+    if (guideBtn !== 'btn-pause-guide') throw Error(`Down twice from Resume should reach the Field Guide button, got ${guideBtn}`);
+    await press(A);
+    if (!(await page.evaluate(() => __game.guideOpen && !document.getElementById('guide-modal').classList.contains('hidden')))) throw Error('A should open the Field Guide');
+    await page.waitForTimeout(400);
+    await press(RB);
+    const tab = await page.evaluate(() => [__game.fieldGuide.tab, document.querySelector('#guide-modal .gp-focus')?.dataset.guideTab]);
+    if (tab[0] !== 'mechanics' || tab[1] !== 'mechanics') throw Error(`RB should switch to and focus MECHANICS, got ${tab}`);
+    for (let k = 0; k < 4; k++) await press(DOWN);
+    const entry = await page.evaluate(() => ({ id: document.querySelector('#guide-modal .gp-focus')?.dataset.entry, top: document.getElementById('guide-body').scrollTop }));
+    if (!entry.id || !(entry.top > 0)) throw Error(`D-pad down should walk focus through the entries and scroll: ${JSON.stringify(entry)}`);
+    await page.screenshot({ path: 'controller-guide.png' });
+    await press(B);
+    if (await page.evaluate(() => __game.guideOpen)) throw Error('B should close the Field Guide');
+    await expect('PAUSED', 'closing the guide returns to the pause menu');
+    await page.waitForTimeout(400);
+    await press(B);
+    await expect('PLAYING', 'B resumes after the guide');
+
     await page.evaluate(() => { const g = __game; g.openRelicChest({ x: g.player.x, y: g.player.y, isSuper: false }); });
     await expect('CHEST', 'chest opens');
     await page.waitForTimeout(400);
@@ -97,6 +123,6 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await page.screenshot({ path: 'controller-gameplay.png' });
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + damage-number toggle + resume, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + damage-number toggle + resume, Field Guide open + tab switch + browse + back, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

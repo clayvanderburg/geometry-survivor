@@ -79,17 +79,25 @@ npm start
    - **Tags** (`WEAPON_TAGS`): blaster/helix/shrapnel `PROJECTILE KINETIC`, wing rockets `PROJECTILE EXPLOSIVE AREA`, orbit blades `ORBITAL KINETIC`, missiles `PROJECTILE EXPLOSIVE AREA`, arcs `ELECTRIC`, singularity `GRAVITY AREA`, dash nova `AREA`, tectonic blast `EXPLOSIVE AREA`. Specialist cards boost every weapon with a tag and are offered once you own one: *Tungsten Penetrators* (+20% KINETIC damage/level), *Shaped Charges* (+30% EXPLOSIVE), *Overvolt Coils* (+30% ELECTRIC), *Field Amplifier* (epic, +15% AREA size: missile blast, singularity pull/collapse, dash nova, drill blast). No card adds projectiles beyond Prism Split.
    - **Damage types**: *Thermite Rounds* (blaster/helix bolts) **BURN**: each hit adds a stack (max 3 + level) and refreshes 3 s; stacks tick every 0.5 s for `damage × (0.3 + 0.15·level)` DPS per stack. *Cryo Payload* (missile blasts, needs missiles) **CHILL**: −(25 + 5·level)% move speed for 1.8 + 0.3·level s, bosses take 40% of the slow (`chillBossMult`); hulls frost over. *Nanite Swarm* (Tesla/Storm arcs, needs the emitter) **CORRODE**: each arc hit adds +5% damage taken from every source, burn included, up to 4 + level stacks, 4 s refresh. Overlays are three batched strokes per frame (burn ring, frost spikes, corrode gauge); black holes/portals are immune.
 
+10. **Field Guide (`js/field-guide.js`, `js/field-guide-scenes.js`, `js/field-guide-ui.js`)**
+   - Opened with the **📖 FIELD GUIDE** button on the title hub, pause menu and game-over screen, or **`[G]`** (from a live run it pauses first). Three tabs: **HOSTILES**, **MECHANICS**, **WEAPONS**. Keyboard: ←/→ (or Q/E, 1–3) tabs, ↑/↓/PgUp/PgDn scroll, Esc/G back. Controller: d-pad walks focus through the entries (the list scrolls with it), right stick scrolls, LB/RB tabs, B back.
+   - **HOSTILES**: every enemy type (swarmer, pinwheel, weaver, splitter, mini-splitter, vortex, the five archetypes), lieutenants (with all modifiers) and the boss. Each entry is **locked** (dark silhouette + `???` and the wave its signal appears) until first encountered: any part of the hull inside the camera view (scanned every 6 ticks), a NEW HOSTILE SIGNATURE card, a lieutenant arrival or a boss arrival. A first encounter shows a small **FIELD GUIDE UPDATED** toast (archetypes get a link line on their intel card instead) and a **NEW** badge in the guide and on every guide button until the entry has been on screen.
+   - Unlocked entries play a **live preview**: a tiny looping scene run by the real `EnemyManager` AI and drawing code (telegraphs, plates, links, orbs, auras), `ParticleSystem` and the crab ship renderer, with a scripted dummy ship kiting and firing (bruiser lane + sidestep, gunner aim line + orb, shielder plates sparking bolts while flank shots land, blinker ring + teleport, conduit beams on swarmers, splitter burst, vortex sparks/tug/bent shots, lieutenant rolled fresh each loop, boss warning + crown). Only previews scrolled into view step and draw (IntersectionObserver), and nothing runs while the guide is closed.
+   - Stats are exact and live from the spawn config and TUNING: HP at wave 1 (boss at wave 3), speed in px/s and vs. your ship, contact damage (`contactDamageAt` in `js/enemies.js`, shared with the game), XP and unlock wave, plus a *how to beat it* tip. Mechanics text pulls its numbers from TUNING and the shared constants too (crit base, level-jump odds, falloffs, escape cap, chest odds…).
+   - **WEAPONS** is a thin adapter over `UPGRADE_POOL` / `WEAPON_TAGS` / `TAG_INFO` / `RARITY`: every upgrade card in pool order with its category, max level, tag chips and *OWNED LV n* when opened mid-run, evolutions with their recipe, and the starting kit. New cards appear with no guide edits.
+   - Unlocks persist in the existing save (`vectra_survivor_save_v2`, `guide: { seen, fresh }`, normalized so old saves load). **New enemy type?** Add a `HOSTILE_ENTRIES` entry and a preview scene: `tests/field-guide.test.js` fails until every spawnable type has both.
+
 ---
 
 ## File Map (For Multi-Agent Handoffs)
 
-- `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, and slide-over `#tuner-drawer`.
+- `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, Field Guide (`#guide-modal`), and slide-over `#tuner-drawer`.
 - `tuner.html` — Standalone Live Tuning & Dev Sandbox Studio with live 60 FPS Crab-Ship & Shield preview canvas.
 - `css/style.css` — Neon glassmorphic HUD, modal, and Tuner Drawer styling.
 - `js/config.js` — Centralized `TUNING` state, `DEFAULT_TUNING`, `TUNING_SCHEMA`, `localStorage` persistence, and `BroadcastChannel` sync.
 - `js/main.js` — Core `Game` loop, Minimap (`drawMinimap`), weapons, and live tuning integration.
 - `js/ship-renderer.js` — Crab Ship renderer (`drawCrabShip`), shield renderer and shield hitbox, shared by game and Studio.
-- `js/gamepad.js` — Controller snapshots and d-pad/stick menu navigation. Full controller play: L-stick move, R-stick aim/fire, A dash, B supernova, X/Y auto-fire/auto-aim, Start pause; menus use d-pad + A, Start confirms, B resumes.
+- `js/gamepad.js` — Controller snapshots and d-pad/stick menu navigation. Full controller play: L-stick move, R-stick aim/fire, A dash, B supernova, X/Y auto-fire/auto-aim, Start pause; menus use d-pad + A, Start confirms, B resumes. Elements marked `data-gp-nav` (Field Guide entries) are extra focus stops.
 - `js/asteroids.js` — Procedural asteroid cluster generation, spatial hash grid, and dedicated Twin Crab-Claw rotary drilling physics.
 - `js/enemies.js` — Enemy spawning/update loop, Boids flocking, Weaver bullet-dodging, and boss behaviors.
 - `js/archetypes.js` — Bruiser, Gunner, Shielder, Blinker and Conduit stats, AI state machines, silhouettes/telegraphs, shield blocking, unlock waves and weighted wave packs.
@@ -99,7 +107,10 @@ npm start
 - `js/weapon-scaling.js` — Every weapon/crit/tag/status formula (`weaponDamage`, AREA radii, crit multipliers, burn/chill/corrode numbers) plus `WEAPON_TAGS` and `TAG_INFO` chip colors; firing code and card previews both read it.
 - `js/upgrade-cards.js` — Card headline + exact before → after rows (`STAT_ROWS`), tag chips and card HTML.
 - `js/status-effects.js` — BURN / CHILL / CORRODE application, fixed-tick timers and burn DoT, corrosion damage multiplier, batched status overlays.
-- `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign) and Void Armory meta-upgrades.
+- `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign), Void Armory meta-upgrades and Field Guide unlocks (`guide.seen` / `guide.fresh`).
+- `js/field-guide.js` — Field Guide data: hostile entries (text, tips, exact stats from the real config), mechanics, the weapons adapter over `UPGRADE_POOL`, and encounter detection (`detectEncounters`).
+- `js/field-guide-scenes.js` — Animated hostile previews (`GuidePreview`) built on the real enemy AI/draw code, plus locked silhouettes.
+- `js/field-guide-ui.js` — Field Guide screen: tab HTML builders, NEW badges, visible-only preview loop.
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
 - `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, pooled hit-impact flares, and floating text.
 - `js/deployables.js` — Proximity Mines, Sentry Turrets and Escort Drones: pooled update, targeting (nearest visible enemy), bolts through the shared bullet sweep, and neon rendering.
@@ -112,7 +123,7 @@ Requires Node.js 20 or newer; runtime and tests have no package dependencies. Ru
 
 The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy neighbors, projectile avoidance, and primary projectile collisions use spatial queries. Enemy capacity includes active and pending spawns (default 200). Game and Studio share `js/ship-renderer.js`. Saved tuning and progression are normalized on load.
 
-Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → pause → chest → game over with a simulated gamepad only.
+Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → pause → Field Guide → chest → game over with a simulated gamepad only.
 
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
 
