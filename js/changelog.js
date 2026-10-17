@@ -1,0 +1,136 @@
+// Player-facing patch notes, newest first. Shown by the PATCH NOTES screen (js/patch-notes.js) and used
+// by the /api/scores Netlify Function (which bundles this file) as the list of known game versions.
+//
+// Adding a release: bump GAME_VERSION in js/version.js and put a new entry at the TOP of this list
+// with the same version. Write for players: short, plain and concrete ("Escort Drones fire 4x faster
+// (same damage output)"), no file names or dev jargon, a handful of notes per version.
+// Note types: 'new' (features, content), 'balance' (numbers that change how runs play), 'fix'.
+//
+// Versions 0.1.0-0.8.1 were assigned after the fact from the merge history (PRs #1-#15).
+
+export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
+
+export const CHANGELOG = Object.freeze([
+  {
+    version: '0.9.0',
+    date: '2026-10-17',
+    title: 'Patch Notes & Versioned Leaderboard',
+    notes: [
+      { type: 'new', text: 'The game now has a version number, shown on the title, pause and game-over screens.' },
+      { type: 'new', text: 'PATCH NOTES on the title screen and pause menu list every change, newest first.' },
+      { type: 'new', text: 'The global leaderboard is split by game version, so every balance patch starts a fresh race. Switch between this version, earlier ones and ALL-TIME.' },
+      { type: 'new', text: 'ALL-TIME shows the version of every run. Runs from before versions existed are marked pre-0.9.' },
+      { type: 'new', text: 'Game over shows your rank together with the version you flew, e.g. GLOBAL RANK #4 · v0.9.0.' }
+    ]
+  },
+  {
+    version: '0.8.1',
+    date: '2026-10-17',
+    title: 'Drone Tune',
+    notes: [
+      { type: 'balance', text: 'Escort Drones fire 4× faster (same damage output: each bolt hits for a quarter as much).' }
+    ]
+  },
+  {
+    version: '0.8.0',
+    date: '2026-10-17',
+    title: 'Global Leaderboard',
+    notes: [
+      { type: 'new', text: 'Shared GLOBAL leaderboard: every finished run is sent automatically under your pilot callsign.' },
+      { type: 'new', text: 'Game over shows your GLOBAL RANK, and your own runs are highlighted on the board.' },
+      { type: 'new', text: 'MY RUNS shows your best runs on this device. Offline, the board falls back to them and never blocks play.' },
+      { type: 'fix', text: 'Impossible scores, offensive callsigns and spam are kept off the board.' }
+    ]
+  },
+  {
+    version: '0.7.0',
+    date: '2026-10-17',
+    title: 'Weapon Feel',
+    notes: [
+      { type: 'new', text: 'Much more visible weapon effects: thick crackling Tesla Arc bolts, glowing missile trails and blasts, rocket and blade flashes.' },
+      { type: 'new', text: 'New weapon sounds: arc zaps, missile launches, explosions, drone blips, blade grinding and more.' },
+      { type: 'balance', text: 'Volatile Shatter is now a passive: it no longer takes a weapon slot.' },
+      { type: 'balance', text: 'Swarm Missiles fire salvos 25% more often (same damage output).' },
+      { type: 'balance', text: 'Sentry Turret is twice as big and fires twice as fast (same damage output).' },
+      { type: 'fix', text: 'Turret shots now hit enemies right next to the turret.' },
+      { type: 'fix', text: 'The developer tuning panel is hidden from players.' }
+    ]
+  },
+  {
+    version: '0.6.0',
+    date: '2026-10-17',
+    title: 'Loadout & Field Guide',
+    notes: [
+      { type: 'new', text: 'Weapon loadout with 6 slots. New weapons come from NEW WEAPON cards; discard one from the pause menu to free a slot.' },
+      { type: 'new', text: 'You start with Pew Pews and Wing Rockets, and every weapon now levels up to LV 8.' },
+      { type: 'new', text: 'FIELD GUIDE [G]: each enemy unlocks a file the first time you meet it, with a live preview, stats and tips. Mechanics and weapons are in there too.' },
+      { type: 'balance', text: 'Faster leveling: each level needs less XP than before.' },
+      { type: 'balance', text: 'Wing Rockets level up like other weapons: up to 6 rockets and bigger blasts.' },
+      { type: 'fix', text: 'Trying to discard your last weapon now explains why you can\'t.' }
+    ]
+  },
+  {
+    version: '0.5.0',
+    date: '2026-10-17',
+    title: 'Prism & Rockets',
+    notes: [
+      { type: 'new', text: 'New starting weapon, Wing Rockets: your wings launch rockets in the direction you fly, separate from your turret aim.' },
+      { type: 'balance', text: 'Prism Split adds parallel streams in fixed positions instead of widening a fan, so your forward shots stay on target.' }
+    ]
+  },
+  {
+    version: '0.4.0',
+    date: '2026-10-16',
+    title: 'Arsenal & New Hostiles',
+    notes: [
+      { type: 'new', text: 'Five new enemies: Bruiser, Gunner, Aegis Shielder, Blinker and Conduit, plus a named Lieutenant elite every wave.' },
+      { type: 'new', text: 'Deployables: Proximity Mines, Sentry Turret and Escort Drones. Mines + Turret unlock Siege Battery.' },
+      { type: 'new', text: 'Critical hits, and Burn, Chill and Corrode damage types.' },
+      { type: 'balance', text: 'Card rarity is now the level jump you rolled: +1 common up to +5 legendary.' },
+      { type: 'balance', text: 'Every weapon deals the same potential damage per second at the same level.' },
+      { type: 'balance', text: 'Blasts hit softer at the edge, Phase Piercer loses damage per enemy pierced, Orbit Blades are bigger, Prism Split is tighter.' }
+    ]
+  },
+  {
+    version: '0.3.0',
+    date: '2026-10-16',
+    title: 'Readable Combat',
+    notes: [
+      { type: 'new', text: 'Floating damage numbers (toggle with [N] or in the pause menu), hit knockback and bigger kill effects for tougher enemies.' },
+      { type: 'new', text: 'Boss fights are events: a 3-second warning, an entrance, health bars and a defeat payoff.' },
+      { type: 'new', text: 'Upgrade cards show exact before → after stats and the level you will reach.' },
+      { type: 'balance', text: 'Gravity wells really pull now: they tug your ship (you can always escape), bend shots and drag in pickups.' },
+      { type: 'balance', text: 'Vortex Singularity bunches enemies up, then collapses for a big damage pulse.' },
+      { type: 'fix', text: 'Enemy black holes are now called Vortexes, and missile levels show Storm Protocol\'s +1.' }
+    ]
+  },
+  {
+    version: '0.2.0',
+    date: '2026-10-16',
+    title: 'VEXOLITH',
+    notes: [
+      { type: 'new', text: 'The game is now VEXOLITH // SURVIVOR, playable online in the browser.' },
+      { type: 'new', text: 'Full controller support: fly, aim, dash, Supernova and every menu with a gamepad.' },
+      { type: 'new', text: 'Your shield hugs the ship\'s outline and is your hitbox; its glowing arc shows how much is left.' },
+      { type: 'fix', text: 'Enemies and rocks no longer spawn on top of you or outside the arena.' },
+      { type: 'fix', text: 'Score multiplier no longer loses fractions; Storm Protocol lightning starts from your ship.' }
+    ]
+  },
+  {
+    version: '0.1.0',
+    date: '2026-10-16',
+    title: 'First Flight',
+    notes: [
+      { type: 'new', text: 'Pilot a crab-shaped gunship through endless waves of geometric swarms, with a boss every 3 waves.' },
+      { type: 'new', text: 'Drill through asteroids with your claws to dig out XP, shield crystals and Void Cores.' },
+      { type: 'new', text: 'Level up to pick upgrades; lucky rolls jump several levels and supply caches hand out free upgrades.' },
+      { type: 'new', text: 'Spend Void Cores in the Void Armory on permanent ship upgrades. Local highscore board with your callsign.' }
+    ]
+  }
+]);
+
+export const KNOWN_VERSIONS = Object.freeze(CHANGELOG.map(entry => entry.version));
+
+export function changelogEntry(version) {
+  return CHANGELOG.find(entry => entry.version === version) || null;
+}

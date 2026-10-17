@@ -7,10 +7,11 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES
+  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion
 } = await import('../js/leaderboard.js');
 const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
+const { GAME_VERSION, LEGACY_VERSION_LABEL } = await import('../js/version.js');
 
 const jsonResponse = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 const htmlResponse = (status, text) => new Response(text, { status, headers: { 'content-type': 'text/html' } });
@@ -124,13 +125,13 @@ test('submit: success remembers the run id, adopts the returned board and report
   };
   const board = new GlobalLeaderboard({ fetchImpl, storage });
   const result = await board.submit(RUN);
-  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46 });
+  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION });
   assert.equal(result.ok, true);
   assert.equal(result.rank, 12);
   assert.equal(board.status, 'ready');
   assert.equal(board.entries.length, 3);
   assert.deepEqual(JSON.parse(storage.getItem('vexolith_global_runs_v1')), ['new-run']);
-  assert.deepEqual(describeSubmit(result), { text: '◎ GLOBAL RANK #12', tone: 'gold' });
+  assert.deepEqual(describeSubmit(result), { text: `◎ GLOBAL RANK #12 · v${GAME_VERSION}`, tone: 'gold' });
   assert.ok(new GlobalLeaderboard({ storage }).myIds.has('new-run'), 'ids survive a reload');
 });
 
@@ -168,7 +169,7 @@ test('buildRunPayload folds any callsign into the server alphabet', () => {
   assert.equal(buildRunPayload({ ...RUN, name: undefined }).name, 'PILOT');
   assert.equal(buildRunPayload({ ...RUN, name: 'X'.repeat(30) }).name.length, 18);
   const p = buildRunPayload({ name: 'A', score: 12.9, wave: NaN, level: 0, kills: -3, multiplier: 0.2, time: -1 });
-  assert.deepEqual(p, { name: 'A', score: 12, wave: 1, level: 1, kills: 0, multiplier: 1, time: 0 });
+  assert.deepEqual(p, { name: 'A', score: 12, wave: 1, level: 1, kills: 0, multiplier: 1, time: 0, version: GAME_VERSION });
 });
 
 test('tabs: GLOBAL is the default, MY RUNS shows the local board, unknown tabs fall back to GLOBAL', () => {
@@ -266,4 +267,196 @@ test('the harness-style game without a board (no constructor) never submits', ()
   const fake = {};
   assert.doesNotThrow(() => Game.prototype.submitGlobalRun.call(fake, RUN));
   assert.equal(fake.globalSubmit, undefined);
+});
+
+// --- Versioned boards ------------------------------------------------------------------------------
+
+// A fake /api/scores that answers GETs per ?version= and records every URL.
+function versionedApi(boards, { versions = [GAME_VERSION] } = {}) {
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    const version = new URL(url, 'https://game.example').searchParams.get('version');
+    return jsonResponse(200, { version, current: GAME_VERSION, versions, entries: boards[version] || [], total: (boards[version] || []).length, boardSize: 100 });
+  };
+  return { urls, fetchImpl };
+}
+
+test('GLOBAL opens on the current version; the selector switches boards, caches them and drops stale answers', async () => {
+  const OLD = [{ ...GLOBAL[0], id: 'o1', name: 'OLDTIMER', version: '0.0.1' }];
+  const api = versionedApi({ [GAME_VERSION]: GLOBAL.map(e => ({ ...e, version: GAME_VERSION })), all: [...OLD, ...GLOBAL] }, { versions: [GAME_VERSION, '0.0.1'] });
+  const board = new GlobalLeaderboard({ fetchImpl: api.fetchImpl, storage: memoryStorage() });
+  assert.equal(board.version, GAME_VERSION, 'current version by default');
+  await board.refresh();
+  assert.equal(api.urls[0], `/api/scores?version=${GAME_VERSION}`);
+  assert.deepEqual(board.versions, [GAME_VERSION, '0.0.1']);
+  const view = buildBoardView({ tab: 'global', board, local: LOCAL });
+  assert.equal(view.board, GAME_VERSION);
+  assert.equal(view.note, `TOP 50 // v${GAME_VERSION}`);
+  assert.ok(view.rows.every(r => r.version === ''), 'a single-version board needs no per-row version');
+  assert.deepEqual(view.versions.map(o => [o.label, o.active, o.current]), [
+    [`v${GAME_VERSION}`, true, true], ['v0.0.1', false, false], ['ALL-TIME', false, false]
+  ]);
+
+  assert.equal(board.setVersion('all'), true);
+  assert.equal(board.status, 'loading', 'nothing cached for ALL-TIME yet');
+  assert.equal(board.entries.length, 0, 'the previous board is not shown under the new label');
+  await board.refresh();
+  assert.equal(api.urls.at(-1), '/api/scores?version=all');
+  assert.deepEqual(board.entries.map(e => e.name), ['OLDTIMER', 'ACE', 'MADKING', 'OTHER']);
+
+  assert.equal(board.setVersion(GAME_VERSION), true);
+  assert.equal(board.status, 'ready', 'switching back shows the cached board at once');
+  assert.equal(board.entries.length, 3);
+  assert.equal(board.setVersion(GAME_VERSION), false, 'no-op when already selected');
+  assert.equal(board.setVersion('garbage'), false, 'junk selects the current version');
+  assert.equal(normalizeBoardVersion('garbage'), GAME_VERSION);
+
+  // A slow answer for a board the player already left is cached, not shown.
+  let release;
+  const slow = new GlobalLeaderboard({ fetchImpl: (url) => new Promise(resolve => { release = () => resolve(api.fetchImpl(url)); }), storage: memoryStorage() });
+  slow.setVersion('all');
+  const pending = slow.refresh();
+  slow.setVersion(GAME_VERSION);
+  release();
+  await pending;
+  assert.equal(slow.version, GAME_VERSION);
+  assert.equal(slow.entries.length, 0, 'the ALL-TIME answer did not land on the version board');
+  assert.equal(slow.cache.get('all').entries.length, 4);
+});
+
+test('the ALL-TIME view shows each run\'s version; runs from before versioning read pre-0.9', () => {
+  const entries = [
+    { ...GLOBAL[0], version: GAME_VERSION },
+    { ...GLOBAL[1], version: null },
+    { ...GLOBAL[2] }
+  ];
+  const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries, versions: [] }, local: LOCAL });
+  assert.equal(view.board, 'all');
+  assert.equal(view.note, 'TOP 50 // ALL-TIME');
+  assert.deepEqual(view.rows.map(r => r.version), [`v${GAME_VERSION}`, LEGACY_VERSION_LABEL, LEGACY_VERSION_LABEL]);
+  assert.equal(LEGACY_VERSION_LABEL, 'pre-0.9');
+  assert.deepEqual(view.versions.at(-1), { id: 'all', label: 'ALL-TIME', current: false, active: true });
+  const empty = buildBoardView({ tab: 'global', board: { status: 'ready', entries: [] }, local: LOCAL });
+  assert.equal(empty.note, `NO v${GAME_VERSION} RUNS YET // BE THE FIRST`);
+  // Offline and MY RUNS have no selector.
+  assert.deepEqual(buildBoardView({ tab: 'local', board: { status: 'ready', entries }, local: LOCAL }).versions, []);
+  assert.deepEqual(buildBoardView({ tab: 'global', board: { status: 'offline', reason: 'offline' }, local: LOCAL }).versions, []);
+});
+
+test('version options: current version always offered, other versions with runs newest first, ALL-TIME last', () => {
+  const ids = (opts) => opts.map(o => o.id);
+  assert.deepEqual(ids(buildVersionOptions({ current: '0.9.0' })), ['0.9.0', 'all']);
+  assert.deepEqual(ids(buildVersionOptions({ current: '0.10.0', versions: ['0.9.0', '0.10.0', '0.9.2', 'junk', null, '1.0'] })),
+    ['0.10.0', '0.9.2', '0.9.0', 'all'], 'semver order (0.10 > 0.9), junk dropped, no duplicates');
+  const opts = buildVersionOptions({ current: '0.10.0', versions: ['0.9.2'], selected: '0.9.2' });
+  assert.deepEqual(opts.map(o => [o.label, o.active, o.current]), [['v0.10.0', false, true], ['v0.9.2', true, false], ['ALL-TIME', false, false]]);
+});
+
+test('submit sends the game version and the game-over line names it; an unknown version reads as outdated', async () => {
+  let sent = null;
+  const board = new GlobalLeaderboard({
+    fetchImpl: async (_url, init) => {
+      sent = JSON.parse(init.body);
+      return jsonResponse(201, { accepted: true, onBoard: true, rank: 4, allTimeRank: 9, version: sent.version, id: 'v-run', name: 'MADKING', entries: GLOBAL, total: 3, boardSize: 100 });
+    },
+    storage: memoryStorage()
+  });
+  board.setVersion('all'); // the player was looking at ALL-TIME when the run ended
+  const result = await board.submit(RUN);
+  assert.equal(sent.version, GAME_VERSION);
+  assert.deepEqual([result.rank, result.allTimeRank, result.version], [4, 9, GAME_VERSION]);
+  assert.deepEqual(describeSubmit(result), { text: `◎ GLOBAL RANK #4 · v${GAME_VERSION}`, tone: 'gold' });
+  assert.equal(board.entries.length, 0, 'the version board answer is cached, not shown under ALL-TIME');
+  assert.equal(board.cache.get(GAME_VERSION).entries.length, 3);
+  assert.match(describeSubmit({ ok: true, rank: null, version: GAME_VERSION, boardSize: 100 }).text, new RegExp(`OUTSIDE v${GAME_VERSION.replace(/\./g, '\\.')} TOP 100`));
+
+  const stale = new GlobalLeaderboard({ fetchImpl: async () => jsonResponse(422, { error: 'unknown game version: reload the game to get the latest build' }), storage: memoryStorage() });
+  const refused = await stale.submit(RUN);
+  assert.equal(refused.reason, 'outdated');
+  assert.deepEqual(describeSubmit(refused), { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' });
+});
+
+test('game over on another board (ALL-TIME) re-reads it after the submit so the new run shows there too', async () => {
+  let refreshed = 0;
+  const fake = {
+    globalBoard: { version: 'all', refresh() { refreshed++; return Promise.resolve(this); }, submit: async () => ({ ok: true, id: 'r', rank: 2, version: GAME_VERSION }) },
+    runTainted: false,
+    renderBoards() {},
+    refreshGlobalBoard() { refreshed++; }
+  };
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(refreshed, 1);
+  fake.globalBoard.version = GAME_VERSION;
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(refreshed, 1, 'the run\'s own board came back with the answer');
+});
+
+test('Game.setBoardVersion switches the board and re-syncs it', () => {
+  const calls = [];
+  const fake = {
+    globalBoard: new GlobalLeaderboard({ fetchImpl: null, storage: memoryStorage() }),
+    refreshGlobalBoard() { calls.push(this.globalBoard.version); }
+  };
+  Game.prototype.setBoardVersion.call(fake, 'all');
+  Game.prototype.setBoardVersion.call(fake, GAME_VERSION);
+  assert.deepEqual(calls, ['all', GAME_VERSION]);
+  assert.doesNotThrow(() => Game.prototype.setBoardVersion.call({}, 'all'));
+});
+
+// Minimal DOM stand-in for renderVersionOptions / renderBoardView.
+class FakeEl {
+  constructor(tag, doc) {
+    this.tagName = tag.toUpperCase();
+    this.ownerDocument = doc;
+    this.children = [];
+    this.dataset = {};
+    this.attrs = {};
+    this.classes = new Set();
+    this.textContent = '';
+    this.classList = {
+      toggle: (c, on = !this.classes.has(c)) => (on ? this.classes.add(c) : this.classes.delete(c)),
+      add: (c) => this.classes.add(c),
+      contains: (c) => this.classes.has(c)
+    };
+  }
+  set className(v) { this.classes = new Set(String(v).split(/\s+/).filter(Boolean)); }
+  get className() { return [...this.classes].join(' '); }
+  get lastChild() { return this.children.at(-1) || null; }
+  appendChild(el) { this.children.push(el); return el; }
+  prepend(el) { this.children.unshift(el); }
+  replaceChildren(...kids) { this.children = kids; }
+  setAttribute(k, v) { this.attrs[k] = v; }
+  querySelectorAll(sel) {
+    const all = (el) => el.children.flatMap(c => [c, ...all(c)]);
+    return sel === '[data-board-version]' ? all(this).filter(c => 'boardVersion' in c.dataset) : [];
+  }
+}
+const fakeDoc = { createElement: (tag) => new FakeEl(tag, fakeDoc) };
+
+test('renderVersionOptions: focusable buttons built once, active mark moves without rebuilding', () => {
+  const container = new FakeEl('div', fakeDoc);
+  container.classes.add('hidden');
+  renderVersionOptions(container, buildVersionOptions({ current: GAME_VERSION, versions: ['0.0.1'] }));
+  assert.equal(container.classes.has('hidden'), false);
+  const buttons = container.querySelectorAll('[data-board-version]');
+  assert.deepEqual(buttons.map(b => [b.tagName, b.textContent, b.classes.has('active'), b.attrs['aria-pressed']]), [
+    ['BUTTON', `v${GAME_VERSION}`, true, 'true'], ['BUTTON', 'v0.0.1', false, 'false'], ['BUTTON', 'ALL-TIME', false, 'false']
+  ]);
+  renderVersionOptions(container, buildVersionOptions({ current: GAME_VERSION, versions: ['0.0.1'], selected: 'all' }));
+  const again = container.querySelectorAll('[data-board-version]');
+  assert.ok(again.every((b, i) => b === buttons[i]), 'same elements, so controller focus survives');
+  assert.deepEqual(again.map(b => b.classes.has('active')), [false, false, true]);
+  renderVersionOptions(container, []);
+  assert.equal(container.classes.has('hidden'), true, 'hidden on MY RUNS / offline');
+
+  // ALL-TIME rows carry a version tag in their meta cell.
+  const list = new FakeEl('div', fakeDoc);
+  const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries: [{ ...GLOBAL[0], version: null }] }, local: [] });
+  renderBoardView(list, null, view);
+  const meta = list.children[0].children[2];
+  assert.equal(meta.children[0].textContent, LEGACY_VERSION_LABEL);
+  assert.equal(meta.children[0].classes.has('legacy'), true);
 });
