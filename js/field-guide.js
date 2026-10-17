@@ -12,7 +12,7 @@ import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
-import { WEAPONS, PASSIVES, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
+import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -369,6 +369,7 @@ export function weaponGuide(levels = null, pool = UPGRADE_POOL) {
       summary: u.summary || '',
       maxLevel: u.maxLevel,
       evolution: !!u.isSynergy,
+      weapon: !!WEAPON_BY_LEVEL_ID[u.id], // a slot weapon's own card (WEAPONS tab) vs an upgrade (UPGRADES tab)
       recipe: EVOLUTION_RECIPES[u.id] || null,
       tags: tagChips(u.tags),
       owned: levels ? (levels[u.id] || 0) : 0
