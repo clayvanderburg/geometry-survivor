@@ -17,7 +17,8 @@ export const DAMAGE_SOURCE_COLORS = {
   mine: '#ff5a4a',        // Proximity mine bursts
   turret: '#5aa8ff',      // Sentry turret bolts (and Siege Battery shell bursts)
   drone: '#c4ff4a',       // Escort drone bolts
-  burn: '#ff5a2e',        // Thermite burn ticks (damage over time)
+  burn: '#ff5a2e',
+  rocket: '#ffb347',       // Wing rockets (starting kit)        // Thermite burn ticks (damage over time)
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
 };
 

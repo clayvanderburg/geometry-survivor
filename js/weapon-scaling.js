@@ -19,12 +19,17 @@ const SINGULARITY_COLLAPSE_SHARE = 0.45;
 const SINGULARITY_LIFE_TICKS = 2.6 * 60;
 
 export const WEAPON_SCALING = {
-  // Prism Split (per level): extra blaster bolts, and extra angle between neighbouring bolts.
-  // The spread is per gap, so the fan's total width grows with both bolt count and level.
-  // 0.04 (was 0.11): at 0.11 the even-count fan left the aimed target in the gap between the inner
-  // bolts beyond ~110 px at LV 1, and LV 7 wrapped 16 bolts over 782° (docs/BALANCE_REPORT.md).
+  // Prism Split (per level): adds one pair of blaster streams in the fixed PRISM_STREAMS order.
   multishotBolts: 2,
-  multishotSpread: 0.04,
+
+  // Wing Rockets (starting kit): two slow dumbfire rockets from the outer wing tips, always fired
+  // along the hull's heading. Direct hit + a small blast (blast is a share of the hit).
+  wingRocketCooldown: 2.4,
+  wingRocketDamageMult: 2.4,
+  wingRocketBlastShare: 0.5,
+  wingRocketBlastRadius: 50,
+  wingRocketSpeed: 8.5,
+  wingRocketLife: 1.6,
 
   // Swarm Micro-Missiles
   missileSalvo: (lv) => 1 + lv,
@@ -130,6 +135,48 @@ export const WEAPON_SCALING = {
 
 const W = WEAPON_SCALING;
 
+// Prism Split stream layout, in unlock order. Each group is a pair of streams; existing streams never
+// move, so the first pair always fires straight ahead where the player aims. Angles are degrees from
+// the aim; `parallel` pairs fire side by side (offset `lateral` px) instead of mirrored left/right.
+// Past the last group the order repeats (doubling up) with a small extra offset.
+export const PRISM_STREAMS = [
+  { name: 'FORWARD', angle: 0, parallel: true },
+  { name: 'REAR', angle: 180, parallel: true },
+  { name: 'SIDES', angle: 90 },
+  { name: 'FORWARD DIAGONALS', angle: 40 },
+  { name: 'REAR DIAGONALS', angle: 140 },
+  { name: 'FORWARD FLANKS', angle: 20 },
+  { name: 'WIDE FLANKS', angle: 65 },
+  { name: 'REAR FLANKS', angle: 115 },
+  { name: 'TAIL FLANKS', angle: 160 }
+];
+const PRISM_LATERAL = 7;
+
+// Every stream for a volley of `count` bolts: { angle (radians from aim), lateral (px sideways) }.
+export function prismStreams(count) {
+  const streams = [];
+  for (let i = 0; i < count; i++) {
+    const pair = Math.floor(i / 2);
+    const group = PRISM_STREAMS[pair % PRISM_STREAMS.length];
+    const layer = Math.floor(pair / PRISM_STREAMS.length);
+    const side = i % 2 === 0 ? -1 : 1;
+    const extra = layer * 5;
+    if (group.parallel) {
+      streams.push({ angle: (group.angle * Math.PI) / 180, lateral: side * (PRISM_LATERAL + extra) });
+    } else {
+      streams.push({ angle: (side * group.angle * Math.PI) / 180, lateral: extra ? side * extra : 0 });
+    }
+  }
+  return streams;
+}
+
+// Name of the newest stream pair at this bolt count (shown on the Prism Split card).
+export function prismNewestGroup(count) {
+  const pair = Math.max(0, Math.ceil(count / 2) - 1);
+  const name = PRISM_STREAMS[pair % PRISM_STREAMS.length].name;
+  return pair >= PRISM_STREAMS.length ? `${name} x2` : name;
+}
+
 // Potential DPS (x base damage) per autonomous weapon, from its counts, cooldowns and hit damage.
 // Tests hold every weapon to DPS_TARGET at every level; the balance tool reports it alongside real runs.
 export const POTENTIAL_DPS = {
@@ -154,6 +201,7 @@ export const WEAPON_TAGS = {
   singularity: ['gravity', 'area'],
   nova: ['area'],
   tectonic: ['explosive', 'area'],
+  rocket: ['projectile', 'explosive', 'area'],
   mine: ['deployable', 'explosive', 'area'],
   turret: ['deployable', 'projectile', 'kinetic'],
   drone: ['deployable', 'projectile', 'kinetic'],
@@ -203,6 +251,7 @@ export function weaponDamage(p, weapon, lv = 0) {
     case 'collapse': return d * W.singularityCollapseDamageMult(lv) * (TUNING.singularityCollapseMult ?? 1) * tagDamageMult(p, 'singularity');
     case 'nova': base = W.novaDamage(lv); break;
     case 'tectonic': base = d * W.tectonicDamageMult; break;
+    case 'rocket': base = d * W.wingRocketDamageMult; break;
     case 'mine': base = d * W.mineDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
     case 'turret': base = d * W.turretDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
     case 'drone': base = d * W.droneDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
