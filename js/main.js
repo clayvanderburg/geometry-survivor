@@ -1080,6 +1080,7 @@ export class Game {
         const dmg = e.maxHp * 0.4;
         e.hp -= dmg;
         e.hitFlash = 1;
+        e.sinceHit = 0; // counts as a hit, so a REGENERATING lieutenant's regen pauses too
         this.damageNumbers?.add(e, dmg, 'supernova');
         if (e.hp <= 0) this.killEnemy(e, true);
       } else {
@@ -1617,6 +1618,7 @@ export class Game {
     // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
     const pack = pickWavePack(this.wave);
     const em = this.enemyManager;
+    const queuedBefore = em.spawnIndicators.length;
     const spread = (type, count, minD = 420, maxD = 720) => {
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnAroundPlayer(minD, maxD);
@@ -1659,7 +1661,8 @@ export class Game {
       }
       if (this.wave >= 8) em.queueSpawn('bruiser', pt.x + 80, pt.y, waveScale);
     }
-    if (ARCHETYPE_INFO[pack]) this.announceArchetype(pack);
+    // Only announce a newcomer that actually made it past the enemy cap.
+    if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
   }
 
   // Auto-aim: nearest target, but a hull whose shield plates face the ship counts as 260 px further
@@ -1763,6 +1766,7 @@ export class Game {
           break;
         }
         if (hit.shield) {
+          if (hit.shield.dead) continue; // killed earlier in this segment: its plates are gone
           blocked = true;
           const hx = x0 + (b.x - x0) * hit.t;
           const hy = y0 + (b.y - y0) * hit.t;

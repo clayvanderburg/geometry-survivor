@@ -256,6 +256,19 @@ test('shield plates block shots from the front; flank shots and area damage reac
   assert.equal(s.hp, 970, 'area damage ignores the plates');
   assert.equal(shieldBlocks(s, 2000, 2000, -1, 0), false, 'only inbound shots can be blocked');
   assert.equal(shieldBlocks(s, 2000, 2000, 1, 0), true);
+
+  // A piercing shot that kills a hull in front of a shielder is not then stopped by dead plates.
+  const fodder = addEnemy(manager, 'swarmer', 2250, 2000);
+  fodder.x = 2250; fodder.y = 2000; fodder.hp = 1;
+  const doomed = addEnemy(manager, 'shielder', 2330, 2000);
+  doomed.x = 2330; doomed.y = 2000; doomed.shieldAngle = Math.PI; doomed.dead = false;
+  game.bullets = [{ x: 2200, y: 2000, vx: 150, vy: 0, damage: 10, pierce: 3, hue: 186, radius: 4, life: 1 }];
+  const kill = game.killEnemy.bind(game);
+  game.killEnemy = (e, b) => { kill(e, b); if (e === fodder) doomed.dead = true; };
+  game.updateBullets(1 / 60);
+  delete game.killEnemy;
+  assert.equal(doomed.shieldFlash, 0, 'plates of a hull that died mid-segment block nothing');
+  assert.equal(game.bullets.length, 1, 'the shot flies on');
 });
 
 test('auto-aim prefers a hittable target over a shielder facing the ship, until it is flanked', () => {
@@ -397,8 +410,10 @@ test('lieutenants: elite stats, arrival card, sturdy vs contact/supernova, elite
   assert.equal(e.hp, 940, 'ARMORED takes 40% less damage');
 
   game.player.x = e.x; game.player.y = e.y;
+  e.sinceHit = 5;
   game.triggerSupernova();
   assert.ok(manager.enemies.includes(e), 'a supernova strips HP from a lieutenant instead of erasing it');
+  assert.equal(e.sinceHit, 0, 'the supernova counts as a hit (pauses regeneration)');
   game.player.x = 2000; game.player.y = 2000;
 
   game.hitStopTicks = 0;
@@ -443,6 +458,23 @@ test('first spawn of each new archetype shows one intel card; sandbox buttons sp
   const id = game.ltCard.id;
   game.announceArchetype('gunner');
   assert.equal(game.ltCard.id, id, 'only once per run');
+
+  // A newcomer pack refused by the enemy cap is not announced (it stays unseen for the next pack).
+  game.ltCardTimer = 0;
+  game.wave = 9;
+  for (const pack of WAVE_PACKS) TUNING[pack.weightKey] = 0;
+  TUNING.spawnWeightBlinker = 1;
+  const cap = manager.maxEnemies;
+  manager.maxEnemies = manager.enemies.length + manager.spawnIndicators.length;
+  game.spawnWavePack();
+  assert.equal(game.seenArchetypes.has('blinker'), false);
+  manager.maxEnemies = cap;
+  game.spawnWavePack();
+  assert.equal(game.seenArchetypes.has('blinker'), true);
+  assert.equal(game.ltCard.name, ARCHETYPE_INFO.blinker.label);
+  manager.spawnIndicators.length = 0;
+  resetTuning();
+  game.wave = 1;
 
   Object.assign(game, {
     progression: { getBonuses: () => ({ moveSpeedMult: 1, fireRateMult: 1, damageMult: 1, magnetMult: 1, xpMult: 1, coreMult: 1 }), addCores() {} },
