@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.10.0',
+    date: '2026-10-17',
+    title: 'Off-Screen Spawns & Stronger Vortexes',
+    notes: [
+      { type: 'balance', text: 'Enemies now arrive from just off the edge of the screen, mostly ahead of where you are flying, instead of popping in on top of you.' },
+      { type: 'balance', text: 'Nothing can spawn within 260 px of your ship. Anything that has to appear on screen gets a longer, clearer warning first.' },
+      { type: 'balance', text: 'Enemies chase you from anywhere on the map, steer around asteroids instead of getting stuck, and speed up to catch you when far behind.' },
+      { type: 'balance', text: 'Lieutenants move about 35% faster (still slower than your ship).' },
+      { type: 'balance', text: 'Vortexes pull harder: 50% of your thrust at the edge, rising to 75% at half the distance to the core. Holding away always escapes.' }
+    ]
+  },
+  {
     version: '0.9.0',
     date: '2026-10-17',
     title: 'Patch Notes & Versioned Leaderboard',

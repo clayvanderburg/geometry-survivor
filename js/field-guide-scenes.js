@@ -9,7 +9,7 @@ import { ParticleSystem } from './particles.js';
 import { drawCrabShip, drawPlayerShield, shieldTouches } from './ship-renderer.js';
 import { BRUISER, shieldBlocks, bounceFromShip, lieutenantTypes } from './archetypes.js';
 import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
-import { wellPullScale, wellFalloff } from './gravity.js';
+import { wellPullScale, playerPullShare } from './gravity.js';
 
 export const PREVIEW_DT = 1 / 60;
 export const PREVIEW_ASPECT = 9 / 16;
@@ -106,7 +106,7 @@ const SCENES = {
         b.vx += (v.x - b.x) * k;
         b.vy += (v.y - b.y) * k;
       }
-      s.tug = wellFalloff(Math.hypot(v.x - s.player.x, v.y - s.player.y), pull);
+      s.tug = playerPullShare(Math.hypot(v.x - s.player.x, v.y - s.player.y), pull, v.radius);
       if (s.every(0.3)) s.fireAt(v.x + (Math.random() - 0.5) * 60, v.y - pull * 0.65);
     },
     noContactKill: true
@@ -496,7 +496,7 @@ export class GuidePreview {
     ctx.setLineDash([4, 9]);
     ctx.lineDashOffset = -this.t * 40;
     ctx.lineWidth = 1.6;
-    ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.15 + this.tug * 0.5})`;
+    ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.1 + this.tug * 0.65})`;
     ctx.beginPath();
     ctx.moveTo(p.x + ux * (p.radius + 10), p.y + uy * (p.radius + 10));
     ctx.lineTo(w.x - ux * w.radius * 1.2, w.y - uy * w.radius * 1.2);

@@ -10,7 +10,7 @@ import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserCha
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
-import { PLAYER_ESCAPE_THRUST_SHARE } from './gravity.js';
+import { playerPullCapShare } from './gravity.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
@@ -53,7 +53,7 @@ export const HOSTILE_ENTRIES = [
   {
     id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: 1,
     what: () => `A crimson singularity. Inside its ${TUNING.blackholePullRadius ?? 200} px dashed rim it drags enemies, sparks, Geoms and your shots into orbit and tugs your ship. It collapses in a 175 px burst that damages nearby hostiles when it dies.`,
-    tip: () => `The tug is capped at ${pct(PLAYER_ESCAPE_THRUST_SHARE)} of your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
+    tip: () => `The tug is ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust at the rim, rising to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} from ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the way in. It never matches your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
   },
   {
     id: 'bruiser', name: 'BRUISER', group: 'archetype', unlockWave: ARCHETYPE_INFO.bruiser.unlockWave,
@@ -82,7 +82,7 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
-    what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype).`,
+    what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
     modifiers: true
   },
@@ -265,8 +265,9 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'gravity', icon: '◉', title: 'GRAVITY, VORTEX TUG & ESCAPE',
     body: () => [
-      `Vortexes pull inside ${TUNING.blackholePullRadius ?? 200} px, strongest at the core and fading to nothing at the rim. They bend passing shots and drag pickups and enemies into orbit; a dashed tether shows when your ship is being tugged.`,
-      `Escape cap: the pull on your ship is capped at ${pct(PLAYER_ESCAPE_THRUST_SHARE)} of your thrust, even from several vortexes, so holding away always keeps at least ${pct(1 - PLAYER_ESCAPE_THRUST_SHARE)} of your speed.`
+      `Vortexes pull inside ${TUNING.blackholePullRadius ?? 200} px. They bend passing shots and drag pickups and enemies into orbit, strongest at the core; a dashed tether shows when your ship is being tugged.`,
+      `Ship tug: ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust as you cross the rim, rising steadily to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} at ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the radius from the core, and holding there.`,
+      `Escape cap: even several vortexes together never pull with more than ${pct(playerPullCapShare())} of your thrust, so holding away always keeps at least ${pct(1 - playerPullCapShare())} of your speed.`
     ]
   },
   {

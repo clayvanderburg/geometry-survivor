@@ -1,6 +1,7 @@
 // Lieutenants: one elite per non-boss wave. An archetype the wave already fields, rebuilt with a
 // generated name/epithet, 1–2 modifiers, a silver rank aura (never the boss's gold crown), a mini
-// HP bar and a modest guaranteed reward. Strength and timing live in TUNING (Enemy Variety group).
+// HP bar and a modest guaranteed reward. Strength and timing live in TUNING (Enemy Variety group);
+// move speed is `lieutenantSpeedMult` (Spawn Placement & Pursuit group, default +35%).
 import { TUNING } from './config.js';
 import { SHIELDER } from './archetypes.js';
 
@@ -70,6 +71,8 @@ export function applyLieutenant(config, lt, bossHp) {
   config.epithet = lt.epithet;
   config.mods = lt.mods;
   config.volley = 3; // a gunner lieutenant fires a three-orb fan
+  // Quicker than its archetype: a movement multiplier on all steering (not the Bruiser charge lane).
+  config.pace = Math.max(0.1, TUNING.lieutenantSpeedMult ?? 1.35);
   if (lt.mods.includes('armored')) config.armor = 0.4;
   if (lt.mods.includes('hasted')) {
     config.speed *= 1.35;
