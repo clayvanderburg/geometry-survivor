@@ -22,12 +22,16 @@ export const WEAPON_SCALING = {
   // Prism Split (per level): adds one pair of blaster streams in the fixed PRISM_STREAMS order.
   multishotBolts: 2,
 
-  // Wing Rockets (starting kit): two slow dumbfire rockets from the outer wing tips, always fired
-  // along the hull's heading. Direct hit + a small blast (blast is a share of the hit).
-  wingRocketCooldown: 2.4,
-  wingRocketDamageMult: 2.4,
+  // Wing Rockets (starting weapon, leveled like the others): dumbfire rockets from the outer wing tips,
+  // always fired along the hull's heading. Direct hit + a small blast centred on the target (the blast
+  // is a share of the hit, so a rocket deals hit x (1 + blast share) to whatever it strikes). Rockets
+  // alternate wings; odd counts put the extra rocket on the left. Count rises where the DPS curve can
+  // absorb it without lowering damage per hit, and the cooldown shortens on the other levels.
+  wingRocketCount: (lv) => [2, 2, 2, 2, 3, 4, 4, 5, 6][Math.max(0, Math.min(8, lv))],
+  wingRocketCooldown: (lv) => [1, 1, 0.9, 0.8, 0.8, 0.8, 0.7, 0.7, 0.7][Math.max(0, Math.min(8, lv))],
+  wingRocketDamageMult: (lv) => DPS_TARGET(lv) * W.wingRocketCooldown(lv) / (W.wingRocketCount(lv) * (1 + W.wingRocketBlastShare)),
   wingRocketBlastShare: 0.5,
-  wingRocketBlastRadius: 50,
+  wingRocketBlastRadius: (lv) => 46 + lv * 4,
   wingRocketSpeed: 8.5,
   wingRocketLife: 1.6,
 
@@ -35,13 +39,13 @@ export const WEAPON_SCALING = {
   missileSalvo: (lv) => 1 + lv,
   missileSpeed: (lv) => 9.5 + lv * 0.8,
   missileDamageMult: (lv) => DPS_TARGET(lv) * W.missileCooldown(lv) / W.missileSalvo(lv),
-  missileCooldown: (lv) => 1.9 - lv * 0.1,
+  missileCooldown: (lv) => Math.max(1.2, 1.9 - lv * 0.1),
   missileBlastRadius: 75,
 
   // Tesla Arc Emitter (Storm Protocol detonations chain at a fixed level)
   lightningJumps: (lv) => 3 + lv * 2,
   lightningDamageMult: (lv) => DPS_TARGET(lv) * W.lightningCooldown(lv) / W.lightningJumps(lv),
-  lightningCooldown: (lv) => 1.65 - lv * 0.1,
+  lightningCooldown: (lv) => Math.max(0.95, 1.65 - lv * 0.1),
   stormChainLevel: 2,
 
   // Vortex Singularity: light per-tick core damage so packs clump, then a collapse pulse over 85% of the pull radius
@@ -80,7 +84,7 @@ export const WEAPON_SCALING = {
   mineDamageMult: (lv) => DPS_TARGET(lv) * W.mineCooldown(lv),
 
   // Sentry Turret (deployable): planted at the ship, shoots the nearest enemy it can see past cover.
-  turretCooldown: (lv) => 8.5 - lv * 0.5,
+  turretCooldown: (lv) => Math.max(5.5, 8.5 - lv * 0.5),
   turretMaxActive: (lv) => 1 + Math.floor(lv / 3),
   turretDuration: (lv) => 5 + lv,
   turretRange: (lv) => 300 + lv * 25,
@@ -180,6 +184,7 @@ export function prismNewestGroup(count) {
 // Potential DPS (x base damage) per autonomous weapon, from its counts, cooldowns and hit damage.
 // Tests hold every weapon to DPS_TARGET at every level; the balance tool reports it alongside real runs.
 export const POTENTIAL_DPS = {
+  rockets: (lv) => W.wingRocketCount(lv) * W.wingRocketDamageMult(lv) * (1 + W.wingRocketBlastShare) / W.wingRocketCooldown(lv),
   missiles: (lv) => W.missileSalvo(lv) * W.missileDamageMult(lv) / W.missileCooldown(lv),
   lightning: (lv) => W.lightningJumps(lv) * W.lightningDamageMult(lv) / W.lightningCooldown(lv),
   singularity: (lv) => (W.singularityDamageMult(lv) * SINGULARITY_LIFE_TICKS + W.singularityCollapseDamageMult(lv)) / W.singularityCooldown(lv),
@@ -251,7 +256,7 @@ export function weaponDamage(p, weapon, lv = 0) {
     case 'collapse': return d * W.singularityCollapseDamageMult(lv) * (TUNING.singularityCollapseMult ?? 1) * tagDamageMult(p, 'singularity');
     case 'nova': base = W.novaDamage(lv); break;
     case 'tectonic': base = d * W.tectonicDamageMult; break;
-    case 'rocket': base = d * W.wingRocketDamageMult; break;
+    case 'rocket': base = d * W.wingRocketDamageMult(Math.max(1, lv)); break;
     case 'mine': base = d * W.mineDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
     case 'turret': base = d * W.turretDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
     case 'drone': base = d * W.droneDamageMult(lv) * (TUNING.deployableDamageMult ?? 1); break;
@@ -263,6 +268,7 @@ export function weaponDamage(p, weapon, lv = 0) {
 
 // Radii scaled by the AREA tag (missile blasts, singularity pull/collapse, dash nova, tectonic blast).
 export const missileBlastRadius = (p) => W.missileBlastRadius * areaMult(p);
+export const wingRocketBlastRadius = (p, lv) => W.wingRocketBlastRadius(Math.max(1, lv)) * areaMult(p);
 export const singularityPullRadius = (p, lv) => W.singularityPullRadius(lv) * areaMult(p);
 export const novaRadius = (p, lv) => W.novaRadius(lv) * areaMult(p);
 export const tectonicBlastRadius = (p) => W.tectonicBlastRadius * areaMult(p);

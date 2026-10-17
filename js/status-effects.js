@@ -61,7 +61,7 @@ export function applyOnHitStatuses(p, e, source) {
   const w = p.weapons;
   if (source === 'blaster') {
     if (w.thermite) applyBurn(p, e, w.thermite);
-  } else if (source === 'missile') {
+  } else if (source === 'missile' || source === 'rocket') {
     if (w.cryo) applyChill(e, w.cryo);
   } else if (source === 'lightning') {
     if (w.nanite) applyCorrode(e, w.nanite);

@@ -128,13 +128,23 @@
 
     <!-- Pause Modal Overlay -->
     <div id="pause-modal" class="modal-overlay hidden">
-      <div class="modal-card upgrade-card" style="max-width:480px; text-align:center;">
+      <div class="modal-card upgrade-card pause-card">
         <div class="upgrade-header">
           <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
           <h2 class="upgrade-title">SYSTEM PAUSED</h2>
           <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume</p>
         </div>
 
+        <div class="pause-layout">
+        <section class="pause-loadout-box" aria-label="Weapon loadout">
+          <div class="pause-loadout-head">
+            <span class="pause-loadout-title">WEAPON LOADOUT</span>
+            <span id="pause-loadout-count" class="pause-loadout-count">2 / 6 SLOTS</span>
+          </div>
+          <div id="pause-loadout" class="pause-loadout-grid"></div>
+        </section>
+
+        <div class="pause-controls">
         <div class="pause-audio-box">
           <div class="pause-slider-row">
             <span>🔊 MASTER VOLUME</span>
@@ -158,6 +168,8 @@
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-tuner" class="neon-btn" style="border-color:var(--gold); color:var(--gold); padding:12px 18px; font-size:13px;">⚙ TOGGLE LIVE TUNING DRAWER [T]</button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
+        </div>
+        </div>
         </div>
       </div>
     </div>

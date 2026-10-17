@@ -51,7 +51,7 @@ test('wing rockets launch from both wing tips along the hull heading, not the tu
   for (const r of g.bullets) {
     assert.equal(r.source, 'rocket');
     assert.ok(Math.abs(r.vx) < 1e-9 && r.vy === W.wingRocketSpeed, 'flies along the hull heading');
-    assert.equal(r.damage, 10 * W.wingRocketDamageMult);
+    assert.equal(r.damage, 10 * W.wingRocketDamageMult(1));
     assert.equal(r.blastDamage, r.damage * W.wingRocketBlastShare);
   }
   const xs = g.bullets.map((r) => r.x - 1000).sort((a, b) => a - b);

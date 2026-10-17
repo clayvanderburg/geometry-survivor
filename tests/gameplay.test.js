@@ -8,7 +8,7 @@ globalThis.BroadcastChannel = undefined;
 const element = () => ({ textContent: '', innerHTML: '', style: {}, classList: { add() {}, remove() {} }, appendChild() {} });
 globalThis.document = { getElementById: element, createElement: element };
 const { Game } = await import('../js/main.js');
-const { UPGRADE_POOL, rollUpgrades } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, rollUpgrades, xpToNextLevel } = await import('../js/upgrades.js');
 const silent = new Proxy({}, { get: () => () => {} });
 const enemy = (type = 'swarmer', extra = {}) => ({ type, x: 200, y: 200, hp: 100, maxHp: 100, radius: 10, hue: 1, score: 1, xp: 1, ...extra });
 function game(enemies = []) {
@@ -78,7 +78,7 @@ test('pending XP grants consecutive choices after selecting the preceding upgrad
   g.selectUpgrade(0);
   assert.equal(g.player.level, 3);
   assert.equal(g.state, 'UPGRADE');
-  assert.equal(g.player.xp, 66);
+  assert.equal(g.player.xp, 100 - 12 - xpToNextLevel(2));
 });
 
 test('shared upgrade application honors lucky level jumps and caps ranks', () => {
