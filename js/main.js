@@ -48,6 +48,18 @@ import {
 } from './config.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
+// Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
+const RADAR_STORAGE_KEY = 'vexolith_radar';
+const RADAR_BASE_SIZE = 152;
+const RADAR_SCALE = 2.5; // on-screen size vs the original 152 px radar
+function loadRadarVisible() {
+  try { return globalThis.localStorage?.getItem(RADAR_STORAGE_KEY) !== '0'; } catch { return true; }
+}
+// Radar side in px: 2.5x the original, but never more than 55% of the screen's short side (laptops, phones).
+export function radarSize(width, height) {
+  return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, 0.55 * Math.min(width, height)));
+}
+
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
 const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
 const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
@@ -129,6 +141,7 @@ export class Game {
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
+    this.radarVisible = loadRadarVisible(); // sector radar minimap, toggled with [R] / controller Back
     this.enemyManager = new EnemyManager();
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
@@ -453,6 +466,10 @@ export class Game {
           this.toggleDamageNumbers();
           return;
         }
+        if (code === 'KeyR') {
+          this.toggleRadar();
+          return;
+        }
       }
 
       if (this.state === 'PLAYING') {
@@ -479,6 +496,9 @@ export class Game {
         }
         if (code === 'KeyN') {
           this.toggleDamageNumbers();
+        }
+        if (code === 'KeyR') {
+          this.toggleRadar();
         }
       }
 
@@ -567,6 +587,7 @@ export class Game {
     if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
+    document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
     }
@@ -574,6 +595,7 @@ export class Game {
       document.getElementById(id)?.addEventListener('click', () => this.openNotes());
     }
     this.syncDamageNumbersButton();
+    this.syncRadarButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -959,6 +981,20 @@ export class Game {
   toggleDamageNumbers() {
     this.damageNumbers.toggle();
     this.syncDamageNumbersButton();
+  }
+
+  toggleRadar() {
+    this.radarVisible = !this.radarVisible;
+    try { globalThis.localStorage?.setItem(RADAR_STORAGE_KEY, this.radarVisible ? '1' : '0'); } catch { /* storage blocked */ }
+    this.syncRadarButton();
+  }
+
+  syncRadarButton() {
+    const btn = globalThis.document?.getElementById('btn-pause-radar');
+    if (!btn) return;
+    btn.textContent = `🛰 SECTOR RADAR: ${this.radarVisible ? 'ON' : 'OFF'} [R]`;
+    btn.classList.toggle('active', this.radarVisible);
+    btn.setAttribute?.('aria-pressed', String(this.radarVisible));
   }
 
   syncDamageNumbersButton() {
@@ -2851,6 +2887,7 @@ export class Game {
 
     if (gp?.pressed(PAD.X)) this.toggleAutoFire();
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
+    if (gp?.pressed(PAD.BACK)) this.toggleRadar();
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
     if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
@@ -3711,7 +3748,8 @@ export class Game {
   }
 
   drawMinimap(ctx) {
-    const mapSize = 152;
+    const mapSize = radarSize(this.width, this.height);
+    const k = mapSize / RADAR_BASE_SIZE; // blips grow with the radar so they stay readable
     const pad = 18;
     const mx = this.width - mapSize - pad;
     const my = this.height - mapSize - pad;
@@ -3719,7 +3757,7 @@ export class Game {
     const scaleY = mapSize / this.worldHeight;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(5, 9, 22, 0.84)';
+    ctx.fillStyle = 'rgba(5, 9, 22, 0.62)'; // see-through enough that action under the big radar still reads
     ctx.strokeStyle = 'rgba(0, 243, 255, 0.45)';
     ctx.lineWidth = 1.5;
     ctx.fillRect(mx, my, mapSize, mapSize);
@@ -3734,7 +3772,7 @@ export class Game {
         : r.oreType === 'gold_vein'
         ? '#ffcc00'
         : 'rgba(0, 195, 255, 0.38)';
-      const sz = r.oreType !== 'rock' ? 2.2 : 1.5;
+      const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
       ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
     }
 
@@ -3742,7 +3780,7 @@ export class Game {
     for (let i = 0; i < this.chests.length; i++) {
       const ch = this.chests[i];
       ctx.fillStyle = '#ffee00';
-      ctx.fillRect(mx + ch.x * scaleX - 3, my + ch.y * scaleY - 3, 6, 6);
+      ctx.fillRect(mx + ch.x * scaleX - 3 * k, my + ch.y * scaleY - 3 * k, 6 * k, 6 * k);
     }
 
     // 3. Enemies on Radar
@@ -3750,7 +3788,7 @@ export class Game {
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       ctx.fillStyle = e.isBoss ? '#ff2a55' : e.isLieutenant ? '#eef2ff' : 'rgba(255, 0, 127, 0.75)';
-      const sz = e.isBoss ? 4 : e.isLieutenant ? 3.2 : 1.8;
+      const sz = (e.isBoss ? 4 : e.isLieutenant ? 3.2 : 1.8) * k;
       ctx.fillRect(mx + e.x * scaleX - sz * 0.5, my + e.y * scaleY - sz * 0.5, sz, sz);
     }
 
@@ -3762,7 +3800,7 @@ export class Game {
       if (!sp.config.isBoss) continue;
       ctx.strokeStyle = Math.cos(sp.timer * Math.PI * 5) > 0 ? '#ff2a55' : '#ffcc00';
       ctx.beginPath();
-      ctx.arc(mx + sp.x * scaleX, my + sp.y * scaleY, 4 + (sp.timer % 0.5) * 8, 0, Math.PI * 2);
+      ctx.arc(mx + sp.x * scaleX, my + sp.y * scaleY, (4 + (sp.timer % 0.5) * 8) * k, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -3779,12 +3817,12 @@ export class Game {
     // 5. Player Dot
     ctx.fillStyle = '#00ff88';
     ctx.beginPath();
-    ctx.arc(mx + this.player.x * scaleX, my + this.player.y * scaleY, 3.2, 0, Math.PI * 2);
+    ctx.arc(mx + this.player.x * scaleX, my + this.player.y * scaleY, 3.2 * Math.min(k, 2), 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.font = '800 9px system-ui, sans-serif';
+    ctx.font = `800 ${Math.round(9 + 2 * (k - 1) / 1.5)}px system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(0, 243, 255, 0.75)';
-    ctx.fillText('SECTOR RADAR // DRILL ACTIVE', mx + 6, my + 11);
+    ctx.fillText('SECTOR RADAR // [R] HIDE', mx + 6, my + 6 + Math.round(9 + 2 * (k - 1) / 1.5));
     ctx.restore();
   }
 
@@ -4047,7 +4085,7 @@ export class Game {
 
     // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues
     if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST') {
-      this.drawMinimap(ctx);
+      if (this.radarVisible) this.drawMinimap(ctx);
       this.drawBossIndicators(ctx);
     }
 
