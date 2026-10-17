@@ -2,15 +2,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createScoresHandler, LIMITS, BOARD_KEY, RATE_PREFIX, CENSORED_NAME, containsProfanity, checkPlausibility,
-  validateRun, rankEntries, maxScoreFor
+  createScoresHandler, LIMITS, BOARD_KEY, VERSION_BOARD_PREFIX, RATE_PREFIX, CENSORED_NAME, containsProfanity, checkPlausibility,
+  validateRun, rankEntries, maxScoreFor, boardKey, checkVersion
 } from '../netlify/lib/leaderboard.mjs';
-import { sanitizeCallsign } from '../js/leaderboard-rules.js';
+import { sanitizeCallsign, BOARD_VERSIONS } from '../js/leaderboard-rules.js';
+import { GAME_VERSION } from '../js/version.js';
 
-// Same contract as @netlify/blobs Store for what the handler uses: getWithMetadata + conditional setJSON.
+const CURRENT_KEY = VERSION_BOARD_PREFIX + GAME_VERSION;
+
+// Same contract as @netlify/blobs Store for what the handler uses: getWithMetadata, conditional setJSON
+// and list({ prefix }).
 class FakeStore {
-  constructor({ etags = true } = {}) {
+  constructor({ etags = true, list = true } = {}) {
     this.etags = etags; // the local `netlify dev` blob sandbox returns no ETag on reads
+    if (!list) this.list = undefined; // a store without list() still serves boards
     this.blobs = new Map();
     this.version = 0;
     this.writes = 0;
@@ -31,12 +36,17 @@ class FakeStore {
     this.put(key, value);
     return { modified: true, etag: this.blobs.get(key).etag };
   }
+  async list({ prefix = '' } = {}) {
+    await null;
+    return { blobs: [...this.blobs].filter(([key]) => key.startsWith(prefix)).map(([key, v]) => ({ key, etag: v.etag })), directories: [] };
+  }
   put(key, value) {
     this.writes++;
     this.blobs.set(key, { body: JSON.stringify(value), etag: `"v${++this.version}"` });
   }
-  board() {
-    const entry = this.blobs.get(BOARD_KEY);
+  // Defaults to the all-time board (board-v1), which every run lands on.
+  board(key = BOARD_KEY) {
+    const entry = this.blobs.get(key);
     return entry ? JSON.parse(entry.body).entries : [];
   }
 }
@@ -56,8 +66,8 @@ function setup(overrides = {}, storeOptions) {
   return { store, handler, advance: (ms) => { clock += ms; } };
 }
 
-// A believable 5-minute run.
-const run = (extra = {}) => ({ name: 'NOVA', score: 2_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40.3, time: 300.5, ...extra });
+// A believable 5-minute run from the current game version.
+const run = (extra = {}) => ({ name: 'NOVA', score: 2_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40.3, time: 300.5, version: GAME_VERSION, ...extra });
 
 let ipCounter = 0;
 const freshIp = () => `10.0.${Math.floor(++ipCounter / 250)}.${ipCounter % 250}`;
@@ -70,7 +80,7 @@ function post(handler, body, { ip = freshIp(), contentType = 'application/json',
   });
   return handler(req, { ip });
 }
-const get = (handler) => handler(new Request('https://game.example/api/scores'), { ip: '1.1.1.1' });
+const get = (handler, version = GAME_VERSION) => handler(new Request('https://game.example/api/scores' + (version === null ? '' : `?version=${encodeURIComponent(version)}`)), { ip: '1.1.1.1' });
 const body = (res) => res.json();
 
 test('GET on an empty store returns an empty board, uncached', async () => {
@@ -79,10 +89,10 @@ test('GET on an empty store returns an empty board, uncached', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('access-control-allow-origin'), null, 'same origin: no CORS headers');
-  assert.deepEqual(await body(res), { entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE });
+  assert.deepEqual(await body(res), { version: GAME_VERSION, current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE });
 });
 
-test('POST stores a run and GET returns it with name, score, wave, level, time and date', async () => {
+test('POST stores a run and GET returns it with name, score, wave, level, time, date and version', async () => {
   const { handler } = setup();
   const res = await post(handler, run({ extra: 'ignored' }));
   assert.equal(res.status, 201);
@@ -90,10 +100,12 @@ test('POST stores a run and GET returns it with name, score, wave, level, time a
   assert.equal(out.rank, 1);
   assert.equal(out.onBoard, true);
   assert.equal(out.id, 'run-1');
+  assert.equal(out.version, GAME_VERSION);
+  assert.equal(out.allTimeRank, 1);
   const [entry] = (await body(await get(handler))).entries;
   assert.deepEqual(entry, {
     id: 'run-1', name: 'NOVA', score: 2_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40.3, time: 300.5,
-    date: '2026-10-17T12:00:00.000Z'
+    date: '2026-10-17T12:00:00.000Z', version: GAME_VERSION
   });
 });
 
@@ -113,6 +125,7 @@ test('board keeps only the top N, GET returns the public top slice, and a low ru
   const { handler, store } = setup({ limits });
   for (let i = 1; i <= 7; i++) await post(handler, run({ name: `P${i}`, score: i * 10_000 }));
   assert.deepEqual(store.board().map(e => e.name), ['P7', 'P6', 'P5', 'P4', 'P3']);
+  assert.deepEqual(store.board(CURRENT_KEY).map(e => e.name), ['P7', 'P6', 'P5', 'P4', 'P3']);
   const pub = await body(await get(handler));
   assert.deepEqual(pub.entries.map(e => e.name), ['P7', 'P6', 'P5']);
   assert.equal(pub.total, 5);
@@ -122,6 +135,7 @@ test('board keeps only the top N, GET returns the public top slice, and a low ru
   assert.equal(low.onBoard, false);
   assert.equal(low.rank, null);
   assert.equal(store.writes, writes + 1, 'only the rate-limit blob is written for an off-board run');
+  assert.equal(low.allTimeRank, null);
 });
 
 test('one callsign holds at most MAX_PER_NAME places', async () => {
@@ -273,14 +287,18 @@ test('rejected submissions (400) do not burn the cooldown; implausible ones (422
 
 test('write conflicts are retried against the fresh board, so concurrent runs both land', async () => {
   const { handler, store } = setup();
-  let sneaked = false;
+  const rival = { id: 'rival', name: 'RIVAL', score: 3_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40, time: 300, date: '2026-10-17T11:59:59.000Z', version: GAME_VERSION };
+  const sneaked = new Set();
   store.beforeSet = async (key) => {
-    if (key !== BOARD_KEY || sneaked) return;
-    sneaked = true; // another function instance writes between our read and our conditional write
-    store.put(BOARD_KEY, { version: 1, entries: [{ id: 'rival', name: 'RIVAL', score: 3_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40, time: 300, date: '2026-10-17T11:59:59.000Z' }] });
+    if (key.startsWith(RATE_PREFIX) || sneaked.has(key)) return;
+    sneaked.add(key); // another function instance writes between our read and our conditional write
+    store.put(key, { version: 1, entries: [rival] });
   };
   const res = await body(await post(handler, run()));
   assert.equal(res.rank, 2);
+  assert.equal(res.allTimeRank, 2);
+  assert.deepEqual([...sneaked].sort(), [BOARD_KEY, CURRENT_KEY], 'both boards hit a conflict and were retried');
+  assert.deepEqual(store.board(CURRENT_KEY).map(e => e.name), ['RIVAL', 'NOVA']);
   assert.deepEqual(store.board().map(e => e.name), ['RIVAL', 'NOVA']);
 });
 
@@ -296,11 +314,24 @@ test('many simultaneous submissions from different players all end up on the boa
 test('a board that never stops changing gives up with 503 instead of looping', async () => {
   const { handler, store } = setup();
   store.beforeSet = async (key) => {
-    if (key === BOARD_KEY) store.put(BOARD_KEY, { version: 1, entries: [] });
+    if (key === CURRENT_KEY) store.put(CURRENT_KEY, { version: 1, entries: [] });
   };
   const res = await post(handler, run());
   assert.equal(res.status, 503);
   assert.ok(res.headers.get('retry-after'));
+  assert.equal(store.board().length, 0, 'nothing reaches the all-time board either');
+});
+
+test('a contended all-time board does not fail a run that already made its version board', async () => {
+  const { handler, store } = setup();
+  store.beforeSet = async (key) => {
+    if (key === BOARD_KEY) store.put(BOARD_KEY, { version: 1, entries: [] });
+  };
+  const res = await post(handler, run());
+  assert.equal(res.status, 201);
+  const out = await body(res);
+  assert.deepEqual([out.rank, out.allTimeRank], [1, null]);
+  assert.deepEqual(store.board(CURRENT_KEY).map(e => e.name), ['NOVA']);
 });
 
 test('a broken store returns 500 JSON, not an exception', async () => {
@@ -313,7 +344,7 @@ test('a broken store returns 500 JSON, not an exception', async () => {
 test('a hand-edited or corrupt board blob is tolerated', async () => {
   const { handler, store } = setup();
   store.put(BOARD_KEY, { entries: [null, 'junk', { name: 'OK', score: 5 }, { name: 7, score: 9 }] });
-  const res = await body(await get(handler));
+  const res = await body(await get(handler, 'all'));
   assert.deepEqual(res.entries.map(e => e.name), ['OK']);
 });
 
@@ -325,4 +356,116 @@ test('a store that returns no ETags (local netlify dev sandbox) still accepts ru
   advance(LIMITS.COOLDOWN_MS + 1);
   assert.equal((await post(handler, run({ name: 'THREE', score: 30 }), { ip: '203.0.113.70' })).status, 201);
   assert.deepEqual(store.board().map(e => e.name), ['THREE', 'TWO', 'ONE']);
+});
+
+// --- Versioned boards ------------------------------------------------------------------------------
+
+test('every run lands on its version board (board-v1@<version>) and on the all-time board', async () => {
+  const { handler, store } = setup();
+  assert.equal(boardKey(GAME_VERSION), CURRENT_KEY);
+  assert.equal(boardKey('all'), BOARD_KEY);
+  await post(handler, run({ name: 'ONE', score: 300_000 }));
+  await post(handler, run({ name: 'TWO', score: 500_000 }));
+  assert.deepEqual(store.board(CURRENT_KEY).map(e => [e.name, e.version]), [['TWO', GAME_VERSION], ['ONE', GAME_VERSION]]);
+  assert.deepEqual(store.board().map(e => [e.name, e.version]), [['TWO', GAME_VERSION], ['ONE', GAME_VERSION]]);
+  assert.equal(JSON.parse(store.blobs.get(CURRENT_KEY).body).gameVersion, GAME_VERSION);
+  const current = await body(await get(handler));
+  assert.equal(current.version, GAME_VERSION);
+  assert.deepEqual(current.versions, [GAME_VERSION], 'versions that have runs');
+  const all = await body(await get(handler, 'all'));
+  assert.equal(all.version, 'all');
+  assert.deepEqual(all.entries.map(e => [e.name, e.version]), [['TWO', GAME_VERSION], ['ONE', GAME_VERSION]]);
+});
+
+test('a new version starts a fresh board; an older cached client still lands on its own version board', async () => {
+  // Simulate the release after this one: the server knows both versions, the old one is still cached somewhere.
+  const old = GAME_VERSION;
+  const next = '99.0.0';
+  const versions = [next, ...BOARD_VERSIONS];
+  const { handler, store } = setup({ versions, currentVersion: next });
+  assert.equal((await post(handler, run({ name: 'OLD CHAMP', score: 9_000_000, version: old }))).status, 201);
+  const fresh = await body(await post(handler, run({ name: 'NEW PILOT', score: 100_000, version: next })));
+  assert.equal(fresh.rank, 1, 'old high scores do not crowd the new version');
+  assert.equal(fresh.allTimeRank, 2, 'but they still count all-time');
+  assert.equal(fresh.version, next);
+  const late = await body(await post(handler, run({ name: 'STALE TAB', score: 50_000, version: old })));
+  assert.deepEqual([late.version, late.rank], [old, 2], 'an older known version goes to its own board');
+  assert.deepEqual(store.board(VERSION_BOARD_PREFIX + next).map(e => e.name), ['NEW PILOT']);
+  assert.deepEqual(store.board(VERSION_BOARD_PREFIX + old).map(e => e.name), ['OLD CHAMP', 'STALE TAB']);
+  assert.deepEqual(store.board().map(e => e.name), ['OLD CHAMP', 'NEW PILOT', 'STALE TAB']);
+  const res = await body(await get(handler, next));
+  assert.deepEqual(res.versions, [next, old], 'newest first');
+  assert.equal(res.current, next);
+  assert.deepEqual((await body(await get(handler, old))).entries.map(e => e.name), ['OLD CHAMP', 'STALE TAB']);
+});
+
+test('unknown game versions are rejected with 422 before the cooldown and never stored', async () => {
+  const { handler, store } = setup();
+  const preVersioning = ['0.1.0', '0.8.1'].filter(v => !BOARD_VERSIONS.includes(v));
+  assert.equal(preVersioning.length, 2, 'changelog versions from before versioning have no board');
+  for (const version of ['9.9.9', 'banana', '', 7, true, { v: 1 }, ' 0.9.0', ...preVersioning]) {
+    const res = await post(handler, run({ version }), { ip: '203.0.113.80' });
+    assert.equal(res.status, 422, JSON.stringify(version));
+    const out = await body(res);
+    assert.match(out.error, /unknown game version/);
+    assert.equal(out.current, GAME_VERSION);
+  }
+  assert.equal(store.writes, 0, 'no board and no rate-limit write');
+  assert.equal((await post(handler, run(), { ip: '203.0.113.80' })).status, 201, 'the cooldown was not burned');
+  assert.deepEqual(checkVersion(GAME_VERSION), { version: GAME_VERSION });
+  assert.deepEqual(checkVersion(undefined), { version: null });
+});
+
+test('GET picks the board from ?version=: a version, all, or (no parameter) all-time for older clients', async () => {
+  const { handler } = setup();
+  await post(handler, run());
+  assert.equal((await body(await get(handler, null))).version, 'all');
+  assert.equal((await body(await get(handler, ''))).version, 'all');
+  for (const bad of ['9.9.9', '0.1.0', 'ALL', 'latest']) {
+    const res = await get(handler, bad);
+    assert.equal(res.status, 400, bad);
+    assert.match((await body(res)).error, /unknown version/);
+  }
+});
+
+test('the legacy board-v1 (runs from before versioning) stays readable as the all-time board', async () => {
+  const { handler, store } = setup();
+  const legacy = [
+    { id: 'old-1', name: 'FIRST', score: 4_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40, time: 300, date: '2026-10-17T09:00:00.000Z' },
+    { id: 'old-2', name: 'SECOND', score: 1_000_000, wave: 14, level: 20, kills: 1500, multiplier: 40, time: 300, date: '2026-10-17T09:30:00.000Z' }
+  ];
+  store.put(BOARD_KEY, { version: 1, updated: '2026-10-17T09:30:00.000Z', entries: legacy });
+  const before = await body(await get(handler, 'all'));
+  assert.deepEqual(before.entries.map(e => [e.name, e.version]), [['FIRST', null], ['SECOND', null]], 'legacy runs report version null (shown as pre-0.9)');
+  assert.deepEqual((await body(await get(handler))).entries, [], 'the current version starts empty');
+
+  const res = await body(await post(handler, run({ name: 'NOVA', score: 2_000_000 })));
+  assert.deepEqual([res.rank, res.allTimeRank], [1, 2]);
+  assert.deepEqual((await body(await get(handler, 'all'))).entries.map(e => [e.name, e.version]),
+    [['FIRST', null], ['NOVA', GAME_VERSION], ['SECOND', null]], 'new runs rank against the legacy ones all-time');
+  assert.deepEqual((await body(await get(handler))).entries.map(e => e.name), ['NOVA']);
+});
+
+test('a client from before versioning (no version field) is still accepted, onto the all-time board only', async () => {
+  const { handler, store } = setup();
+  const { version, ...legacyRun } = run({ name: 'CACHED' });
+  assert.equal(version, GAME_VERSION);
+  const res = await post(handler, legacyRun);
+  assert.equal(res.status, 201);
+  const out = await body(res);
+  assert.deepEqual([out.version, out.board, out.rank, out.allTimeRank], [null, 'all', 1, 1]);
+  assert.deepEqual(store.board().map(e => [e.name, e.version ?? null]), [['CACHED', null]]);
+  assert.equal(store.blobs.has(CURRENT_KEY), false);
+  assert.deepEqual((await body(await get(handler))).versions, []);
+});
+
+test('a store without list() (or a failing one) still serves boards, just without the version list', async () => {
+  const { handler } = setup({}, { list: false });
+  await post(handler, run());
+  const res = await body(await get(handler));
+  assert.deepEqual([res.versions, res.entries.length], [[], 1]);
+  const broken = setup();
+  broken.store.list = async () => { throw new Error('list down'); };
+  await post(broken.handler, run());
+  assert.deepEqual((await body(await get(broken.handler))).versions, []);
 });

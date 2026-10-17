@@ -1,5 +1,5 @@
 // Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. a NEW WEAPON pick),
-// pause (sliders, damage-number toggle, loadout discard with confirm), Field Guide, chest and game over.
+// pause (sliders, damage-number toggle, loadout discard with confirm), Field Guide, Patch Notes, chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
@@ -30,11 +30,13 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     await page.goto('http://127.0.0.1:8096');
     await page.waitForTimeout(800);
 
+    // Holds the button until the game has polled it down, then until it has seen the release, so a slow or
+    // busy machine (long frames) can't drop a press. Each step still takes at least the old 90 ms.
     const press = async (i) => {
       await page.evaluate(i => { window.__pad.buttons[i] = true; }, i);
-      await page.waitForTimeout(90);
+      await Promise.all([page.waitForTimeout(90), page.waitForFunction(i => __game.gpButtons[i] === true, i, { timeout: 5000 })]);
       await page.evaluate(i => { window.__pad.buttons[i] = false; }, i);
-      await page.waitForTimeout(90);
+      await Promise.all([page.waitForTimeout(90), page.waitForFunction(i => !__game.gpButtons[i], i, { timeout: 5000 })]);
     };
     const state = () => page.evaluate(() => __game.state);
     const expect = async (want, step) => { const got = await state(); if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`); };
@@ -155,6 +157,51 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     await press(B);
     await expect('PLAYING', 'B resumes after the guide');
 
+    // Patch notes from pause: Down three times reaches PATCH NOTES (wearing its NEW badge), A opens them with the
+    // newest version expanded, the d-pad walks into the list, A on an older version expands it, B backs out.
+    await press(START);
+    await expect('PAUSED', 'Start pauses for the patch notes');
+    await page.waitForTimeout(400);
+    if (await page.evaluate(() => document.querySelector('#btn-pause-notes [data-notes-badge]').classList.contains('hidden'))) throw Error('PATCH NOTES should wear a NEW badge before they are read');
+    for (let k = 0; k < 3; k++) await press(DOWN);
+    const notesBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
+    if (notesBtn !== 'btn-pause-notes') throw Error(`Down three times from Resume should reach PATCH NOTES, got ${notesBtn}`);
+    await press(A);
+    const opened = await page.evaluate(() => ({
+      open: __game.notesOpen && !document.getElementById('notes-modal').classList.contains('hidden'),
+      first: document.querySelector('#notes-body .notes-entry')?.className,
+      openCount: document.querySelectorAll('#notes-body .notes-entry.open').length,
+      badges: [...document.querySelectorAll('[data-notes-badge]')].every(b => b.classList.contains('hidden')),
+      seen: localStorage.getItem('vexolith_patch_notes_seen'),
+      version: document.querySelector('#notes-body .notes-entry')?.dataset.version
+    }));
+    if (!opened.open) throw Error('A should open the patch notes');
+    if (!/\bopen\b/.test(opened.first) || !/\blatest\b/.test(opened.first) || opened.openCount !== 1) throw Error(`Newest version should be expanded on top, the rest collapsed: ${JSON.stringify(opened)}`);
+    if (!opened.badges || opened.seen !== opened.version) throw Error(`Opening the notes should clear the NEW badge and remember ${opened.version}: ${JSON.stringify(opened)}`);
+    await page.waitForTimeout(400);
+    const focusedHead = () => page.evaluate(() => document.querySelector('#notes-modal .gp-focus')?.dataset?.notesToggle || null);
+    if (await focusedHead() !== opened.version) throw Error(`Focus should start on the newest version header, got ${await focusedHead()}`);
+    let older = null;
+    for (let k = 0; k < 4 && !older; k++) {
+      await press(DOWN);
+      const head = await focusedHead();
+      if (head && head !== opened.version) older = head;
+    }
+    if (!older) throw Error('D-pad down should walk from the newest notes to an older version header');
+    await press(A);
+    const expanded = await page.evaluate(v => {
+      const entry = document.querySelector(`#notes-body .notes-entry[data-version="${v}"]`);
+      return entry.classList.contains('open') && entry.querySelector('.notes-head').getAttribute('aria-expanded') === 'true' && !entry.querySelector('.notes-sections').hidden;
+    }, older);
+    if (!expanded) throw Error(`A on v${older} should expand it`);
+    await page.screenshot({ path: 'controller-notes.png' });
+    await press(B);
+    if (await page.evaluate(() => __game.notesOpen)) throw Error('B should close the patch notes');
+    await expect('PAUSED', 'closing the patch notes returns to the pause menu');
+    await page.waitForTimeout(400);
+    await press(B);
+    await expect('PLAYING', 'B resumes after the patch notes');
+
     await page.evaluate(() => { const g = __game; g.openRelicChest({ x: g.player.x, y: g.player.y, isSuper: false }); });
     await expect('CHEST', 'chest opens');
     await page.waitForTimeout(400);
@@ -170,6 +217,6 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     await page.screenshot({ path: 'controller-gameplay.png' });
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, Field Guide open + tab switch + browse + back, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

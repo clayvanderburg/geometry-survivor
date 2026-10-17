@@ -10,6 +10,14 @@ npm start
 - **Play Game**: `http://127.0.0.1:8096`
 - **Standalone Live Tuning & Dev Sandbox Studio**: `http://127.0.0.1:8096/tuner.html` (or press **`Shift+Alt+T`** in-game, Shift+Option+T on Mac, to toggle the hidden slide-over Tuner Drawer; it has no visible link so the public build stays clean).
 
+## Versions & patch notes
+
+The game has a semver version, `GAME_VERSION` in **`js/version.js`** (the single source of truth), shown as a tag under the title logo, on the pause menu and on the game-over screen. **`js/changelog.js`** holds `CHANGELOG`, the player-facing patch notes, newest first: `{ version, date, title, notes: [{ type: 'new' | 'balance' | 'fix', text }] }`. The **📜 PATCH NOTES** button (title screen and pause menu) opens them; it wears a glowing **NEW** badge until the notes of the current version have been opened (last version read is kept in `localStorage` as `vexolith_patch_notes_seen`; with storage blocked the badge clears for the session only). The notes never open by themselves.
+
+**Rule: every merge that affects gameplay (balance, weapons, enemies, scoring, pacing, anything that changes what a run can score) bumps `GAME_VERSION` and adds a matching entry at the top of `CHANGELOG` in the same PR.** Use a minor bump (`0.9.0` → `0.10.0`) for a release with new content and a patch bump (`0.9.0` → `0.9.1`) for a tuning tweak or fix. Write the notes for players: short, plain and concrete ("Escort Drones fire 4× faster (same damage output)"), no file names or jargon, a handful per version. `tests/changelog.test.js` fails if the version and the newest entry disagree, or if versions are not unique and descending. The global leaderboard keeps a separate board per version (see below), so a bump also starts a fresh race; pure UI/docs changes don't need a bump.
+
+Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.0 the original prototype, 0.2.0 PR #3–#4, 0.3.0 #5–#6, 0.4.0 #7–#8, 0.5.0 #9, 0.6.0 #10–#11, 0.7.0 #12–#13, 0.8.0 #14, 0.8.1 #15, 0.9.0 versioned leaderboard + patch notes.
+
 ---
 
 ## Core Mechanics & Features
@@ -69,7 +77,7 @@ npm start
 
 6. **Global + Local Highscore Board & Void Armory Meta-Progression (`js/progression.js`, `js/leaderboard.js`)**
    - Custom **Pilot Callsign / Name Entry** on Title and Game Over screens.
-   - **GLOBAL** tab (default): the shared top 50 of everyone who plays, from `/api/scores` (see [Global leaderboard](#global-leaderboard)). Every finished run is submitted automatically under the callsign, your own runs are highlighted, and the game-over screen shows **GLOBAL RANK #n**. **MY RUNS** tab: this device's top 8 (`localStorage`), which is also what GLOBAL falls back to, with an OFFLINE note, when the API can't be reached.
+   - **GLOBAL** tab (default): the shared top 50 of everyone who plays, from `/api/scores` (see [Global leaderboard](#global-leaderboard)), **per game version**. It opens on the current version's board; a compact **VERSION** selector under the callsign switches to earlier versions that have runs or to **ALL-TIME** (every run, each row tagged with its version, `pre-0.9` for runs from before versioning). Every finished run is submitted automatically under the callsign with `GAME_VERSION`, your own runs are highlighted, and the game-over screen shows **GLOBAL RANK #n · v0.X.Y**. **MY RUNS** tab: this device's top 8 (`localStorage`), which is also what GLOBAL falls back to, with an OFFLINE note, when the API can't be reached. Tabs and version buttons are plain buttons, so mouse, keyboard and the controller's d-pad + A all work.
    - Spend **Void Cores (❖)** harvested during runs on 6 permanent Armory upgrades persisted in `localStorage` (`vectra_survivor_save_v2`).
 
 7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + hidden `Shift+Alt+T` Drawer)**
@@ -104,10 +112,15 @@ The title and game-over boards share scores between all players through a **Netl
 **How it works**
 
 - `netlify/functions/scores.mjs` is served at **`/api/scores`** (functions v2, `config.path`). `netlify.toml` points `[functions]` at `netlify/functions`; Netlify installs `@netlify/blobs` from `package.json` and bundles the function with esbuild alongside the static `dist` publish.
-  - `GET /api/scores` → `{ entries, total, boardSize }`: the top 50 runs, each `{ id, name, score, wave, level, kills, multiplier, time, date }` (`time` = seconds survived, `date` = server time, ISO).
-  - `POST /api/scores` with a JSON run `{ name, score, wave, level, kills, multiplier, time }` → `201 { accepted, onBoard, rank, id, name, censored, entries, ... }`; `400` malformed, `413` too big, `415` not JSON, `422` implausible, `429` cooldown (with `Retry-After`), `503` too much write contention, `405` anything else. Responses are `no-store`; there are no CORS headers (the game calls its own origin).
-- The board is **one JSON blob** (`board-v1` in the `leaderboard` store) holding the top **100** runs, with at most **5 per callsign**. Each submission re-reads the blob and writes it back with `onlyIfMatch: <etag>` (or `onlyIfNew` for the first run); on a conflict it re-reads and retries with jittered backoff (up to 8 tries), so simultaneous submissions all land.
-- The logic lives in `netlify/lib/leaderboard.mjs` (storage-agnostic, unit-tested with an in-memory store); `js/leaderboard-rules.js` holds the callsign alphabet shared by browser and server, so the game never sends a name the server rejects.
+  - `GET /api/scores?version=<v>` → that game version's board; `GET /api/scores?version=all` → the all-time board (also what a bare `GET /api/scores` returns, for clients from before versioning). Answer: `{ version, current, versions, entries, total, boardSize }` where `entries` are the top 50 runs, each `{ id, name, score, wave, level, kills, multiplier, time, date, version }` (`time` = seconds survived, `date` = server time, ISO, `version` = game version or `null` for pre-versioning runs) and `versions` lists the versions that have runs, newest first. An unknown `?version=` is a `400`.
+  - `POST /api/scores` with a JSON run `{ name, score, wave, level, kills, multiplier, time, version }` → `201 { accepted, onBoard, rank, allTimeRank, version, id, name, censored, entries, ... }` (`rank` and `entries` are for the run's own version board); `400` malformed, `413` too big, `415` not JSON, `422` implausible or unknown game version, `429` cooldown (with `Retry-After`), `503` too much write contention, `405` anything else. Responses are `no-store`; there are no CORS headers (the game calls its own origin).
+  - **Versions**: the function imports `CHANGELOG`/`GAME_VERSION` from `js/changelog.js` / `js/version.js` (esbuild bundles them like `js/leaderboard-rules.js`). Any changelog version from `VERSIONED_SINCE` (0.9.0) on is accepted, so a run from an older cached client lands on its own version's board; anything else is a `422` (the game shows *OUTDATED GAME VERSION // RELOAD*). A run with no `version` at all (a client from before versioning) is accepted onto the all-time board only.
+- **Storage layout** (Netlify Blobs store `leaderboard`), each board one JSON blob `{ version: 1, updated, entries }` holding the top **100** runs, with at most **5 per callsign**:
+  - `board-v1@<version>` (e.g. `board-v1@0.9.0`, plus `gameVersion`): one board per game version, created by its first run. A new version starts empty, so old high scores can't crowd it out.
+  - `board-v1`: the **all-time** board. It is the pre-versioning board kept as it was: its old runs have no `version` and show as `pre-0.9`, and every new run is merged in with its version.
+  - `ratelimit/<hash>`: per-IP cooldown stamps.
+  - A run is written to its version board first (that's the rank the game shows), then to the all-time board (best effort: if that one stays contended the run still counts). Each write re-reads the blob and writes it back with `onlyIfMatch: <etag>` (or `onlyIfNew` for a board's first run); on a conflict it re-reads and retries with jittered backoff (up to 8 tries), so simultaneous submissions all land.
+- The logic lives in `netlify/lib/leaderboard.mjs` (storage-agnostic, unit-tested with an in-memory store); `js/leaderboard-rules.js` holds the callsign alphabet and the list of board versions shared by browser and server, so the game never sends a name the server rejects.
 - In the browser, `js/leaderboard.js` fetches with a 4.5 s timeout (6 s for submits). Offline, on the local `npm start` server (no function: `/api/scores` is a 404), or on a slow network, GLOBAL falls back to MY RUNS with an OFFLINE note; nothing blocks play or throws. Runs flown with the dev tuner/sandbox (or saved non-default tuning) are not submitted.
 
 **Abuse protection (casual, not bulletproof)**
@@ -122,17 +135,17 @@ The title and game-over boards share scores between all players through a **Netl
 
 **Moderating / resetting the board** (there is deliberately no delete endpoint):
 
-- *Netlify UI*: open the project, go to **Blobs**, pick the `leaderboard` store, and delete the `board-v1` entry to wipe the board (it is recreated by the next run). `ratelimit/…` entries are disposable and can be deleted at any time.
+- *Netlify UI*: open the project, go to **Blobs**, pick the `leaderboard` store, and delete `board-v1@<version>` to wipe one version's board or `board-v1` to wipe the all-time board (each is recreated by the next run). `ratelimit/…` entries are disposable and can be deleted at any time.
 - *Netlify CLI* (`npx netlify link` first):
-  - reset: `npx netlify blobs:delete leaderboard board-v1`
-  - remove one cheater: `npx netlify blobs:get leaderboard board-v1 > board.json`, delete their entries from `entries`, then `npx netlify blobs:set leaderboard board-v1 --input board.json`
+  - reset one version: `npx netlify blobs:delete leaderboard board-v1@0.9.0` (all-time: `board-v1`)
+  - remove one cheater: `npx netlify blobs:get leaderboard board-v1@0.9.0 > board.json`, delete their entries from `entries`, then `npx netlify blobs:set leaderboard board-v1@0.9.0 --input board.json`; do the same for `board-v1` (their runs are on both)
   - inspect: `npx netlify blobs:list leaderboard`
 
 ---
 
 ## File Map (For Multi-Agent Handoffs)
 
-- `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, Field Guide (`#guide-modal`), and slide-over `#tuner-drawer`.
+- `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, Field Guide (`#guide-modal`), Patch Notes (`#notes-modal`), and slide-over `#tuner-drawer`.
 - `tuner.html` — Standalone Live Tuning & Dev Sandbox Studio with live 60 FPS Crab-Ship & Shield preview canvas.
 - `css/style.css` — Neon glassmorphic HUD, modal, and Tuner Drawer styling.
 - `js/config.js` — Centralized `TUNING` state, `DEFAULT_TUNING`, `TUNING_SCHEMA`, `localStorage` persistence, and `BroadcastChannel` sync.
@@ -150,10 +163,13 @@ The title and game-over boards share scores between all players through a **Netl
 - `js/upgrade-cards.js` — Card headline + exact before → after rows (`STAT_ROWS`), tag chips and card HTML.
 - `js/status-effects.js` — BURN / CHILL / CORRODE application, fixed-tick timers and burn DoT, corrosion damage multiplier, batched status overlays.
 - `js/progression.js` — Persistent local Highscore Leaderboard (with editable Pilot Callsign), Void Armory meta-upgrades and Field Guide unlocks (`guide.seen` / `guide.fresh`).
-- `js/leaderboard.js` — Global leaderboard client: `/api/scores` fetch/submit with timeouts, OFFLINE fallback, board view model (`buildBoardView`), GLOBAL / MY RUNS tabs, game-over rank line.
-- `js/leaderboard-rules.js` — Callsign alphabet (`sanitizeCallsign`) shared by the game and the function.
+- `js/leaderboard.js` — Global leaderboard client: `/api/scores` fetch/submit with timeouts, OFFLINE fallback, per-version boards and the VERSION selector, board view model (`buildBoardView`), GLOBAL / MY RUNS tabs, game-over rank line.
+- `js/leaderboard-rules.js` — Callsign alphabet (`sanitizeCallsign`) and board versions (`BOARD_VERSIONS`, `ALL_TIME`) shared by the game and the function.
+- `js/version.js` — `GAME_VERSION` (single source of truth), `VERSIONED_SINCE`, semver compare and `v0.X.Y` / `pre-0.9` labels; shared with the function.
+- `js/changelog.js` — `CHANGELOG`: player-facing patch notes, newest first; also the server's list of known versions.
+- `js/patch-notes.js` — PATCH NOTES screen (`#notes-modal`): HTML builders, NEW badge / last-seen version, expand/collapse.
 - `netlify/functions/scores.mjs` — The `/api/scores` Netlify Function (wires `@netlify/blobs` `getStore` into the handler).
-- `netlify/lib/leaderboard.mjs` — Leaderboard handler: validation, plausibility envelope, profanity filter, IP rate limit, ETag compare-and-swap writes.
+- `netlify/lib/leaderboard.mjs` — Leaderboard handler: per-version + all-time boards, version validation, plausibility envelope, profanity filter, IP rate limit, ETag compare-and-swap writes.
 - `js/field-guide.js` — Field Guide data: hostile entries (text, tips, exact stats from the real config), mechanics, the weapons adapter over `UPGRADE_POOL`, and encounter detection (`detectEncounters`).
 - `js/field-guide-scenes.js` — Animated hostile previews (`GuidePreview`) built on the real enemy AI/draw code, plus locked silhouettes.
 - `js/field-guide-ui.js` — Field Guide screen: tab HTML builders, NEW badges, visible-only preview loop.
@@ -169,7 +185,7 @@ Requires Node.js 20 or newer; the game and the tests have no package dependencie
 
 The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy neighbors, projectile avoidance, and primary projectile collisions use spatial queries. Enemy capacity includes active and pending spawns (default 200). Game and Studio share `js/ship-renderer.js`. Saved tuning and progression are normalized on load.
 
-Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → NEW WEAPON pick → pause (sliders, damage numbers, loadout discard + confirm) → Field Guide → chest → game over with a simulated gamepad only. `node tools/leaderboard-smoke.cjs <playwright-module-path>` checks the global board offline (aborted API), with a slow API (timeout fallback) and against a faked `/api/scores` (tabs by mouse and controller, auto-submit, GLOBAL RANK line), saving `leaderboard-*-smoke.png` screenshots.
+Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → NEW WEAPON pick → pause (sliders, damage numbers, loadout discard + confirm) → Field Guide → Patch Notes → chest → game over with a simulated gamepad only. `node tools/leaderboard-smoke.cjs <playwright-module-path>` checks the global board offline (aborted API), with a slow API (timeout fallback) and against a faked `/api/scores` (tabs and VERSION selector by mouse and controller, versioned submit, GLOBAL RANK · version line), saving `leaderboard-*-smoke.png` screenshots.
 
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
 

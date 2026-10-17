@@ -1,5 +1,8 @@
 // Rules shared by the browser and the /api/scores Netlify Function (which bundles this file), so a
-// callsign the game sends is always one the server accepts. No DOM, no dependencies.
+// callsign the game sends is always one the server accepts. No DOM, no dependencies beyond the shared
+// version/changelog modules.
+import { VERSIONED_SINCE, compareVersions } from './version.js';
+import { KNOWN_VERSIONS } from './changelog.js';
 
 export const NAME_MAX = 18;
 // Upper-case letters, digits, spaces and a little arcade punctuation ("VOID // HUNTER", "X-23", "ACE!").
@@ -25,4 +28,14 @@ export function sanitizeCallsign(value) {
 export function formatRunTime(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds) || 0));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// --- Versioned boards ------------------------------------------------------------------------------
+// Every game version from VERSIONED_SINCE on has its own board; ALL_TIME is the board of every run
+// (including the ones from before versioning). Newest first.
+export const ALL_TIME = 'all';
+export const BOARD_VERSIONS = Object.freeze(KNOWN_VERSIONS.filter(v => compareVersions(v, VERSIONED_SINCE) >= 0));
+
+export function isBoardVersion(value, versions = BOARD_VERSIONS) {
+  return typeof value === 'string' && versions.includes(value);
 }

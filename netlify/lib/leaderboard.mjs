@@ -1,20 +1,32 @@
 // Global leaderboard logic behind /api/scores (see netlify/functions/scores.mjs).
 // Storage-agnostic so tests can drive it with an in-memory store: anything with
-// getWithMetadata(key, { type: 'json' }) and setJSON(key, value, { onlyIfMatch | onlyIfNew }),
-// which is the @netlify/blobs Store API.
+// getWithMetadata(key, { type: 'json' }), setJSON(key, value, { onlyIfMatch | onlyIfNew }) and
+// (optionally) list({ prefix }), which is the @netlify/blobs Store API.
 //
-// The whole board is one JSON blob ({ version, updated, entries }) holding the top BOARD_SIZE runs.
-// Writes are compare-and-swap on the blob's ETag and retried on conflict, so two runs submitted at
-// the same moment both land. Rate limiting keeps one small blob per hashed client IP.
+// Boards are JSON blobs ({ version, updated, entries }) holding the top BOARD_SIZE runs:
+//   board-v1@<game version>  one per game version (from VERSIONED_SINCE on), so a balance patch starts
+//                            a fresh race and old high scores can't crowd it out;
+//   board-v1                 the all-time board: every run of every version, each entry tagged with its
+//                            version. Runs from before versioning have no version ("pre-0.9").
+// A run is written to its version's board and to the all-time board. Writes are compare-and-swap on the
+// blob's ETag and retried on conflict, so two runs submitted at the same moment both land. Rate limiting
+// keeps one small blob per hashed client IP.
 //
 // Anti-cheat is deliberately "not trivially broken", not secure: the browser reports its own score,
 // so anyone who reads this file can submit a believable fake run. See README "Global leaderboard".
 import { createHash, randomUUID } from 'node:crypto';
-import { NAME_PATTERN, sanitizeCallsign } from '../../js/leaderboard-rules.js';
+import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
+import { GAME_VERSION, compareVersions } from '../../js/version.js';
 
 export const STORE_NAME = 'leaderboard';
-export const BOARD_KEY = 'board-v1';
+export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
+export const VERSION_BOARD_PREFIX = 'board-v1@';
 export const RATE_PREFIX = 'ratelimit/';
+
+// Blob key of a board: 'all' -> the all-time board, '0.9.0' -> board-v1@0.9.0.
+export function boardKey(version) {
+  return version === ALL_TIME ? BOARD_KEY : VERSION_BOARD_PREFIX + version;
+}
 
 export const LIMITS = Object.freeze({
   BOARD_SIZE: 100,       // runs kept in the blob
@@ -154,11 +166,34 @@ export function readBoard(data) {
   return list.filter((e) => e && typeof e === 'object' && typeof e.name === 'string' && Number.isFinite(e.score));
 }
 
+// version is null for runs from before versioning (shown as "pre-0.9").
 export function publicEntry(e) {
   return {
     id: e.id, name: e.name, score: e.score, wave: e.wave, level: e.level,
-    kills: e.kills, multiplier: e.multiplier, time: e.time, date: e.date
+    kills: e.kills, multiplier: e.multiplier, time: e.time, date: e.date,
+    version: typeof e.version === 'string' ? e.version : null
   };
+}
+
+// --- Game version ----------------------------------------------------------------------------------
+// The game sends `version` (GAME_VERSION) with every run. A known version (including an older one, from
+// a cached client) goes to that version's board. A run with no version at all comes from a client that
+// predates versioning: it only goes to the all-time board, like every run before it. Anything else is
+// a version this server doesn't know (a 422, so the client keeps the run locally).
+// Returns { version } (a string, or null for a pre-versioning client) or { error }.
+export function checkVersion(value, versions = BOARD_VERSIONS) {
+  if (value === undefined || value === null) return { version: null };
+  if (typeof value === 'string' && versions.includes(value)) return { version: value };
+  return { error: 'unknown game version: reload the game to get the latest build' };
+}
+
+// Which board a GET reads: ?version=<v> or ?version=all. Without the parameter (older clients) the
+// all-time board, which is what /api/scores returned before boards were split by version.
+// Returns { board } ('all' or a version) or { error }.
+export function boardFromQuery(value, versions = BOARD_VERSIONS) {
+  if (value === null || value === '' || value === ALL_TIME) return { board: ALL_TIME };
+  if (versions.includes(value)) return { board: value };
+  return { error: 'unknown version: use ?version=all or a known game version' };
 }
 
 // --- HTTP ------------------------------------------------------------------------------------------
@@ -194,6 +229,8 @@ export function writeConditions(current) {
 }
 
 // options.store(): returns the Store (called per request, after Netlify has set up the blob context).
+// options.versions / currentVersion: the game versions with boards (newest first) and the live one;
+// they default to the shared changelog, tests pass their own to simulate a version bump.
 export function createScoresHandler({
   store,
   now = () => Date.now(),
@@ -201,16 +238,38 @@ export function createScoresHandler({
   sleep = defaultSleep,
   newId = () => randomUUID(),
   limits = LIMITS,
+  versions = BOARD_VERSIONS,
+  currentVersion = GAME_VERSION,
   log = console
 } = {}) {
-  async function getBoard(blobs) {
-    const result = await blobs.getWithMetadata(BOARD_KEY, { type: 'json' });
+  async function getBoard(blobs, key) {
+    const result = await blobs.getWithMetadata(key, { type: 'json' });
     return { entries: readBoard(result?.data), conditions: writeConditions(result) };
   }
 
-  async function handleGet(blobs) {
-    const { entries } = await getBoard(blobs);
+  // Versions whose board blob exists (i.e. that have runs), newest first. One list call; a store
+  // without list() or a failing list just reports none, the board itself still loads.
+  async function versionsWithRuns(blobs) {
+    if (typeof blobs.list !== 'function') return [];
+    try {
+      const listing = await blobs.list({ prefix: VERSION_BOARD_PREFIX });
+      const found = new Set((listing?.blobs || []).map(b => String(b.key).slice(VERSION_BOARD_PREFIX.length)));
+      return versions.filter(v => found.has(v)).sort((a, b) => compareVersions(b, a));
+    } catch (err) {
+      log?.warn?.('[scores] list failed', err);
+      return [];
+    }
+  }
+
+  async function handleGet(req, blobs) {
+    const query = new URL(req.url).searchParams.get('version');
+    const { board, error } = boardFromQuery(query, versions);
+    if (error) return json(400, { error, current: currentVersion });
+    const [{ entries }, withRuns] = await Promise.all([getBoard(blobs, boardKey(board)), versionsWithRuns(blobs)]);
     return json(200, {
+      version: board,
+      current: currentVersion,
+      versions: withRuns,
       entries: entries.slice(0, limits.PUBLIC_SIZE).map(publicEntry),
       total: entries.length,
       boardSize: limits.BOARD_SIZE
@@ -227,6 +286,23 @@ export function createScoresHandler({
     return write.modified ? 0 : Math.ceil(limits.COOLDOWN_MS / 1000);
   }
 
+  // Merges one entry into a board blob. Resolves { ranked, rank } (rank null when it didn't make the
+  // board, in which case nothing is written) or { busy: true } after WRITE_ATTEMPTS conflicts.
+  async function insertEntry(blobs, key, entry, extra = {}) {
+    for (let attempt = 0; attempt < limits.WRITE_ATTEMPTS; attempt++) {
+      const { entries, conditions } = await getBoard(blobs, key);
+      const ranked = rankEntries([...entries.filter(e => e.id !== entry.id), entry], limits);
+      const index = ranked.findIndex((e) => e.id === entry.id);
+      if (index === -1) return { ranked, rank: null };
+      const write = await blobs.setJSON(key, { version: 1, ...extra, updated: entry.date, entries: ranked }, conditions);
+      if (write.modified) return { ranked, rank: index + 1 };
+      // Someone else wrote first: re-read and merge again after a jittered, growing pause so
+      // simultaneous writers fall out of lockstep.
+      await sleep(Math.floor(Math.random() * Math.min(400, 25 * 2 ** attempt)));
+    }
+    return { busy: true };
+  }
+
   async function handlePost(req, context, blobs) {
     const type = req.headers.get('content-type') || '';
     // JSON only: a cross-site page can't send this without a CORS preflight, which we never approve.
@@ -240,6 +316,10 @@ export function createScoresHandler({
 
     const { run, censored, error } = validateRun(body);
     if (error) return json(400, { error });
+    // An unknown version is refused before the cooldown: it's a stale or dev build, not a probe.
+    const version = checkVersion(body.version, versions);
+    if (version.error) return json(422, { error: version.error, current: currentVersion });
+    run.version = version.version;
 
     const t = now();
     const retryAfter = await claimRateSlot(blobs, hashIp(clientIp(req, context), salt), t);
@@ -251,35 +331,31 @@ export function createScoresHandler({
     if (implausible) return json(422, { error: `run rejected: ${implausible}` });
 
     const entry = { id: newId(), ...run, date: new Date(t).toISOString() };
-    for (let attempt = 0; attempt < limits.WRITE_ATTEMPTS; attempt++) {
-      const { entries, conditions } = await getBoard(blobs);
-      const ranked = rankEntries([...entries, entry], limits);
-      const index = ranked.findIndex((e) => e.id === entry.id);
-      // Didn't make the board: nothing to write, but report where it would have landed.
-      if (index === -1) {
-        return json(201, {
-          accepted: true, onBoard: false, rank: null, id: entry.id, name: entry.name, censored,
-          entries: ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: ranked.length, boardSize: limits.BOARD_SIZE
-        });
-      }
-      const blob = { version: 1, updated: entry.date, entries: ranked };
-      const write = await blobs.setJSON(BOARD_KEY, blob, conditions);
-      if (write.modified) {
-        return json(201, {
-          accepted: true, onBoard: true, rank: index + 1, id: entry.id, name: entry.name, censored,
-          entries: ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: ranked.length, boardSize: limits.BOARD_SIZE
-        });
-      }
-      // Someone else wrote first: re-read and merge again after a jittered, growing pause so
-      // simultaneous writers fall out of lockstep.
-      await sleep(Math.floor(Math.random() * Math.min(400, 25 * 2 ** attempt)));
+    // The run's own version board first (that's the rank the game shows), then the all-time board.
+    // A pre-versioning client's run only has the all-time board.
+    const own = run.version
+      ? await insertEntry(blobs, boardKey(run.version), entry, { gameVersion: run.version })
+      : await insertEntry(blobs, BOARD_KEY, entry);
+    if (own.busy) return json(503, { error: 'leaderboard busy, try again' }, { 'retry-after': '2' });
+    let allTimeRank = run.version ? null : own.rank;
+    if (run.version) {
+      // Best effort: the run is already on its version's board, so a contended all-time board doesn't
+      // turn the submission into an error.
+      const allTime = await insertEntry(blobs, BOARD_KEY, entry);
+      if (allTime.busy) log?.warn?.('[scores] all-time board busy, run kept on its version board', entry.id);
+      else allTimeRank = allTime.rank;
     }
-    return json(503, { error: 'leaderboard busy, try again' }, { 'retry-after': '2' });
+    return json(201, {
+      accepted: true, onBoard: own.rank !== null, rank: own.rank, allTimeRank,
+      version: run.version, board: run.version || ALL_TIME, current: currentVersion,
+      id: entry.id, name: entry.name, censored,
+      entries: own.ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: own.ranked.length, boardSize: limits.BOARD_SIZE
+    });
   }
 
   return async function handler(req, context) {
     try {
-      if (req.method === 'GET' || req.method === 'HEAD') return await handleGet(store());
+      if (req.method === 'GET' || req.method === 'HEAD') return await handleGet(req, store());
       if (req.method === 'POST') return await handlePost(req, context, store());
       return json(405, { error: 'method not allowed' }, { allow: 'GET, HEAD, POST' });
     } catch (err) {
