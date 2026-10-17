@@ -13,6 +13,10 @@ const {
   GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround
 } = await import('../js/gold.js');
 
+// Hands and rerolls carry no NEW WEAPON card unless a test asks for one (it would open the weapon
+// pick instead of applying a card), so slot-by-slot checks are deterministic.
+Object.assign(TUNING, { newWeaponChance: 0, newWeaponPity: 99 });
+
 function freshGame(gold = 0) {
   const g = h.createHeadlessGame();
   g.resetRun();
