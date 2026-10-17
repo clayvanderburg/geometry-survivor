@@ -22,7 +22,7 @@ globalThis.document = {
 };
 const { Game } = await import('../js/main.js');
 const { TUNING } = await import('../js/config.js');
-const { UPGRADE_POOL, RARITY, applyUpgradeLevels } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, RARITY, applyUpgradeLevels, rollUpgrades, levelJumpChances } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
 const silent = new Proxy({}, { get: () => () => {} });
@@ -71,10 +71,10 @@ test('a supply-cache level is the starting level of the next level-up card and t
   assert.equal(g.player.stats.bulletCount, 6);
 
   const chestCard = elements.get('chest-rewards-grid').children[0];
-  assert.match(chestCard.className, /\brarity-epic\b/);
+  assert.match(chestCard.className, /\brarity-uncommon\b/, 'a +2 roll is uncommon');
   assert.match(chestCard.className, /\bjump-2\b/);
   assert.match(chestCard.innerHTML, /INSTALLED \/\/ NEW → LV 2/);
-  assert.match(chestCard.innerHTML, /LUCKY ROLL \/\/ \+2 LEVELS/);
+  assert.match(chestCard.innerHTML, /\+2 LEVELS/);
   assert.match(chestCard.innerHTML, /\+4 PROJECTILES/);
 
   g.closeChestModal();
@@ -152,25 +152,38 @@ test('only stats that change are listed', () => {
   assert.ok(!thrusters.some((r) => r.id === 'missileDamage'), 'unowned weapons stay off the card');
 });
 
-test('rarity is fixed per upgrade, legendary for synergies, and separate from the level-jump ribbon', () => {
-  const tiers = new Set();
+test('rarity is the rolled level jump: +1 common up to +5 legendary; evolutions have their own tier', () => {
   for (const u of UPGRADE_POOL) {
-    assert.ok(RARITY[u.rarity], `${u.id} has no valid rarity`);
-    assert.equal(u.rarity === 'legendary', !!u.isSynergy, `${u.id}: legendary is reserved for synergies`);
+    assert.equal(u.rarity, undefined, `${u.id}: rarity comes from the roll, not the upgrade`);
     assert.ok(u.summary && !/\d/.test(u.summary), `${u.id} summary should be number-free`);
     assert.ok(STAT_ROWS.some((row) => row.id === u.headline), `${u.id} headline row`);
-    tiers.add(u.rarity);
   }
-  assert.deepEqual([...tiers].sort(), Object.keys(RARITY).sort());
-
   const p = makePlayer();
-  const plain = renderUpgradeCard(describeUpgrade(p, { ...byId('firerate'), levelJump: 1 }), '[1]');
-  const lucky = renderUpgradeCard(describeUpgrade(p, { ...byId('firerate'), levelJump: 3 }), '[1]');
-  assert.equal(plain.className, 'upgrade-option rarity-common');
-  assert.ok(!plain.html.includes('upg-jump-ribbon'));
-  assert.equal(lucky.className, 'upgrade-option rarity-common jump-3');
-  assert.match(lucky.html, /LUCKY ROLL \/\/ \+3 LEVELS/);
-  assert.match(lucky.html, /NEW → LV 3/);
+  const expected = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+  for (let jump = 1; jump <= 5; jump++) {
+    const card = renderUpgradeCard(describeUpgrade(p, { ...byId('luck_boost'), levelJump: jump }), '[1]');
+    assert.match(card.className, new RegExp(`\\brarity-${expected[jump - 1]}\\b`), `+${jump}`);
+    assert.equal(card.html.includes('upg-jump-ribbon'), jump > 1);
+    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} LEVELS`));
+  }
+  const evo = UPGRADE_POOL.find((u) => u.isSynergy);
+  assert.match(renderUpgradeCard(describeUpgrade(p, { ...evo, levelJump: 1 }), '[1]').className, /\brarity-evolution\b/);
+});
+
+test('+4 and +5 rolls happen only when they fit under the level cap, scaled by luck', () => {
+  const p = makePlayer();
+  const withConstant = (r, fn) => { const o = Math.random; Math.random = () => r; try { return fn(); } finally { Math.random = o; } };
+  // Every draw tiny: each offered card rolls into the +5 band, capped by its remaining levels.
+  for (const card of withConstant(0.0001, () => rollUpgrades(p, 3))) {
+    if (!card.isSynergy) assert.equal(card.levelJump, Math.min(5, card.maxLevel), card.id);
+  }
+  p.upgradeLevels = Object.fromEntries(UPGRADE_POOL.map((u) => [u.id, u.maxLevel - 2]));
+  for (const card of withConstant(0.0001, () => rollUpgrades(p, 3))) {
+    if (!card.isSynergy) assert.equal(card.levelJump, 2, `${card.id} has only 2 levels left`);
+  }
+  const c = levelJumpChances(1);
+  assert.ok(c.pentaChance < c.quadChance && c.quadChance < c.tripleChance && c.tripleChance < c.doubleChance);
+  assert.ok(levelJumpChances(2).pentaChance > c.pentaChance, 'luck raises legendary odds');
 });
 
 test('weapons fire with the shared scaling the cards preview', () => {

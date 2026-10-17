@@ -1,24 +1,31 @@
 // Roguelite Upgrades, Luck Multi-Level Rolls (+2 / +3 Levels), Mining Drill, and Golden Synergies
 import { TUNING } from './config.js';
 
-// Rarity is fixed per upgrade and drives card border/name color only. It is separate from the
-// lucky +2/+3 level-jump roll, which gets its own ribbon on the card.
+// Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
+// +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
 export const RARITY = {
   common: { label: 'COMMON', color: '#c9d4e4' },
   uncommon: { label: 'UNCOMMON', color: '#00ff88' },
   rare: { label: 'RARE', color: '#3d9bff' },
   epic: { label: 'EPIC', color: '#b565ff' },
-  legendary: { label: 'LEGENDARY', color: '#ffcc00' }
+  legendary: { label: 'LEGENDARY', color: '#ffcc00' },
+  evolution: { label: 'EVOLUTION', color: '#ff4fd8' }
 };
 
-// Each entry: rarity (RARITY key), headline (the STAT_ROWS id shown enlarged on its card, see
+const RARITY_BY_JUMP = ['common', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+export function rarityFor(upg, jump = 1) {
+  if (upg.isSynergy) return 'evolution';
+  return RARITY_BY_JUMP[Math.max(1, Math.min(5, jump))];
+}
+
+// Each entry: headline (the STAT_ROWS id shown enlarged on its card, see
 // upgrade-cards.js) and a number-free summary. Exact numbers always come from the card preview.
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
     name: 'Rotary Claw Overclock',
     category: 'DRILL CLAWS',
-    rarity: 'uncommon',
     maxLevel: 6,
     headline: 'miningSpeed',
     summary: 'Spins the twin drill-claws faster, with longer reach and bigger claws.',
@@ -32,7 +39,6 @@ export const UPGRADE_POOL = [
     id: 'luck_boost',
     name: 'Quantum Fortune Matrix',
     category: 'LUCK',
-    rarity: 'uncommon',
     maxLevel: 5,
     headline: 'luck',
     summary: 'Raises the odds of lucky multi-level rolls, supply caches and cache jackpots.',
@@ -44,7 +50,6 @@ export const UPGRADE_POOL = [
     id: 'multishot',
     name: 'Prism Split',
     category: 'WEAPON',
-    rarity: 'epic',
     maxLevel: 7,
     headline: 'bulletCount',
     summary: 'Adds plasma vectors to every volley in a wider harmonic arc.',
@@ -57,7 +62,6 @@ export const UPGRADE_POOL = [
     id: 'firerate',
     name: 'Hyper-Capacitor',
     category: 'WEAPON',
-    rarity: 'common',
     maxLevel: 7,
     headline: 'fireRate',
     summary: 'Faster primary volleys with quicker bolts.',
@@ -70,7 +74,6 @@ export const UPGRADE_POOL = [
     id: 'pierce',
     name: 'Phase Piercer',
     category: 'WEAPON',
-    rarity: 'uncommon',
     maxLevel: 6,
     headline: 'pierce',
     summary: 'Bolts slice through more targets and hit harder. Damage scales every weapon.',
@@ -83,7 +86,6 @@ export const UPGRADE_POOL = [
     id: 'missiles',
     name: 'Swarm Micro-Missiles',
     category: 'AUTONOMOUS',
-    rarity: 'rare',
     maxLevel: 6,
     headline: 'missileSalvo',
     summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.',
@@ -95,7 +97,6 @@ export const UPGRADE_POOL = [
     id: 'orbitals',
     name: 'Aegis Orbiting Blades',
     category: 'AUTONOMOUS',
-    rarity: 'rare',
     maxLevel: 6,
     headline: 'orbitalBlades',
     summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.',
@@ -107,7 +108,6 @@ export const UPGRADE_POOL = [
     id: 'lightning',
     name: 'Tesla Arc Emitter',
     category: 'AUTONOMOUS',
-    rarity: 'rare',
     maxLevel: 6,
     headline: 'lightningJumps',
     summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.',
@@ -119,7 +119,6 @@ export const UPGRADE_POOL = [
     id: 'singularity',
     name: 'Vortex Singularity',
     category: 'AUTONOMOUS',
-    rarity: 'epic',
     maxLevel: 5,
     headline: 'singularityPull',
     summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.',
@@ -131,7 +130,6 @@ export const UPGRADE_POOL = [
     id: 'shrapnel',
     name: 'Volatile Shatter',
     category: 'PASSIVE',
-    rarity: 'uncommon',
     maxLevel: 5,
     headline: 'shrapnelShards',
     summary: 'Kills burst into ricochet shards that trigger chain-reaction kills.',
@@ -143,7 +141,6 @@ export const UPGRADE_POOL = [
     id: 'magnet',
     name: 'Geom Attractor Field',
     category: 'UTILITY',
-    rarity: 'common',
     maxLevel: 5,
     headline: 'magnetRadius',
     summary: 'Wider Geom vacuum, more XP per Geom, and a spare Supernova Bomb.',
@@ -157,7 +154,6 @@ export const UPGRADE_POOL = [
     id: 'thrusters',
     name: 'Phase Nova Thrusters',
     category: 'UTILITY',
-    rarity: 'common',
     maxLevel: 5,
     headline: 'moveSpeed',
     summary: 'Faster hull, tougher shield, and Phase Dash unleashes a damaging shockwave.',
@@ -173,7 +169,6 @@ export const UPGRADE_POOL = [
     id: 'evo_tectonic',
     name: 'SYNERGY: Tectonic Claw Bore',
     category: 'EVOLUTION',
-    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -192,7 +187,6 @@ export const UPGRADE_POOL = [
     id: 'evo_pulsar',
     name: 'SYNERGY: Pulsar Helix',
     category: 'EVOLUTION',
-    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -209,7 +203,6 @@ export const UPGRADE_POOL = [
     id: 'evo_tempest',
     name: 'SYNERGY: Storm Protocol',
     category: 'EVOLUTION',
-    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -225,10 +218,13 @@ export const UPGRADE_POOL = [
 ];
 
 // Cumulative roll thresholds: roll < tripleChance gives +3, roll < doubleChance gives +2.
+// Cumulative roll thresholds (roll < pentaChance → +5, < quadChance → +4, ...), all scaled by Luck.
 export function levelJumpChances(luck) {
-  const tripleChance = Math.min(0.45, (TUNING.tripleLevelChance ?? 0.035) * luck);
+  const pentaChance = Math.min(0.1, (TUNING.pentaLevelChance ?? 0.0025) * luck);
+  const quadChance = Math.min(0.25, pentaChance + (TUNING.quadLevelChance ?? 0.01) * luck);
+  const tripleChance = Math.min(0.45, quadChance + (TUNING.tripleLevelChance ?? 0.035) * luck);
   const doubleChance = Math.min(0.75, tripleChance + (TUNING.doubleLevelChance ?? 0.1) * luck);
-  return { tripleChance, doubleChance };
+  return { pentaChance, quadChance, tripleChance, doubleChance };
 }
 
 // The single place upgrade levels are installed. Level-up picks, supply caches and card previews
@@ -267,12 +263,14 @@ export function rollUpgrades(player, count = 3) {
 
     if (!u.isSynergy && remaining > 1) {
       const roll = Math.random();
-      const { tripleChance, doubleChance } = levelJumpChances(luck);
-
-      if (roll < tripleChance && remaining >= 3) {
-        levelJump = 3;
-      } else if (roll < doubleChance && remaining >= 2) {
-        levelJump = 2;
+      const c = levelJumpChances(luck);
+      // Largest jump whose threshold the roll beats and that still fits under the level cap.
+      const tiers = [[5, c.pentaChance], [4, c.quadChance], [3, c.tripleChance], [2, c.doubleChance]];
+      for (const [jump, threshold] of tiers) {
+        if (roll < threshold && remaining >= jump) {
+          levelJump = jump;
+          break;
+        }
       }
     }
 
