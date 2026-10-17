@@ -17,7 +17,7 @@ import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   wingRocketBlastRadius, critChance, critMultiplier
 } from './weapon-scaling.js';
-import { STARTING_WEAPONS, WEAPON_BY_ID, ownedWeapons, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
+import { STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
@@ -77,6 +77,9 @@ const DEATH_FX = [
 ];
 // Knockback impulses (px/tick for a 10px-radius hull; mass scales with radius²). Bosses are immune.
 const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
+// Weapon FX (visual/audio only): Tesla Arc hue, missile exhaust samples kept per missile.
+const ARC_HUE = 275;
+const MISSILE_TRAIL_LEN = 16;
 const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
@@ -113,6 +116,7 @@ export class Game {
     this.progression.onExternalChange = () => this.renderHubUI();
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
+    this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
     this.enemyManager = new EnemyManager();
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
@@ -1342,6 +1346,9 @@ export class Game {
     const shrapnelLv = this.player.weapons.shrapnel || 0;
     if (shrapnelLv > 0 && !fromBomb && Math.random() < W.shrapnelChance(shrapnelLv)) {
       const shardCount = W.shrapnelShards(shrapnelLv);
+      this.particles.spawnFlash?.(e.x, e.y, 18 + e.radius, 48, 0.14);
+      this.particles.spawnShockwave(e.x, e.y, 30 + e.radius, 48, 2, 0.2);
+      this.sound.playShatter?.();
       for (let s = 0; s < shardCount; s++) {
         const a = (s * Math.PI * 2) / shardCount + Math.random() * 0.3;
         this.bullets.push({
@@ -1843,7 +1850,9 @@ export class Game {
     const pending = this.bullets;
     this.bullets = [];
     for (const b of pending) {
-      const x0 = b.x, y0 = b.y;
+      // sweepX/Y: a bolt spawned at a barrel tip sweeps from its gun on the first tick so point-blank targets still get hit.
+      const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
+      if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
       b.x += b.vx;
       b.y += b.vy;
       b.life -= dt;
@@ -1905,7 +1914,9 @@ export class Game {
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb);
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
-          this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 2.5, 0.22);
+          this.particles.spawnFlash?.(hx, hy, b.blastRadius * 0.4, b.hue, 0.16);
+          this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 3, 0.32);
+          this.sound.playMissileImpact?.(0.75);
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5);
         }
         if (b.pierce <= 0) break;
@@ -2012,6 +2023,7 @@ export class Game {
         blastRadius,
         blastDamage: damage * W.wingRocketBlastShare
       });
+      this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
     }
     this.sound.playLaser(0.55);
   }
@@ -2034,6 +2046,33 @@ export class Game {
         life: 3.2
       });
     }
+    this.missileSalvoFx(p, count);
+  }
+
+  // Salvo launch (visual/audio only): a bloom and puff ring behind the hull and an exhaust spray
+  // along the launch fan, so a salvo reads as one volley leaving the ship.
+  missileSalvoFx(p, count) {
+    const fx = this.particles;
+    const back = p.angle + Math.PI;
+    const rx = p.x + Math.cos(back) * (p.radius * 0.8);
+    const ry = p.y + Math.sin(back) * (p.radius * 0.8);
+    const hue = p.weapons.stormProtocol ? 52 : 325;
+    fx.spawnFlash?.(rx, ry, 24 + Math.min(count, 8) * 2, hue, 0.2);
+    fx.spawnShockwave(rx, ry, 34 + Math.min(count, 8) * 3, hue, 3, 0.3);
+    fx.spawnDirectionalSparks(rx, ry, back, 1.9, Math.min(20, 3 * count), hue, 7);
+    this.sound.playMissileLaunch?.(count);
+  }
+
+  // Missile detonation (visual/audio only): bloom, blast ring with a hot inner ring, sparks, and the
+  // missile's exhaust trail handed to the particle system so it keeps glowing after the blast.
+  missileBlastFx(m, blast) {
+    const fx = this.particles;
+    fx.spawnFlash?.(m.x, m.y, blast * 0.42, m.hue, 0.2);
+    fx.spawnShockwave(m.x, m.y, blast, m.hue, 4, 0.42);
+    fx.spawnShockwave(m.x, m.y, blast * 0.45, 40, 2.5, 0.22);
+    fx.spawnExplosionSparks(m.x, m.y, 18, m.hue, 2, 11, 2.2);
+    fx.spawnTrail?.(m.trail, m.hue, 1, 0.45);
+    this.sound.playMissileImpact?.();
   }
 
   fireChainLightning(level, originX = this.player.x, originY = this.player.y) {
@@ -2046,6 +2085,7 @@ export class Game {
     let currX = originX;
     let currY = originY;
 
+    let hits = 0;
     for (let b = 0; b < bounces; b++) {
       let bestIdx = -1;
       let bestDistSq = 300 * 300;
@@ -2064,8 +2104,9 @@ export class Game {
       const target = enemies[bestIdx];
       hitSet.add(target);
 
-      this.particles.spawnLightning(currX, currY, target.x, target.y, 275);
-      this.particles.spawnExplosionSparks(target.x, target.y, 8, 275, 2, 7, 1.8);
+      if (b === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
+      this.arcHopFx(currX, currY, target, b);
+      hits++;
       const arc = Math.sqrt(bestDistSq) || 1;
       const kx = ((target.x - currX) / arc) * KNOCKBACK.lightning;
       const ky = ((target.y - currY) / arc) * KNOCKBACK.lightning;
@@ -2074,6 +2115,35 @@ export class Game {
 
       this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky);
     }
+    if (hits > 0) this.sound.playArcZap?.(hits);
+  }
+
+  // Tesla Arc emitter: a violet bloom and a tight ring where the chain leaves, plus two short
+  // crackle stubs licking off the emitter (visual only).
+  arcEmitterFx(x, y, tx, ty) {
+    const fx = this.particles;
+    const a = Math.atan2(ty - y, tx - x);
+    fx.spawnFlash?.(x, y, 30, ARC_HUE, 0.2);
+    fx.spawnShockwave(x, y, 38, ARC_HUE, 2.5, 0.24);
+    for (let k = -1; k <= 1; k += 2) {
+      const sa = a + k * (0.9 + Math.random() * 0.7);
+      const r = 22 + Math.random() * 14;
+      fx.spawnLightning(x, y, x + Math.cos(sa) * r, y + Math.sin(sa) * r, ARC_HUE, 0.55, 0.16, 0);
+    }
+  }
+
+  // One chain hop: the bolt (slightly thinner down the chain), then an impact bloom, a cross flare,
+  // sparks thrown along the bolt and a crackle stub on the struck hull (visual only).
+  arcHopFx(x, y, target, hop) {
+    const fx = this.particles;
+    const a = Math.atan2(target.y - y, target.x - x);
+    fx.spawnLightning(x, y, target.x, target.y, ARC_HUE, Math.max(0.75, 1.3 - hop * 0.06));
+    fx.spawnFlash?.(target.x, target.y, 16 + target.radius * 0.9, ARC_HUE, 0.2);
+    fx.spawnImpact(target.x, target.y, a, 10 + target.radius * 0.5, 0.14);
+    fx.spawnDirectionalSparks(target.x, target.y, a, 1.6, 6, ARC_HUE, 8);
+    const sa = a + (Math.random() - 0.5) * 2.4;
+    const r = target.radius + 12 + Math.random() * 14;
+    fx.spawnLightning(target.x, target.y, target.x + Math.cos(sa) * r, target.y + Math.sin(sa) * r, ARC_HUE, 0.5, 0.14, 0);
   }
 
   fireSingularity(level) {
@@ -2098,6 +2168,9 @@ export class Game {
       spin: 0,
       hue: 290
     });
+    this.particles.spawnFlash?.(p.x, p.y, 34, 290, 0.22);
+    this.particles.spawnShockwave(p.x, p.y, 60, 290, 3, 0.3, true);
+    this.sound.playSingularityLaunch?.();
   }
 
   // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
@@ -2363,6 +2436,7 @@ export class Game {
 
   // Pause-menu LOADOUT panel: one card per slot with level, tags and weapon-specific upgrades. DISCARD
   // asks for confirmation in place (CONFIRM / KEEP), then frees the slot so NEW WEAPON cards return.
+  // Owned passives (Volatile Shatter) follow the slots in a full-width row: no slot, no discard.
   renderLoadoutPanel() {
     const panel = document.getElementById('pause-loadout');
     if (!panel || !this.player) return;
@@ -2408,6 +2482,14 @@ export class Game {
         <div class="upg-tags">${chips(id)}</div>
         ${lines ? `<div class="loadout-lines">${lines}</div>` : ''}
         ${actions}
+      </div>`);
+    }
+    for (const id of ownedPassives(p)) {
+      const x = PASSIVE_BY_ID[id];
+      html.push(`<div class="loadout-slot loadout-passive" style="--wc:${x.color}" data-passive="${id}">
+        <div class="loadout-slot-top"><span class="loadout-slot-num">PASSIVE // NO SLOT</span><span class="loadout-lv">LV ${passiveLevel(p, id)}<span class="upg-max"> / ${UPGRADE_BY_ID[x.upgradeId].maxLevel}</span></span></div>
+        <div class="loadout-name">${x.name}</div>
+        <div class="upg-tags">${chips(id)}</div>
       </div>`);
     }
     panel.innerHTML = html.join('');
@@ -2833,6 +2915,8 @@ export class Game {
           if (dx * dx + dy * dy < (e.radius + W.orbitalBladeRadius) * (e.radius + W.orbitalBladeRadius)) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
+            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
+            this.sound.playBladeHit?.();
             this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
           }
         }
@@ -2867,7 +2951,7 @@ export class Game {
       m.x += m.vx;
       m.y += m.vy;
       m.trail.push({ x: m.x, y: m.y });
-      if (m.trail.length > 10) m.trail.shift();
+      if (m.trail.length > MISSILE_TRAIL_LEN) m.trail.shift();
 
       let detonated = m.life <= 0;
       for (const e of [...enemies].reverse()) {
@@ -2880,8 +2964,7 @@ export class Game {
 
       if (detonated) {
         const blast = m.blastRadius ?? W.missileBlastRadius;
-        this.particles.spawnShockwave(m.x, m.y, blast, m.hue, 3.5, 0.3);
-        this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
+        this.missileBlastFx(m, blast);
         if (p.weapons.cryo) this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
@@ -3268,6 +3351,92 @@ export class Game {
     ctx.stroke();
   }
 
+  // Swarm micro-missile: a soft exhaust glow under a tapered core trail (drawn in four chunks), then
+  // a dart body along its heading with a hue rim, a white-hot nose and a flickering engine bloom.
+  drawMissile(ctx, m) {
+    if (m.x < this.camX - 260 || m.x > this.camX + this.width + 260 || m.y < this.camY - 260 || m.y > this.camY + this.height + 260) return;
+    const vfx = TUNING.vfxIntensity ?? 1;
+    const tr = m.trail;
+    const n = tr.length;
+    if (n > 1) {
+      ctx.strokeStyle = `hsla(${m.hue}, 100%, 60%, ${Math.min(1, 0.3 * vfx)})`;
+      ctx.lineWidth = 10 * vfx;
+      ctx.beginPath();
+      ctx.moveTo(tr[0].x, tr[0].y);
+      for (let t = 1; t < n; t++) ctx.lineTo(tr[t].x, tr[t].y);
+      ctx.stroke();
+      const chunks = 4;
+      for (let c = 0; c < chunks; c++) {
+        const from = Math.floor(((n - 1) * c) / chunks);
+        const to = Math.floor(((n - 1) * (c + 1)) / chunks);
+        if (to <= from) continue;
+        const k = (c + 1) / chunks;
+        ctx.strokeStyle = `hsla(${m.hue}, 100%, ${62 + k * 22}%, ${Math.min(1, (0.25 + k * 0.65) * vfx)})`;
+        ctx.lineWidth = (1.2 + k * 2.8) * vfx;
+        ctx.beginPath();
+        ctx.moveTo(tr[from].x, tr[from].y);
+        for (let t = from + 1; t <= to; t++) ctx.lineTo(tr[t].x, tr[t].y);
+        ctx.stroke();
+      }
+    }
+    const sp = Math.hypot(m.vx, m.vy) || 1;
+    const c = m.vx / sp, s = m.vy / sp;
+    const L = 10 * vfx, W = 4.4 * vfx;
+    const bloom = (6 + Math.random() * 3) * vfx;
+    ctx.fillStyle = `hsla(${m.hue}, 100%, 70%, 0.55)`;
+    ctx.beginPath();
+    ctx.arc(m.x - c * L * 0.8, m.y - s * L * 0.8, bloom, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(m.x + c * L, m.y + s * L);
+    ctx.lineTo(m.x - c * L * 0.7 - s * W, m.y - s * L * 0.7 + c * W);
+    ctx.lineTo(m.x - c * L * 0.35, m.y - s * L * 0.35);
+    ctx.lineTo(m.x - c * L * 0.7 + s * W, m.y - s * L * 0.7 - c * W);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = `hsla(${m.hue}, 100%, 66%, 1)`;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // Aegis Orbit Blades, batched: a fading motion-smear arc behind each blade, then one glow pass and
+  // one core pass over all saw-triangles.
+  drawOrbitBlades(ctx, p) {
+    const orbCount = W.orbitalBlades(p.weapons.orbitals);
+    const orbRadius = W.orbitalRadius(p.weapons.orbitals);
+    const vfx = TUNING.vfxIntensity ?? 1;
+    ctx.strokeStyle = `hsla(150, 100%, 55%, ${Math.min(1, 0.22 * vfx)})`;
+    ctx.lineWidth = 9 * vfx;
+    ctx.beginPath();
+    for (let o = 0; o < orbCount; o++) {
+      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
+      ctx.moveTo(p.x + Math.cos(oa - 0.55) * orbRadius, p.y + Math.sin(oa - 0.55) * orbRadius);
+      ctx.arc(p.x, p.y, orbRadius, oa - 0.55, oa);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    for (let o = 0; o < orbCount; o++) {
+      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
+      const ox = p.x + Math.cos(oa) * orbRadius;
+      const oy = p.y + Math.sin(oa) * orbRadius;
+      for (let k = 0; k < 3; k++) {
+        const sa = oa * 3 + (k * Math.PI * 2) / 3;
+        const vx = ox + Math.cos(sa) * 15;
+        const vy = oy + Math.sin(sa) * 15;
+        if (k === 0) ctx.moveTo(vx, vy);
+        else ctx.lineTo(vx, vy);
+      }
+      ctx.closePath();
+    }
+    ctx.strokeStyle = `hsla(150, 100%, 58%, ${Math.min(1, 0.35 * vfx)})`;
+    ctx.lineWidth = 7 * vfx;
+    ctx.stroke();
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+  }
+
   drawPlayerShield(ctx, p, beatPulse) {
     drawPlayerShield(ctx, p, beatPulse, TUNING, this.shieldRotation);
   }
@@ -3585,23 +3754,7 @@ export class Game {
       ctx.stroke();
     }
 
-    for (let i = 0; i < this.missiles.length; i++) {
-      const m = this.missiles[i];
-      // Tapered exhaust: brighter and thicker toward the missile.
-      for (let t = 1; t < m.trail.length; t++) {
-        const k = t / (m.trail.length - 1);
-        ctx.strokeStyle = `hsla(${m.hue}, 100%, ${60 + k * 12}%, ${0.2 + k * 0.55})`;
-        ctx.lineWidth = 1.2 + k * 2.4;
-        ctx.beginPath();
-        ctx.moveTo(m.trail[t - 1].x, m.trail[t - 1].y);
-        ctx.lineTo(m.trail[t].x, m.trail[t].y);
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
 
     this.deployables?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
@@ -3612,32 +3765,7 @@ export class Game {
       this.drawGravityTethers(ctx, p);
       this.drawPlayerShield(ctx, p, beatPulse);
 
-      if (p.weapons.orbitals > 0) {
-        const orbCount = W.orbitalBlades(p.weapons.orbitals);
-        const orbRadius = W.orbitalRadius(p.weapons.orbitals);
-        for (let o = 0; o < orbCount; o++) {
-          const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-          const ox = p.x + Math.cos(oa) * orbRadius;
-          const oy = p.y + Math.sin(oa) * orbRadius;
-
-          ctx.save();
-          ctx.translate(ox, oy);
-          ctx.rotate(oa * 3);
-          ctx.strokeStyle = '#00ff88';
-          ctx.lineWidth = 2.4;
-          ctx.beginPath();
-          for (let s = 0; s < 3; s++) {
-            const sa = (s * Math.PI * 2) / 3;
-            const vx = Math.cos(sa) * 15;
-            const vy = Math.sin(sa) * 15;
-            if (s === 0) ctx.moveTo(vx, vy);
-            else ctx.lineTo(vx, vy);
-          }
-          ctx.closePath();
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
+      if (p.weapons.orbitals > 0) this.drawOrbitBlades(ctx, p);
 
       this.deployables?.drawEscorts(ctx, this);
       this.drawCrabShip(ctx, p);

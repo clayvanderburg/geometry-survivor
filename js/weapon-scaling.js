@@ -35,11 +35,12 @@ export const WEAPON_SCALING = {
   wingRocketSpeed: 8.5,
   wingRocketLife: 1.6,
 
-  // Swarm Micro-Missiles
+  // Swarm Micro-Missiles: salvos come 25% faster than the original 1.9 s - 0.1/LV (floor 1.2 s) curve,
+  // so each missile carries 20% less damage at the same potential DPS.
   missileSalvo: (lv) => 1 + lv,
   missileSpeed: (lv) => 9.5 + lv * 0.8,
   missileDamageMult: (lv) => DPS_TARGET(lv) * W.missileCooldown(lv) / W.missileSalvo(lv),
-  missileCooldown: (lv) => Math.max(1.2, 1.9 - lv * 0.1),
+  missileCooldown: (lv) => Math.max(0.96, 1.52 - lv * 0.08),
   missileBlastRadius: 75,
 
   // Tesla Arc Emitter (Storm Protocol detonations chain at a fixed level)
@@ -64,7 +65,8 @@ export const WEAPON_SCALING = {
   orbitalDamageMult: (lv) => DPS_TARGET(lv) / (W.orbitalPassesContactTicksPerSec(lv)),
   orbitalPassesContactTicksPerSec: (lv) => W.orbitalBlades(lv) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(lv)) * 60,
 
-  // Volatile Shatter
+  // Volatile Shatter (passive, no slot): on-kill shards at a flat 0.75x base damage. It is not on the
+  // DPS curve (it needs kills to fire), like the dash nova.
   shrapnelChance: (lv) => Math.min(1, 0.45 + lv * 0.12),
   shrapnelShards: (lv) => 3 + lv,
   shrapnelDamageMult: 0.75,
@@ -88,7 +90,8 @@ export const WEAPON_SCALING = {
   turretMaxActive: (lv) => 1 + Math.floor(lv / 3),
   turretDuration: (lv) => 5 + lv,
   turretRange: (lv) => 300 + lv * 25,
-  turretFireRate: (lv) => 2.6 + lv * 0.45,
+  // Bolts per second per live turret: twice the original 2.6 + 0.45/LV, at half the damage per bolt.
+  turretFireRate: (lv) => 5.2 + lv * 0.9,
   turretDamageMult: (lv) => DPS_TARGET(lv) / (W.turretAverageActive(lv) * W.turretFireRate(lv)),
   // Mean live turrets: one per cooldown, each lasting its lifetime, never above the active cap.
   turretAverageActive: (lv) => Math.min(W.turretMaxActive(lv), W.turretDuration(lv) / W.turretCooldown(lv)),

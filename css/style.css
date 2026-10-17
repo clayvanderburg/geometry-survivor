@@ -1638,6 +1638,11 @@ html, body {
   justify-content: flex-start;
 }
 
+.loadout-slot.loadout-passive {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
 .loadout-slot.confirming {
   border-color: rgba(255, 42, 85, 0.75);
   box-shadow: 0 0 16px rgba(255, 42, 85, 0.3);

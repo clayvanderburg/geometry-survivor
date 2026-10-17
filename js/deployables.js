@@ -18,11 +18,16 @@ const RETARGET_TIME = 0.2;       // seconds between nearest-target searches per 
 const LOS_CANDIDATES = 3;        // nearest targets tried before giving up on a blocked line of sight
 const TURRET_TURN_RATE = 9;      // barrel slew, rad/s
 const TURRET_AIM_TOLERANCE = 0.3;
-const TURRET_MUZZLE = 17;
+// Sentry turret size: the body is drawn at TURRET_SCALE x its unit geometry (hex 11, ring 19, barrel
+// 17), and every size-dependent distance (muzzle, rock clearance, spacing, sidesteps, view pad and
+// deploy/expire rings) scales with it.
+export const TURRET_SCALE = 2;
+const TURRET_MUZZLE_UNIT = 17;   // barrel length in unit geometry (drawn under the scale)
+const TURRET_MUZZLE = TURRET_MUZZLE_UNIT * TURRET_SCALE; // world px from the turret centre to where bolts spawn
 const TURRET_BOLT_RADIUS = 3.3;
-const TURRET_BASE = 14;          // base hex radius plus a little clearance from rock surfaces
-const TURRET_SPACING = 34;       // a new turret never sits closer than this to a live one
-const SIDESTEPS = [38, -38, 76, -76]; // sideways offsets tried when the ship's spot is taken
+export const TURRET_BASE = 14 * TURRET_SCALE;    // base hex radius plus a little clearance from rock surfaces
+export const TURRET_SPACING = 34 * TURRET_SCALE; // a new turret never sits closer than this to a live one
+const SIDESTEPS = [38, -38, 76, -76].map((v) => v * TURRET_SCALE); // sideways offsets tried when the ship's spot is taken
 const DRONE_BOLT_RADIUS = 2.6;
 const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
@@ -132,9 +137,10 @@ export class Deployables {
 
   detonateMine(game, m) {
     const hue = DEPLOYABLE_HUES.mine;
-    game.particles.spawnShockwave(m.x, m.y, m.blast, hue, 3.5, 0.32);
-    game.particles.spawnShockwave(m.x, m.y, m.blast * 0.4, 40, 2.5, 0.2);
-    game.particles.spawnExplosionSparks(m.x, m.y, 16, hue, 2, 10, 2);
+    game.particles.spawnFlash?.(m.x, m.y, m.blast * 0.4, hue, 0.2);
+    game.particles.spawnShockwave(m.x, m.y, m.blast, hue, 4, 0.42);
+    game.particles.spawnShockwave(m.x, m.y, m.blast * 0.4, 40, 2.5, 0.24);
+    game.particles.spawnExplosionSparks(m.x, m.y, 18, hue, 2, 10, 2.2);
     game.sound.playExplosion(0.7);
     game.damageEnemiesInRadius(m.x, m.y, m.blast, m.damage, hue, 'mine', MINE_KNOCK);
   }
@@ -162,7 +168,7 @@ export class Deployables {
         t.target = null;
         this.turrets[i] = this.turrets[this.turretCount - 1];
         this.turrets[--this.turretCount] = t;
-        game.particles.spawnShockwave(t.x, t.y, 34, DEPLOYABLE_HUES.turret, 2, 0.22, true);
+        game.particles.spawnShockwave(t.x, t.y, 34 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2, 0.22, true);
         game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
         continue;
       }
@@ -216,7 +222,7 @@ export class Deployables {
     t.target = null;
     t.retarget = 0;
     t.flash = 0;
-    game.particles.spawnShockwave(t.x, t.y, 48, DEPLOYABLE_HUES.turret, 2.5, 0.25);
+    game.particles.spawnShockwave(t.x, t.y, 48 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2.5, 0.25);
     game.grid.applyImpulse(t.x, t.y, 12, 70, DEPLOYABLE_HUES.turret);
   }
 
@@ -243,6 +249,8 @@ export class Deployables {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
     const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
+    b.sweepX = t.x; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
+    b.sweepY = t.y;
     if (p.weapons.siegeBattery) {
       b.blastRadius = siegeShellRadius(p);
       b.blastDamage = weaponDamage(p, 'siege', level);
@@ -310,6 +318,7 @@ export class Deployables {
         d.fireAcc -= 1;
         this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
         d.flash = 1;
+        game.sound.playDroneShot?.();
       }
     }
   }
@@ -471,10 +480,10 @@ export class Deployables {
     const ht = DEPLOYABLE_HUES.turret;
     for (let i = 0; i < this.turretCount; i++) {
       const t = this.turrets[i];
-      if (!this.inView(game, t.x, t.y, 40)) continue;
+      if (!this.inView(game, t.x, t.y, 40 * TURRET_SCALE)) continue;
       const frac = Math.max(0, t.life / t.maxLife);
       const popIn = Math.min(1, (t.maxLife - t.life) / 0.15);
-      const s = 0.6 + 0.4 * popIn;
+      const s = (0.6 + 0.4 * popIn) * TURRET_SCALE;
       const ending = t.life < 1.5 && Math.sin(this.time * 18) < 0;
       ctx.save();
       ctx.translate(t.x, t.y);
@@ -505,8 +514,8 @@ export class Deployables {
       ctx.strokeStyle = `hsla(${ht}, 100%, 72%, 1)`;
       ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(2, -2.6); ctx.lineTo(TURRET_MUZZLE - 2 * t.flash, -2.6);
-      ctx.moveTo(2, 2.6); ctx.lineTo(TURRET_MUZZLE - 2 * t.flash, 2.6);
+      ctx.moveTo(2, -2.6); ctx.lineTo(TURRET_MUZZLE_UNIT - 2 * t.flash, -2.6);
+      ctx.moveTo(2, 2.6); ctx.lineTo(TURRET_MUZZLE_UNIT - 2 * t.flash, 2.6);
       ctx.stroke();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.6;
@@ -514,7 +523,7 @@ export class Deployables {
       if (t.flash > 0.05) {
         ctx.fillStyle = `hsla(${ht - 20}, 100%, 80%, ${t.flash})`;
         ctx.beginPath();
-        ctx.arc(TURRET_MUZZLE + 2, 0, 3 + t.flash * 3, 0, Math.PI * 2);
+        ctx.arc(TURRET_MUZZLE_UNIT + 2, 0, 3 + t.flash * 3, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();

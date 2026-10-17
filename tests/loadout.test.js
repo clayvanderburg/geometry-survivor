@@ -9,7 +9,7 @@ const {
   UPGRADE_POOL, UPGRADE_BY_ID, rollUpgrades, rollLevelUpHand, rollWeaponPicks, acquireWeapon, discardWeapon, eligibleUpgrades,
   canOfferNewWeapon, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID
 } = await import('../js/upgrades.js');
-const { WEAPONS, WEAPON_BY_ID, ownedWeapons, freeSlots, weaponSlots } = await import('../js/loadout.js');
+const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons } = await import('../js/loadout.js');
 const { STAT_ROWS, describeWeaponPick, describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET } = await import('../js/weapon-scaling.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
@@ -57,10 +57,10 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   const p = freshGame().player;
   const seen = new Set();
   withRandom(() => { for (let i = 0; i < 400; i++) for (const c of rollUpgrades(p, 3)) seen.add(c.id); }, lcg(11));
-  for (const id of ['rockets', 'multishot', 'firerate', 'pierce', 'thermite', 'cryo', 'overdrive', 'crit_chance', 'tag_kinetic', 'tag_explosive', 'tag_area']) {
+  for (const id of ['rockets', 'multishot', 'firerate', 'pierce', 'thermite', 'cryo', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic', 'tag_explosive', 'tag_area']) {
     assert.ok(seen.has(id), `${id} is offered at run start`);
   }
-  for (const id of ['missiles', 'lightning', 'orbitals', 'singularity', 'shrapnel', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
+  for (const id of ['missiles', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
     assert.ok(!seen.has(id), `${id} needs its weapon first`);
   }
   // Equipping Tesla Arc unlocks its level, Nanite Swarm and the ELECTRIC tag card.
@@ -361,4 +361,83 @@ test('discarding your last weapon explains why instead of confirming', async () 
   } finally {
     globalThis.document.getElementById = realGet;
   }
+});
+
+test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in normal hands with its level jumps', () => {
+  assert.ok(!WEAPONS.some((w) => w.id === 'shrapnel'), 'not a loadout weapon');
+  assert.deepEqual(PASSIVES.map((x) => x.id), ['shrapnel']);
+  assert.equal(upgradeKind(UPGRADE_BY_ID.shrapnel), 'general', 'weighted like any general upgrade');
+  assert.equal(UPGRADE_BY_ID.shrapnel.maxLevel, 8);
+
+  const g = freshGame();
+  const p = g.player;
+  assert.ok(!unownedWeapons(p).includes('shrapnel'));
+  assert.ok(eligibleUpgrades(p).some((u) => u.id === 'shrapnel'), 'offered from the first level-up');
+  // The weapon-pick pool never contains it, even when it is the only thing left to roll.
+  withRandom(() => {
+    for (let i = 0; i < 200; i++) assert.ok(!rollWeaponPicks(p, 3).some((c) => c.weaponId === 'shrapnel'));
+  }, lcg(9));
+  // It shows up in ordinary hands, and rolls its rarity jumps like other lines.
+  let offered = 0;
+  withRandom(() => { for (let i = 0; i < 300; i++) if (rollLevelUpHand(p, 3).some((c) => c.id === 'shrapnel')) offered++; }, lcg(21));
+  assert.ok(offered > 20, `Shatter in ${offered} of 300 hands`);
+  const rare = withRandom(() => rollUpgrades({ ...p, upgradeLevels: Object.fromEntries(UPGRADE_POOL.filter((u) => u.id !== 'shrapnel').map((u) => [u.id, u.maxLevel])) }, 1), () => 0.02);
+  assert.equal(rare[0].id, 'shrapnel');
+  assert.equal(rare[0].levelJump, 3, 'a +3 (rare) roll');
+
+  // Installing it uses no slot and does not touch the loadout.
+  const slotsBefore = freeSlots(p);
+  const loadout = [...p.loadout];
+  assert.equal(applyUpgradeLevels(p, { ...UPGRADE_BY_ID.shrapnel, levelJump: 3 }), 3);
+  assert.equal(p.upgradeLevels.shrapnel, 3);
+  assert.equal(p.weapons.shrapnel, 3);
+  assert.deepEqual(p.loadout, loadout);
+  assert.equal(freeSlots(p), slotsBefore);
+  assert.deepEqual(ownedPassives(p), ['shrapnel']);
+  // Discarding weapons never removes it.
+  fill(p, ['missiles']);
+  discardWeapon(p, 'missiles');
+  discardWeapon(p, 'blaster');
+  assert.equal(p.upgradeLevels.shrapnel, 3);
+  assert.equal(p.weapons.shrapnel, 3);
+});
+
+test('owning Volatile Shatter unlocks the KINETIC tag card', () => {
+  const p = freshGame().player;
+  discardWeapon(p, 'blaster'); // Wing Rockets alone carry no KINETIC tag
+  assert.deepEqual(p.loadout, ['rockets']);
+  assert.ok(!ownedTags(p).has('kinetic'));
+  assert.ok(!eligibleUpgrades(p).some((u) => u.id === 'tag_kinetic'));
+  applyUpgradeLevels(p, UPGRADE_BY_ID.shrapnel);
+  assert.ok(ownedTags(p).has('kinetic'));
+  assert.ok(eligibleUpgrades(p).some((u) => u.id === 'tag_kinetic'), 'the passive unlocks Tungsten Penetrators');
+});
+
+test('the loadout panel lists Shatter as a passive outside the slots, and the Field Guide describes it', async () => {
+  const { Game } = await import('../js/main.js');
+  const { MECHANIC_ENTRIES } = await import('../js/field-guide.js');
+  const panel = { innerHTML: '', querySelectorAll: () => [] };
+  const silent = new Proxy({}, { get: () => () => {} });
+  const g = Object.assign(Object.create(Game.prototype), {
+    player: { loadout: ['blaster', 'rockets'], weapons: { rockets: 1, shrapnel: 2 }, upgradeLevels: { rockets: 1, shrapnel: 2 }, stats: {} },
+    particles: silent, updateHUD() {}, focusLoadoutButton() {}
+  });
+  const realGet = globalThis.document.getElementById;
+  globalThis.document.getElementById = (id) => (id === 'pause-loadout' ? panel : realGet(id));
+  try {
+    g.renderLoadoutPanel();
+  } finally {
+    globalThis.document.getElementById = realGet;
+  }
+  assert.equal((panel.innerHTML.match(/SLOT \d/g) || []).length, weaponSlots(), 'Shatter takes none of the slots');
+  assert.match(panel.innerHTML, /data-passive="shrapnel"/);
+  assert.match(panel.innerHTML, /PASSIVE \/\/ NO SLOT/);
+  assert.match(panel.innerHTML, /Volatile Shatter/);
+  assert.match(panel.innerHTML, /LV 2<span class="upg-max"> \/ 8/);
+  assert.ok(!/data-discard="shrapnel"/.test(panel.innerHTML), 'passives cannot be discarded');
+
+  const body = MECHANIC_ENTRIES.find((e) => e.id === 'loadout').body();
+  const arsenal = body.find((line) => line.startsWith('Arsenal: '));
+  assert.ok(!arsenal.includes('Volatile Shatter'), 'not listed as a weapon');
+  assert.ok(body.some((line) => /Volatile Shatter is a PASSIVE/.test(line) && /no slot/.test(line) && /Tungsten Penetrators/.test(line)));
 });

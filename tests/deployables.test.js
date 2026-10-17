@@ -19,7 +19,7 @@ globalThis.document = {
   createElement: makeElement
 };
 const { Game } = await import('../js/main.js');
-const { Deployables, isDeployableTarget } = await import('../js/deployables.js');
+const { Deployables, isDeployableTarget, TURRET_SCALE, TURRET_BASE, TURRET_SPACING } = await import('../js/deployables.js');
 const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbers.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
@@ -139,7 +139,7 @@ test('a second turret planted by a parked ship steps aside, but never into a roc
   d.deployTurret(g, 3);
   assert.equal(d.turretCount, 2);
   const [a, b] = d.turrets;
-  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= 34, 'turrets do not stack');
+  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= TURRET_SPACING, 'turrets do not stack');
   assert.ok(Math.hypot(b.x - rock.x, b.y - rock.y) > rock.radius + 10, 'the sidestep avoids the rock');
   tick(g, 0.5);
   assert.equal(b.target, target, 'and the new turret can shoot');
@@ -282,4 +282,62 @@ test('HUD tags, damage colours and tuning cover the deployables', () => {
     assert.ok(keys.includes(k));
     assert.ok(k in DEFAULT_TUNING);
   }
+});
+
+test('the sentry turret is twice its old size: body, placement clearance and muzzle', () => {
+  assert.equal(TURRET_SCALE, 2);
+  assert.equal(TURRET_BASE, 28, 'rock clearance (hex 22 + margin) was 14');
+  assert.equal(TURRET_SPACING, 68, 'turret spacing was 34');
+  const target = enemy(2300, 2000);
+  const g = arena({ enemies: [target] });
+  g.player.weapons.turret = 1;
+  const d = g.deployables;
+  d.deployTurret(g, 1);
+  const t = d.turrets[0];
+  t.life = t.maxLife - 1; // fully popped in
+  // Bolts leave from the tip of the doubled barrel (34 px out, was 17).
+  d.fireTurretBolt(g, t, 1);
+  const bolt = g.bullets[0];
+  assert.ok(Math.abs(Math.hypot(bolt.x - t.x, bolt.y - t.y) - 34) < 1e-9);
+  // Drawn size: the lifetime ring (unit radius 19) under the canvas scale.
+  let scale = 1;
+  const arcs = [];
+  const ctx = new Proxy({}, {
+    get: (_, k) => (k === 'scale' ? (sx) => { scale = sx; }
+      : k === 'arc' ? (x, y, r) => arcs.push(r * scale)
+      : () => {}),
+    set: () => true
+  });
+  d.drawGround(ctx, g);
+  assert.equal(scale, 2);
+  assert.equal(Math.max(...arcs), 38, 'lifetime ring radius was 19 px');
+  // A rock that a 14 px base cleared now blocks the spot under the ship.
+  const rock = { x: 2000, y: 2040, radius: 18, hp: 100 };
+  const g2 = arena({ rocks: [rock] });
+  assert.equal(g2.deployables.turretSpotClear(g2, 2000, 2000, 0), false);
+  rock.y = 2000 + 18 + TURRET_BASE + 1;
+  assert.equal(g2.deployables.turretSpotClear(g2, 2000, 2000, 0), true);
+});
+
+test('a live turret fires its doubled rate of half-damage bolts', () => {
+  const target = enemy(2200, 2000);
+  const g = arena({ enemies: [target] });
+  g.player.weapons.turret = 1;
+  tick(g, 0.8);
+  assert.equal(g.deployables.turretCount, 1);
+  g.bullets = [];
+  tick(g, 2);
+  const bolts = g.bullets.filter((b) => b.source === 'turret');
+  // 2 s at 6.1 bolts/s (was 3.05/s): about 12 bolts, each half the old damage.
+  assert.ok(Math.abs(bolts.length - 2 * W.turretFireRate(1)) <= 1, `${bolts.length} bolts in 2 s`);
+  for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(1));
+});
+
+test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
+  const close = enemy(2012, 2000); // inside the 34 px muzzle
+  const g = arena({ enemies: [close] });
+  g.player.weapons.turret = 1;
+  g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
+  g.updateBullets(DT);
+  assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
 });
