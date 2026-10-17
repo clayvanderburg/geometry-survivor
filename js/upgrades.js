@@ -1,14 +1,27 @@
 // Roguelite Upgrades, Luck Multi-Level Rolls (+2 / +3 Levels), Mining Drill, and Golden Synergies
 import { TUNING } from './config.js';
 
+// Rarity is fixed per upgrade and drives card border/name color only. It is separate from the
+// lucky +2/+3 level-jump roll, which gets its own ribbon on the card.
+export const RARITY = {
+  common: { label: 'COMMON', color: '#c9d4e4' },
+  uncommon: { label: 'UNCOMMON', color: '#00ff88' },
+  rare: { label: 'RARE', color: '#3d9bff' },
+  epic: { label: 'EPIC', color: '#b565ff' },
+  legendary: { label: 'LEGENDARY', color: '#ffcc00' }
+};
+
+// Each entry: rarity (RARITY key), headline (the STAT_ROWS id shown enlarged on its card, see
+// upgrade-cards.js) and a number-free summary. Exact numbers always come from the card preview.
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
     name: 'Rotary Claw Overclock',
     category: 'DRILL CLAWS',
-    badgeColor: '#00ffaa',
+    rarity: 'uncommon',
     maxLevel: 6,
-    desc: '+50% Twin Drill-Claw Mining Speed, +20% Claw Reach and +15% Rotary Claw Size.',
+    headline: 'miningSpeed',
+    summary: 'Spins the twin drill-claws faster, with longer reach and bigger claws.',
     apply(player) {
       player.stats.miningSpeed *= 1.5;
       player.stats.miningRange *= 1.2;
@@ -19,9 +32,10 @@ export const UPGRADE_POOL = [
     id: 'luck_boost',
     name: 'Quantum Fortune Matrix',
     category: 'LUCK',
-    badgeColor: '#ffcc00',
+    rarity: 'uncommon',
     maxLevel: 5,
-    desc: '+25% LUCK! Boosts rare chances for +2/+3 Multi-Level Upgrades, Supply Cache drops, and Chest Jackpots.',
+    headline: 'luck',
+    summary: 'Raises the odds of lucky multi-level rolls, supply caches and cache jackpots.',
     apply(player) {
       player.stats.luck += 0.25;
     }
@@ -30,9 +44,10 @@ export const UPGRADE_POOL = [
     id: 'multishot',
     name: 'Prism Split',
     category: 'WEAPON',
-    badgeColor: '#00f3ff',
+    rarity: 'epic',
     maxLevel: 7,
-    desc: 'Fires +2 additional plasma vectors per volley in a wider harmonic arc.',
+    headline: 'bulletCount',
+    summary: 'Adds plasma vectors to every volley in a wider harmonic arc.',
     apply(player) {
       player.stats.bulletCount += 2;
       player.stats.spreadAngle += 0.11;
@@ -42,9 +57,10 @@ export const UPGRADE_POOL = [
     id: 'firerate',
     name: 'Hyper-Capacitor',
     category: 'WEAPON',
-    badgeColor: '#00f3ff',
+    rarity: 'common',
     maxLevel: 7,
-    desc: 'Increases primary fire rate by +26% and projectile velocity by +15%.',
+    headline: 'fireRate',
+    summary: 'Faster primary volleys with quicker bolts.',
     apply(player) {
       player.stats.fireRate *= 1.26;
       player.stats.bulletSpeed *= 1.15;
@@ -54,9 +70,10 @@ export const UPGRADE_POOL = [
     id: 'pierce',
     name: 'Phase Piercer',
     category: 'WEAPON',
-    badgeColor: '#00ff88',
+    rarity: 'uncommon',
     maxLevel: 6,
-    desc: 'Bolts slice through +2 additional targets and deal +25% base damage.',
+    headline: 'pierce',
+    summary: 'Bolts slice through more targets and hit harder. Damage scales every weapon.',
     apply(player) {
       player.stats.pierce += 2;
       player.stats.damage *= 1.25;
@@ -66,9 +83,10 @@ export const UPGRADE_POOL = [
     id: 'missiles',
     name: 'Swarm Micro-Missiles',
     category: 'AUTONOMOUS',
-    badgeColor: '#ff007f',
+    rarity: 'rare',
     maxLevel: 6,
-    desc: 'Periodically launches curving, ribbon-trailing homing missiles that detonate on impact.',
+    headline: 'missileSalvo',
+    summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.',
     apply(player) {
       player.weapons.missiles = (player.weapons.missiles || 0) + 1;
     }
@@ -77,9 +95,10 @@ export const UPGRADE_POOL = [
     id: 'orbitals',
     name: 'Aegis Orbiting Blades',
     category: 'AUTONOMOUS',
-    badgeColor: '#00ff88',
+    rarity: 'rare',
     maxLevel: 6,
-    desc: 'Summons spinning geometric saw-triangles that orbit your ship and shred enemies.',
+    headline: 'orbitalBlades',
+    summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.',
     apply(player) {
       player.weapons.orbitals = (player.weapons.orbitals || 0) + 1;
     }
@@ -88,9 +107,10 @@ export const UPGRADE_POOL = [
     id: 'lightning',
     name: 'Tesla Arc Emitter',
     category: 'AUTONOMOUS',
-    badgeColor: '#9d4edd',
+    rarity: 'rare',
     maxLevel: 6,
-    desc: 'Discharges high-voltage chain lightning that arcs across packs of nearby swarmers.',
+    headline: 'lightningJumps',
+    summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.',
     apply(player) {
       player.weapons.lightning = (player.weapons.lightning || 0) + 1;
     }
@@ -99,9 +119,10 @@ export const UPGRADE_POOL = [
     id: 'singularity',
     name: 'Vortex Singularity',
     category: 'AUTONOMOUS',
-    badgeColor: '#ff2a55',
+    rarity: 'epic',
     maxLevel: 5,
-    desc: 'Fires gravitational black holes that warp the grid, suck swarms inward, and implode.',
+    headline: 'singularityPull',
+    summary: 'Gravitational black holes warp the grid, suck swarms inward, and implode.',
     apply(player) {
       player.weapons.singularity = (player.weapons.singularity || 0) + 1;
     }
@@ -110,9 +131,10 @@ export const UPGRADE_POOL = [
     id: 'shrapnel',
     name: 'Volatile Shatter',
     category: 'PASSIVE',
-    badgeColor: '#ffcc00',
+    rarity: 'uncommon',
     maxLevel: 5,
-    desc: 'Exploding enemies burst into lethal ricochet shards that trigger chain-reaction kills.',
+    headline: 'shrapnelShards',
+    summary: 'Kills burst into ricochet shards that trigger chain-reaction kills.',
     apply(player) {
       player.weapons.shrapnel = (player.weapons.shrapnel || 0) + 1;
     }
@@ -121,9 +143,10 @@ export const UPGRADE_POOL = [
     id: 'magnet',
     name: 'Geom Attractor Field',
     category: 'UTILITY',
-    badgeColor: '#00ff88',
+    rarity: 'common',
     maxLevel: 5,
-    desc: '+65% Geom vacuum radius, +25% XP resonance, and +1 Supernova Bomb.',
+    headline: 'magnetRadius',
+    summary: 'Wider Geom vacuum, more XP per Geom, and a spare Supernova Bomb.',
     apply(player) {
       player.stats.magnetRadius *= 1.65;
       player.stats.xpMultiplier *= 1.25;
@@ -134,9 +157,10 @@ export const UPGRADE_POOL = [
     id: 'thrusters',
     name: 'Phase Nova Thrusters',
     category: 'UTILITY',
-    badgeColor: '#00f3ff',
+    rarity: 'common',
     maxLevel: 5,
-    desc: '+16% Move Speed, +25 Max Shield, +45 Shield Repair, and Phase Dash unleashes a shattering shockwave.',
+    headline: 'moveSpeed',
+    summary: 'Faster hull, tougher shield, and Phase Dash unleashes a damaging shockwave.',
     apply(player) {
       player.stats.moveSpeed *= 1.16;
       player.maxHp += 25;
@@ -149,13 +173,14 @@ export const UPGRADE_POOL = [
     id: 'evo_tectonic',
     name: 'SYNERGY: Tectonic Claw Bore',
     category: 'EVOLUTION',
-    badgeColor: '#ffcc00',
+    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
       return (player.upgradeLevels.mining_speed >= 2);
     },
-    desc: 'EVOLUTION: Supercharges your Twin Drill-Claws (+90% Mining Speed) and causes every drilled asteroid to detonate, blasting nearby enemies!',
+    headline: 'tectonicBlast',
+    summary: 'EVOLUTION: supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
       player.stats.miningSpeed *= 1.9;
@@ -167,13 +192,14 @@ export const UPGRADE_POOL = [
     id: 'evo_pulsar',
     name: 'SYNERGY: Pulsar Helix',
     category: 'EVOLUTION',
-    badgeColor: '#ffcc00',
+    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
-    desc: 'EVOLUTION: +15% Fire Rate, and every volley also fires a rotating twin-arm spiral of plasma bolts!',
+    headline: 'helixBolts',
+    summary: 'EVOLUTION: every volley also fires a rotating twin-arm spiral of plasma bolts.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
       player.stats.fireRate *= 1.15;
@@ -183,19 +209,39 @@ export const UPGRADE_POOL = [
     id: 'evo_tempest',
     name: 'SYNERGY: Storm Protocol',
     category: 'EVOLUTION',
-    badgeColor: '#ffcc00',
+    rarity: 'legendary',
     isSynergy: true,
     maxLevel: 1,
     req(player) {
       return (player.weapons.missiles >= 1 && player.weapons.lightning >= 1);
     },
-    desc: 'EVOLUTION: Homing Missiles supercharge with Tesla energy, triggering Chain Lightning on every detonation!',
+    headline: 'stormChain',
+    summary: 'EVOLUTION: homing missiles carry Tesla charge and chain lightning on every detonation.',
     apply(player) {
       player.weapons.stormProtocol = 1;
       player.weapons.missiles += 1;
     }
   }
 ];
+
+// Cumulative roll thresholds: roll < tripleChance gives +3, roll < doubleChance gives +2.
+export function levelJumpChances(luck) {
+  const tripleChance = Math.min(0.45, (TUNING.tripleLevelChance ?? 0.035) * luck);
+  const doubleChance = Math.min(0.75, tripleChance + (TUNING.doubleLevelChance ?? 0.1) * luck);
+  return { tripleChance, doubleChance };
+}
+
+// The single place upgrade levels are installed. Level-up picks, supply caches and card previews
+// (on a copy of the player) all go through it, so they share one player.upgradeLevels state.
+export function applyUpgradeLevels(player, upg) {
+  const current = player.upgradeLevels[upg.id] || 0;
+  const jump = Math.max(0, Math.min(upg.levelJump || 1, upg.maxLevel - current));
+  for (let k = 0; k < jump; k++) {
+    player.upgradeLevels[upg.id] = current + k + 1;
+    upg.apply(player);
+  }
+  return jump;
+}
 
 export function rollUpgrades(player, count = 3) {
   const available = UPGRADE_POOL.filter((u) => {
@@ -221,10 +267,7 @@ export function rollUpgrades(player, count = 3) {
 
     if (!u.isSynergy && remaining > 1) {
       const roll = Math.random();
-      const baseTriple = TUNING.tripleLevelChance ?? 0.035;
-      const baseDouble = TUNING.doubleLevelChance ?? 0.1;
-      const tripleChance = Math.min(0.45, baseTriple * luck);
-      const doubleChance = Math.min(0.75, tripleChance + baseDouble * luck);
+      const { tripleChance, doubleChance } = levelJumpChances(luck);
 
       if (roll < tripleChance && remaining >= 3) {
         levelJump = 3;

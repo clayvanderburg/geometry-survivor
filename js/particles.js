@@ -7,10 +7,36 @@ export class ParticleSystem {
     this.lightnings = [];
     this.floatTexts = [];
     this.afterimages = [];
+    this.infall = [];
+    // Pooled hit-impact flares: fixed slots recycled oldest-first, drawn as one batched path.
+    this.impacts = Array.from({ length: 96 }, () => ({ x: 0, y: 0, cos: 1, sin: 0, size: 0, life: 0, maxLife: 1 }));
+    this.impactCount = 0;
+    this.impactNext = 0;
   }
 
   clear() {
-    for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages']) this[key].length = 0;
+    for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages', 'infall']) this[key].length = 0;
+    this.impactCount = 0;
+    this.impactNext = 0;
+  }
+
+  // Brief white-hot cross flare at a hit point; `angle` is the incoming direction.
+  spawnImpact(x, y, angle, size = 7, life = 0.1) {
+    let slot;
+    if (this.impactCount < this.impacts.length) {
+      slot = this.impacts[this.impactCount++];
+    } else {
+      // Full: overwrite in round-robin order (the oldest flare is the nearest to fading anyway).
+      slot = this.impacts[this.impactNext];
+      this.impactNext = (this.impactNext + 1) % this.impacts.length;
+    }
+    slot.x = x;
+    slot.y = y;
+    slot.cos = Math.cos(angle);
+    slot.sin = Math.sin(angle);
+    slot.size = size;
+    slot.life = life;
+    slot.maxLife = life;
   }
 
   // Burst of velocity-stretched neon line sparks (Geometry Wars signature explosion)
@@ -90,17 +116,47 @@ export class ParticleSystem {
     }
   }
 
-  spawnShockwave(x, y, maxRadius, hue, lineWidth = 4, duration = 0.42) {
+  // inward = true contracts from maxRadius to the centre and brightens (implosion wind-up).
+  spawnShockwave(x, y, maxRadius, hue, lineWidth = 4, duration = 0.42, inward = false) {
     this.shockwaves.push({
       x,
       y,
-      radius: 4,
+      radius: inward ? maxRadius : 4,
       maxRadius,
       hue,
       lineWidth,
       life: duration,
-      maxLife: duration
+      maxLife: duration,
+      inward
     });
+  }
+
+  // Spiralling infall stream: sparks that orbit a (possibly moving) well and sink into its core,
+  // spinning up as they fall. `well` is any live object with x/y (and `dead` once it is gone).
+  spawnInfall(well, radius, hue, count = 1) {
+    if (this.infall.length >= 480) return;
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const r = radius * (0.7 + Math.random() * 0.3);
+      const life = 0.8 + Math.random() * 0.5;
+      const x = well.x + Math.cos(ang) * r;
+      const y = well.y + Math.sin(ang) * r;
+      this.infall.push({
+        well,
+        ang,
+        r,
+        r0: r,
+        spin: 0.035 + Math.random() * 0.025,
+        sink: 0.955 - Math.random() * 0.02,
+        hue,
+        x,
+        y,
+        lx: x,
+        ly: y,
+        life,
+        maxLife: life
+      });
+    }
   }
 
   spawnLightning(x1, y1, x2, y2, hue = 190) {
@@ -173,6 +229,22 @@ export class ParticleSystem {
   }
 
   update(dt, width, height) {
+    // Update Infall Streams (die with their well or on reaching the event horizon)
+    for (let i = this.infall.length - 1; i >= 0; i--) {
+      const f = this.infall[i];
+      f.life -= dt;
+      f.r *= f.sink;
+      f.ang += f.spin * Math.min(5, Math.sqrt(f.r0 / Math.max(1, f.r)));
+      f.lx = f.x;
+      f.ly = f.y;
+      f.x = f.well.x + Math.cos(f.ang) * f.r;
+      f.y = f.well.y + Math.sin(f.ang) * f.r;
+      if (f.life <= 0 || f.well.dead || f.r < 7) {
+        this.infall[i] = this.infall[this.infall.length - 1];
+        this.infall.pop();
+      }
+    }
+
     // Update Sparks
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const s = this.sparks[i];
@@ -233,8 +305,10 @@ export class ParticleSystem {
       const sw = this.shockwaves[i];
       sw.life -= dt;
       const progress = 1 - Math.max(0, sw.life / sw.maxLife);
-      // Ease-out expansion
-      sw.radius = sw.maxRadius * (1 - Math.pow(1 - progress, 2.6));
+      // Ease-out expansion (or accelerating collapse for implosion rings)
+      sw.radius = sw.inward
+        ? sw.maxRadius * (1 - progress * progress)
+        : sw.maxRadius * (1 - Math.pow(1 - progress, 2.6));
       if (sw.life <= 0) {
         this.shockwaves.splice(i, 1);
       }
@@ -256,6 +330,18 @@ export class ParticleSystem {
       }
     }
 
+    // Update Impact Flares (swap-remove inside the fixed pool)
+    for (let i = this.impactCount - 1; i >= 0; i--) {
+      const im = this.impacts[i];
+      im.life -= dt;
+      if (im.life <= 0) {
+        const last = this.impacts[--this.impactCount];
+        this.impacts[this.impactCount] = im;
+        this.impacts[i] = last;
+      }
+    }
+    if (this.impactNext >= this.impactCount) this.impactNext = 0;
+
     // Update Float Texts
     for (let i = this.floatTexts.length - 1; i >= 0; i--) {
       const ft = this.floatTexts[i];
@@ -263,6 +349,30 @@ export class ParticleSystem {
       ft.life -= dt;
       if (ft.life <= 0) {
         this.floatTexts.splice(i, 1);
+      }
+    }
+  }
+
+  drawInfall(ctx, visible) {
+    const hues = this.infallHues || (this.infallHues = []);
+    hues.length = 0;
+    for (let i = 0; i < this.infall.length; i++) {
+      if (!hues.includes(this.infall[i].hue)) hues.push(this.infall[i].hue);
+    }
+    for (let band = 0; band < 2; band++) {
+      ctx.lineWidth = band === 0 ? 1.3 : 2.1;
+      for (let h = 0; h < hues.length; h++) {
+        ctx.strokeStyle = band === 0 ? `hsla(${hues[h]}, 100%, 66%, 0.45)` : `hsla(${hues[h]}, 100%, 86%, 0.9)`;
+        ctx.beginPath();
+        let any = false;
+        for (let i = 0; i < this.infall.length; i++) {
+          const f = this.infall[i];
+          if (f.hue !== hues[h] || (f.r < f.r0 * 0.45 ? 1 : 0) !== band || !visible(f.x, f.y, 24)) continue;
+          ctx.moveTo(f.x - (f.x - f.lx) * 2.6, f.y - (f.y - f.ly) * 2.6);
+          ctx.lineTo(f.x, f.y);
+          any = true;
+        }
+        if (any) ctx.stroke();
       }
     }
   }
@@ -298,7 +408,8 @@ export class ParticleSystem {
     for (let i = 0; i < this.shockwaves.length; i++) {
       const sw = this.shockwaves[i];
       if (!visible(sw.x, sw.y, sw.radius + sw.lineWidth * 3)) continue;
-      const alpha = Math.max(0, sw.life / sw.maxLife);
+      const fade = Math.max(0, sw.life / sw.maxLife);
+      const alpha = sw.inward ? Math.min(1, 1.25 - fade) : fade;
       // Outer neon halo
       ctx.strokeStyle = `hsla(${sw.hue}, 100%, 60%, ${alpha * 0.55})`;
       ctx.lineWidth = sw.lineWidth * 2.5 * alpha;
@@ -346,6 +457,10 @@ export class ParticleSystem {
       ctx.stroke();
     }
 
+    // 4b. Draw Infall Streams: comet streaks batched into one path per (hue, band) so hundreds of
+    // streaks cost a handful of strokes. The outer band is dim; the inner band runs white-hot.
+    if (this.infall.length) this.drawInfall(ctx, visible);
+
     // 5. Draw Chain Lightning Arcs
     for (let i = 0; i < this.lightnings.length; i++) {
       const l = this.lightnings[i];
@@ -365,7 +480,26 @@ export class ParticleSystem {
       ctx.stroke();
     }
 
-    // 6. Floating Text Popups
+    // 6. Hit Impact Flares: one batched stroke — a long flare across the shot, a short one along it.
+    if (this.impactCount > 0) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let i = 0; i < this.impactCount; i++) {
+        const im = this.impacts[i];
+        if (!visible(im.x, im.y, im.size * 1.5)) continue;
+        const s = im.size * (0.3 + 0.7 * Math.max(0, im.life / im.maxLife));
+        const ax = im.cos * s * 0.55, ay = im.sin * s * 0.55;
+        const px = -im.sin * s, py = im.cos * s;
+        ctx.moveTo(im.x - px, im.y - py);
+        ctx.lineTo(im.x + px, im.y + py);
+        ctx.moveTo(im.x - ax, im.y - ay);
+        ctx.lineTo(im.x + ax, im.y + ay);
+      }
+      ctx.stroke();
+    }
+
+    // 7. Floating Text Popups
     ctx.textAlign = 'center';
     for (let i = 0; i < this.floatTexts.length; i++) {
       const ft = this.floatTexts[i];

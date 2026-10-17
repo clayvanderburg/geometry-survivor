@@ -199,9 +199,13 @@ html, body {
   color: var(--cyan);
 }
 
-.weapon-tag.evolved {
-  border-color: var(--gold);
-  color: var(--gold);
+/* HUD tags share the card rarity colors (see .rarity-* below). */
+.weapon-tag[class*="rarity-"] {
+  border-color: var(--rarity-soft);
+  color: var(--rarity);
+}
+
+.weapon-tag.rarity-legendary {
   background: rgba(255, 204, 0, 0.14);
 }
 
@@ -342,6 +346,204 @@ html, body {
 @keyframes bannerPulse {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* Boss Encounter HUD: spans the full top row under the three HUD columns */
+.boss-hud {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(640px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -8px;
+  position: relative;
+}
+
+.boss-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #fff;
+  background: repeating-linear-gradient(-45deg, rgba(255, 42, 85, 0.34) 0 12px, rgba(255, 204, 0, 0.1) 12px 24px);
+  background-size: 33.94px 33.94px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  box-shadow: 0 0 18px rgba(255, 42, 85, 0.55), inset 0 0 14px rgba(255, 42, 85, 0.35);
+  text-shadow: 0 0 10px var(--danger), 0 1px 2px #000;
+  animation: hazardScroll 0.8s linear infinite, bossWarnFlash 0.25s ease-in-out infinite alternate;
+}
+
+.boss-warning-icon {
+  color: var(--gold);
+  text-shadow: 0 0 10px var(--gold), 0 1px 2px #000;
+}
+
+.boss-warning-eta {
+  min-width: 64px;
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+  background: rgba(3, 4, 11, 0.7);
+  border-radius: 3px;
+}
+
+@keyframes hazardScroll {
+  from { background-position: 0 0; }
+  to { background-position: 33.94px 0; }
+}
+
+@keyframes bossWarnFlash {
+  from { border-color: var(--danger); }
+  to { border-color: var(--gold); box-shadow: 0 0 26px rgba(255, 204, 0, 0.6), inset 0 0 18px rgba(255, 42, 85, 0.5); }
+}
+
+.boss-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.boss-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.boss-bar-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 2px #000;
+}
+
+.boss-bar-name {
+  font-size: 13px;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.8), 0 1px 2px #000;
+}
+
+.boss-bar-epithet {
+  font-size: 10px;
+  color: #ff77b7;
+}
+
+.boss-bar-hp {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.boss-bar-track {
+  height: 12px;
+  background: rgba(10, 14, 30, 0.85);
+  border: 1px solid rgba(255, 204, 0, 0.65);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 0 14px rgba(255, 204, 0, 0.25);
+}
+
+.boss-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff2a55, #ffcc00);
+  box-shadow: 0 0 12px #ffcc00;
+  transition: width 0.12s ease-out;
+}
+
+/* Extra bosses stack as compact rows under the first. */
+.boss-bar-row + .boss-bar-row .boss-bar-track { height: 6px; }
+.boss-bar-row + .boss-bar-row .boss-bar-name { font-size: 11px; }
+
+.boss-bar-more {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* Boss arrival / defeat title card */
+.boss-card {
+  position: absolute;
+  top: calc(100% + 22px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, 94vw);
+  padding: 12px 24px 14px;
+  text-align: center;
+  background: linear-gradient(90deg, transparent, rgba(255, 42, 85, 0.24) 18%, rgba(255, 42, 85, 0.24) 82%, transparent);
+  border-top: 2px solid var(--danger);
+  border-bottom: 2px solid var(--danger);
+  animation: bossCardIn 0.6s cubic-bezier(0.2, 1.3, 0.4, 1);
+  transition: opacity 0.4s ease-in;
+}
+
+.boss-card-kicker {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--danger);
+  text-shadow: 0 0 10px var(--danger);
+}
+
+.boss-card-name {
+  font-size: clamp(24px, 5vw, 42px);
+  font-weight: 900;
+  letter-spacing: 6px;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 0 18px var(--gold), 0 0 38px rgba(255, 204, 0, 0.6);
+}
+
+.boss-card-epithet {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.7);
+}
+
+.boss-card-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  color: #d6e6ff;
+}
+
+.boss-card-defeat {
+  background: linear-gradient(90deg, transparent, rgba(255, 204, 0, 0.22) 18%, rgba(255, 204, 0, 0.22) 82%, transparent);
+  border-color: var(--gold);
+}
+
+.boss-card-defeat .boss-card-kicker {
+  color: var(--gold);
+  text-shadow: 0 0 10px var(--gold);
+}
+
+.boss-card-defeat .boss-card-name {
+  text-shadow: 0 0 18px var(--cyan), 0 0 38px rgba(0, 243, 255, 0.6);
+}
+
+.boss-card-out {
+  opacity: 0;
+}
+
+@keyframes bossCardIn {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.5); }
+  55% { opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); }
 }
 
 /* Modals */
@@ -687,37 +889,75 @@ html, body {
   gap: 16px;
 }
 
+/* Rarity palette: common white/gray, uncommon green, rare blue, epic purple, legendary gold.
+   Rarity owns the card border, name and badge color; lucky +2/+3 level rolls get a separate ribbon. */
+.rarity-common { --rarity: #c9d4e4; --rarity-soft: rgba(201, 212, 228, 0.3); --rarity-bg: rgba(30, 36, 52, 0.94); }
+.rarity-uncommon { --rarity: #00ff88; --rarity-soft: rgba(0, 255, 136, 0.32); --rarity-bg: rgba(6, 40, 30, 0.94); }
+.rarity-rare { --rarity: #3d9bff; --rarity-soft: rgba(61, 155, 255, 0.36); --rarity-bg: rgba(10, 26, 60, 0.94); }
+.rarity-epic { --rarity: #b565ff; --rarity-soft: rgba(181, 101, 255, 0.38); --rarity-bg: rgba(36, 14, 60, 0.94); }
+.rarity-legendary { --rarity: #ffcc00; --rarity-soft: rgba(255, 204, 0, 0.4); --rarity-bg: rgba(48, 36, 8, 0.94); }
+
 .upgrade-option {
   position: relative;
-  background: linear-gradient(180deg, rgba(16, 24, 48, 0.92), rgba(8, 12, 26, 0.96));
-  border: 1px solid rgba(0, 243, 255, 0.35);
+  background: linear-gradient(180deg, var(--rarity-bg), rgba(8, 12, 26, 0.97) 55%);
+  border: 2px solid var(--rarity);
   border-radius: 12px;
-  padding: 20px 18px;
+  padding: 18px 16px 14px;
   cursor: pointer;
   text-align: left;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: all 0.16s ease;
+  box-shadow: 0 0 18px var(--rarity-soft);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .upgrade-option:hover {
   transform: translateY(-5px);
-  border-color: var(--cyan);
-  box-shadow: 0 8px 28px rgba(0, 243, 255, 0.3);
+  box-shadow: 0 8px 30px var(--rarity-soft), 0 0 22px var(--rarity-soft);
 }
 
-.upgrade-option.rarity-synergy {
-  border-color: var(--gold);
-  background: linear-gradient(180deg, rgba(45, 34, 10, 0.92), rgba(14, 12, 24, 0.96));
-  box-shadow: 0 0 24px rgba(255, 204, 0, 0.25);
+/* Cache rewards are already installed: informational, not clickable. */
+.upgrade-option.installed {
+  cursor: default;
+}
+
+.upgrade-option.installed:hover {
+  transform: none;
+}
+
+/* Lucky multi-level roll: a magenta ribbon, deliberately outside the rarity palette. */
+.upg-jump-ribbon {
+  position: absolute;
+  top: -11px;
+  right: 12px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #ff007f, #ff4fa8);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(255, 0, 127, 0.75);
+}
+
+.jump-3 .upg-jump-ribbon {
+  outline: 1px solid #fff;
+  animation: jump-ribbon-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes jump-ribbon-pulse {
+  from { box-shadow: 0 0 10px rgba(255, 0, 127, 0.6); }
+  to { box-shadow: 0 0 24px rgba(255, 0, 127, 1); }
 }
 
 .upg-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .upg-key {
@@ -728,36 +968,157 @@ html, body {
   background: rgba(0, 243, 255, 0.15);
   border: 1px solid rgba(0, 243, 255, 0.5);
   color: var(--cyan);
+  white-space: nowrap;
 }
 
 .upg-badge {
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.2px;
   padding: 3px 8px;
   border-radius: 4px;
   text-transform: uppercase;
+  color: var(--rarity);
+  border: 1px solid var(--rarity-soft);
+  background: rgba(0, 0, 0, 0.3);
+  text-align: right;
 }
 
 .upg-name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
-  color: #fff;
-  margin-bottom: 8px;
+  color: var(--rarity);
+  margin-bottom: 4px;
 }
 
-.upg-desc {
-  font-size: 13px;
+.upg-headline {
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 0 12px var(--rarity-soft);
+  margin-bottom: 6px;
+}
+
+.upg-summary {
+  font-size: 12.5px;
   color: #b8c7e0;
-  line-height: 1.45;
-  margin-bottom: 14px;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.upg-stats {
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.upg-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.upg-stat-label {
+  color: #9fb0cc;
+}
+
+.upg-stat-val {
+  color: #8494b2;
+  white-space: nowrap;
+}
+
+.upg-stat-val b {
+  color: #fff;
+  font-weight: 800;
+}
+
+.upg-stat-more {
+  color: #7a8ba8;
+  font-style: italic;
 }
 
 .upg-level {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.5px;
-  color: var(--emerald);
+  color: #dbe6f5;
+}
+
+.upg-max {
+  color: var(--text-dim);
+}
+
+.jump-2 .upg-level,
+.jump-3 .upg-level {
+  color: #ff66b2;
+}
+
+/* Cache rewards: center however many cards the jackpot installed. */
+#chest-rewards-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+  justify-content: center;
+}
+
+/* 5x jackpots wrap to two rows: trim each card so the whole cache and its Claim button fit 720px. */
+#chest-rewards-grid.compact {
+  gap: 14px 16px;
+}
+
+#chest-rewards-grid.compact .upgrade-option {
+  padding: 12px 14px 10px;
+}
+
+#chest-rewards-grid.compact .upg-top {
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-name {
+  margin-bottom: 2px;
+}
+
+#chest-rewards-grid.compact .upg-headline {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+#chest-rewards-grid.compact .upg-summary {
+  display: none;
+}
+
+#chest-rewards-grid.compact .upg-stats {
+  margin-bottom: 8px;
+}
+
+#chest-rewards-grid.compact .upg-stat {
+  padding: 2px 0;
+}
+
+@media (max-width: 760px) {
+  .upgrade-card {
+    padding: 18px 14px;
+  }
+
+  .upgrade-title {
+    font-size: 26px;
+  }
+
+  .upgrade-hint {
+    margin-bottom: 16px;
+  }
+
+  .upgrade-choices-grid,
+  #chest-rewards-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .upg-headline {
+    font-size: 19px;
+  }
 }
 
 /* Game Over Stats Row */
@@ -860,18 +1221,6 @@ html, body {
   border: 1px solid rgba(0, 255, 136, 0.55);
   border-radius: 99px;
   text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
-}
-
-.upgrade-option.jump-2 {
-  border-color: var(--magenta);
-  background: linear-gradient(180deg, rgba(48, 12, 42, 0.94), rgba(10, 12, 26, 0.96));
-  box-shadow: 0 0 22px rgba(255, 0, 127, 0.28);
-}
-
-.upgrade-option.jump-3 {
-  border-color: #00ffaa;
-  background: linear-gradient(180deg, rgba(10, 48, 42, 0.94), rgba(18, 14, 34, 0.96));
-  box-shadow: 0 0 28px rgba(0, 255, 170, 0.38);
 }
 
 .jump-pill {
@@ -1014,6 +1363,20 @@ html, body {
   cursor: pointer;
 }
 
+/* Pause-menu on/off toggles (e.g. floating damage numbers): dim when OFF, cyan when ON. */
+.pause-toggle-btn {
+  padding: 12px 18px;
+  font-size: 13px;
+  border-color: rgba(139, 163, 199, 0.55);
+  color: #8ba3c7;
+  background: rgba(5, 10, 24, 0.6);
+}
+
+.pause-toggle-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 /* Controller focus highlight (menus navigated with d-pad / left stick) */
 .gp-focus {
   outline: 2px solid var(--gold) !important;
@@ -1023,6 +1386,15 @@ html, body {
 
 .upgrade-option.gp-focus {
   transform: translateY(-5px);
+}
+
+/* Short screens (up to 1366x768 laptops): a slimmer boss title card so it stays clear of the ship at
+   screen centre even under a warning strip and stacked boss bars. */
+@media (max-height: 820px) {
+  .boss-card { top: calc(100% + 10px); padding: 6px 16px 8px; }
+  .boss-card-name { font-size: clamp(20px, 4vw, 30px); letter-spacing: 4px; }
+  .boss-card-epithet { font-size: 12px; }
+  .boss-card-detail { margin-top: 2px; }
 }
 
 /* Narrow screens: stack the core wallet under the title so the logo keeps its width. */

@@ -3,12 +3,16 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager } from './enemies.js';
+import { EnemyManager, BOSS_NAME } from './enemies.js';
+import { DamageNumbers } from './damage-numbers.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
-import { UPGRADE_POOL, rollUpgrades } from './upgrades.js';
+import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
+import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
+import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
   TUNING,
   TUNING_SCHEMA,
@@ -18,6 +22,42 @@ import {
   getAgentTuningPayload,
   sendSandboxCommand
 } from './config.js';
+
+// Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
+const SINGULARITY_IMPLODE_TIME = 0.35;
+// Grid funnel depth (px at the core) for enemy black holes and player singularities.
+const BLACKHOLE_GRID_DEPTH = 220;
+const SINGULARITY_GRID_DEPTH = 260;
+
+// Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
+const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
+const BOSS_CARD_TIME = 2.8;
+const BOSS_BAR_ROWS = 3;
+
+// "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
+export function bossEpithet(wave) {
+  const rank = BOSS_RANKS[Math.max(0, Math.min(BOSS_RANKS.length - 1, Math.floor(wave / 3) - 1))];
+  return `WAVE ${wave} ${rank}`;
+}
+
+const setHidden = (el, hidden) => {
+  if (el) el.classList[hidden ? 'add' : 'remove']('hidden');
+};
+
+// Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
+// Unknown archetypes fall back to tier 1; anything flagged isBoss is tier 4.
+const DEATH_TIER = { swarmer: 0, mini_splitter: 0, weaver: 1, pinwheel: 1, splitter: 2, blackhole: 3, boss: 4 };
+const DEATH_FX = [
+  { intensity: 0.8, shake: 0, hitStop: 0 },   // 0: swarm fodder — quick pop, no shake
+  { intensity: 1.15, shake: 0, hitStop: 0 },  // 1: pinwheel/weaver — adds a white-hot core flash
+  { intensity: 1.5, shake: 4, hitStop: 0 },   // 2: splitter — inner debris shatter + embers
+  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: black hole (elite) — wide second ring
+  { intensity: 3.0, shake: 18, hitStop: 3 }   // 4: boss — everything, plus a chroma flash
+];
+// Knockback impulses (px/tick for a 10px-radius hull; mass scales with radius²). Bosses are immune.
+const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
+const KNOCKBACK_MAX = 4;
+const HIT_STOP_MAX_TICKS = 3;
 
 export class Game {
   constructor() {
@@ -40,6 +80,7 @@ export class Game {
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.enemyManager = new EnemyManager();
+    this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
 
     this.state = 'TITLE'; // TITLE, PLAYING, UPGRADE, CHEST, GAMEOVER
@@ -50,6 +91,7 @@ export class Game {
     this.mouse = { x: this.width * 0.5, y: this.height * 0.5, down: false };
     this.shake = 0;
     this.chromaFlash = 0;
+    this.hitStopTicks = 0;
     this.shieldRotation = 0;
     this.lastRunHighlightId = null;
 
@@ -89,6 +131,11 @@ export class Game {
     this.waveTimer = 0;
     this.spawnCooldown = 0.6;
     this.pendingBossSpawns = [];
+    this.bossCard = null;
+    this.bossCardTimer = 0;
+    this.hitStopTicks = 0;
+    this.slowMoTicks = 0;
+    this.bossFlash = 0;
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -147,9 +194,11 @@ export class Game {
     this.camY = centerY - this.height * 0.5;
 
     this.particles.clear();
+    this.damageNumbers?.clear();
     this.grid.reset();
     this.shake = 0;
     this.chromaFlash = 0;
+    this.hitStopTicks = 0;
     this.fireAccumulator = 0;
     this.missileTimer = 0;
     this.lightningTimer = 0;
@@ -160,6 +209,7 @@ export class Game {
     this.bullets = [];
     this.missiles = [];
     this.singularities = [];
+    this.gravityWells = [];
     this.geoms = [];
     this.chests = []; // Vampire Survivors style Relic Supply Caches!
 
@@ -269,6 +319,10 @@ export class Game {
           this.togglePause();
           return;
         }
+        if (code === 'KeyN') {
+          this.toggleDamageNumbers();
+          return;
+        }
       }
 
       if (this.state === 'PLAYING') {
@@ -292,6 +346,9 @@ export class Game {
         }
         if (code === 'KeyM') {
           this.toggleAudio();
+        }
+        if (code === 'KeyN') {
+          this.toggleDamageNumbers();
         }
       }
 
@@ -374,11 +431,14 @@ export class Game {
     const resumeBtn = document.getElementById('btn-resume-game');
     const pauseTunerBtn = document.getElementById('btn-pause-tuner');
     const pauseRestartBtn = document.getElementById('btn-pause-restart');
+    const pauseDmgNumsBtn = document.getElementById('btn-pause-dmgnums');
 
     if (pauseBtn) pauseBtn.addEventListener('click', () => this.togglePause());
     if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
     if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
+    if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
+    this.syncDamageNumbersButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -569,11 +629,15 @@ export class Game {
         this.renderHubUI();
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
+        // Same warning -> entrance event as a scheduled boss.
         const bp = this.spawnAroundPlayer(420, 620);
-        if (this.enemyManager.queueSpawn('boss', bp.x, bp.y, this.getWaveScale())) {
-          this.showBanner('⚠ SANDBOX DREADNOUGHT SPAWNED ⚠');
-        } else {
+        if (!this.queueBossEncounter(bp, this.getWaveScale(), `WAVE ${this.wave} SANDBOX SIMULACRUM`)) {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
+        }
+      } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
+        const bp = this.spawnAroundPlayer(300, 380);
+        if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner('⚠ ENEMY CAP REACHED — BLACK HOLE NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -682,6 +746,20 @@ export class Game {
     btn.classList.toggle('active', on);
   }
 
+  toggleDamageNumbers() {
+    this.damageNumbers.toggle();
+    this.syncDamageNumbersButton();
+  }
+
+  syncDamageNumbersButton() {
+    const btn = document.getElementById('btn-pause-dmgnums');
+    if (!btn || !this.damageNumbers) return;
+    const on = this.damageNumbers.enabled;
+    btn.textContent = `🔢 DAMAGE NUMBERS: ${on ? 'ON' : 'OFF'} [N]`;
+    btn.classList.toggle('active', on);
+    btn.setAttribute?.('aria-pressed', String(on));
+  }
+
   resetInput() {
     this.keys = {};
     this.mouse.down = false;
@@ -735,7 +813,7 @@ export class Game {
 
     this.resetRun();
     this.state = 'PLAYING';
-    this.sound.setMusicState({ intensity: 0.35, muffled: false });
+    this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
 
     this.grid.applyImpulse(this.player.x, this.player.y, 48, 260, 188);
     this.particles.spawnShockwave(this.player.x, this.player.y, 240, 188, 5, 0.5);
@@ -810,17 +888,17 @@ export class Game {
     this.sessionCores += bonusCores;
     this.progression.addCores(bonusCores);
 
-    // Pick random available upgrades and automatically apply them!
+    // Pick random available upgrades and install them through the same path as level-up picks.
+    // Each card is described just before install, so it shows exactly what this cache changed.
+    // 5x jackpots use compact cards (fewer stat rows, no summary) so both rows fit one screen.
+    const compact = rewardCount > 3;
     const awarded = [];
     for (let i = 0; i < rewardCount; i++) {
       const pool = rollUpgrades(this.player, 3);
       if (pool.length === 0) break;
       const chosen = pool[0];
+      awarded.push(describeUpgrade(this.player, chosen, compact ? COMPACT_MAX_ROWS : undefined));
       this.applyUpgrade(chosen);
-      awarded.push({
-        ...chosen,
-        newLevel: this.player.upgradeLevels[chosen.id]
-      });
     }
 
     document.getElementById('chest-tier-subtitle').textContent = tierSub;
@@ -830,25 +908,13 @@ export class Game {
 
     const gridEl = document.getElementById('chest-rewards-grid');
     gridEl.innerHTML = '';
+    gridEl.classList[compact ? 'add' : 'remove']('compact');
 
-    awarded.forEach((upg, idx) => {
+    awarded.forEach((d, idx) => {
       const card = document.createElement('div');
-      card.className = `upgrade-option ${upg.isSynergy ? 'rarity-synergy' : 'jump-2'}`;
-      card.innerHTML = `
-        <div>
-          <div class="upg-top">
-            <span class="upg-key">FREE #${idx + 1}</span>
-            <span class="upg-badge" style="color:${upg.badgeColor}; border:1px solid ${upg.badgeColor}66; background:${upg.badgeColor}18">
-              ${upg.category}
-            </span>
-          </div>
-          <div class="upg-name">${upg.name}</div>
-          <div class="upg-desc">${upg.desc}</div>
-        </div>
-        <div class="upg-level" style="color:var(--gold)">
-          ${upg.isSynergy ? '★ GOLDEN SYNERGY UNLOCKED ★' : `INSTALLED → LEVEL ${upg.newLevel}`}
-        </div>
-      `;
+      const view = renderUpgradeCard(d, `FREE #${idx + 1}`, true);
+      card.className = `${view.className} installed`;
+      card.innerHTML = view.html;
       gridEl.appendChild(card);
     });
 
@@ -931,8 +997,8 @@ export class Game {
 
     // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore) {
-      this.particles.spawnShockwave(rock.x, rock.y, 135, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, 135, this.player.stats.damage * 2.6, 48);
+      this.particles.spawnShockwave(rock.x, rock.y, W.tectonicBlastRadius, 48, 4.5, 0.35);
+      this.damageEnemiesInRadius(rock.x, rock.y, W.tectonicBlastRadius, this.player.stats.damage * W.tectonicDamageMult, 48);
     }
   }
 
@@ -941,7 +1007,7 @@ export class Game {
     if (p.dashCooldown > 0) return;
 
     p.dashTimer = 0.22;
-    p.dashCooldown = Math.max(0.2, (TUNING.dashCooldownBase ?? 1.5) - (p.weapons.dashNova || 0) * 0.14);
+    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, 0.32);
 
@@ -957,9 +1023,9 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
     if (p.weapons.dashNova > 0) {
-      const novaRadius = 140 + p.weapons.dashNova * 35;
+      const novaRadius = W.novaRadius(p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, novaRadius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, novaRadius, 35 * p.weapons.dashNova, 160);
+      this.damageEnemiesInRadius(p.x, p.y, novaRadius, W.novaDamage(p.weapons.dashNova), 160);
     }
   }
 
@@ -970,8 +1036,9 @@ export class Game {
     p.invuln = Math.max(p.invuln, 1.2);
 
     this.sound.playSupernova();
-    this.shake = 22 * (TUNING.screenShakeMult ?? 1.0);
+    this.addShake(22);
     this.chromaFlash = 0.75;
+    this.requestHitStop(2);
 
     // Fixed world-space reach (the old 1920x1080 value) so window size and zoom don't change the blast.
     const maxR = 1430;
@@ -984,8 +1051,10 @@ export class Game {
       if (e.dead) continue;
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
       if (e.isBoss) {
-        e.hp -= e.maxHp * 0.4;
+        const dmg = e.maxHp * 0.4;
+        e.hp -= dmg;
         e.hitFlash = 1;
+        this.damageNumbers?.add(e, dmg, 'supernova');
         if (e.hp <= 0) this.killEnemy(e, true);
       } else {
         this.killEnemy(e, true);
@@ -1000,21 +1069,53 @@ export class Game {
   }
 
   // Weapons and explosions ONLY damage enemies — never asteroids!
-  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190) {
+  // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
+  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area) {
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       const dx = e.x - cx;
       const dy = e.y - cy;
-      if (dx * dx + dy * dy <= (radius + e.radius) * (radius + e.radius)) {
-        e.hp -= dmg;
-        e.hitFlash = 1;
-        if (e.hp <= 0) {
-          this.killEnemy(e);
-        }
+      const dSq = dx * dx + dy * dy;
+      if (dSq <= (radius + e.radius) * (radius + e.radius)) {
+        const d = Math.sqrt(dSq) || 1;
+        this.hitEnemy(e, dmg, source, (dx / d) * knock, (dy / d) * knock);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
+  }
+
+  // Single entry point for weapon damage: HP, hit flash, damage number, knockback and kill.
+  // (kx, ky) is a knockback impulse in px/tick for a 10px-radius hull; heavier hulls move less.
+  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+    e.hp -= dmg;
+    e.hitFlash = Math.max(e.hitFlash || 0, flash);
+    this.damageNumbers?.add(e, dmg, source);
+    if ((kx || ky) && !e.isBoss) {
+      const k = (TUNING.knockbackMult ?? 1.0) * 100 / (e.radius * e.radius);
+      let nx = (e.knockX || 0) + kx * k;
+      let ny = (e.knockY || 0) + ky * k;
+      const mag = Math.hypot(nx, ny);
+      if (mag > KNOCKBACK_MAX) {
+        nx *= KNOCKBACK_MAX / mag;
+        ny *= KNOCKBACK_MAX / mag;
+      }
+      e.knockX = nx;
+      e.knockY = ny;
+    }
+    if (e.hp <= 0) this.killEnemy(e);
+  }
+
+  // Screen shake is reserved for heavy moments; every source goes through the user's multiplier.
+  addShake(amount) {
+    this.shake = Math.max(this.shake || 0, Math.min(24, amount) * (TUNING.screenShakeMult ?? 1.0));
+  }
+
+  // Freeze the simulation for a few fixed ticks (never more than 3) on big moments only.
+  // consumeTimeDilation() spends these ticks alongside the boss-kill hit-stop and slow-mo.
+  requestHitStop(ticks) {
+    const want = Math.min(HIT_STOP_MAX_TICKS, Math.round(ticks * (TUNING.hitStopMult ?? 1.0)));
+    this.hitStopTicks = Math.max(this.hitStopTicks || 0, want);
   }
 
   killEnemy(e, fromBomb = false) {
@@ -1026,15 +1127,31 @@ export class Game {
     enemies.splice(enemyIndex, 1);
     this.kills++;
 
-    const intensity = e.isBoss ? 3.0 : e.type === 'blackhole' ? 2.2 : e.type === 'splitter' ? 1.5 : 1.0;
+    const tier = e.isBoss ? 4 : DEATH_TIER[e.type] ?? 1;
+    const fx = DEATH_FX[tier];
+    const intensity = fx.intensity;
     this.sound.playExplosion(intensity);
-    this.shake = Math.min(24, Math.max(this.shake, 3.2 * intensity * (TUNING.screenShakeMult ?? 1.0)));
+    if (fx.shake > 0) this.addShake(fx.shake);
+    if (fx.hitStop > 0) this.requestHitStop(fx.hitStop);
 
     this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, intensity);
     const sparkCount = fromBomb ? 18 : Math.floor(26 * intensity);
     this.particles.spawnExplosionSparks(e.x, e.y, sparkCount, e.hue, 2.5, 14 * Math.sqrt(intensity), 2.3);
     this.particles.spawnShockwave(e.x, e.y, 48 * intensity, e.hue, 3 * intensity, 0.34);
     this.grid.applyImpulse(e.x, e.y, 26 * intensity, 115 * intensity, e.hue);
+
+    // Heavier hulls stack extra layers; supernova mass-kills skip them (except elites/bosses).
+    if (!fromBomb || tier >= 3) {
+      if (tier >= 1) this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+      if (tier >= 2) {
+        this.particles.spawnPolygonShatter(e.x, e.y, e.radius * 0.55, e.sides, -e.rotation, e.hue, intensity * 0.55);
+        this.particles.spawnExplosionSparks(e.x, e.y, 6 * tier, 48, 1.5, 6, 3.2);
+      }
+      if (tier >= 3) {
+        this.particles.spawnShockwave(e.x, e.y, 110 * intensity, e.hue, 2.5 + tier, 0.65);
+        this.chromaFlash = Math.max(this.chromaFlash || 0, tier === 4 ? 0.45 : 0.16);
+      }
+    }
 
     if (e.type === 'splitter' && !fromBomb) {
       const waveScale = this.getWaveScale();
@@ -1055,8 +1172,11 @@ export class Game {
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
+    let bossBombGain = 0;
     if (e.isBoss) {
+      const bombsBefore = this.player.bombs;
       this.player.bombs = Math.min(9, this.player.bombs + 1);
+      bossBombGain = this.player.bombs - bombsBefore;
       this.spawnRelicChest(e.x, e.y, true);
     } else if (!fromBomb && this.chests.length < 3) {
       const chestChance = (
@@ -1071,8 +1191,8 @@ export class Game {
     }
 
     const shrapnelLv = this.player.weapons.shrapnel || 0;
-    if (shrapnelLv > 0 && !fromBomb && Math.random() < 0.45 + shrapnelLv * 0.12) {
-      const shardCount = 3 + shrapnelLv;
+    if (shrapnelLv > 0 && !fromBomb && Math.random() < W.shrapnelChance(shrapnelLv)) {
+      const shardCount = W.shrapnelShards(shrapnelLv);
       for (let s = 0; s < shardCount; s++) {
         const a = (s * Math.PI * 2) / shardCount + Math.random() * 0.3;
         this.bullets.push({
@@ -1080,17 +1200,20 @@ export class Game {
           y: e.y,
           vx: Math.cos(a) * 11.5,
           vy: Math.sin(a) * 11.5,
-          damage: this.player.stats.damage * 0.75,
+          damage: this.player.stats.damage * W.shrapnelDamageMult,
           pierce: 1,
           hue: 48,
           radius: 4,
-          life: 0.45
+          life: 0.45,
+          source: 'other',
+          knock: KNOCKBACK.shrapnel
         });
       }
     }
 
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
+    if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
 
     const geomCount = e.isBoss ? 14 : e.type === 'blackhole' ? 4 : e.type === 'splitter' ? 2 : 1;
     for (let g = 0; g < geomCount; g++) {
@@ -1172,10 +1295,159 @@ export class Game {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.spawnAroundPlayer(520, 780);
-      if (!this.enemyManager.queueSpawn('boss', bp.x, bp.y, scheduled.waveScale)) break;
+      if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
       this.pendingBossSpawns.shift();
-      this.showBanner('⚠ PRISMATIC DREADNOUGHT DETECTED ⚠');
     }
+  }
+
+  // Admission reserves the boss's enemy slot at once and the warning plays out on that reserved
+  // spawn ring, so a boss that has been announced can never be refused by the cap on arrival.
+  queueBossEncounter(pos, waveScale, epithet) {
+    const warmup = TUNING.bossWarningTime ?? 3.0;
+    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, { warmup, name: BOSS_NAME, epithet })) return false;
+    this.sound.playBossWarning();
+    return true;
+  }
+
+  contactDamage(e) {
+    return (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  showBossCard(kind, kicker, e, detail) {
+    this.bossCardSerial = (this.bossCardSerial || 0) + 1;
+    this.bossCard = { id: this.bossCardSerial, kind, kicker, name: e.name || BOSS_NAME, epithet: e.epithet || '', detail };
+    this.bossCardTimer = BOSS_CARD_TIME;
+  }
+
+  // Entrance: layered shockwaves, a hard grid shove, capped screen shake and the title card.
+  onBossArrived(e) {
+    this.shake = Math.min(24, Math.max(this.shake, 20 * (TUNING.screenShakeMult ?? 1.0)));
+    this.chromaFlash = Math.max(this.chromaFlash, 0.6);
+    this.particles.spawnShockwave(e.x, e.y, 560, 48, 8, 0.8);
+    this.particles.spawnShockwave(e.x, e.y, 320, e.hue, 5, 0.55);
+    this.particles.spawnExplosionSparks(e.x, e.y, 48, 48, 3, 18, 2.6);
+    this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
+    this.sound.playBossArrival();
+    const hp = Math.round(e.maxHp).toLocaleString();
+    this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+  }
+
+  // Defeat payoff: hit-stop then half-speed slow-mo (counted in fixed ticks), a gold flash,
+  // layered shockwaves and a banner listing the exact rewards.
+  onBossDefeated(e, pts, bombGain) {
+    this.hitStopTicks = Math.max(this.hitStopTicks || 0, Math.round((TUNING.bossHitStop ?? 0.1) * 60));
+    this.slowMoTicks = Math.round((TUNING.bossSlowMo ?? 0.5) * 60);
+    this.bossFlash = 1;
+    this.shake = Math.min(24, Math.max(this.shake, 24 * (TUNING.screenShakeMult ?? 1.0)));
+    this.particles.spawnShockwave(e.x, e.y, 680, 48, 10, 0.9);
+    this.particles.spawnShockwave(e.x, e.y, 420, 185, 6, 0.65);
+    this.particles.spawnShockwave(e.x, e.y, 220, 325, 5, 0.45);
+    this.particles.spawnExplosionSparks(e.x, e.y, 70, 48, 4, 22, 3);
+    this.grid.applyImpulse(e.x, e.y, 110, 600, 48);
+    this.sound.playBossDefeat();
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE'];
+    if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
+    this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
+  }
+
+  // Boss-kill time dilation in whole 60 Hz ticks: hit-stop holds every tick, then slow-mo holds
+  // every other tick (half speed). Skipping ticks instead of scaling dt keeps per-tick motion exact.
+  consumeTimeDilation() {
+    if (this.hitStopTicks > 0) {
+      this.hitStopTicks--;
+      return true;
+    }
+    if (this.slowMoTicks > 0) {
+      this.slowMoTicks--;
+      return this.slowMoTicks % 2 === 1;
+    }
+    return false;
+  }
+
+  // 0 = no boss, 1 = boss warning counting down, 2 = boss alive (drives the music layers).
+  getBossStage() {
+    if (this.enemyManager.enemies.some(e => e.isBoss && !e.dead)) return 2;
+    return (this.enemyManager.spawnIndicators || []).some(sp => sp.config?.isBoss) ? 1 : 0;
+  }
+
+  // HUD snapshot: live bosses as stacked bars, plus the soonest pending warning's countdown.
+  getBossHudModel() {
+    const bosses = this.enemyManager.enemies.filter(e => e.isBoss && !e.dead);
+    let shown = bosses;
+    if (bosses.length > BOSS_BAR_ROWS) {
+      // Too many to stack: keep the nearest few, still in arrival order so rows don't reshuffle.
+      const p = this.player;
+      const distSq = e => (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      const nearest = new Set([...bosses].sort((a, b) => distSq(a) - distSq(b)).slice(0, BOSS_BAR_ROWS));
+      shown = bosses.filter(e => nearest.has(e));
+    }
+
+    let soonest = null;
+    let warningCount = 0;
+    for (const sp of this.enemyManager.spawnIndicators || []) {
+      if (!sp.config?.isBoss) continue;
+      warningCount++;
+      if (!soonest || sp.timer < soonest.timer) soonest = sp;
+    }
+
+    return {
+      visible: bosses.length > 0,
+      rows: shown.map(e => ({
+        name: e.name || BOSS_NAME,
+        epithet: e.epithet || '',
+        hp: Math.max(0, Math.ceil(e.hp)),
+        maxHp: Math.round(e.maxHp),
+        pct: Math.max(0, Math.min(1, e.hp / e.maxHp))
+      })),
+      overflow: bosses.length - shown.length,
+      warning: soonest
+        ? { count: warningCount, eta: Math.max(0, soonest.timer), name: soonest.config.name || BOSS_NAME, epithet: soonest.config.epithet || '' }
+        : null
+    };
+  }
+
+  updateBossHUD(model) {
+    const card = this.bossCardTimer > 0 ? this.bossCard : null;
+    setHidden(document.getElementById('boss-hud'), !model.warning && !model.visible && !card);
+    const warnEl = document.getElementById('boss-warning');
+    setHidden(warnEl, !model.warning);
+    if (model.warning) {
+      const w = model.warning;
+      document.getElementById('boss-warning-text').textContent = w.count > 1
+        ? `${w.count} BOSSES INBOUND // NEXT: ${w.name}`
+        : `${w.name} INBOUND // ${w.epithet}`;
+      document.getElementById('boss-warning-eta').textContent = `T-${w.eta.toFixed(1)}s`;
+    }
+
+    setHidden(document.getElementById('boss-bars'), !model.visible);
+    for (let i = 0; i < BOSS_BAR_ROWS; i++) {
+      const row = model.rows[i];
+      setHidden(document.getElementById(`boss-bar-${i}`), !row);
+      if (!row) continue;
+      document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
+      document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
+      document.getElementById(`boss-bar-hp-${i}`).textContent = `${row.hp.toLocaleString()} / ${row.maxHp.toLocaleString()}`;
+      document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
+    }
+    const moreEl = document.getElementById('boss-bar-more');
+    setHidden(moreEl, model.overflow <= 0);
+    if (model.overflow > 0) moreEl.textContent = `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`;
+
+    const cardEl = document.getElementById('boss-card');
+    if (card && card.id !== this.bossCardShownId) {
+      this.bossCardShownId = card.id;
+      document.getElementById('boss-card-kicker').textContent = card.kicker;
+      document.getElementById('boss-card-name').textContent = card.name;
+      document.getElementById('boss-card-epithet').textContent = card.epithet ? `— ${card.epithet} —` : '';
+      document.getElementById('boss-card-detail').textContent = card.detail;
+      // Re-run the entrance animation even when one card replaces another that is still showing.
+      cardEl.className = `boss-card boss-card-${card.kind}`;
+      cardEl.style.animation = 'none';
+      void cardEl.offsetWidth;
+      cardEl.style.animation = '';
+    }
+    setHidden(cardEl, !card);
+    if (cardEl) cardEl.classList[card && this.bossCardTimer < 0.45 ? 'add' : 'remove']('boss-card-out');
   }
 
   spawnWavePack() {
@@ -1279,13 +1551,14 @@ export class Game {
         const e = hit.enemy;
         if (e.dead) continue;
         b.hitEnemies.add(e);
-        e.hp -= b.damage;
-        e.hitFlash = 1;
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
         const hy = y0 + (b.y - y0) * hit.t;
-        this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(b.vy, b.vx), 1.1, 5, e.hue, 7);
-        if (e.hp <= 0) this.killEnemy(e);
+        const travel = Math.atan2(b.vy, b.vx);
+        this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
+        this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
+        const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
+        this.hitEnemy(e, b.damage, b.source || 'blaster', b.vx * kb, b.vy * kb);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
@@ -1295,13 +1568,7 @@ export class Game {
   }
 
   applyUpgrade(upg) {
-    const current = this.player.upgradeLevels[upg.id] || 0;
-    const jump = Math.min(upg.levelJump || 1, upg.maxLevel - current);
-    for (let k = 0; k < jump; k++) {
-      this.player.upgradeLevels[upg.id] = current + k + 1;
-      upg.apply(this.player);
-    }
-    return jump;
+    return applyUpgradeLevels(this.player, upg);
   }
 
   processPendingLevelUps() {
@@ -1341,14 +1608,14 @@ export class Game {
 
     if (p.weapons.pulsarHelix) {
       this.helixAngle += 0.48;
-      for (let arm = 0; arm < 2; arm++) {
+      for (let arm = 0; arm < W.helixArms; arm++) {
         const ha = this.helixAngle + arm * Math.PI;
         this.bullets.push({
           x: p.x,
           y: p.y,
           vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
-          damage: p.stats.damage * 0.8,
+          damage: p.stats.damage * W.helixDamageMult,
           pierce: p.stats.pierce,
           hue: 48,
           radius: 4.5,
@@ -1363,7 +1630,7 @@ export class Game {
 
   fireSwarmMissiles(level) {
     const p = this.player;
-    const count = 1 + level;
+    const count = W.missileSalvo(level);
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       this.missiles.push({
@@ -1371,8 +1638,8 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: 9.5 + level * 0.8,
-        damage: p.stats.damage * (1.8 + level * 0.35),
+        speed: W.missileSpeed(level),
+        damage: p.stats.damage * W.missileDamageMult(level),
         hue: p.weapons.stormProtocol ? 52 : 325,
         trail: [],
         life: 3.2
@@ -1385,7 +1652,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     if (enemies.length === 0) return;
 
-    const bounces = 3 + level * 2;
+    const bounces = W.lightningJumps(level);
     const hitSet = new Set();
     let currX = originX;
     let currY = originY;
@@ -1410,14 +1677,13 @@ export class Game {
 
       this.particles.spawnLightning(currX, currY, target.x, target.y, 275);
       this.particles.spawnExplosionSparks(target.x, target.y, 8, 275, 2, 7, 1.8);
+      const arc = Math.sqrt(bestDistSq) || 1;
+      const kx = ((target.x - currX) / arc) * KNOCKBACK.lightning;
+      const ky = ((target.y - currY) / arc) * KNOCKBACK.lightning;
       currX = target.x;
       currY = target.y;
 
-      target.hp -= p.stats.damage * (1.4 + level * 0.35);
-      target.hitFlash = 1;
-      if (target.hp <= 0) {
-        this.killEnemy(target);
-      }
+      this.hitEnemy(target, p.stats.damage * W.lightningDamageMult(level), 'lightning', kx, ky);
     }
   }
 
@@ -1425,17 +1691,177 @@ export class Game {
     const p = this.player;
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
+    const pullRadius = W.singularityPullRadius(level);
     this.singularities.push({
       x: p.x,
       y: p.y,
       vx: Math.cos(angle) * 4.2,
       vy: Math.sin(angle) * 4.2,
-      radius: 14 + level * 3,
-      pullRadius: 150 + level * 25,
-      damage: p.stats.damage * (0.35 + level * 0.12),
+      radius: W.singularityCoreRadius(level),
+      pullRadius,
+      // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
+      // the payoff is the collapse pulse over 85% of the pull radius.
+      damage: p.stats.damage * W.singularityDamageMult(level),
+      collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
+      collapseDamage: p.stats.damage * W.singularityCollapseDamageMult(level) * (TUNING.singularityCollapseMult ?? 1.0),
       life: 2.6,
+      maxLife: 2.6,
+      spin: 0,
       hue: 290
     });
+  }
+
+  // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
+  collectGravityWells() {
+    const wells = this.gravityWells || (this.gravityWells = []);
+    wells.length = 0;
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      if (enemies[i].type === 'blackhole' && !enemies[i].dead) wells.push(enemies[i]);
+    }
+    return wells;
+  }
+
+  // Enemy black holes tug the ship. The summed pull is capped to a share of the ship's own thrust
+  // (see gravity.js), so holding away from any stack of wells always escapes at base move speed.
+  applyWellPullToPlayer(p) {
+    const wells = this.gravityWells;
+    p.gravityTug = 0;
+    if (!wells || wells.length === 0) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    const strength = TUNING.blackholePlayerPull ?? 0.4;
+    let ax = 0;
+    let ay = 0;
+    for (let i = 0; i < wells.length; i++) {
+      const w = wells[i];
+      if (w.dead) continue;
+      const dx = w.x - p.x;
+      const dy = w.y - p.y;
+      const k = wellPullScale(dx, dy, radius, strength, w.radius);
+      ax += dx * k;
+      ay += dy * k;
+    }
+    const mag = Math.hypot(ax, ay);
+    if (mag === 0) return;
+    const cap = playerPullCap(p.stats.moveSpeed);
+    if (mag > cap) {
+      ax *= cap / mag;
+      ay *= cap / mag;
+    }
+    p.vx += ax;
+    p.vy += ay;
+    p.gravityTug = Math.min(mag, cap);
+  }
+
+  // Enemy black holes bend passing shots slightly; speed is preserved so range and damage are unchanged.
+  bendProjectilesInWells() {
+    const wells = this.gravityWells;
+    const strength = TUNING.blackholeBulletBend ?? 0.22;
+    if (!wells || wells.length === 0 || strength <= 0) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      let ax = 0;
+      let ay = 0;
+      for (let j = 0; j < wells.length; j++) {
+        const w = wells[j];
+        if (w.dead) continue;
+        const dx = w.x - b.x;
+        const dy = w.y - b.y;
+        const k = wellPullScale(dx, dy, radius, strength, w.radius);
+        ax += dx * k;
+        ay += dy * k;
+      }
+      if (ax === 0 && ay === 0) continue;
+      const speed = Math.hypot(b.vx, b.vy);
+      b.vx += ax;
+      b.vy += ay;
+      const bent = Math.hypot(b.vx, b.vy) || 1;
+      b.vx *= speed / bent;
+      b.vy *= speed / bent;
+    }
+  }
+
+  // Grid funnels and spiralling infall streams for every well (visual only).
+  updateWellEffects() {
+    const radius = TUNING.blackholePullRadius ?? 200;
+    const margin = Math.max(260, radius); // streams spawn up to 0.9 × pull radius from their well
+    const onScreen = (x, y) => x > this.camX - margin && x < this.camX + this.width + margin &&
+      y > this.camY - margin && y < this.camY + this.height + margin;
+    for (let i = 0; i < this.gravityWells.length; i++) {
+      const w = this.gravityWells[i];
+      if (w.dead) continue;
+      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, radius, w.hue, 0.22);
+      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, radius * 0.9, w.hue, 1);
+    }
+    for (let i = 0; i < this.singularities.length; i++) {
+      const sg = this.singularities[i];
+      this.grid.applyWell(sg.x, sg.y, SINGULARITY_GRID_DEPTH, sg.pullRadius, sg.hue, 0.35);
+      if (onScreen(sg.x, sg.y)) this.particles.spawnInfall(sg, sg.pullRadius * 0.9, sg.hue, 2);
+    }
+  }
+
+  // Player Vortex Singularities: drag enemies into a swirling clump, then implode in a damage pulse.
+  updateSingularities(dt) {
+    const enemies = this.enemyManager.enemies;
+    const basePull = TUNING.singularityPull ?? 0.75;
+    for (let i = this.singularities.length - 1; i >= 0; i--) {
+      const sg = this.singularities[i];
+      sg.x += sg.vx;
+      sg.y += sg.vy;
+      sg.vx *= 0.985;
+      sg.vy *= 0.985;
+      sg.life -= dt;
+
+      const imploding = sg.life <= SINGULARITY_IMPLODE_TIME;
+      if (imploding && !sg.implodeCued) {
+        sg.implodeCued = true;
+        this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius, sg.hue, 3, SINGULARITY_IMPLODE_TIME, true);
+      }
+      sg.spin = (sg.spin || 0) + dt * (imploding ? 16 : 5);
+      const pull = basePull * (imploding ? 1.8 : 1);
+      this.particles.applyGravityWell(sg.x, sg.y, 1.8, sg.pullRadius);
+
+      const pullSq = sg.pullRadius * sg.pullRadius;
+      for (const e of [...enemies].reverse()) {
+        if (e.dead) continue;
+        const dx = sg.x - e.x;
+        const dy = sg.y - e.y;
+        const dSq = dx * dx + dy * dy;
+        if (dSq >= pullSq) continue;
+        if (!e.isBoss) {
+          // Inward drag with a vortex twist: the drift bypasses the enemy's own speed cap, and the
+          // same pull also bends its steering so flocks turn into the vortex instead of fighting it.
+          const k = wellPullScale(dx, dy, sg.pullRadius, pull, sg.radius);
+          e.gvx = (e.gvx || 0) + (dx - dy * 0.35) * k;
+          e.gvy = (e.gvy || 0) + (dy + dx * 0.35) * k;
+          e.vx += dx * k;
+          e.vy += dy * k;
+        }
+        const reach = sg.radius + e.radius + 18;
+        if (dSq < reach * reach) {
+          this.hitEnemy(e, sg.damage, 'singularity', 0, 0, 0.5);
+        }
+      }
+
+      if (sg.life <= 0) {
+        this.collapseSingularity(sg);
+        this.singularities.splice(i, 1);
+      }
+    }
+  }
+
+  collapseSingularity(sg) {
+    sg.dead = true;
+    const r = sg.collapseRadius ?? sg.pullRadius * 0.85;
+    const dmg = sg.collapseDamage ?? sg.damage * 14;
+    this.sound.playImplosion();
+    this.shake = Math.min(24, Math.max(this.shake, 7 * (TUNING.screenShakeMult ?? 1.0)));
+    this.particles.spawnShockwave(sg.x, sg.y, r, sg.hue, 6, 0.45);
+    this.particles.spawnShockwave(sg.x, sg.y, r * 0.45, 200, 4, 0.26);
+    this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
+    this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
+    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity');
   }
 
   triggerLevelUp() {
@@ -1459,36 +1885,10 @@ export class Game {
     container.innerHTML = '';
 
     this.currentChoices.forEach((upg, idx) => {
-      const curLv = this.player.upgradeLevels[upg.id] || 0;
-      const jump = upg.levelJump || 1;
-      const jumpClass = upg.isSynergy ? 'rarity-synergy' : jump === 3 ? 'jump-3' : jump === 2 ? 'jump-2' : '';
-
-      let levelFooter = `LEVEL ${curLv} → ${curLv + jump}`;
-      if (upg.isSynergy) {
-        levelFooter = '★ GOLDEN SYNERGY ★';
-      } else if (jump === 3) {
-        levelFooter = `★★ EPIC LUCKY ROLL: +3 LEVELS! (${curLv} → ${curLv + 3}) ★★`;
-      } else if (jump === 2) {
-        levelFooter = `★ RARE LUCKY ROLL: +2 LEVELS! (${curLv} → ${curLv + 2}) ★`;
-      }
-
+      const view = renderUpgradeCard(describeUpgrade(this.player, upg), `[${idx + 1}]`);
       const card = document.createElement('div');
-      card.className = `upgrade-option ${jumpClass}`;
-      card.innerHTML = `
-        <div>
-          <div class="upg-top">
-            <span class="upg-key">[${idx + 1}]</span>
-            <span class="upg-badge" style="color:${upg.badgeColor}; border:1px solid ${upg.badgeColor}66; background:${upg.badgeColor}18">
-              ${upg.category} ${jump > 1 ? `// +${jump} LVLS!` : ''}
-            </span>
-          </div>
-          <div class="upg-name">${upg.name}</div>
-          <div class="upg-desc">${upg.desc}</div>
-        </div>
-        <div class="upg-level" style="color:${jump === 3 ? '#00ffaa' : jump === 2 ? '#ff66b2' : 'var(--emerald)'}">
-          ${levelFooter}
-        </div>
-      `;
+      card.className = view.className;
+      card.innerHTML = view.html;
       card.addEventListener('click', () => this.selectUpgrade(idx));
       container.appendChild(card);
     });
@@ -1508,14 +1908,14 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, upg.badgeColor, 15);
+    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, (RARITY[upg.rarity] || RARITY.common).color, 15);
     this.processPendingLevelUps();
     this.updateHUD();
   }
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
-    this.sound.setMusicState({ intensity: 0.3, muffled: true });
+    this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.playSupernova();
 
     const mins = Math.floor(this.elapsedTime / 60);
@@ -1628,10 +2028,16 @@ export class Game {
   }
 
   update(dt) {
-    this.grid.update(this.camX, this.camY, this.width, this.height);
-    this.particles.update(dt, this.worldWidth, this.worldHeight);
+    // A boss-kill hit-stop/slow-mo tick freezes the world, grid and particles together.
+    const held = this.state === 'PLAYING' && this.consumeTimeDilation();
+    if (!held) {
+      this.grid.update(this.camX, this.camY, this.width, this.height);
+      this.particles.update(dt, this.worldWidth, this.worldHeight);
+      this.damageNumbers?.update(dt);
+    }
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 45);
     if (this.chromaFlash > 0) this.chromaFlash = Math.max(0, this.chromaFlash - dt * 2.2);
+    if (this.bossFlash > 0) this.bossFlash = Math.max(0, this.bossFlash - dt * 2.4);
     this.shieldRotation += dt * 1.4;
 
     const gp = this.pollGamepad();
@@ -1648,8 +2054,15 @@ export class Game {
       this.togglePause();
       return;
     }
+
     if (gp?.pressed(PAD.X)) this.toggleAutoFire();
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
+
+    if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
+    if (held) {
+      this.updateHUD();
+      return;
+    }
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
@@ -1659,7 +2072,9 @@ export class Game {
       1.0,
       0.32 + (enemyCount / 50) * 0.42 + ((this.multiplier - 1) / 15) * 0.18 + (this.wave - 1) * 0.05
     );
-    this.sound.setMusicState({ intensity: dynamicIntensity, muffled: false });
+    // Boss warning drops the mix out; a live boss pins it at full intensity with the boss riff.
+    const bossStage = this.getBossStage();
+    this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
     // Escalate waves every 22 seconds
     if (this.waveTimer >= 22) {
@@ -1698,7 +2113,8 @@ export class Game {
       p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2));
     }
 
-    // 1. Player Movement
+    // 1. Player Movement (enemy black holes tug the ship, capped so it can always escape)
+    this.collectGravityWells();
     let inputX = 0;
     let inputY = 0;
     if (this.keys['KeyW'] || this.keys['ArrowUp']) inputY -= 1;
@@ -1719,6 +2135,7 @@ export class Game {
 
     if (p.dashTimer > 0) {
       p.dashTimer -= dt;
+      p.gravityTug = 0; // Dashes cut straight through gravity wells
       this.particles.spawnAfterimage(p.x, p.y, p.angle, p.radius, 188);
     } else {
       const mag = Math.hypot(inputX, inputY);
@@ -1744,6 +2161,7 @@ export class Game {
         p.vx *= 0.82;
         p.vy *= 0.82;
       }
+      this.applyWellPullToPlayer(p);
     }
 
     p.x += p.vx;
@@ -1810,7 +2228,7 @@ export class Game {
       this.missileTimer -= dt;
       if (this.missileTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireSwarmMissiles(p.weapons.missiles);
-        this.missileTimer = Math.max(0.65, 1.9 - p.weapons.missiles * 0.22);
+        this.missileTimer = W.missileCooldown(p.weapons.missiles);
       }
     }
 
@@ -1818,7 +2236,7 @@ export class Game {
       this.lightningTimer -= dt;
       if (this.lightningTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireChainLightning(p.weapons.lightning);
-        this.lightningTimer = Math.max(0.55, 1.65 - p.weapons.lightning * 0.2);
+        this.lightningTimer = W.lightningCooldown(p.weapons.lightning);
       }
     }
 
@@ -1826,14 +2244,14 @@ export class Game {
       this.singularityTimer -= dt;
       if (this.singularityTimer <= 0 && this.enemyManager.enemies.length > 0) {
         this.fireSingularity(p.weapons.singularity);
-        this.singularityTimer = Math.max(2.2, 4.5 - p.weapons.singularity * 0.5);
+        this.singularityTimer = W.singularityCooldown(p.weapons.singularity);
       }
     }
 
     if (p.weapons.orbitals > 0) {
-      this.orbitalAngle += dt * (3.2 + p.weapons.orbitals * 0.4);
-      const orbCount = 1 + p.weapons.orbitals;
-      const orbRadius = 62 + p.weapons.orbitals * 6;
+      this.orbitalAngle += dt * W.orbitalSpin(p.weapons.orbitals);
+      const orbCount = W.orbitalBlades(p.weapons.orbitals);
+      const orbRadius = W.orbitalRadius(p.weapons.orbitals);
       const enemies = this.enemyManager.enemies;
 
       for (let o = 0; o < orbCount; o++) {
@@ -1847,16 +2265,16 @@ export class Game {
           const dx = e.x - ox;
           const dy = e.y - oy;
           if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
-            e.hp -= p.stats.damage * 0.35;
-            e.hitFlash = 0.6;
+            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (e.hp <= 0) this.killEnemy(e);
+            this.hitEnemy(e, p.stats.damage * W.orbitalDamageMult, 'orbital', 0, 0, 0.6);
           }
         }
       }
     }
 
-    // 5. Sweep projectiles against enemies and cover in travel order.
+    // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
+    this.bendProjectilesInWells();
     this.updateBullets(dt);
     const enemies = this.enemyManager.enemies;
 
@@ -1891,58 +2309,33 @@ export class Game {
       }
 
       if (detonated) {
-        this.particles.spawnShockwave(m.x, m.y, 75, m.hue, 3.5, 0.3);
+        this.particles.spawnShockwave(m.x, m.y, W.missileBlastRadius, m.hue, 3.5, 0.3);
         this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
-        this.damageEnemiesInRadius(m.x, m.y, 75, m.damage, m.hue);
+        this.damageEnemiesInRadius(m.x, m.y, W.missileBlastRadius, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
         if (p.weapons.stormProtocol) {
-          this.fireChainLightning(2, m.x, m.y);
+          this.fireChainLightning(W.stormChainLevel, m.x, m.y);
         }
 
         this.missiles.splice(i, 1);
       }
     }
 
-    // 7. Update Player Vortex Singularities
-    for (let i = this.singularities.length - 1; i >= 0; i--) {
-      const sg = this.singularities[i];
-      sg.x += sg.vx;
-      sg.y += sg.vy;
-      sg.vx *= 0.985;
-      sg.vy *= 0.985;
-      sg.life -= dt;
-
-      this.grid.applyImplosion(sg.x, sg.y, 18, sg.pullRadius, sg.hue, 0.45);
-      this.particles.applyGravityWell(sg.x, sg.y, 1.8, sg.pullRadius);
-
-      for (const e of [...enemies].reverse()) {
-        if (e.dead) continue;
-        const dx = sg.x - e.x;
-        const dy = sg.y - e.y;
-        const d = Math.hypot(dx, dy) || 1;
-        if (d < sg.pullRadius) {
-          if (!e.isBoss) {
-            e.vx += (dx / d) * 0.85;
-            e.vy += (dy / d) * 0.85;
-          }
-          if (d < sg.radius + e.radius + 18) {
-            e.hp -= sg.damage;
-            e.hitFlash = 0.5;
-            if (e.hp <= 0) this.killEnemy(e);
-          }
-        }
-      }
-
-      if (sg.life <= 0) {
-        this.particles.spawnShockwave(sg.x, sg.y, sg.pullRadius * 0.85, sg.hue, 5, 0.42);
-        this.particles.spawnExplosionSparks(sg.x, sg.y, 38, sg.hue, 3, 14, 2.4);
-        this.damageEnemiesInRadius(sg.x, sg.y, sg.pullRadius * 0.85, sg.damage * 14, sg.hue);
-        this.singularities.splice(i, 1);
-      }
-    }
+    // 7. Update Player Vortex Singularities, then grid funnels & infall streams for every well
+    this.updateSingularities(dt);
+    this.updateWellEffects();
 
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers
+    // Warned boss spawns tear at the grid harder as their countdown runs out.
+    for (const sp of this.enemyManager.spawnIndicators) {
+      if (sp.config.isBoss) this.grid.applyImplosion(sp.x, sp.y, 1.2 + 3 * (1 - sp.timer / sp.maxTimer), 210, 348, 0.6);
+    }
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    const arrivals = this.enemyManager.bossArrivals;
+    if (arrivals?.length) {
+      for (const boss of arrivals) this.onBossArrived(boss);
+      arrivals.length = 0;
+    }
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
 
     for (const e of [...enemies].reverse()) {
@@ -1951,11 +2344,11 @@ export class Game {
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           p.shieldFlash = 1;
-          const hitDmg = (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+          const hitDmg = this.contactDamage(e);
           p.hp -= hitDmg;
           p.invuln = 0.65;
           this.multiplier = Math.max(1.0, this.multiplier * 0.75);
-          this.shake = 16;
+          this.addShake(16);
           this.chromaFlash = 0.5;
           this.sound.playExplosion(1.8);
           this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
@@ -1975,10 +2368,12 @@ export class Game {
     }
 
     // 9. Update Relic Supply Caches (Vampire Survivors Chests!)
+    // Pickup waits out a boss kill's slow-mo and defeat card so the cache modal never cuts off the payoff.
+    const chestsArmed = !(this.slowMoTicks > 0) && !(this.bossCard?.kind === 'defeat' && this.bossCardTimer > 0.45);
     for (let i = this.chests.length - 1; i >= 0; i--) {
       const ch = this.chests[i];
       ch.rotation += dt * 1.8;
-      if (Math.hypot(p.x - ch.x, p.y - ch.y) < p.radius * 2.1 + 18) {
+      if (chestsArmed && Math.hypot(p.x - ch.x, p.y - ch.y) < p.radius * 2.1 + 18) {
         this.chests.splice(i, 1);
         this.openRelicChest(ch);
         return;
@@ -2002,6 +2397,19 @@ export class Game {
         g.vx = g.vx * 0.75 + (dx / dist) * pullSpd * 0.35;
         g.vy = g.vy * 0.75 + (dy / dist) * pullSpd * 0.35;
       } else {
+        // Loose geoms drift into enemy black holes: kill the well to cash in the pile.
+        const wells = this.gravityWells;
+        if (wells && wells.length) {
+          const wellRadius = TUNING.blackholePullRadius ?? 200;
+          const wellPull = TUNING.blackholePickupPull ?? 0.3;
+          for (let w = 0; w < wells.length; w++) {
+            const well = wells[w];
+            if (well.dead) continue;
+            const k = wellPullScale(well.x - g.x, well.y - g.y, wellRadius, wellPull, well.radius * 0.6);
+            g.vx += (well.x - g.x) * k;
+            g.vy += (well.y - g.y) * k;
+          }
+        }
         g.vx *= 0.92;
         g.vy *= 0.92;
       }
@@ -2074,10 +2482,13 @@ export class Game {
     for (const upg of UPGRADE_POOL) {
       const lv = p.upgradeLevels[upg.id];
       if (lv) {
-        tags.push(`<span class="weapon-tag ${upg.isSynergy ? 'evolved' : ''}">${upg.name} ${upg.isSynergy ? '★' : 'v' + lv}</span>`);
+        // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
+        tags.push(`<span class="weapon-tag rarity-${upg.rarity}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
       }
     }
     weaponsBar.innerHTML = tags.join('');
+
+    this.updateBossHUD(this.getBossHudModel());
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -2132,6 +2543,18 @@ export class Game {
       ctx.fillRect(mx + e.x * scaleX - sz * 0.5, my + e.y * scaleY - sz * 0.5, sz, sz);
     }
 
+    // Boss warnings: a pulsing hazard ring on each reserved spawn point
+    const indicators = this.enemyManager.spawnIndicators;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < indicators.length; i++) {
+      const sp = indicators[i];
+      if (!sp.config.isBoss) continue;
+      ctx.strokeStyle = Math.cos(sp.timer * Math.PI * 5) > 0 ? '#ff2a55' : '#ffcc00';
+      ctx.beginPath();
+      ctx.arc(mx + sp.x * scaleX, my + sp.y * scaleY, 4 + (sp.timer % 0.5) * 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // 4. Camera Viewport Box
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
     ctx.lineWidth = 1;
@@ -2152,6 +2575,89 @@ export class Game {
     ctx.fillStyle = 'rgba(0, 243, 255, 0.75)';
     ctx.fillText('SECTOR RADAR // DRILL ACTIVE', mx + 6, my + 11);
     ctx.restore();
+  }
+
+  // Screen-space boss cues: a pulsing red frame while a warning counts down, and edge arrows toward
+  // warned spawn points (with their countdown) and toward live bosses that are off-screen.
+  drawBossIndicators(ctx) {
+    let soonest = Infinity;
+    this.edgeArrowTop = null; // Measured lazily, only on frames that actually draw an edge arrow.
+    ctx.save();
+    ctx.font = '900 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const indicators = this.enemyManager.spawnIndicators;
+    for (let i = 0; i < indicators.length; i++) {
+      const sp = indicators[i];
+      if (!sp.config.isBoss) continue;
+      soonest = Math.min(soonest, sp.timer);
+      const flash = Math.cos(sp.timer * Math.PI * 5) > 0;
+      this.drawEdgeArrow(ctx, sp.x, sp.y, flash ? '#ff2a55' : '#ffcc00', `⚠ ${sp.timer.toFixed(1)}s`);
+    }
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
+    }
+    if (soonest < Infinity) {
+      const pulse = 0.5 + 0.5 * Math.cos(soonest * Math.PI * 5);
+      ctx.strokeStyle = `rgba(255, 42, 85, ${0.16 + pulse * 0.38})`;
+      ctx.lineWidth = 14;
+      ctx.strokeRect(7, 7, this.width - 14, this.height - 14);
+    }
+    ctx.restore();
+  }
+
+  // Bottom of the top HUD block (+ room for the arrow head) in canvas pixels. The DOM has already been
+  // written for this frame, so this read is the same layout the browser would run before painting.
+  measureEdgeArrowTop() {
+    this.hudTopEl ??= document.querySelector?.('.hud-top') || null;
+    const bottom = this.hudTopEl?.getBoundingClientRect?.().bottom;
+    return Number.isFinite(bottom) ? bottom + 34 : Math.max(150, this.height * 0.25);
+  }
+
+  drawEdgeArrow(ctx, wx, wy, color, label) {
+    const sx = wx - this.camX;
+    const sy = wy - this.camY;
+    if (sx >= 0 && sx <= this.width && sy >= 0 && sy <= this.height) return; // On-screen: the world art reads.
+    // Ray from screen centre to the target, clipped to an inset frame whose top edge sits just below
+    // the HUD, warning strip and stacked boss bars (measured, so the arrow stays at the edge on any
+    // screen height instead of landing on the ship).
+    const cx = this.width * 0.5;
+    const cy = this.height * 0.5;
+    const dx = sx - cx;
+    const dy = sy - cy;
+    this.edgeArrowTop ??= this.measureEdgeArrowTop();
+    const top = Math.min(cy - 40, this.edgeArrowTop);
+    const kx = dx > 0 ? (this.width - 46 - cx) / dx : dx < 0 ? (46 - cx) / dx : Infinity;
+    const ky = dy > 0 ? (this.height - 46 - cy) / dy : dy < 0 ? (top - cy) / dy : Infinity;
+    const k = Math.min(kx, ky);
+    const ax = cx + dx * k;
+    const ay = cy + dy * k;
+    const ang = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(-12, -16);
+    ctx.lineTo(-5, 0);
+    ctx.lineTo(-12, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Label sits further inward than the arrow so it never overlaps it, even in corners.
+    const lx = ax - Math.cos(ang) * 56;
+    const ly = ay - Math.sin(ang) * 34;
+    ctx.fillStyle = 'rgba(3, 4, 11, 0.75)';
+    ctx.fillRect(lx - 30, ly - 9, 60, 18);
+    ctx.fillStyle = color;
+    ctx.fillText(label, lx, ly);
   }
 
   draw() {
@@ -2189,6 +2695,9 @@ export class Game {
 
     // 3. Draw Destructible Asteroid Clusters & Active Mining Laser Beams
     this.asteroidManager.draw(ctx, this.camX, this.camY, this.width, this.height);
+
+    // Event horizons: opaque discs under the additive layer so wells read as holes punched in the grid.
+    this.drawWellHorizons(ctx);
 
     // 4. Draw Geoms, Relic Chests, Singularities, Bullets, Missiles, Enemies & Player in Additive Mode
     ctx.save();
@@ -2271,18 +2780,7 @@ export class Game {
     }
 
     for (let i = 0; i < this.singularities.length; i++) {
-      const sg = this.singularities[i];
-      ctx.strokeStyle = `hsla(${sg.hue}, 100%, 68%, 0.9)`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(sg.x, sg.y, sg.radius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = `hsla(${sg.hue}, 100%, 55%, 0.25)`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(sg.x, sg.y, sg.pullRadius * 0.45, 0, Math.PI * 2);
-      ctx.stroke();
+      this.drawSingularity(ctx, this.singularities[i], beatPulse);
     }
 
     for (let i = 0; i < this.bullets.length; i++) {
@@ -2327,11 +2825,12 @@ export class Game {
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
+      this.drawGravityTethers(ctx, p);
       this.drawPlayerShield(ctx, p, beatPulse);
 
       if (p.weapons.orbitals > 0) {
-        const orbCount = 1 + p.weapons.orbitals;
-        const orbRadius = 62 + p.weapons.orbitals * 6;
+        const orbCount = W.orbitalBlades(p.weapons.orbitals);
+        const orbRadius = W.orbitalRadius(p.weapons.orbitals);
         for (let o = 0; o < orbCount; o++) {
           const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
           const ox = p.x + Math.cos(oa) * orbRadius;
@@ -2363,13 +2862,23 @@ export class Game {
 
     // 5. Draw Sparks, Shatter Shards, Shockwaves & Lightning in World Space
     this.particles.draw(ctx, this.camX, this.camY, this.width, this.height);
+    this.damageNumbers.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Close Camera Transform
     ctx.restore();
 
-    // 6. Screen-Space Tactical Sector Radar Minimap
+    // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues
     if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST') {
       this.drawMinimap(ctx);
+      this.drawBossIndicators(ctx);
+    }
+
+    if (this.bossFlash > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.restore();
     }
 
     if (this.chromaFlash > 0.01) {
@@ -2379,6 +2888,105 @@ export class Game {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
+  }
+
+  singularityCoreRadius(sg) {
+    const implode = Math.max(0, 1 - sg.life / SINGULARITY_IMPLODE_TIME);
+    return sg.radius * (1 - implode * 0.5);
+  }
+
+  drawWellHorizons(ctx) {
+    const inView = (x, y, r) => x + r >= this.camX && y + r >= this.camY &&
+      x - r <= this.camX + this.width && y - r <= this.camY + this.height;
+    ctx.save();
+    ctx.fillStyle = 'rgba(1, 1, 5, 0.94)';
+    ctx.beginPath();
+    const enemies = this.enemyManager.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.type !== 'blackhole' || !inView(e.x, e.y, e.radius)) continue;
+      ctx.moveTo(e.x + e.radius * 0.9, e.y);
+      ctx.arc(e.x, e.y, e.radius * 0.9, 0, Math.PI * 2);
+    }
+    for (let i = 0; i < this.singularities.length; i++) {
+      const sg = this.singularities[i];
+      const r = this.singularityCoreRadius(sg) * 0.95;
+      if (!inView(sg.x, sg.y, r)) continue;
+      ctx.moveTo(sg.x + r, sg.y);
+      ctx.arc(sg.x, sg.y, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Vortex Singularity: pull rim, spinning accretion arcs (thicker on the beat), white photon ring.
+  // During the final wind-up the core shrinks and the arcs spin up before the collapse pulse.
+  drawSingularity(ctx, sg, beatPulse = 0) {
+    const reach = sg.pullRadius + 8;
+    if (sg.x + reach < this.camX || sg.y + reach < this.camY || sg.x - reach > this.camX + this.width || sg.y - reach > this.camY + this.height) return;
+    const implode = Math.max(0, 1 - sg.life / SINGULARITY_IMPLODE_TIME);
+    const coreR = this.singularityCoreRadius(sg);
+    ctx.save();
+    ctx.translate(sg.x, sg.y);
+
+    ctx.strokeStyle = `hsla(${sg.hue}, 100%, 62%, ${0.16 + beatPulse * 0.14})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, sg.pullRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.rotate(sg.spin || 0);
+    for (let k = 0; k < 3; k++) {
+      const arcR = coreR * (1.75 + k * 0.6);
+      const start = k * 2.1;
+      ctx.strokeStyle = `hsla(${sg.hue + k * 22}, 100%, ${66 + implode * 20}%, ${0.8 - k * 0.15})`;
+      ctx.lineWidth = 2.8 - k * 0.6 + beatPulse * 1.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, arcR, start, start + 1.9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, arcR, start + Math.PI, start + Math.PI + 1.2);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = `hsla(${sg.hue}, 100%, 70%, 0.5)`;
+    ctx.lineWidth = 5 + implode * 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR * 1.08, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.6 + implode * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Marching dashes from the ship toward each black hole that is tugging it, brighter as the pull grows.
+  drawGravityTethers(ctx, p) {
+    const wells = this.gravityWells;
+    if (!wells || wells.length === 0 || !(p.gravityTug > 0)) return;
+    const radius = TUNING.blackholePullRadius ?? 200;
+    ctx.save();
+    ctx.setLineDash([4, 9]);
+    ctx.lineDashOffset = -(this.elapsedTime || 0) * 40;
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < wells.length; i++) {
+      const w = wells[i];
+      if (w.dead) continue;
+      const d = Math.hypot(w.x - p.x, w.y - p.y);
+      const f = wellFalloff(d, radius);
+      if (f <= 0 || d < 1) continue;
+      const ux = (w.x - p.x) / d;
+      const uy = (w.y - p.y) / d;
+      ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.15 + f * 0.5})`;
+      ctx.beginPath();
+      ctx.moveTo(p.x + ux * (p.radius + 10), p.y + uy * (p.radius + 10));
+      ctx.lineTo(w.x - ux * w.radius * 1.2, w.y - uy * w.radius * 1.2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   loop(now) {

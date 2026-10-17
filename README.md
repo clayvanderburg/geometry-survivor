@@ -30,12 +30,13 @@ npm start
    - **Boid Swarmers** (Magenta Diamonds): Flock using separation, alignment, cohesion, and swirl.
    - **Weavers** (Emerald Darts): Sense incoming player fire and dodge perpendicular to bullet trajectories.
    - **Pinwheels** (Violet Rotating Squares) & **Splitters** (Golden Hexagons that fracture into 3 fast mini-triangles).
-   - **Black Holes** (Crimson Singularities): Pull the grid, particles, and nearby enemies inward.
-   - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache.
+   - **Black Holes** (Crimson Singularities): Funnel the grid, swirl enemies, pickups and sparks inward, bend passing shots, and tug your ship. The tug is capped below your thrust (`js/gravity.js`), so holding away always escapes. Strengths live in the tuner's *Gravity Wells & Singularities* group.
+   - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache. Each one is a staged event: a `bossWarningTime` (default 3 s) warning with a hazard strip countdown, klaxon, music drop, red screen frame, radar ring and off-screen arrow to the reserved spawn point; then an arrival shockwave and title card (e.g. `PRISMATIC DREADNOUGHT — WAVE 3 WARDEN`), a gold-crowned silhouette, and top-of-HUD health bars (up to 3 stacked, `+N MORE` beyond). A kill triggers a fixed-tick hit-stop + half-speed slow-mo, gold flash and a reward banner. Sandbox `+Boss` runs the same event.
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**
    - **Multi-Level Upgrades**: Level-up cards have a rare, Luck-scaled chance (`10% * luck` for `+2 Levels`, `3.5% * luck` for `+3 Levels`, before caps) to jump multiple levels at once.
-   - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades).
+   - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades). Caches install through the same `applyUpgradeLevels` path as level-up picks, so they share one `player.upgradeLevels` state.
+   - **Readable Cards (`js/upgrade-cards.js`)**: Every level-up and cache card shows an enlarged headline (e.g. `+2 PROJECTILES`), a short summary and exact **before → after** stats, computed by installing the upgrade (including its rolled level jump) on a copy of the player. Weapon formulas live in `js/weapon-scaling.js` so cards and gameplay can't drift. Rarity sets the card border/name color (common gray, uncommon green, rare blue, epic purple, legendary gold for synergies); a lucky `+2`/`+3` roll is a separate magenta ribbon. Cards, caches and HUD tags all use the same `LV n` wording.
 
 5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
    - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.
@@ -46,8 +47,13 @@ npm start
    - Spend **Void Cores (❖)** harvested during runs on 6 permanent Armory upgrades persisted in `localStorage` (`vectra_survivor_save_v2`).
 
 7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + `[T]` Drawer)**
-   - Exposes 38 live parameters across 5 categories (*Crab Ship & Drill-Claws*, *Weapons & Shield*, *Luck & Chests*, *Asteroids & Economy*, *Audio & Visual FX*) with real-time cross-tab sync via `BroadcastChannel` + `localStorage`.
+   - Exposes 47 live parameters across 6 categories (*Crab Ship & Drill-Claws*, *Weapons & Shield*, *Luck & Chests*, *Asteroids & Economy*, *Audio & Visual FX*, *Hit Feedback & Damage Numbers*) with real-time cross-tab sync via `BroadcastChannel` + `localStorage`.
    - Includes instant Sandbox triggers (`Spawn Chest`, `Trigger Level-Up`, `+50 Cores`, `Spawn Boss`, `Regenerate Asteroids`, `Full Heal`) and a 1-click **📋 COPY TUNING FOR AGENT** button.
+
+8. **Damage & Hit Feedback (`js/damage-numbers.js`, `hitEnemy` in `js/main.js`)**
+   - **Floating damage numbers** (on by default; toggle in the pause menu or with `[N]`, saved in `localStorage` as `vexolith_damage_numbers`). Rapid hits on one enemy from one weapon merge into a single rising total (new number after a 0.3 s gap or 1 s burst), live numbers are capped (`damageNumberCap`, default 48) and stacked at most three deep per spot, size grows gently with damage, and colour shows the source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, supernova gold, other (shrapnel, dash nova, bore, black-hole burst) white.
+   - **Impacts**: white-hot hit flash + hull pop, a pooled cross-flare at each projectile hit, and mass-scaled knockback (decaying displacement; bosses immune, orbitals/singularities never push).
+   - **Kills by durability tier**: swarmers pop, pinwheels/weavers add a core flash, splitters shed debris + embers and shake lightly, black holes add a wide ring + 1-tick hit-stop, bosses add a chroma flash + 3-tick hit-stop. Supernova uses a 2-tick hit-stop. All shake goes through `screenShakeMult`; hit-stop is capped at 3 fixed ticks (`hitStopMult`).
 
 ---
 
@@ -65,7 +71,8 @@ npm start
 - `js/upgrades.js` — In-run upgrade pool, Golden Synergies (*Tectonic Claw Bore*, *Pulsar Helix*, *Storm Protocol*), and Luck-scaled `+2`/`+3` level jump rolls.
 - `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign) and Void Armory meta-upgrades.
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
-- `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, and floating text.
+- `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, pooled hit-impact flares, and floating text.
+- `js/damage-numbers.js` — Pooled, canvas-drawn floating damage numbers (per-enemy/per-source aggregation, live cap, persisted toggle).
 - `js/audio.js` — Procedural WebAudio synthwave sequencer and SFX engine.
 
 ## Engineering checks
