@@ -326,3 +326,39 @@ test('when everything is maxed and the loadout is full, level-ups fall back to a
   const hand = withTuning({ newWeaponChance: 0, newWeaponPity: 99 }, () => rollLevelUpHand(p, 3));
   assert.deepEqual(hand.map((c) => c.id), [NEW_WEAPON_ID], 'nothing else left: NEW WEAPON regardless of chance');
 });
+
+test('discarding your last weapon explains why instead of confirming', async () => {
+  const { Game } = await import('../js/main.js');
+  const buttons = [];
+  const panel = {
+    innerHTML: '',
+    querySelectorAll(sel) {
+      const attr = sel.slice(1, -1);
+      const re = new RegExp(`${attr}="([^"]+)"`, 'g');
+      return [...this.innerHTML.matchAll(re)].map((m) => {
+        const b = { listeners: [], getAttribute: () => m[1], addEventListener(_, f) { this.listeners.push(f); } };
+        buttons.push([attr, b]);
+        return b;
+      });
+    }
+  };
+  const silent = new Proxy({}, { get: () => () => {} });
+  const g = Object.assign(Object.create(Game.prototype), {
+    player: { loadout: ['rockets'], weapons: { rockets: 1 }, upgradeLevels: { rockets: 1 }, stats: {} },
+    particles: silent, updateHUD() {}, focusLoadoutButton() {}
+  });
+  const realGet = globalThis.document.getElementById;
+  globalThis.document.getElementById = (id) => (id === 'pause-loadout' ? panel : realGet(id));
+  try {
+    g.renderLoadoutPanel();
+    assert.ok(!/data-discard="rockets"[^>]*disabled/.test(panel.innerHTML), 'the button stays clickable');
+    buttons.find(([a]) => a === 'data-discard')[1].listeners[0]();
+    assert.match(panel.innerHTML, /You need at least one weapon/);
+    assert.ok(!panel.innerHTML.includes('CONFIRM DISCARD'));
+    assert.deepEqual(g.player.loadout, ['rockets']);
+    buttons.filter(([a]) => a === 'data-discard-ok').pop()[1].listeners[0]();
+    assert.ok(!panel.innerHTML.includes('You need at least one weapon'), 'OK closes the notice');
+  } finally {
+    globalThis.document.getElementById = realGet;
+  }
+});
