@@ -1,9 +1,13 @@
 // Shared Gravity-Well Physics: one falloff curve for black holes, singularities, grid, bullets & pickups
 // All forces are per fixed 60 Hz tick (px/tick²), like the rest of the simulation.
 
-// Ship thrust per tick is moveSpeed * 0.22 (see Game.update). Wells may never out-pull this share of it,
-// so holding away from any stack of black holes still nets >= 55% of move speed.
-export const PLAYER_ESCAPE_THRUST_SHARE = 0.45;
+import { TUNING } from './config.js';
+
+// Ship thrust per tick is moveSpeed * 0.22 (see Game.update). The tug on the ship is a share of that
+// thrust (TUNING blackholePlayerPull*), and no setting or stack of wells may exceed this hard ceiling,
+// so holding away always nets at least 20% of move speed (1.0 px/tick at base, still faster than a
+// drifting vortex's 0.95).
+export const MAX_PLAYER_PULL_SHARE = 0.8;
 export const SHIP_THRUST_PER_TICK = 0.22;
 
 // External gravity velocity on enemies decays by this each tick, so a steady pull `a` settles at
@@ -28,7 +32,30 @@ export function wellPullScale(dx, dy, radius, strength, minDist = 6) {
   return (strength * wellFalloff(d, radius)) / d;
 }
 
-// Largest pull the ship can feel at a given move speed (see PLAYER_ESCAPE_THRUST_SHARE).
-export function playerPullCap(moveSpeed) {
-  return Math.max(0, moveSpeed) * SHIP_THRUST_PER_TICK * PLAYER_ESCAPE_THRUST_SHARE;
+const clampShare = (v, fallback) => Math.max(0, Math.min(MAX_PLAYER_PULL_SHARE, Number.isFinite(v) ? v : fallback));
+
+// Share of the ship's thrust one vortex pulls with at `dist` from its centre: the edge share at the rim,
+// rising linearly to the inner share at innerAt × radius from the core, then holding that share.
+// Inside the vortex's own hull (`coreRadius`) it eases to zero so a ship resting on the centre is still.
+export function playerPullShare(dist, radius, coreRadius = 0, tuning = TUNING) {
+  if (!(dist < radius) || radius <= 0) return 0;
+  const edge = clampShare(tuning.blackholePlayerPullEdge, 0.5);
+  const inner = clampShare(tuning.blackholePlayerPullInner, 0.75);
+  const innerAt = Math.max(0, Math.min(1, tuning.blackholePlayerPullInnerAt ?? 0.5));
+  const innerR = radius * innerAt;
+  let share = inner;
+  if (dist > innerR) share = edge + (inner - edge) * ((radius - dist) / (radius - innerR));
+  const core = Math.max(0, Math.min(coreRadius, innerR));
+  if (dist < core) share *= dist / core;
+  return share;
+}
+
+// Largest share of thrust the summed pull of every vortex may reach (always below 100%).
+export function playerPullCapShare(tuning = TUNING) {
+  return Math.max(clampShare(tuning.blackholePlayerPullEdge, 0.5), clampShare(tuning.blackholePlayerPullInner, 0.75));
+}
+
+// Largest pull the ship can feel at a given move speed, in px/tick².
+export function playerPullCap(moveSpeed, tuning = TUNING) {
+  return Math.max(0, moveSpeed) * SHIP_THRUST_PER_TICK * playerPullCapShare(tuning);
 }

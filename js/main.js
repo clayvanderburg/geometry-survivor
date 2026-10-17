@@ -26,11 +26,12 @@ import {
 } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
-import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
+import { wellPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
+import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import {
@@ -748,21 +749,21 @@ export class Game {
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
         // Same warning -> entrance event as a scheduled boss.
-        const bp = this.spawnAroundPlayer(420, 620);
+        const bp = this.spawnPointOnscreen(40);
         if (!this.queueBossEncounter(bp, this.getWaveScale(), `WAVE ${this.wave} SANDBOX SIMULACRUM`)) {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
-        const bp = this.spawnAroundPlayer(300, 380);
-        if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
+        const bp = this.spawnPointOnscreen(30);
+        if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale(), this.placedSpawn(bp))) {
           this.showBanner('⚠ ENEMY CAP REACHED — VORTEX NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'SPAWN_LIEUTENANT') {
-        if (!this.spawnLieutenant(420, 560)) this.showBanner('⚠ ENEMY CAP REACHED — LIEUTENANT NOT SPAWNED ⚠');
+        if (!this.spawnLieutenant(null, true)) this.showBanner('⚠ ENEMY CAP REACHED — LIEUTENANT NOT SPAWNED ⚠');
       } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
         const type = SANDBOX_ARCHETYPES[sandboxAction];
-        const bp = this.spawnAroundPlayer(320, 420);
-        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale())) {
+        const bp = this.spawnPointOnscreen(30);
+        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(), this.placedSpawn(bp))) {
           this.showBanner(`⚠ ENEMY CAP REACHED — ${ARCHETYPE_INFO[type].label} NOT SPAWNED ⚠`);
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
@@ -1483,6 +1484,25 @@ export class Game {
     }
   }
 
+  // Where a new hostile appears: just past the camera's edge, biased toward the ship's heading (see
+  // js/spawn-placement.js). `pad` is the hull/pack radius, so the whole pack starts off screen.
+  spawnPoint(pad = 0, warmup = SPAWN_WARMUP) {
+    return pickSpawnPoint(this, { pad, warmup });
+  }
+
+  // A deliberately visible spawn (sandbox buttons): inside the view, at least spawnMinDist from the ship.
+  spawnPointOnscreen(pad = 0) {
+    return pickOnscreenSpawn(this, { pad });
+  }
+
+  // queueSpawn extras for a placed point: every placed spawn holds off materializing while the ship
+  // sits on it, and a visible one gets the long, growing on-screen telegraph.
+  placedSpawn(pos, extra = {}) {
+    if (!pos?.onScreen) return { ...extra, guard: true };
+    return { ...extra, guard: true, onScreen: true, warmup: Math.max(extra.warmup ?? 0, TUNING.spawnOnscreenTelegraph ?? 1.4) };
+  }
+
+  // Ring point around a random spot (asteroid cluster respawns); hostiles use spawnPoint().
   spawnAroundPlayer(minDist = 440, maxDist = 760) {
     const p = this.player;
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -1511,7 +1531,7 @@ export class Game {
   processPendingBossSpawns() {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
-      const bp = this.spawnAroundPlayer(520, 780);
+      const bp = this.spawnPoint(40, TUNING.bossWarningTime ?? 3);
       if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
       this.pendingBossSpawns.shift();
     }
@@ -1521,7 +1541,7 @@ export class Game {
   // spawn ring, so a boss that has been announced can never be refused by the cap on arrival.
   queueBossEncounter(pos, waveScale, epithet) {
     const warmup = TUNING.bossWarningTime ?? 3.0;
-    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, { warmup, name: BOSS_NAME, epithet })) return false;
+    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, this.placedSpawn(pos, { warmup, name: BOSS_NAME, epithet }))) return false;
     this.sound.playBossWarning();
     return true;
   }
@@ -1580,10 +1600,10 @@ export class Game {
     if (this.spawnLieutenant()) this.lieutenantWave = this.wave;
   }
 
-  spawnLieutenant(minDist = 480, maxDist = 700, type = null) {
+  spawnLieutenant(type = null, onScreen = false) {
     const lt = rollLieutenant(this.wave, lieutenantTypes(this.wave), Math.random, type);
-    const pos = this.spawnAroundPlayer(minDist, maxDist);
-    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), { warmup: LIEUTENANT_WARMUP, lieutenant: lt });
+    const pos = onScreen ? this.spawnPointOnscreen(40) : this.spawnPoint(40, LIEUTENANT_WARMUP);
+    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), this.placedSpawn(pos, { warmup: LIEUTENANT_WARMUP, lieutenant: lt }));
   }
 
   showLieutenantCard(kind, kicker, name, epithet, detail, link = '') {
@@ -1796,31 +1816,32 @@ export class Game {
     if (this.enemyManager.enemies.length > 130) return;
 
     const waveScale = this.getWaveScale();
-    const pt = this.spawnAroundPlayer(440, 740);
+    const pt = this.spawnPoint(90); // pack centre: room for the widest formation around it
 
     // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
     const pack = pickWavePack(this.wave);
     const em = this.enemyManager;
     const queuedBefore = em.spawnIndicators.length;
-    const spread = (type, count, minD = 420, maxD = 720) => {
+    // Each member gets its own off-screen ring point (trailing distance args at call sites are unused).
+    const spread = (type, count) => {
       for (let i = 0; i < count; i++) {
-        const p2 = this.spawnAroundPlayer(minD, maxD);
-        em.queueSpawn(type, p2.x, p2.y, waveScale);
+        const p2 = this.spawnPoint(30);
+        em.queueSpawn(type, p2.x, p2.y, waveScale, this.placedSpawn(p2));
       }
     };
     const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
       const count = Math.min(34, 12 + this.wave * 2);
-      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
+      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
       for (let i = 0; i < 3 + Math.floor(this.wave * 0.6); i++) {
-        const p2 = this.spawnAroundPlayer(420, 720);
-        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
+        const p2 = this.spawnPoint(30);
+        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale, this.placedSpawn(p2));
       }
     } else if (pack === 'splitter') {
       spread('splitter', 2 + Math.floor(this.wave * 0.4), 450, 750);
     } else if (pack === 'blackhole') {
-      em.queueSpawn('blackhole', pt.x, pt.y, waveScale);
+      em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
     } else if (pack === 'bruiser') {
       spread('bruiser', Math.min(3, 1 + Math.floor(since('bruiser') / 4)), 460, 720);
     } else if (pack === 'gunner') {
@@ -1829,20 +1850,27 @@ export class Game {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
       const count = Math.min(3, 1 + Math.floor(since('shielder') / 5));
       for (let i = 0; i < count; i++) {
-        const p2 = this.spawnAroundPlayer(460, 720);
-        em.queueSpawn('shielder', p2.x, p2.y, waveScale);
-        for (let k = 0; k < 2; k++) em.queueSpawn('pinwheel', p2.x + (k ? 40 : -40), p2.y + 34, waveScale);
+        const p2 = this.spawnPoint(70);
+        em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
+        for (let k = 0; k < 2; k++) {
+          const esc = packMemberPoint(this, p2, k ? 40 : -40, 34);
+          em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+        }
       }
     } else if (pack === 'blinker') {
       spread('blinker', Math.min(7, 3 + Math.floor(since('blinker') / 3)), 480, 760);
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
-      em.queueSpawn('conduit', pt.x, pt.y, waveScale);
+      em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
       for (let k = 0; k < 3; k++) {
         const a = (k * Math.PI * 2) / 3;
-        em.queueSpawn('pinwheel', pt.x + Math.cos(a) * 60, pt.y + Math.sin(a) * 60, waveScale);
+        const esc = packMemberPoint(this, pt, Math.cos(a) * 60, Math.sin(a) * 60);
+        em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
       }
-      if (this.wave >= 8) em.queueSpawn('bruiser', pt.x + 80, pt.y, waveScale);
+      if (this.wave >= 8) {
+        const esc = packMemberPoint(this, pt, 80, 0);
+        em.queueSpawn('bruiser', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+      }
     }
     // Only announce a newcomer that actually made it past the enemy cap.
     if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
@@ -2244,14 +2272,15 @@ export class Game {
     return wells;
   }
 
-  // Enemy black holes tug the ship. The summed pull is capped to a share of the ship's own thrust
-  // (see gravity.js), so holding away from any stack of wells always escapes at base move speed.
+  // Enemy black holes tug the ship with a share of its own thrust (playerPullShare in gravity.js: 50% at
+  // the rim rising to 75% at half radius by default). The summed pull of stacked wells is capped below
+  // 100% of thrust, so holding away from any stack of wells always escapes.
   applyWellPullToPlayer(p) {
     const wells = this.gravityWells;
     p.gravityTug = 0;
     if (!wells || wells.length === 0) return;
     const radius = TUNING.blackholePullRadius ?? 200;
-    const strength = TUNING.blackholePlayerPull ?? 0.4;
+    const thrust = Math.max(0, p.stats.moveSpeed) * SHIP_THRUST_PER_TICK;
     let ax = 0;
     let ay = 0;
     for (let i = 0; i < wells.length; i++) {
@@ -2259,9 +2288,11 @@ export class Game {
       if (w.dead) continue;
       const dx = w.x - p.x;
       const dy = w.y - p.y;
-      const k = wellPullScale(dx, dy, radius, strength, w.radius);
-      ax += dx * k;
-      ay += dy * k;
+      const d = Math.hypot(dx, dy);
+      if (d < 1e-6) continue;
+      const a = playerPullShare(d, radius, w.radius) * thrust;
+      ax += (dx / d) * a;
+      ay += (dy / d) * a;
     }
     const mag = Math.hypot(ax, ay);
     if (mag === 0) return;
@@ -3057,6 +3088,8 @@ export class Game {
     for (const sp of this.enemyManager.spawnIndicators) {
       if (sp.config.isBoss) this.grid.applyImplosion(sp.x, sp.y, 1.2 + 3 * (1 - sp.timer / sp.maxTimer), 210, 348, 0.6);
     }
+    this.enemyManager.view = spawnView(this);
+    this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     const arrivals = this.enemyManager.bossArrivals;
     if (arrivals?.length) {
@@ -3957,11 +3990,11 @@ export class Game {
       const w = wells[i];
       if (w.dead) continue;
       const d = Math.hypot(w.x - p.x, w.y - p.y);
-      const f = wellFalloff(d, radius);
+      const f = playerPullShare(d, radius, w.radius);
       if (f <= 0 || d < 1) continue;
       const ux = (w.x - p.x) / d;
       const uy = (w.y - p.y) / d;
-      ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.15 + f * 0.5})`;
+      ctx.strokeStyle = `hsla(${w.hue}, 100%, 66%, ${0.1 + f * 0.65})`;
       ctx.beginPath();
       ctx.moveTo(p.x + ux * (p.radius + 10), p.y + uy * (p.radius + 10));
       ctx.lineTo(w.x - ux * w.radius * 1.2, w.y - uy * w.radius * 1.2);

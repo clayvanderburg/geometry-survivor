@@ -7,10 +7,17 @@ import {
   archetypeStats, updateArchetype, speedCap, traceArchetype, drawArchetypeOverlay, drawConduitLinks, isArchetype, SHIELDER
 } from './archetypes.js';
 import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph } from './lieutenants.js';
+import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
 const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
+// A guarded spawn (every placed spawn from Game) never materializes within spawnMinDist of the ship:
+// fully charged, it waits for the ship to back off, and after SPAWN_HOLD_MAX seconds it moves to a
+// fresh point from `relocateSpawn` (set by Game) with a new telegraph.
+export const SPAWN_HOLD_MAX = 1.5;
+// A lieutenant's sped-up steering never exceeds this share of the ship's base move speed.
+export const LIEUTENANT_MAX_SHIP_SHARE = 0.9;
 
 // Contact damage of a hull touching the ship at a given wave (bosses hit harder; +8% per wave after 5).
 export function contactDamageAt(e, wave) {
@@ -33,10 +40,17 @@ export class EnemyManager {
     this.lieutenantArrivals = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
-    // Optional terrain (AsteroidManager) so blinkers never land inside rock; null in unit tests.
+    // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
     this.terrain = null;
+    // Camera rect in world space ({ x, y, w, h }), set by Game each tick; off-screen catch-up uses it.
+    this.view = null;
+    // (indicator) => { x, y, onScreen } | null: a new place for a guarded spawn the ship is camping on.
+    this.relocateSpawn = null;
+    this.tick = 0;
+    this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
-    this.aiEnv = { player: null, dirX: 0, dirY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, width: 0, height: 0 };
+    // moveX/moveY: the direction to steer toward the ship (dirX/dirY bent round blocking rock).
+    this.aiEnv = { player: null, dirX: 0, dirY: 0, moveX: 0, moveY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, width: 0, height: 0 };
   }
 
   clear() {
@@ -51,6 +65,8 @@ export class EnemyManager {
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
   // `extra.warmup` lengthens the ring into a telegraph; the slot is reserved for its whole duration.
+  // `extra.onScreen` draws the long, growing on-screen telegraph; `extra.guard` holds the arrival while
+  // the ship is within spawnMinDist of the spot (nothing pops in on top of the player).
   queueSpawn(type, x, y, waveScale = 1, extra = {}) {
     if (this.enemies.length + this.spawnIndicators.length >= this.maxEnemies) return false;
     const config = this.getArchetype(type, waveScale, extra);
@@ -66,19 +82,21 @@ export class EnemyManager {
       y,
       config,
       timer: extra.instant ? 0.02 : (extra.warmup ?? 0.55),
-      maxTimer: extra.warmup ?? 0.55
+      maxTimer: extra.warmup ?? 0.55,
+      onScreen: !!extra.onScreen,
+      guard: !!extra.guard && !extra.instant
     });
     return true;
   }
 
   // Spawn a coordinated Boid Swarm pack
-  spawnBoidSwarm(centerX, centerY, count, waveScale, width, height) {
+  spawnBoidSwarm(centerX, centerY, count, waveScale, width, height, extra = {}) {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
       const dist = 16 + Math.random() * 55;
       const sx = Math.max(30, Math.min(width - 30, centerX + Math.cos(angle) * dist));
       const sy = Math.max(30, Math.min(height - 30, centerY + Math.sin(angle) * dist));
-      this.queueSpawn('swarmer', sx, sy, waveScale);
+      this.queueSpawn('swarmer', sx, sy, waveScale, extra);
     }
   }
 
@@ -199,6 +217,19 @@ export class EnemyManager {
     for (let i = this.spawnIndicators.length - 1; i >= 0; i--) {
       const sp = this.spawnIndicators[i];
       sp.timer -= dt;
+      if (sp.timer <= 0 && sp.guard && Math.hypot(player.x - sp.x, player.y - sp.y) < (TUNING.spawnMinDist ?? 260)) {
+        sp.timer = 0; // fully charged, waiting for the ship to back off
+        sp.held = (sp.held || 0) + dt;
+        const moved = sp.held > SPAWN_HOLD_MAX && this.relocateSpawn ? this.relocateSpawn(sp) : null;
+        if (moved) {
+          sp.x = moved.x;
+          sp.y = moved.y;
+          sp.onScreen = !!moved.onScreen;
+          sp.timer = sp.maxTimer = moved.onScreen ? (TUNING.spawnOnscreenTelegraph ?? 1.4) : 0.55;
+          sp.held = 0;
+        }
+        continue;
+      }
       if (sp.timer <= 0) {
         const c = sp.config;
         const angle = Math.random() * Math.PI * 2;
@@ -255,7 +286,14 @@ export class EnemyManager {
           blinkX: 0,
           blinkY: 0,
           isLieutenant: !!c.isLieutenant,
-          mods: c.mods || null
+          mods: c.mods || null,
+          pace: c.pace || 1, // movement multiplier on top of steering (lieutenants: lieutenantSpeedMult)
+          detourRock: null,
+          detourSide: 0,
+          detourT: 0,
+          detourAge: 0,
+          detourX: 0,
+          detourY: 0
         };
         this.enemies.push(spawned);
         if (spawned.isBoss) this.bossArrivals.push(spawned);
@@ -278,6 +316,8 @@ export class EnemyManager {
     env.particles = particles;
     env.width = width;
     env.height = height;
+    const tick = this.tick++;
+    const steer = this.steer;
 
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
@@ -295,6 +335,12 @@ export class EnemyManager {
       env.dirX = dirX;
       env.dirY = dirY;
       env.dist = distPlayer;
+      // Chasers bend their approach round rock that blocks the line to the ship (see pursuit.js).
+      steerAroundRocks(e, dirX, dirY, distPlayer, this.terrain, dt, (tick + i) % PROBE_TICKS === 0, steer);
+      const moveX = steer.x;
+      const moveY = steer.y;
+      env.moveX = moveX;
+      env.moveY = moveY;
       if (isArchetype(e.type)) this.softSeparation(e, i, enemyOrder, maxRadius, env);
       if (updateArchetype(e, this, env)) {
         // Driven by archetypes.js (Bruiser, Gunner, Shielder, Blinker, Conduit).
@@ -329,8 +375,8 @@ export class EnemyManager {
           }
         }
 
-        let steerX = dirX * 0.42 + sepX;
-        let steerY = dirY * 0.42 + sepY;
+        let steerX = moveX * 0.42 + sepX;
+        let steerY = moveY * 0.42 + sepY;
 
         if (neighbors > 0) {
           alignX /= neighbors;
@@ -370,8 +416,8 @@ export class EnemyManager {
             }
           }
         }
-        e.vx = (e.vx + dirX * 0.45 + dodgeX) * 0.88;
-        e.vy = (e.vy + dirY * 0.45 + dodgeY) * 0.88;
+        e.vx = (e.vx + moveX * 0.45 + dodgeX) * 0.88;
+        e.vy = (e.vy + moveY * 0.45 + dodgeY) * 0.88;
         e.rotation = Math.atan2(e.vy, e.vx);
       } else if (e.type === 'blackhole') {
         // Crimson Gravity Well: pulls nearby enemies/sparks (grid funnel, ship, bullet & geom pulls live in Game)
@@ -407,8 +453,8 @@ export class EnemyManager {
             softSepY += (oy / d) * 0.35;
           }
         }
-        e.vx = (e.vx + dirX * 0.32 + softSepX) * 0.91;
-        e.vy = (e.vy + dirY * 0.32 + softSepY) * 0.91;
+        e.vx = (e.vx + moveX * 0.32 + softSepX) * 0.91;
+        e.vy = (e.vy + moveY * 0.32 + softSepY) * 0.91;
 
         if (e.isBoss && Math.sin(e.pulsePhase) > 0.92) {
           grid.applyImpulse(e.x, e.y, 10, 120, e.hue);
@@ -424,11 +470,20 @@ export class EnemyManager {
         e.vy = (e.vy / curSpd) * cap;
       }
 
-      // Gravity drift rides on top of the capped steering, then bleeds off.
+      // Steering moves at the enemy's pace (lieutenants are quicker; far off-screen chasers catch up;
+      // a Bruiser charge keeps its telegraphed lane length). Gravity drift rides on top, then bleeds off.
+      let pace = e.pace || 1;
+      if (e.isLieutenant && pace > 1) {
+        // Quicker, but always slower than a ship at base thrust, so a lieutenant stays dodgeable.
+        const v = Math.hypot(e.vx, e.vy);
+        const limit = LIEUTENANT_MAX_SHIP_SHARE * (TUNING.moveSpeed ?? 5);
+        if (v * pace > limit) pace = Math.max(1, limit / v);
+      }
+      pace = e.burstSpeed > 0 ? 1 : pace * catchupPace(e, distPlayer, this.view);
       const gvx = e.gvx || 0;
       const gvy = e.gvy || 0;
-      e.x += e.vx + gvx;
-      e.y += e.vy + gvy;
+      e.x += e.vx * pace + gvx;
+      e.y += e.vy * pace + gvy;
       e.gvx = gvx * GRAVITY_DRIFT_DRAG;
       e.gvy = gvy * GRAVITY_DRIFT_DRAG;
 
@@ -495,6 +550,10 @@ export class EnemyManager {
       }
       if (sp.config.isLieutenant) {
         if (visible(sp.x, sp.y, sp.config.radius * 3.6 + 10)) drawLieutenantTelegraph(ctx, sp);
+        continue;
+      }
+      if (sp.onScreen) {
+        if (visible(sp.x, sp.y, sp.config.radius * 2.8 + 30)) this.drawOnscreenTelegraph(ctx, sp);
         continue;
       }
       if (!visible(sp.x, sp.y, sp.config.radius * 2.6 + 4)) continue;
@@ -669,6 +728,63 @@ export class EnemyManager {
     ctx.arc(0, 0, r * 0.74, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  // Long telegraph for a spawn the player can see (spawnOnscreenTelegraph): a hazard ring that is bright
+  // from the first frame, a progress arc sweeping round it, and the enemy's own outline growing from a
+  // dot to full size at the centre, flashing faster as arrival nears. Driven by the sim timer.
+  drawOnscreenTelegraph(ctx, sp) {
+    const t = Math.max(0, Math.min(1, 1 - sp.timer / sp.maxTimer));
+    const c = sp.config;
+    const hue = c.hue;
+    const flash = 0.5 + 0.5 * Math.cos(sp.timer * Math.PI * (4 + t * 10));
+    const ringR = c.radius * 2.2 + 16;
+    const spin = sp.timer * 1.8;
+
+    // Dashed hazard ring, visible at full strength from the start.
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = `hsla(${hue}, 100%, 66%, ${0.5 + flash * 0.4})`;
+    ctx.beginPath();
+    for (let s = 0; s < 8; s++) {
+      const a = spin + (s * Math.PI * 2) / 8;
+      ctx.moveTo(sp.x + Math.cos(a) * ringR, sp.y + Math.sin(a) * ringR);
+      ctx.arc(sp.x, sp.y, ringR, a, a + 0.48);
+    }
+    ctx.stroke();
+
+    // Countdown arc: sweeps a full turn over the telegraph.
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = `hsla(${flash > 0.5 ? 0 : 48}, 100%, 62%, 0.9)`;
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, ringR + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t);
+    ctx.stroke();
+
+    // Inward crosshair ticks.
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${0.45 + t * 0.45})`;
+    ctx.beginPath();
+    for (let s = 0; s < 4; s++) {
+      const a = -spin * 0.5 + Math.PI / 4 + (s * Math.PI) / 2;
+      ctx.moveTo(sp.x + Math.cos(a) * (ringR + 14), sp.y + Math.sin(a) * (ringR + 14));
+      ctx.lineTo(sp.x + Math.cos(a) * (ringR - 8), sp.y + Math.sin(a) * (ringR - 8));
+    }
+    ctx.stroke();
+
+    // The hull's outline grows in from a dot.
+    const sides = Math.max(3, c.sides || 4);
+    const r = c.radius * (0.15 + 0.85 * t);
+    ctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.1 + t * 0.25})`;
+    ctx.strokeStyle = `hsla(${hue}, 100%, ${62 + flash * 20}%, ${0.55 + t * 0.45})`;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (let s = 0; s < sides; s++) {
+      const a = spin * 2 + (s * Math.PI * 2) / sides;
+      if (s === 0) ctx.moveTo(sp.x + Math.cos(a) * r, sp.y + Math.sin(a) * r);
+      else ctx.lineTo(sp.x + Math.cos(a) * r, sp.y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   // Warning telegraph at a reserved boss spawn: a hazard ring that closes in on the point while
