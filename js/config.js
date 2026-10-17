@@ -75,7 +75,12 @@ export const DEFAULT_TUNING = {
   knockbackMult: 1.0,
   hitStopMult: 1.0,
   damageNumberCap: 48,
-  damageNumberScale: 1.0
+  damageNumberScale: 1.0,
+
+  // 9. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
+  deployableDamageMult: 1.0,
+  mineArmTime: 0.6,
+  droneFormationRadius: 54
 };
 
 export const TUNING_SCHEMA = [
@@ -176,6 +181,14 @@ export const TUNING_SCHEMA = [
       { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
       { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
       { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
+    ]
+  },
+  {
+    group: '🛰 Deployables',
+    items: [
+      { key: 'deployableDamageMult', label: 'Deployable Damage (mines/turrets/drones)', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'mineArmTime', label: 'Mine Arming Delay', type: 'range', min: 0.1, max: 2.0, step: 0.05, unit: 's' },
+      { key: 'droneFormationRadius', label: 'Escort Drone Formation Spacing', type: 'range', min: 30, max: 120, step: 2, unit: 'px' }
     ]
   }
 ];

@@ -39,9 +39,37 @@ export const WEAPON_SCALING = {
   novaDamage: (lv) => 35 * lv,
   dashCooldown: (lv, base) => Math.max(0.2, base - lv * 0.14),
 
+  // Proximity Mines (deployable): dropped behind the ship on a timer while a slot is free; they arm
+  // after TUNING.mineArmTime, burst when an enemy enters the trigger ring, and self-detonate at the end of the fuse.
+  mineCooldown: (lv) => Math.max(0.8, 2.2 - lv * 0.22),
+  mineMaxActive: (lv) => 2 + lv,
+  mineLifetime: (lv) => 9 + lv * 1.5,
+  mineTriggerRadius: (lv) => 44 + lv * 4,
+  mineBlastRadius: (lv) => 80 + lv * 10,
+  mineDamageMult: (lv) => 3.2 + lv * 0.7,
+
+  // Sentry Turret (deployable): planted at the ship, shoots the nearest enemy it can see past cover.
+  turretCooldown: (lv) => Math.max(4.5, 8.5 - lv * 0.6),
+  turretMaxActive: (lv) => 1 + Math.floor(lv / 3),
+  turretDuration: (lv) => 5 + lv,
+  turretRange: (lv) => 300 + lv * 25,
+  turretFireRate: (lv) => 2.6 + lv * 0.5,
+  turretDamageMult: (lv) => 0.8 + lv * 0.1,
+  turretBoltSpeed: 13,
+
+  // Escort Drones (deployable): 1-3 gunships flying in formation behind the hull.
+  droneCount: (lv) => Math.min(3, 1 + Math.floor(lv / 2)),
+  droneFireRate: (lv) => 1.6 + lv * 0.3,
+  droneRange: (lv) => 260 + lv * 20,
+  droneDamageMult: (lv) => 0.55 + lv * 0.08,
+  droneBoltSpeed: 15,
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
   tectonicBlastRadius: 135,
-  tectonicDamageMult: 2.6
+  tectonicDamageMult: 2.6,
+  // Siege Battery: every turret bolt that hits bursts like a small mine.
+  siegeShellRadius: 52,
+  siegeShellDamageMult: 0.7
 };

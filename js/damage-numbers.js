@@ -13,6 +13,9 @@ export const DAMAGE_SOURCE_COLORS = {
   orbital: '#6dff9e',     // Orbiting blades
   singularity: '#ff6ad5', // Vortex singularity grind + collapse
   supernova: '#ffe45c',   // Supernova bomb
+  mine: '#ff5a4a',        // Proximity mine bursts
+  turret: '#5aa8ff',      // Sentry turret bolts (and Siege Battery shell bursts)
+  drone: '#c4ff4a',       // Escort drone bolts
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
 };
 
