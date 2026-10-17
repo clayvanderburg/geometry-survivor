@@ -17,7 +17,7 @@ import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   wingRocketBlastRadius, critChance, critMultiplier
 } from './weapon-scaling.js';
-import { STARTING_WEAPONS, WEAPON_BY_ID, ownedWeapons, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
+import { STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
@@ -2363,6 +2363,7 @@ export class Game {
 
   // Pause-menu LOADOUT panel: one card per slot with level, tags and weapon-specific upgrades. DISCARD
   // asks for confirmation in place (CONFIRM / KEEP), then frees the slot so NEW WEAPON cards return.
+  // Owned passives (Volatile Shatter) follow the slots in a full-width row: no slot, no discard.
   renderLoadoutPanel() {
     const panel = document.getElementById('pause-loadout');
     if (!panel || !this.player) return;
@@ -2408,6 +2409,14 @@ export class Game {
         <div class="upg-tags">${chips(id)}</div>
         ${lines ? `<div class="loadout-lines">${lines}</div>` : ''}
         ${actions}
+      </div>`);
+    }
+    for (const id of ownedPassives(p)) {
+      const x = PASSIVE_BY_ID[id];
+      html.push(`<div class="loadout-slot loadout-passive" style="--wc:${x.color}" data-passive="${id}">
+        <div class="loadout-slot-top"><span class="loadout-slot-num">PASSIVE // NO SLOT</span><span class="loadout-lv">LV ${passiveLevel(p, id)}<span class="upg-max"> / ${UPGRADE_BY_ID[x.upgradeId].maxLevel}</span></span></div>
+        <div class="loadout-name">${x.name}</div>
+        <div class="upg-tags">${chips(id)}</div>
       </div>`);
     }
     panel.innerHTML = html.join('');

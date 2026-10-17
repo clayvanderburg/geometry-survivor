@@ -11,7 +11,7 @@ import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
 import { PLAYER_ESCAPE_THRUST_SHARE } from './gravity.js';
-import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
+import { WEAPONS, PASSIVES, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -186,6 +186,14 @@ const jumpOdds = () => {
   return `+2 ${p(c.doubleChance - c.tripleChance)}, +3 ${p(c.tripleChance - c.quadChance)}, +4 ${p(c.quadChance - c.pentaChance)}, +5 ${p(c.pentaChance)}`;
 };
 
+// Tag cards a passive unlocks, e.g. "Tungsten Penetrators (KINETIC)".
+const passiveTagCards = (id) => {
+  const tags = weaponTags(id);
+  const cards = UPGRADE_POOL.filter((u) => u.category === 'SPECIALIST' && (u.tags || []).some((t) => tags.includes(t)))
+    .map((u) => `${u.name} (${u.tags.map((t) => TAG_INFO[t]?.label || t).join(', ')})`);
+  return cards.length ? `the ${cards.join(' and ')} tag card${cards.length > 1 ? 's' : ''}` : 'no tag cards';
+};
+
 export const MECHANIC_ENTRIES = [
   {
     id: 'controls', icon: '⌨', title: 'CONTROLS',
@@ -228,7 +236,8 @@ export const MECHANIC_ENTRIES = [
     body: () => [
       `You carry up to ${weaponSlots()} weapons. The crab starts with ${STARTING_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(' and ')}. Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
       'While a slot is free, a NEW WEAPON card turns up often (and at least every few level-ups): pick it to choose 1 of 3 new weapons. With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.',
-      'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.'
+      'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
+      ...PASSIVES.map((x) => `${x.name} is a PASSIVE, not a weapon: it takes no slot and is never a NEW WEAPON pick. It turns up in ordinary level-up hands like any general upgrade (with the usual +2…+5 rarity jumps), and owning it unlocks ${passiveTagCards(x.id)}. ${x.summary}`)
     ]
   },
   {

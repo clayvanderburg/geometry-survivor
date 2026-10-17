@@ -32,7 +32,8 @@ export function rarityFor(upg, jump = 1) {
 // Loadout gating (rollUpgrades): a weapon's level line (WEAPONS[].levelId in loadout.js) is offered only
 // while that weapon is equipped. `owners` lists the weapons a weapon-specific line belongs to (offered
 // while any of them is equipped, removed when the last one is discarded); evolutions also name
-// `ownersAll`. Lines without owners are general upgrades. Tag cards need an equipped weapon with the tag.
+// `ownersAll`. Lines without owners are general upgrades (passives such as Volatile Shatter included).
+// Tag cards need an equipped weapon or an owned passive with the tag.
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
@@ -169,6 +170,8 @@ export const UPGRADE_POOL = [
       player.weapons.singularity = (player.weapons.singularity || 0) + 1;
     }
   },
+  // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
+  // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
     id: 'shrapnel',
     name: 'Volatile Shatter',
@@ -176,7 +179,7 @@ export const UPGRADE_POOL = [
     tags: ['projectile', 'kinetic'],
     maxLevel: 8,
     headline: 'shrapnelShards',
-    summary: 'Kills burst into ricochet shards that trigger chain-reaction kills.',
+    summary: 'Passive, no slot: kills burst into ricochet shards that trigger chain-reaction kills.',
     apply(player) {
       player.weapons.shrapnel = (player.weapons.shrapnel || 0) + 1;
     }
@@ -272,7 +275,7 @@ export const UPGRADE_POOL = [
       player.stats.critDamage = (player.stats.critDamage ?? (TUNING.baseCritDamage ?? 1.5)) + W.critDamageStep;
     }
   },
-  // Tag specialists: boost every weapon in one family (offered once you own a weapon that carries it)
+  // Tag specialists: boost every weapon in one family (offered once you own a weapon or passive that carries it)
   {
     id: 'tag_kinetic',
     name: 'Tungsten Penetrators',
@@ -473,7 +476,7 @@ function addTagDamage(player, tag) {
   boosts[tag] = (boosts[tag] ?? 1) + W.tagDamageStep[tag];
 }
 
-// Tag cards are offered only when an equipped weapon carries the tag.
+// Tag cards are offered only when an equipped weapon or an owned passive carries the tag.
 function hasTag(player, tag) {
   return ownedTags(player).has(tag);
 }

@@ -69,3 +69,28 @@ test('piercing bolts hit the first enemy for full damage and each one behind for
   const f = TUNING.pierceFalloff;
   assert.deepEqual(row.map((e) => +(1000 - e.hp).toFixed(6)), [100, +(100 * f).toFixed(6), +(100 * f * f).toFixed(6)]);
 });
+
+test('Swarm Micro-Missiles fire 25% faster at 80% damage per missile, same potential DPS', () => {
+  const oldCooldown = (lv) => Math.max(1.2, 1.9 - lv * 0.1);
+  for (let lv = 1; lv <= maxLevel('missiles'); lv++) {
+    assert.ok(Math.abs(W.missileCooldown(lv) - 0.8 * oldCooldown(lv)) < 1e-9, `LV ${lv} cooldown`);
+    const oldPerMissile = DPS_TARGET(lv) * oldCooldown(lv) / W.missileSalvo(lv);
+    assert.ok(Math.abs(W.missileDamageMult(lv) - 0.8 * oldPerMissile) < 1e-9, `LV ${lv} per-missile damage`);
+    assert.ok(Math.abs(POTENTIAL_DPS.missiles(lv) / DPS_TARGET(lv) - 1) < 1e-9, `LV ${lv} DPS parity`);
+  }
+});
+
+test('Sentry Turret fires twice as fast for half damage per bolt, same potential DPS', () => {
+  for (let lv = 1; lv <= maxLevel('turret'); lv++) {
+    const oldRate = 2.6 + lv * 0.45;
+    assert.ok(Math.abs(W.turretFireRate(lv) - 2 * oldRate) < 1e-9, `LV ${lv} fire rate`);
+    const oldPerBolt = DPS_TARGET(lv) / (W.turretAverageActive(lv) * oldRate);
+    assert.ok(Math.abs(W.turretDamageMult(lv) - oldPerBolt / 2) < 1e-9, `LV ${lv} per-bolt damage`);
+    assert.ok(Math.abs(POTENTIAL_DPS.turret(lv) / DPS_TARGET(lv) - 1) < 1e-9, `LV ${lv} DPS parity`);
+  }
+});
+
+test('Volatile Shatter stays off the DPS curve: flat shard damage, gated by kills', () => {
+  assert.ok(!('shrapnel' in POTENTIAL_DPS), 'passive, conditional on kills');
+  assert.equal(W.shrapnelDamageMult, 0.75);
+});
