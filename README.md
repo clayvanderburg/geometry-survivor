@@ -8,7 +8,7 @@ A browser-based geometric twin-stick roguelite & asteroid-excavation survival ga
 npm start
 ```
 - **Play Game**: `http://127.0.0.1:8096`
-- **Standalone Live Tuning & Dev Sandbox Studio**: `http://127.0.0.1:8096/tuner.html` (or press **`[T]`** in-game to toggle the slide-over Tuner Drawer).
+- **Standalone Live Tuning & Dev Sandbox Studio**: `http://127.0.0.1:8096/tuner.html` (or press **`Shift+Alt+T`** in-game, Shift+Option+T on Mac, to toggle the hidden slide-over Tuner Drawer; it has no visible link so the public build stays clean).
 
 ---
 
@@ -71,7 +71,7 @@ npm start
    - Custom **Pilot Callsign / Name Entry** on Title and Game Over screens.
    - Spend **Void Cores (❖)** harvested during runs on 6 permanent Armory upgrades persisted in `localStorage` (`vectra_survivor_save_v2`).
 
-7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + `[T]` Drawer)**
+7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + hidden `Shift+Alt+T` Drawer)**
    - Exposes 97 live parameters across 12 categories (*Crab Ship & Drill-Claws*, *Weapons & Shield Barrier*, *Luck, Multi-Levels & Chests*, *Asteroids, World & Economy*, *Audio, Enemies & Visual FX*, *Gravity Wells & Singularities*, *Boss Encounters*, *Hit Feedback & Damage Numbers*, *Enemy Variety & Lieutenants*, *Deployables*, *Crits & Damage Types*, *Leveling & Weapon Loadout*) with real-time cross-tab sync via `BroadcastChannel` + `localStorage`.
    - Includes instant Sandbox triggers (`Spawn Chest`, `Trigger Level-Up`, `+50 Cores`, `Spawn Boss`, `+Lieutenant`, `+Bruiser`/`+Gunner`/`+Shielder`/`+Blinker`/`+Conduit`, `Regenerate Asteroids`, `Full Heal`) and a 1-click **📋 COPY TUNING FOR AGENT** button.
    - The *Enemy Variety & Lieutenants* group exposes pack spawn weights, Gunner orb speed/damage, lieutenant HP share, modifier count, first wave, arrival delay and Void Core reward.
