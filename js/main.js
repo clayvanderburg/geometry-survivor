@@ -3,7 +3,7 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
@@ -30,6 +30,8 @@ import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
+import { detectEncounters, hostileEntry } from './field-guide.js';
+import { FieldGuideUI } from './field-guide-ui.js';
 import {
   TUNING,
   TUNING_SCHEMA,
@@ -82,6 +84,12 @@ const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
 };
 
+// Field Guide: how long the in-run "FIELD GUIDE UPDATED" toast stays up, and how often (fixed ticks)
+// the camera view is scanned for hostiles the player has never logged.
+const GUIDE_TOAST_TIME = 2.8;
+const GUIDE_SCAN_TICKS = 6;
+const GUIDE_STATES = ['TITLE', 'PAUSED', 'GAMEOVER'];
+
 // Crits shove a little harder and flash a gold star flare sized to the target.
 const CRIT_KNOCKBACK_MULT = 1.5;
 
@@ -130,6 +138,9 @@ export class Game {
     this.menuGrace = 0;
 
     this.currentChoices = [];
+    // Field Guide overlay (built on first open) sits on top of the title, pause or game-over screen.
+    this.guideOpen = false;
+    this.fieldGuide = null;
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
@@ -167,6 +178,9 @@ export class Game {
     this.ltCard = null;
     this.ltCardTimer = 0;
     this.seenArchetypes = new Set();
+    this.guideToast = null;
+    this.guideToastTimer = 0;
+    this.guideScanTick = 0;
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -336,11 +350,24 @@ export class Game {
       // Space on a focused button/link activates that control instead of a menu shortcut.
       const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
 
+      if (this.guideOpen) {
+        this.handleGuideKey(e, onControl);
+        return;
+      }
+
       this.sound.init();
       const code = e.code;
       this.keys[code] = true;
       // Held movement is stateful; abilities and toggles fire only on the initial press.
       if (e.repeat) return;
+
+      // [G] opens the Field Guide from the title, pause and game-over screens (and pauses a live run).
+      if (code === 'KeyG' && (this.state === 'PLAYING' || GUIDE_STATES.includes(this.state))) {
+        e.preventDefault();
+        if (this.state === 'PLAYING') this.togglePause();
+        this.openGuide();
+        return;
+      }
 
       if (this.state === 'TITLE' && code === 'Space' && !onControl) {
         e.preventDefault();
@@ -493,6 +520,9 @@ export class Game {
     if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
+    for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
+      document.getElementById(id)?.addEventListener('click', () => this.openGuide());
+    }
     this.syncDamageNumbersButton();
 
     // Volume Sliders (HUD & Pause Menu)
@@ -724,6 +754,7 @@ export class Game {
   }
 
   renderHubUI() {
+    this.syncGuideBadges();
     const cores = this.progression.data.cores;
     const hubCoresEl = document.getElementById('hub-cores-count');
     const goCoresEl = document.getElementById('go-cores-count');
@@ -868,6 +899,7 @@ export class Game {
 
   startGame() {
     this.sound.init();
+    if (this.guideOpen) this.closeGuide();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.add('hidden');
@@ -1426,7 +1458,7 @@ export class Game {
   }
 
   contactDamage(e) {
-    return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return contactDamageAt(e, this.wave);
   }
 
   // Gunner orbs scale with the wave exactly like contact damage.
@@ -1485,9 +1517,9 @@ export class Game {
     return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), { warmup: LIEUTENANT_WARMUP, lieutenant: lt });
   }
 
-  showLieutenantCard(kind, kicker, name, epithet, detail) {
+  showLieutenantCard(kind, kicker, name, epithet, detail, link = '') {
     this.ltCardSerial = (this.ltCardSerial || 0) + 1;
-    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail };
+    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail, link };
     this.ltCardTimer = LIEUTENANT_CARD_TIME;
   }
 
@@ -1498,6 +1530,7 @@ export class Game {
     this.addShake(6);
     this.sound.playLieutenantArrival?.();
     const mods = lieutenantModLabels(e).join(' · ');
+    this.logGuideEntries(['lieutenant', e.type]);
     this.showLieutenantCard('arrival', '▲ LIEUTENANT ▲', e.name, e.epithet, `${mods} · ${Math.round(e.maxHp).toLocaleString()} HP`);
   }
 
@@ -1525,7 +1558,10 @@ export class Game {
     if (!info || this.seenArchetypes.has(type)) return;
     if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
     this.seenArchetypes.add(type);
-    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro);
+    // The intel card doubles as the Field Guide link (no separate toast for it).
+    const logged = this.logGuideEntries([type], false).length > 0;
+    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro,
+      logged ? '📖 NEW FIELD GUIDE ENTRY · [G] TO READ' : '📖 IN YOUR FIELD GUIDE · [G]');
   }
 
   updateLieutenantHUD() {
@@ -1538,6 +1574,8 @@ export class Game {
       document.getElementById('lt-card-name').textContent = card.name;
       document.getElementById('lt-card-epithet').textContent = card.epithet;
       document.getElementById('lt-card-detail').textContent = card.detail;
+      const link = document.getElementById('lt-card-link');
+      if (link) link.textContent = card.link || '';
       cardEl.className = `lt-card lt-card-${card.kind}`;
       cardEl.style.animation = 'none';
       void cardEl.offsetWidth;
@@ -1563,6 +1601,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
     this.sound.playBossArrival();
     const hp = Math.round(e.maxHp).toLocaleString();
+    this.logGuideEntries(['boss']);
     this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
   }
 
@@ -2404,6 +2443,7 @@ export class Game {
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
+    this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.playSupernova();
 
@@ -2481,6 +2521,10 @@ export class Game {
   // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
   // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
   updateMenuController(gp, dt) {
+    if (this.guideOpen) {
+      this.updateGuideController(gp, dt);
+      return;
+    }
     const menus = {
       TITLE: ['title-modal', 'btn-start-game'],
       UPGRADE: ['upgrade-modal', null],
@@ -2529,6 +2573,8 @@ export class Game {
     if (this.bossFlash > 0) this.bossFlash = Math.max(0, this.bossFlash - dt * 2.4);
     this.shieldRotation += dt * 1.4;
 
+    // The guide only lives over the title, pause and game-over screens.
+    if (this.guideOpen && !GUIDE_STATES.includes(this.state)) this.closeGuide();
     const gp = this.pollGamepad();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
@@ -2853,6 +2899,7 @@ export class Game {
       for (const lt of ltArrivals) this.onLieutenantArrived(lt);
       ltArrivals.length = 0;
     }
+    this.updateFieldGuide(dt);
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
     if (this.updateEnemyBullets(dt)) return;
 
@@ -3010,6 +3057,170 @@ export class Game {
 
     this.updateBossHUD(this.getBossHudModel());
     this.updateLieutenantHUD();
+    this.updateGuideToast();
+  }
+
+  // --- Field Guide ---------------------------------------------------------------------------
+
+  // Hostiles in view that were never logged unlock their guide entry (scanned every few ticks).
+  updateFieldGuide(dt) {
+    if (this.guideToastTimer > 0) this.guideToastTimer = Math.max(0, this.guideToastTimer - dt);
+    this.guideScanTick = (this.guideScanTick || 0) + 1;
+    if (this.guideScanTick < GUIDE_SCAN_TICKS) return;
+    this.guideScanTick = 0;
+    const seen = this.progression?.data?.guide?.seen;
+    if (!seen) return;
+    const view = { x: this.camX, y: this.camY, w: this.width, h: this.height };
+    const found = detectEncounters(this.enemyManager.enemies, view, id => seen.includes(id));
+    if (found.length) this.logGuideEntries(found);
+  }
+
+  // Saves newly met hostiles and (optionally) raises the toast. Returns the ids that were new.
+  logGuideEntries(ids, toast = true) {
+    const added = this.progression?.unlockGuideEntries?.(ids) || [];
+    if (!added.length) return added;
+    if (toast) {
+      const names = added.map(id => hostileEntry(id)?.name || id.toUpperCase());
+      const merge = this.guideToastTimer > 0.4 && this.guideToast;
+      this.guideToastSerial = (this.guideToastSerial || 0) + 1;
+      this.guideToast = { id: this.guideToastSerial, text: (merge ? [this.guideToast.text, ...names] : names).join(' · ') };
+      this.guideToastTimer = GUIDE_TOAST_TIME;
+    }
+    this.syncGuideBadges();
+    return added;
+  }
+
+  updateGuideToast() {
+    const el = document.getElementById('guide-toast');
+    if (!el) return;
+    const toast = this.guideToastTimer > 0 && this.state === 'PLAYING' ? this.guideToast : null;
+    if (toast && toast.id !== this.guideToastShownId) {
+      this.guideToastShownId = toast.id;
+      const text = document.getElementById('guide-toast-text');
+      if (text) text.textContent = `${toast.text} · [G]`;
+    }
+    setHidden(el, !toast);
+    if (toast) el.classList[this.guideToastTimer < 0.4 ? 'add' : 'remove']('guide-toast-out');
+  }
+
+  // "· 2 NEW" on every Field Guide button while unread entries wait.
+  syncGuideBadges() {
+    const fresh = this.progression?.data?.guide?.fresh.length || 0;
+    for (const id of ['guide-badge-title', 'guide-badge-pause', 'guide-badge-go']) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = fresh ? ` · ${fresh} NEW` : '';
+    }
+  }
+
+  openGuide({ tab = null, focusId = null } = {}) {
+    if (this.guideOpen || !GUIDE_STATES.includes(this.state)) return false;
+    this.fieldGuide ||= new FieldGuideUI({
+      progression: this.progression,
+      getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
+      onClose: () => this.onGuideClosed()
+    });
+    // Opening with unread entries jumps straight to the first one.
+    const fresh = this.progression.data.guide.fresh.find(id => hostileEntry(id));
+    const target = focusId ?? fresh ?? null;
+    this.guideReturnFocus = document.activeElement;
+    this.guideOpen = true;
+    this.resetInput();
+    this.fieldGuide.open({ tab: target ? 'hostiles' : tab, focusId: target });
+    this.guideFocusEl = target ? this.fieldGuide.reveal(target) : null;
+    this.menuNav?.clear();
+    // Focus moves into the guide so Enter/Space can't click the (now covered) button that opened it.
+    (this.guideFocusEl || this.fieldGuide.body).focus?.({ preventScroll: true });
+    return true;
+  }
+
+  closeGuide() {
+    this.fieldGuide?.close();
+  }
+
+  onGuideClosed() {
+    this.guideOpen = false;
+    this.guideFocusEl = null;
+    this.menuNav?.clear();
+    this.menuState = null;
+    this.syncGuideBadges();
+    this.guideReturnFocus?.focus?.();
+  }
+
+  handleGuideKey(e, onControl) {
+    const guide = this.fieldGuide;
+    const code = e.code;
+    // Keys never reach the screen behind the guide: Tab cycles inside it, and Enter/Space on a control
+    // outside it (e.g. RESUME on the pause menu) would otherwise click it and resume the run under the guide.
+    const focused = document.activeElement;
+    const inGuide = !!focused && guide.root.contains(focused);
+    if (code === 'Tab') {
+      const stops = [...guide.root.querySelectorAll('button:not([disabled]), [tabindex="0"]')];
+      const i = inGuide ? stops.indexOf(focused) : -1;
+      const next = i === -1 ? (e.shiftKey ? stops.length - 1 : 0)
+        : e.shiftKey ? (i === 0 ? stops.length - 1 : null) : (i === stops.length - 1 ? 0 : null);
+      if (next !== null && stops[next]) {
+        e.preventDefault();
+        stops[next].focus();
+      }
+      return;
+    }
+    if (!inGuide && (code === 'Enter' || code === 'NumpadEnter')) {
+      e.preventDefault();
+      return;
+    }
+    onControl = onControl && inGuide;
+    const page = (guide.body.clientHeight || 400) * 0.85;
+    const actions = {
+      Escape: () => this.closeGuide(),
+      Backspace: () => this.closeGuide(),
+      KeyG: () => this.closeGuide(),
+      ArrowLeft: () => guide.cycleTab(-1),
+      KeyQ: () => guide.cycleTab(-1),
+      ArrowRight: () => guide.cycleTab(1),
+      KeyE: () => guide.cycleTab(1),
+      Digit1: () => guide.setTab('hostiles'),
+      Digit2: () => guide.setTab('mechanics'),
+      Digit3: () => guide.setTab('weapons'),
+      ArrowUp: () => guide.scrollBy(-90),
+      ArrowDown: () => guide.scrollBy(90),
+      PageUp: () => guide.scrollBy(-page),
+      PageDown: () => guide.scrollBy(page),
+      Home: () => guide.scrollBy(-1e6),
+      End: () => guide.scrollBy(1e6)
+    };
+    if (code === 'Space' && !onControl) actions.Space = () => guide.scrollBy(e.shiftKey ? -page : page);
+    const action = actions[code];
+    if (!action) return;
+    e.preventDefault();
+    if (e.repeat && !code.startsWith('Arrow') && !code.startsWith('Page')) return;
+    action();
+  }
+
+  // Controller in the guide: d-pad/left stick moves focus (auto-scrolling), right stick scrolls,
+  // LB/RB switch tabs, A activates, B or Start goes back.
+  updateGuideController(gp, dt) {
+    const guide = this.fieldGuide;
+    if (this.menuState !== 'GUIDE') {
+      this.menuState = 'GUIDE';
+      this.menuGrace = 0.25;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !guide) return;
+    const fallback = this.guideFocusEl?.isConnected ? this.guideFocusEl : guide.activeTabButton();
+    this.menuNav.update(guide.root, gp, dt, fallback);
+    if (gp.aimY) guide.scrollBy(gp.aimY * 16);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) {
+      this.closeGuide();
+    } else if (gp.pressed(PAD.LB) || gp.pressed(PAD.RB)) {
+      guide.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
+      this.guideFocusEl = null;
+      this.menuNav.setFocus(guide.activeTabButton());
+    } else if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    }
   }
 
   // Wing rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
