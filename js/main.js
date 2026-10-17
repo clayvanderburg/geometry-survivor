@@ -254,6 +254,7 @@ export class Game {
     snapshotBase(this.player);
     for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
     this.discardPending = null;
+    this.discardBlocked = null;
     this.weaponBarHtml = null;
 
     this.camX = centerX - this.width * 0.5;
@@ -880,6 +881,7 @@ export class Game {
       this.mouse.down = false;
       this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
       this.discardPending = null;
+      this.discardBlocked = null;
       this.renderLoadoutPanel();
       if (pauseModal) pauseModal.classList.remove('hidden');
       if (pauseBtn) {
@@ -2389,14 +2391,18 @@ export class Game {
       const lines = lineList
         .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `LV ${l.level}`}</span>`).join('');
       const pending = this.discardPending === id;
+      const blocked = this.discardBlocked === id;
       // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
       const removes = lineList.filter((l) => !(UPGRADE_BY_ID[l.id].owners || []).some((o) => o !== id && owned.includes(o)));
       const removeText = removes.length ? ` and ${removes.map((l) => l.name.replace('SYNERGY: ', '')).join(', ')}` : '';
-      const actions = pending
+      const actions = blocked
+        ? `<div class="loadout-confirm">You need at least one weapon. Equip another weapon before discarding ${w.name}.</div>
+          <div class="loadout-actions"><button class="neon-btn loadout-btn" data-discard-ok="${id}">OK</button></div>`
+        : pending
         ? `<div class="loadout-confirm">Discard ${w.name}${w.levelId ? ` LV ${level}` : ''}${removeText}? The slot opens for a NEW WEAPON.</div>
           <div class="loadout-actions"><button class="neon-btn loadout-btn danger" data-discard-confirm="${id}">✕ CONFIRM DISCARD</button><button class="neon-btn loadout-btn" data-discard-cancel="${id}">KEEP</button></div>`
-        : `<div class="loadout-actions"><button class="neon-btn loadout-btn" data-discard="${id}"${owned.length <= 1 ? ' disabled title="Your last weapon cannot be discarded"' : ''}>DISCARD</button></div>`;
-      html.push(`<div class="loadout-slot${pending ? ' confirming' : ''}" style="--wc:${w.color}">
+        : `<div class="loadout-actions"><button class="neon-btn loadout-btn" data-discard="${id}">DISCARD</button></div>`;
+      html.push(`<div class="loadout-slot${pending || blocked ? ' confirming' : ''}" style="--wc:${w.color}">
         <div class="loadout-slot-top"><span class="loadout-slot-num">SLOT ${i + 1}</span><span class="loadout-lv">${lvText}</span></div>
         <div class="loadout-name">${w.name}</div>
         <div class="upg-tags">${chips(id)}</div>
@@ -2406,9 +2412,23 @@ export class Game {
     }
     panel.innerHTML = html.join('');
     panel.querySelectorAll?.('[data-discard]').forEach((b) => b.addEventListener('click', () => {
-      this.discardPending = b.getAttribute('data-discard');
+      const id = b.getAttribute('data-discard');
+      // The last weapon can't go: explain why instead of offering a confirm.
+      if (ownedWeapons(this.player).length <= 1) {
+        this.discardBlocked = id;
+        this.renderLoadoutPanel();
+        this.focusLoadoutButton(`[data-discard-ok="${id}"]`);
+        return;
+      }
+      this.discardPending = id;
       this.renderLoadoutPanel();
-      this.focusLoadoutButton(`[data-discard-cancel="${this.discardPending}"]`);
+      this.focusLoadoutButton(`[data-discard-cancel="${id}"]`);
+    }));
+    panel.querySelectorAll?.('[data-discard-ok]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.getAttribute('data-discard-ok');
+      this.discardBlocked = null;
+      this.renderLoadoutPanel();
+      this.focusLoadoutButton(`[data-discard="${id}"]`);
     }));
     panel.querySelectorAll?.('[data-discard-cancel]').forEach((b) => b.addEventListener('click', () => {
       const id = b.getAttribute('data-discard-cancel');
@@ -2432,12 +2452,13 @@ export class Game {
   confirmDiscard(id) {
     const removed = discardWeapon(this.player, id);
     this.discardPending = null;
+    this.discardBlocked = null;
     if (removed) {
       const w = WEAPON_BY_ID[id];
       this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${w.name.toUpperCase()} DISCARDED // SLOT FREE`, '#ff77b7', 15);
     }
     this.renderLoadoutPanel();
-    this.focusLoadoutButton('[data-discard]:not([disabled])');
+    this.focusLoadoutButton('[data-discard]');
     this.updateHUD();
   }
 
