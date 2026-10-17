@@ -99,7 +99,7 @@ export const WEAPON_SCALING = {
 
   // Escort Drones (deployable): 1-3 gunships flying in formation behind the hull.
   droneCount: (lv) => Math.min(3, lv),
-  droneFireRate: (lv) => 1.6 + lv * 0.3,
+  droneFireRate: (lv) => 6.4 + lv * 1.2, // 4x the old 1.6 + 0.3/LV: busier to watch, per-bolt damage drops to keep DPS
   droneRange: (lv) => 260 + lv * 20,
   droneDamageMult: (lv) => DPS_TARGET(lv) / (W.droneCount(lv) * W.droneFireRate(lv)),
   droneBoltSpeed: 15,
