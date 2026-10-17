@@ -32,6 +32,19 @@ export function wellPullScale(dx, dy, radius, strength, minDist = 6) {
   return (strength * wellFalloff(d, radius)) / d;
 }
 
+// Player Vortex Singularity pull: the shared well curve raised to TUNING.singularityPullFalloff, so it keeps
+// nearly full strength near the core but fades much faster toward the rim (at the default exponent 3: ~89%
+// of the old pull at 10% radius, 39% at half radius, 12% at three-quarters). Edge enemies are nudged, not
+// vacuumed in. Exponent 1 is the old curve.
+export function singularityPullScale(dx, dy, radius, strength, minDist = 6, tuning = TUNING) {
+  const dSq = dx * dx + dy * dy;
+  if (!(dSq < radius * radius)) return 0;
+  const exp = Math.max(1, tuning.singularityPullFalloff ?? 3);
+  const core = Math.max(1, Math.min(minDist, radius * 0.5));
+  const d = Math.max(core, Math.sqrt(dSq)); // same soft spring inside `core` as wellPullScale
+  return (strength * Math.pow(wellFalloff(d, radius), exp)) / d;
+}
+
 const clampShare = (v, fallback) => Math.max(0, Math.min(MAX_PLAYER_PULL_SHARE, Number.isFinite(v) ? v : fallback));
 
 // Share of the ship's thrust one vortex pulls with at `dist` from its centre: the edge share at the rim,

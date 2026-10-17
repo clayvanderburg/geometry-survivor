@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.11.2',
+    date: '2026-10-17',
+    title: 'Vortex Nerf & Clearer Evolutions',
+    notes: [
+      { type: 'balance', text: 'Vortex Singularity is still brutal at its core, but its pull fades hard toward the rim and its collapse deals only a quarter damage at the edge.' },
+      { type: 'fix', text: 'Evolution cards now say exactly which weapon they upgrade (EVOLUTION · PEW PEWS) and that they are not a new weapon.' },
+      { type: 'fix', text: 'Pulsar Helix (a Pew Pews evolution) is now easy to see: big magenta bolts spin out of your ship with every Pew Pews shot.' },
+      { type: 'fix', text: 'Swarm Missiles got a new yellow color so their cards no longer look like evolutions.' },
+      { type: 'new', text: 'The Field Guide splits WEAPONS (your starting kit and every weapon you can equip) from UPGRADES (all other cards, evolutions and tags).' }
+    ]
+  },
+  {
     version: '0.11.1',
     date: '2026-10-17',
     title: 'Pew Pews Only',

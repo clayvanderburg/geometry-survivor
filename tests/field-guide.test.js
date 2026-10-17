@@ -40,6 +40,7 @@ const { GuidePreview, PREVIEW_IDS, drawSilhouette } = await import('../js/field-
 const { hostileCardHTML, tabHTML, GUIDE_TABS } = await import('../js/field-guide-ui.js');
 const { ARCHETYPE_INFO, WAVE_PACKS } = await import('../js/archetypes.js');
 const { UPGRADE_POOL } = await import('../js/upgrades.js');
+const { WEAPON_BY_LEVEL_ID } = await import('../js/loadout.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 
 const SAVE_KEY = 'vectra_survivor_save_v2';
@@ -261,9 +262,15 @@ test('preview scenes actually show the behaviour they describe', () => {
   assert.ok(run('blackhole', 4, p => p.tug > 0), 'vortex tugs the ship');
 });
 
-test('weapons tab is a thin adapter: every upgrade card is listed, new cards appear automatically', () => {
+test('WEAPONS and UPGRADES tabs are thin adapters: weapons on one, every other card on the other', () => {
   const html = tabHTML('weapons');
-  for (const u of UPGRADE_POOL) assert.ok(html.includes(`data-entry="${u.id}"`), `${u.id} missing from WEAPONS`);
+  const upgrades = tabHTML('upgrades');
+  for (const u of UPGRADE_POOL) {
+    const isWeapon = !!WEAPON_BY_LEVEL_ID[u.id];
+    assert.equal(html.includes(`data-entry="${u.id}"`), isWeapon, `${u.id} ${isWeapon ? 'missing from' : 'should not be on'} WEAPONS`);
+    assert.equal(upgrades.includes(`data-entry="${u.id}"`), !isWeapon, `${u.id} ${isWeapon ? 'should not be on' : 'missing from'} UPGRADES`);
+  }
+  assert.ok(html.includes('ARSENAL') && upgrades.includes('EVOLUTIONS') && upgrades.includes('TAGS'));
   assert.ok(html.includes('PEW PEWS') && !html.includes('WING ROCKETS'), 'starting kit (Pew Pews only) comes from the loadout registry');
   const fake = [...UPGRADE_POOL, { id: 'plasma_whip', name: 'Plasma Whip', category: 'MELEE', tags: ['kinetic'], maxLevel: 4, summary: 'Lashes nearby hulls.' }];
   const g = weaponGuide({ plasma_whip: 2 }, fake);
