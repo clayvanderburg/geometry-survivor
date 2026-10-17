@@ -25,6 +25,7 @@ import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
+import { GlobalLeaderboard, buildBoardView, renderBoardView, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
@@ -34,6 +35,7 @@ import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import {
   TUNING,
+  DEFAULT_TUNING,
   TUNING_SCHEMA,
   updateTuningKey,
   resetTuningToDefaults,
@@ -41,6 +43,11 @@ import {
   getAgentTuningPayload,
   sendSandboxCommand
 } from './config.js';
+
+// Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
+// Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
+const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
+const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
 
 // Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
 const SINGULARITY_IMPLODE_TIME = 0.35;
@@ -134,6 +141,15 @@ export class Game {
     this.shieldRotation = 0;
     this.lastRunHighlightId = null;
 
+    // Global leaderboard (/api/scores): GLOBAL tab by default, MY RUNS = the local board. Falls back
+    // to the local board with an OFFLINE note when the function isn't reachable.
+    this.globalBoard = new GlobalLeaderboard();
+    this.boardTab = 'global';
+    this.globalSubmit = null; // game-over uplink state, see describeSubmit()
+    this.globalSubmitToken = null;
+    this.lastGlobalRunId = null;
+    this.runTainted = false; // dev tuner / sandbox touched this run
+
     // Controller state: previous-tick buttons for press edges, and DOM menu focus.
     this.gpButtons = [];
     this.gpActive = false;
@@ -148,6 +164,7 @@ export class Game {
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
+    this.refreshGlobalBoard();
     this.initTunerDrawer();
 
     onTuningChange((_t, sandboxAction) => {
@@ -163,6 +180,7 @@ export class Game {
     const bonuses = this.progression.getBonuses();
 
     this.score = 0;
+    this.runTainted = false;
     this.multiplier = 1.0;
     this.kills = 0;
     this.rocksMined = 0;
@@ -329,6 +347,10 @@ export class Game {
     if (saveNameBtn) {
       saveNameBtn.addEventListener('click', () => commitGameOverName());
     }
+
+    document.querySelectorAll('[data-board-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => this.setBoardTab(btn.dataset.boardTab));
+    });
     if (goNameInput) {
       goNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -658,6 +680,7 @@ export class Game {
   }
 
   applyLiveTuning(sandboxAction = null) {
+    if (this.state !== 'TITLE' && this.state !== 'GAMEOVER' && (sandboxAction || isTuningModified())) this.runTainted = true;
     this.sound.applyTuning();
 
     const p = this.player;
@@ -807,24 +830,64 @@ export class Game {
       });
     });
 
-    ['highscore-list', 'go-highscore-list'].forEach((listId) => {
-      const listEl = document.getElementById(listId);
-      if (!listEl) return;
-      listEl.innerHTML = '';
+    this.renderBoards();
+  }
 
-      this.progression.data.highscores.forEach((entry, idx) => {
-        const isCurrent = entry.id === this.lastRunHighlightId;
-        const row = document.createElement('div');
-        row.className = `hs-row ${isCurrent ? 'hs-current' : ''}`;
-        row.innerHTML = `
-          <span class="hs-rank">#${idx + 1}</span>
-          <span class="hs-name"></span>
-          <span class="hs-meta">W${entry.wave} · x${Number(entry.multiplier).toFixed(1)} · ${entry.timeStr}</span>
-          <span class="hs-score">${Number(entry.score).toLocaleString()}</span>
-        `;
-        row.querySelector('.hs-name').textContent = entry.name + (isCurrent ? ' ★ NEW' : '');
-        listEl.appendChild(row);
+  // Both board panels (title + game over) share one tab and one view.
+  renderBoards() {
+    try {
+      syncTabButtons(document.querySelectorAll('[data-board-tab]'), this.boardTab);
+      const view = buildBoardView({
+        tab: this.boardTab,
+        board: this.globalBoard,
+        local: this.progression.data.highscores,
+        pilotName: this.progression.data.pilotName,
+        newGlobalId: this.lastGlobalRunId,
+        newLocalId: this.lastRunHighlightId
       });
+      renderBoardView(document.getElementById('highscore-list'), document.getElementById('highscore-note'), view);
+      renderBoardView(document.getElementById('go-highscore-list'), document.getElementById('go-board-note'), view);
+      const rankEl = document.getElementById('go-global-rank');
+      if (rankEl) {
+        const { text, tone } = describeSubmit(this.globalSubmit);
+        rankEl.textContent = text;
+        rankEl.className = `go-global-rank tone-${tone}`;
+      }
+    } catch (err) {
+      console.warn('Leaderboard render failed:', err);
+    }
+  }
+
+  setBoardTab(tab) {
+    this.boardTab = normalizeTab(tab);
+    // Re-opening GLOBAL after a failed fetch tries the network again.
+    if (this.boardTab === 'global' && this.globalBoard && this.globalBoard.status !== 'ready') this.refreshGlobalBoard();
+    else this.renderBoards();
+  }
+
+  refreshGlobalBoard() {
+    if (!this.globalBoard) return;
+    const pending = this.globalBoard.refresh();
+    this.renderBoards();
+    pending.then(() => this.renderBoards());
+  }
+
+  // Fire-and-forget: the game-over screen shows UPLINKING... and then the global rank (or why not).
+  submitGlobalRun(run) {
+    this.lastGlobalRunId = null;
+    if (!this.globalBoard) return;
+    const token = {};
+    this.globalSubmitToken = token; // a late answer for an earlier run is ignored
+    if (this.runTainted || isTuningModified()) {
+      this.globalSubmit = { reason: 'tainted' };
+      return;
+    }
+    this.globalSubmit = { pending: true };
+    this.globalBoard.submit(run).then((result) => {
+      if (this.globalSubmitToken !== token) return;
+      this.globalSubmit = result;
+      if (result.ok) this.lastGlobalRunId = result.id;
+      this.renderBoards();
     });
   }
 
@@ -2569,12 +2632,21 @@ export class Game {
       timeStr
     });
     this.lastRunHighlightId = result.entryId;
+    this.submitGlobalRun({
+      name: currentPilotName,
+      score: this.score,
+      wave: this.wave,
+      level: this.player?.level ?? 1,
+      kills: this.kills,
+      multiplier: this.multiplier,
+      time: this.elapsedTime
+    });
 
     const rankBadge = document.getElementById('go-rank-badge');
     if (rankBadge) {
       rankBadge.textContent = result.rank
-        ? `★ NEW #${result.rank} HIGH SCORE! ★`
-        : 'Top 8 Arena Runs';
+        ? `★ NEW LOCAL #${result.rank} ★`
+        : 'Local top 8';
       rankBadge.style.color = result.rank ? 'var(--gold)' : 'var(--text-dim)';
     }
 

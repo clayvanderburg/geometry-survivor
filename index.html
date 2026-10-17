@@ -264,14 +264,18 @@
 
           <!-- Right: Highscore Leaderboard & Pilot Callsign -->
           <div class="hub-panel">
-            <div class="panel-header">
+            <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
-              <span class="panel-sub">Top Arena Runs</span>
+              <div class="board-tabs" role="tablist" aria-label="Highscore board">
+                <button class="board-tab active" data-board-tab="global" role="tab" aria-selected="true">◎ GLOBAL</button>
+                <button class="board-tab" data-board-tab="local" role="tab" aria-selected="false">MY RUNS</button>
+              </div>
             </div>
             <div class="name-entry-bar" style="margin-bottom:10px;">
               <label for="title-pilot-name" class="name-label">PILOT CALLSIGN:</label>
               <input id="title-pilot-name" type="text" maxlength="18" class="name-input" placeholder="MADKING" value="MADKING" />
             </div>
+            <div id="highscore-note" class="board-note" aria-live="polite"></div>
             <div id="highscore-list" class="highscore-list"></div>
 
             <div class="controls-mini">
@@ -335,6 +339,7 @@
         </div>
 
         <div id="gameover-stats" class="gameover-stats"></div>
+        <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
 
         <div class="hub-columns">
           <div class="hub-panel">
@@ -346,14 +351,21 @@
           </div>
 
           <div class="hub-panel">
-            <div class="panel-header">
+            <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
-              <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
+              <div class="board-tabs" role="tablist" aria-label="Highscore board">
+                <button class="board-tab active" data-board-tab="global" role="tab" aria-selected="true">◎ GLOBAL</button>
+                <button class="board-tab" data-board-tab="local" role="tab" aria-selected="false">MY RUNS</button>
+              </div>
             </div>
             <div class="name-entry-bar" style="margin-bottom:10px;">
               <label for="go-pilot-name" class="name-label">ENTER NAME:</label>
               <input id="go-pilot-name" type="text" maxlength="18" class="name-input" placeholder="ENTER NAME" />
               <button id="btn-save-name" class="save-name-btn">SAVE</button>
+            </div>
+            <div class="board-status">
+              <span id="go-board-note" class="board-note" aria-live="polite"></span>
+              <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
             </div>
             <div id="go-highscore-list" class="highscore-list"></div>
           </div>

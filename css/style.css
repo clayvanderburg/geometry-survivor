@@ -900,6 +900,142 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Global / My Runs board tabs (focusable buttons, so the controller MenuNavigator reaches them) */
+.board-header {
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.board-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.board-tab {
+  background: rgba(8, 12, 26, 0.85);
+  border: 1px solid rgba(0, 243, 255, 0.3);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.board-tab:hover {
+  color: #fff;
+  border-color: var(--cyan);
+}
+
+.board-tab.active {
+  color: var(--bg-deep);
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 243, 255, 0.55);
+}
+
+.board-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.board-note {
+  display: block;
+  min-height: 14px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+
+.board-note.offline {
+  color: #ff9955;
+  text-shadow: 0 0 8px rgba(255, 153, 85, 0.45);
+}
+
+.highscore-list {
+  position: relative; /* rows' offsetTop is relative to the list, for scrolling the new run into view */
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 243, 255, 0.4) transparent;
+  padding-right: 2px;
+}
+
+/* The title board shares its panel with the controls cheat-sheet: ~5 rows, the rest scrolls. */
+#highscore-list {
+  max-height: 190px;
+}
+
+/* A long board makes the right panel taller: keep the armory cards at the top of theirs. */
+.hub-panel:has(> .armory-grid) {
+  justify-content: flex-start;
+}
+
+.hs-row.hs-mine {
+  border-color: rgba(181, 101, 255, 0.75);
+  background: rgba(181, 101, 255, 0.14);
+}
+
+.hs-row.hs-mine .hs-name {
+  color: #e2c6ff;
+}
+
+.hs-row.hs-current.hs-mine {
+  border-color: var(--gold);
+  background: rgba(255, 204, 0, 0.14);
+}
+
+.hs-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+}
+
+/* Game-over global rank line ("GLOBAL RANK #12") */
+.go-global-rank {
+  min-height: 22px;
+  margin: -6px 0 14px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+}
+
+.go-global-rank:empty {
+  display: none;
+}
+
+.go-global-rank.tone-gold {
+  font-size: 20px;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(255, 204, 0, 0.7), 0 0 30px rgba(255, 204, 0, 0.35);
+}
+
+.go-global-rank.tone-cyan {
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(0, 243, 255, 0.55);
+}
+
+.go-global-rank.tone-danger {
+  color: var(--danger);
+  text-shadow: 0 0 10px rgba(255, 42, 85, 0.45);
+}
+
 .controls-mini {
   display: grid;
   grid-template-columns: 1fr 1fr;
