@@ -744,6 +744,237 @@ export class SoundEngine {
     sub.stop(t + 0.46);
   }
 
+  // ---- Weapon SFX voice limiting ----
+  // A sound may start only when its last start is at least `gapMs` ago and fewer than `maxVoices`
+  // copies are still ringing (tracked by scheduled end times on the audio clock, no callbacks).
+  // Keeps swarms of missiles, arc chains and blade grinds rhythmic instead of a wall of noise.
+  claimVoice(key, gapMs, maxVoices, dur) {
+    if (!this.enabled || !this.ctx) return false;
+    const now = performance.now();
+    const voices = this.weaponVoices || (this.weaponVoices = {});
+    const v = voices[key] || (voices[key] = { last: -Infinity, ends: [] });
+    if (now - v.last < gapMs) return false;
+    const t = this.ctx.currentTime;
+    let live = 0;
+    for (let i = 0; i < v.ends.length; i++) if (v.ends[i] > t) v.ends[live++] = v.ends[i];
+    v.ends.length = live;
+    if (live >= maxVoices) return false;
+    v.last = now;
+    v.ends.push(t + dur);
+    return true;
+  }
+
+  // One shared second of white noise (allocated once); sources start at a random offset into it.
+  noiseSource() {
+    if (!this.noiseBuffer || this.noiseBuffer.sampleRate !== this.ctx.sampleRate) {
+      const len = this.ctx.sampleRate;
+      this.noiseBuffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    return src;
+  }
+
+  // Tesla Arc: a stuttering band-passed crackle over a falling saw "zap" and a short low buzz.
+  // Longer chains sound a touch fuller.
+  playArcZap(jumps = 3) {
+    const dur = 0.24;
+    if (!this.claimVoice('arc', 70, 3, dur)) return;
+    const t = this.ctx.currentTime;
+    const body = 1 + Math.min(0.4, jumps * 0.03);
+
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(3400, t);
+    band.frequency.exponentialRampToValueAtTime(1600, t + dur);
+    band.Q.value = 2.2;
+    const crackle = this.ctx.createGain();
+    // Stepped random gain = the electrical crackle; the envelope decays across the steps.
+    crackle.gain.setValueAtTime(0.001, t);
+    for (let k = 0; k < 14; k++) {
+      const env = Math.pow(1 - k / 14, 1.6);
+      crackle.gain.setValueAtTime((0.04 + Math.random() * 0.16) * env * body, t + k * 0.016);
+    }
+    crackle.gain.setValueAtTime(0.0001, t + dur);
+    noise.connect(band);
+    band.connect(crackle);
+    crackle.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, dur + 0.02);
+
+    const zap = this.ctx.createOscillator();
+    const zapGain = this.ctx.createGain();
+    zap.type = 'sawtooth';
+    zap.frequency.setValueAtTime(1500 + Math.random() * 300, t);
+    zap.frequency.exponentialRampToValueAtTime(190, t + 0.13);
+    zapGain.gain.setValueAtTime(0.06 * body, t);
+    zapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    zap.connect(zapGain);
+    zapGain.connect(this.sfxGain);
+    zap.start(t);
+    zap.stop(t + 0.15);
+
+    const buzz = this.ctx.createOscillator();
+    const buzzGain = this.ctx.createGain();
+    buzz.type = 'square';
+    buzz.frequency.setValueAtTime(118, t);
+    buzzGain.gain.setValueAtTime(0.035 * body, t);
+    buzzGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    buzz.connect(buzzGain);
+    buzzGain.connect(this.sfxGain);
+    buzz.start(t);
+    buzz.stop(t + 0.1);
+  }
+
+  // Missile salvo: a band-swept noise whoosh with a soft thump, plus a quick "fft" per extra
+  // missile (up to 3) so the volley sounds like several launches.
+  playMissileLaunch(count = 1) {
+    const dur = 0.3;
+    if (!this.claimVoice('missileLaunch', 90, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const whoosh = (start, vol, len) => {
+      const noise = this.noiseSource();
+      const band = this.ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.setValueAtTime(520, start);
+      band.frequency.exponentialRampToValueAtTime(2600, start + len * 0.8);
+      band.Q.value = 1.3;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.001, start);
+      g.gain.exponentialRampToValueAtTime(vol, start + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.001, start + len);
+      noise.connect(band);
+      band.connect(g);
+      g.connect(this.sfxGain);
+      noise.start(start, Math.random() * 0.6, len + 0.02);
+    };
+    whoosh(t, 0.15, 0.26);
+    for (let k = 1; k <= Math.min(3, count - 1); k++) whoosh(t + k * 0.032, 0.06, 0.1);
+
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    thump.type = 'triangle';
+    thump.frequency.setValueAtTime(190, t);
+    thump.frequency.exponentialRampToValueAtTime(80, t + 0.09);
+    thumpGain.gain.setValueAtTime(0.09, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    thump.connect(thumpGain);
+    thumpGain.connect(this.sfxGain);
+    thump.start(t);
+    thump.stop(t + 0.11);
+  }
+
+  // Missile / rocket blast: a tight sine pop with a noise click (lighter than an enemy explosion).
+  playMissileImpact(vol = 1) {
+    if (!this.claimVoice('blastPop', 40, 4, 0.12)) return;
+    const t = this.ctx.currentTime;
+    const pop = this.ctx.createOscillator();
+    const popGain = this.ctx.createGain();
+    pop.type = 'sine';
+    pop.frequency.setValueAtTime(260 + Math.random() * 40, t);
+    pop.frequency.exponentialRampToValueAtTime(62, t + 0.1);
+    popGain.gain.setValueAtTime(0.16 * vol, t);
+    popGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    pop.connect(popGain);
+    popGain.connect(this.sfxGain);
+    pop.start(t);
+    pop.stop(t + 0.12);
+
+    const noise = this.noiseSource();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(1300, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.09 * vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    noise.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.06);
+  }
+
+  // Singularity launch: a low falling "vwomm" with a slow wobble.
+  playSingularityLaunch() {
+    if (!this.claimVoice('singularity', 150, 2, 0.4)) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.36);
+    lfo.frequency.setValueAtTime(18, t);
+    lfoGain.gain.setValueAtTime(14, t);
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    lfo.start(t);
+    osc.stop(t + 0.4);
+    lfo.stop(t + 0.4);
+  }
+
+  // Escort drone bolt: a tiny high blip, quieter than the blaster.
+  playDroneShot() {
+    if (!this.claimVoice('drone', 70, 2, 0.05)) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1180, t);
+    osc.frequency.exponentialRampToValueAtTime(720, t + 0.04);
+    gain.gain.setValueAtTime(0.03, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.05);
+  }
+
+  // Orbit blade contact: a short metallic grind tick (blades touch every tick, so heavily throttled).
+  playBladeHit() {
+    if (!this.claimVoice('blade', 85, 2, 0.05)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(4200 + Math.random() * 900, t);
+    band.Q.value = 6;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.09, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.05);
+  }
+
+  // Volatile Shatter burst: a glassy three-partial tinkle.
+  playShatter() {
+    if (!this.claimVoice('shatter', 90, 2, 0.16)) return;
+    const t = this.ctx.currentTime;
+    [2637, 3520, 4699].forEach((f, k) => {
+      const start = t + k * 0.018;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * (0.97 + Math.random() * 0.06), start);
+      gain.gain.setValueAtTime(0.045, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.11);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+  }
+
   // Gunner plasma orb: a soft low "thoomp" so incoming fire is audible without masking the blaster.
   playEnemyShot() {
     if (!this.enabled || !this.ctx) return;

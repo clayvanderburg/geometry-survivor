@@ -132,9 +132,10 @@ export class Deployables {
 
   detonateMine(game, m) {
     const hue = DEPLOYABLE_HUES.mine;
-    game.particles.spawnShockwave(m.x, m.y, m.blast, hue, 3.5, 0.32);
-    game.particles.spawnShockwave(m.x, m.y, m.blast * 0.4, 40, 2.5, 0.2);
-    game.particles.spawnExplosionSparks(m.x, m.y, 16, hue, 2, 10, 2);
+    game.particles.spawnFlash?.(m.x, m.y, m.blast * 0.4, hue, 0.2);
+    game.particles.spawnShockwave(m.x, m.y, m.blast, hue, 4, 0.42);
+    game.particles.spawnShockwave(m.x, m.y, m.blast * 0.4, 40, 2.5, 0.24);
+    game.particles.spawnExplosionSparks(m.x, m.y, 18, hue, 2, 10, 2.2);
     game.sound.playExplosion(0.7);
     game.damageEnemiesInRadius(m.x, m.y, m.blast, m.damage, hue, 'mine', MINE_KNOCK);
   }
@@ -310,6 +311,7 @@ export class Deployables {
         d.fireAcc -= 1;
         this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
         d.flash = 1;
+        game.sound.playDroneShot?.();
       }
     }
   }
