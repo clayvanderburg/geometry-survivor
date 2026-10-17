@@ -39,6 +39,7 @@
 - Tags may include laser/beam, projectile, missile/explosive, plasma/energy, ballistic, area, deployable.
 - Stats worth building around: damage, attack speed, projectile speed, projectile count, projectile size, area, duration, crit chance and crit damage.
 - Projectile count is unusually powerful and may need rarer offerings or stronger balance controls.
+  - **Implemented (tags):** every weapon card carries tag chips (`PROJECTILE`, `KINETIC`, `EXPLOSIVE`, `ELECTRIC`, `AREA`, `ORBITAL`, `GRAVITY`; `WEAPON_TAGS` in `js/weapon-scaling.js`). Four specialist cards boost a whole tag and only appear once you own a weapon carrying it: KINETIC/EXPLOSIVE/ELECTRIC damage (rare) and AREA size (epic). Crit chance and crit damage are their own cards. No new card adds projectile count; Prism Split stays the only source.
 - Enable **reroll** and **reserve/lock for a later selection** on level-up, with limits.
 - Proposed funding: in-run mining mineral spent on rerolls/reserves, independent of persistent Power Cores; escalating costs and/or limited reserve slots. Naming and costs TBD.
 - Investigate whether supply cache level grants and normal level-up cards share correct weapon-level state; distinguish UI display bug from actual progression bug.
@@ -53,15 +54,19 @@
 
 ## 5. Critical hits, damage types and deployables
 - Add crit chance, crit damage, critical visuals and corresponding build paths.
+  - **Implemented:** every hit through `hitEnemy` can crit (base 5% / 1.5x, tunable). Crits print a larger white-gold `!` number with a gold halo and star burst, flash a gold star flare and play a throttled tick. In-run path (no Armory needed): *Deadeye Targeting Lattice* (chance), *Overkill Resonator* (damage), and the legendary *Supercritical* synergy (bigger crit bonus against status-afflicted targets).
 - Distinct potential types: kinetic, plasma/heat-over-time, electrical chaining, corrosive nanites/armor erosion, explosive AoE, gravity/displacement, cryogenic slowing.
+  - **Implemented (`js/status-effects.js`):** BURN (*Thermite Rounds*: blaster bolts stack a plasma DoT, red-orange tick numbers), CHILL (*Cryo Payload*: missile blasts slow, frosted hulls, bosses take 40% of the slow), CORRODE (*Nanite Swarm*: arcs stack +damage taken from every source, with a cap). Card previews show exact DPS / slow / damage-taken numbers. Black holes (now portals) are immune.
 - Mines/charges, temporary automated turrets, laser/missile emplacements, perhaps defensive drones.
 - Deployables can scale via active count, duration, range, rate, and overclock modifications.
+  - **First pass in game:** Proximity Mines, Sentry Turret and Escort Drones (category `DEPLOYABLE`, tag `deployable`) scale by active count, duration/fuse, range and rate; *Siege Battery* (mines + turret) makes turret bolts burst. Laser/missile emplacements and overclocks remain open. Needs playtesting for balance.
 
 ## 6. Enemy variety and encounter pacing
 - Enemy archetypes: fast swarmers, slow durable bruisers, mini-spawners/splitters, orbiting-shield units, ranged attackers, burrowers, support/buff units, teleporters.
 - Different movement, durability, silhouettes, and attack mechanics—not merely more health.
 - **Continuous spawns.** Waves advance on a timer even if earlier enemies survive. Wave interval may shorten as difficulty increases.
 - Proposed structure: lieutenant each wave, major boss **every five waves** (supersedes current README's every-three-wave boss behavior, if adopted).
+  - **Implemented (first pass, for playtest):** Bruiser, Gunner (pooled enemy orbs), Aegis Shielder, Blinker and Conduit (support) archetypes, unlocked one per wave from wave 2; one lieutenant per non-boss wave with generated name/epithet and 1–2 modifiers. Bosses stay every 3 waves until the five-wave proposal is decided. Burrowers and mini-spawners are still open.
 - Bosses should be quirky and strange as well as dangerous: mechanical crab, huge jellyfish, cosmic eye, multi-part geometry, terrain-dwelling monstrosity.
 - Boss introductions need warning, title/name, audiovisual impact, special attack patterns, recognizable silhouette and distinctive rewards.
 

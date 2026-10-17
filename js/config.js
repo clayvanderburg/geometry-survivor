@@ -75,7 +75,40 @@ export const DEFAULT_TUNING = {
   knockbackMult: 1.0,
   hitStopMult: 1.0,
   damageNumberCap: 48,
-  damageNumberScale: 1.0
+  damageNumberScale: 1.0,
+
+  // 9. Enemy Variety & Lieutenants (pack weights are relative; a pack joins at its archetype's unlock wave)
+  spawnWeightSwarm: 40,
+  spawnWeightSkirmish: 20,
+  spawnWeightSplitter: 18,
+  spawnWeightBlackhole: 12,
+  spawnWeightBruiser: 12,
+  spawnWeightGunner: 12,
+  spawnWeightShielder: 9,
+  spawnWeightBlinker: 10,
+  spawnWeightConduit: 7,
+  enemyBulletSpeed: 4.2,
+  enemyBulletDamage: 12,
+  lieutenantHpShare: 0.4,
+  lieutenantMaxMods: 2,
+  lieutenantFirstWave: 2,
+  lieutenantDelay: 6,
+  lieutenantCoreReward: 1,
+
+  // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
+  pierceFalloff: 0.7,
+  splashEdgeFalloff: 0.4,
+  deployableDamageMult: 1.0,
+  mineArmTime: 0.6,
+  droneFormationRadius: 54,
+
+  // 11. Crits & Damage Types (run-start crit stats; status strengths scale the card values)
+  baseCritChance: 0.05,
+  baseCritDamage: 1.5,
+  burnDamageMult: 1.0,
+  chillSlowMult: 1.0,
+  chillBossMult: 0.4,
+  corrodeMult: 1.0
 };
 
 export const TUNING_SCHEMA = [
@@ -176,6 +209,48 @@ export const TUNING_SCHEMA = [
       { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
       { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
       { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
+    ]
+  },
+  {
+    group: '👾 Enemy Variety & Lieutenants',
+    items: [
+      { key: 'spawnWeightSwarm', label: 'Pack Weight: Boid Swarm', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSkirmish', label: 'Pack Weight: Pinwheels + Weavers', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSplitter', label: 'Pack Weight: Splitters', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 2+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 4+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 5+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
+      { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
+      { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'lieutenantMaxMods', label: 'Lieutenant Max Modifiers', type: 'range', min: 1, max: 2, step: 1, unit: '' },
+      { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
+      { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
+      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' }
+    ]
+  },
+  {
+    group: '🛰 Deployables',
+    items: [
+      { key: 'pierceFalloff', label: 'Pierce Damage Kept per Enemy Behind', type: 'range', min: 0.2, max: 1, step: 0.05, unit: 'x' },
+      { key: 'splashEdgeFalloff', label: 'Blast Damage Falloff at Edge', type: 'range', min: 0, max: 1, step: 0.05, unit: 'x' },
+      { key: 'deployableDamageMult', label: 'Deployable Damage (mines/turrets/drones)', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'mineArmTime', label: 'Mine Arming Delay', type: 'range', min: 0.1, max: 2.0, step: 0.05, unit: 's' },
+      { key: 'droneFormationRadius', label: 'Escort Drone Formation Spacing', type: 'range', min: 30, max: 120, step: 2, unit: 'px' }
+    ]
+  },
+  {
+    group: '🎯 Crits & Damage Types',
+    items: [
+      { key: 'baseCritChance', label: 'Base Crit Chance', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
+      { key: 'baseCritDamage', label: 'Base Crit Damage', type: 'range', min: 1.1, max: 4.0, step: 0.05, unit: 'x' },
+      { key: 'burnDamageMult', label: 'Burn (Thermite) DoT Strength', type: 'range', min: 0, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'chillSlowMult', label: 'Chill (Cryo) Slow Strength', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'x' },
+      { key: 'chillBossMult', label: 'Chill Slow Applied to Bosses', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'corrodeMult', label: 'Corrode Damage-Taken / Stack', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 'x' }
     ]
   }
 ];

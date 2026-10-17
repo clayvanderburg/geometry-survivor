@@ -2,6 +2,7 @@
 // Rapid hits on one target merge into a single rising total, and the live count is hard-capped
 // so a 200-enemy screen stays readable (and cheap) instead of turning into a wall of digits.
 import { TUNING } from './config.js';
+import { DOT_SOURCES } from './status-effects.js';
 
 export const DAMAGE_NUMBERS_STORAGE_KEY = 'vexolith_damage_numbers';
 
@@ -13,12 +14,25 @@ export const DAMAGE_SOURCE_COLORS = {
   orbital: '#6dff9e',     // Orbiting blades
   singularity: '#ff6ad5', // Vortex singularity grind + collapse
   supernova: '#ffe45c',   // Supernova bomb
+  mine: '#ff5a4a',        // Proximity mine bursts
+  turret: '#5aa8ff',      // Sentry turret bolts (and Siege Battery shell bursts)
+  drone: '#c4ff4a',       // Escort drone bolts
+  burn: '#ff5a2e',        // Thermite burn ticks (damage over time)
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
 };
 
+// Critical hits ignore the source colour: gold halo + white-gold fill, a trailing "!", a bigger font
+// and a star burst.
+export const CRIT_COLOR = '#ffd84a';
+const CRIT_FILL = '#fff8dc';
+const CRIT_BURST_COLOR = 'rgba(255, 246, 214, 0.95)';
+
 const MERGE_WINDOW = 0.3;   // seconds since the last hit that still count as "the same burst"
 const MERGE_MAX_AGE = 1.0;  // a burst becomes a fresh number after this long, so totals read as ~DPS
+// Damage-over-time ticks arrive every 0.5 s, so they merge over a longer gap into one rising total.
+const DOT_MERGE_WINDOW = 0.55;
 const LIFE = 0.7;           // seconds a number lingers after its last hit
+const CRIT_LIFE = 0.95;     // crits linger a little longer
 const RISE_SPEED = 46;      // px/s upward drift
 const POP_DECAY = 7;        // merge "pop" scale bump decays per second
 
@@ -48,12 +62,17 @@ export function damageFontSize(value) {
   return Math.min(26, 12 + 3.2 * Math.log10(Math.max(1, value)));
 }
 
+// Crits print about a third larger (cap 36px) so they stand out of any cluster.
+export function critFontSize(value) {
+  return Math.min(36, damageFontSize(value) * 1.3 + 2);
+}
+
 export class DamageNumbers {
   constructor({ capacity = 120 } = {}) {
     this.enabled = loadDamageNumbersEnabled();
     // Fixed pool: entries are recycled, never allocated during play.
     this.pool = Array.from({ length: capacity }, () => ({
-      target: null, source: 'blaster', value: 0, text: '', x: 0, y: 0, ox: 0, oy: 0, rise: 0,
+      target: null, source: 'blaster', crit: false, value: 0, text: '', x: 0, y: 0, ox: 0, oy: 0, rise: 0,
       life: 0, age: 0, sinceHit: 0, pop: 0, size: 12
     }));
     this.count = 0;
@@ -81,21 +100,22 @@ export class DamageNumbers {
   }
 
   // Record `amount` damage dealt to enemy `e` by `source`. Returns the live entry, or null when
-  // numbers are off or the spot is saturated (that hit simply goes unlabelled).
-  add(e, amount, source = 'blaster') {
+  // numbers are off or the spot is saturated (that hit simply goes unlabelled). Crits aggregate
+  // separately from normal hits, so a crit is never hidden inside a plain running total.
+  add(e, amount, source = 'blaster', crit = false) {
     if (!this.enabled || !(amount > 0)) return null;
 
-    // Fast path: the enemy remembers its most recent number.
+    // Fast path: the enemy remembers its most recent (non-crit) number.
     let n = e.dmgNum;
-    if (!n || n.target !== e || n.source !== source || n.life <= 0) {
+    if (!n || n.target !== e || n.source !== source || n.crit !== crit || n.life <= 0) {
       n = null;
       for (let i = 0; i < this.count; i++) {
         const c = this.pool[i];
-        if (c.target === e && c.source === source) { n = c; break; }
+        if (c.target === e && c.source === source && c.crit === crit) { n = c; break; }
       }
     }
 
-    if (n && n.sinceHit <= MERGE_WINDOW && n.age <= MERGE_MAX_AGE) {
+    if (n && n.sinceHit <= (DOT_SOURCES[source] ? DOT_MERGE_WINDOW : MERGE_WINDOW) && n.age <= MERGE_MAX_AGE) {
       n.value += amount;
       n.sinceHit = 0;
       n.life = LIFE;
@@ -113,11 +133,12 @@ export class DamageNumbers {
     } else {
       if (n) n.target = null; // retire the old burst; it keeps floating as a finished total
       const ox = ((this.count * 7) % 11) - 5; // tiny deterministic jitter
-      const oy = this.freeLane(e.x + ox, e.y - e.radius - 6, formatDamage(amount).length, damageFontSize(amount));
+      const oy = this.freeLane(e.x + ox, e.y - e.radius - 6, formatDamage(amount).length + (crit ? 1 : 0), crit ? critFontSize(amount) : damageFontSize(amount));
       if (oy === null) return null;
       n = this.acquire();
       n.target = e;
       n.source = source;
+      n.crit = crit;
       n.value = amount;
       n.ox = ox;
       n.oy = oy;
@@ -126,12 +147,18 @@ export class DamageNumbers {
       n.rise = 0;
       n.age = 0;
       n.sinceHit = 0;
-      n.life = LIFE;
-      n.pop = 0.6;
+      n.life = crit ? CRIT_LIFE : LIFE;
+      n.pop = crit ? 1 : 0.6;
     }
-    n.text = formatDamage(n.value);
-    n.size = damageFontSize(n.value);
-    e.dmgNum = n;
+    if (crit) {
+      n.text = `${formatDamage(n.value)}!`;
+      n.size = critFontSize(n.value);
+      n.life = CRIT_LIFE;
+    } else {
+      n.text = formatDamage(n.value);
+      n.size = damageFontSize(n.value);
+      e.dmgNum = n;
+    }
     return n;
   }
 
@@ -213,12 +240,37 @@ export class DamageNumbers {
     if (!this.enabled || this.count === 0) return;
     const scale = TUNING.damageNumberScale ?? 1.0;
     ctx.save();
+
+    // Crit star bursts: one batched additive stroke of 8 rays per fresh crit, shrinking as the pop decays.
+    let bursts = false;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = CRIT_BURST_COLOR;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < this.count; i++) {
+      const n = this.pool[i];
+      if (!n.crit || n.pop <= 0.05) continue;
+      const y = n.y - n.rise;
+      if (n.x < camX - 60 || n.x > camX + viewW + 60 || y < camY - 40 || y > camY + viewH + 40) continue;
+      const px = n.size * scale;
+      const cy = y - px * 0.35;
+      const r0 = px * (0.55 + (1 - n.pop) * 0.5);
+      const r1 = r0 + px * 0.75 * n.pop;
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4 + 0.2;
+        const c = Math.cos(a) * (k % 2 ? 0.75 : 1.25), d = Math.sin(a) * (k % 2 ? 0.75 : 1);
+        ctx.moveTo(n.x + c * r0, cy + d * r0);
+        ctx.lineTo(n.x + c * r1, cy + d * r1);
+      }
+      bursts = true;
+    }
+    if (bursts) ctx.stroke();
+
     ctx.globalCompositeOperation = 'source-over';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(3, 4, 11, 0.85)';
-    ctx.lineWidth = 3;
     for (let i = 0; i < this.count; i++) {
       const n = this.pool[i];
       const y = n.y - n.rise;
@@ -226,8 +278,16 @@ export class DamageNumbers {
       const px = Math.round(n.size * scale * (1 + n.pop * 0.28));
       ctx.font = this.font(px);
       ctx.globalAlpha = Math.min(1, n.life / 0.25);
+      if (n.crit) {
+        // Gold halo, then the usual dark outline, then a near-white fill: reads as gold/white on any neon.
+        ctx.strokeStyle = CRIT_COLOR;
+        ctx.lineWidth = 7;
+        ctx.strokeText(n.text, n.x, y);
+      }
+      ctx.strokeStyle = 'rgba(3, 4, 11, 0.85)';
+      ctx.lineWidth = 3;
       ctx.strokeText(n.text, n.x, y);
-      ctx.fillStyle = DAMAGE_SOURCE_COLORS[n.source] || DAMAGE_SOURCE_COLORS.other;
+      ctx.fillStyle = n.crit ? CRIT_FILL : DAMAGE_SOURCE_COLORS[n.source] || DAMAGE_SOURCE_COLORS.other;
       ctx.fillText(n.text, n.x, y);
     }
     ctx.restore();

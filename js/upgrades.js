@@ -1,5 +1,6 @@
 // Roguelite Upgrades, Luck Multi-Level Rolls (+2 / +3 Levels), Mining Drill, and Golden Synergies
 import { TUNING } from './config.js';
+import { WEAPON_SCALING as W } from './weapon-scaling.js';
 
 // Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
 // +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
@@ -19,8 +20,9 @@ export function rarityFor(upg, jump = 1) {
   return RARITY_BY_JUMP[Math.max(1, Math.min(5, jump))];
 }
 
-// Each entry: headline (the STAT_ROWS id shown enlarged on its card, see
-// upgrade-cards.js) and a number-free summary. Exact numbers always come from the card preview.
+// Each entry: headline (the STAT_ROWS id shown enlarged on its card, see upgrade-cards.js),
+// a number-free summary and optional tags (TAG_INFO keys in weapon-scaling.js, shown as chips:
+// the weapon families it belongs to or boosts). Exact numbers always come from the card preview.
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
@@ -50,18 +52,20 @@ export const UPGRADE_POOL = [
     id: 'multishot',
     name: 'Prism Split',
     category: 'WEAPON',
+    tags: ['projectile', 'kinetic'],
     maxLevel: 7,
     headline: 'bulletCount',
     summary: 'Adds plasma vectors to every volley in a wider harmonic arc.',
     apply(player) {
-      player.stats.bulletCount += 2;
-      player.stats.spreadAngle += 0.11;
+      player.stats.bulletCount += W.multishotBolts;
+      player.stats.spreadAngle += W.multishotSpread;
     }
   },
   {
     id: 'firerate',
     name: 'Hyper-Capacitor',
     category: 'WEAPON',
+    tags: ['projectile', 'kinetic'],
     maxLevel: 7,
     headline: 'fireRate',
     summary: 'Faster primary volleys with quicker bolts.',
@@ -74,18 +78,30 @@ export const UPGRADE_POOL = [
     id: 'pierce',
     name: 'Phase Piercer',
     category: 'WEAPON',
+    tags: ['projectile', 'kinetic'],
     maxLevel: 6,
     headline: 'pierce',
-    summary: 'Bolts slice through more targets and hit harder. Damage scales every weapon.',
+    summary: 'Bolts slice through more targets: the first takes full damage, each one behind a little less.',
     apply(player) {
       player.stats.pierce += 2;
-      player.stats.damage *= 1.25;
+    }
+  },
+  {
+    id: 'overdrive',
+    name: 'Reactor Overdrive',
+    category: 'POWER',
+    maxLevel: 5,
+    headline: 'damage',
+    summary: 'Overclocks the reactor: every weapon hits harder.',
+    apply(player) {
+      player.stats.damage *= 1.12;
     }
   },
   {
     id: 'missiles',
     name: 'Swarm Micro-Missiles',
     category: 'AUTONOMOUS',
+    tags: ['projectile', 'explosive', 'area'],
     maxLevel: 6,
     headline: 'missileSalvo',
     summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.',
@@ -97,6 +113,7 @@ export const UPGRADE_POOL = [
     id: 'orbitals',
     name: 'Aegis Orbiting Blades',
     category: 'AUTONOMOUS',
+    tags: ['orbital', 'kinetic'],
     maxLevel: 6,
     headline: 'orbitalBlades',
     summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.',
@@ -108,6 +125,7 @@ export const UPGRADE_POOL = [
     id: 'lightning',
     name: 'Tesla Arc Emitter',
     category: 'AUTONOMOUS',
+    tags: ['electric'],
     maxLevel: 6,
     headline: 'lightningJumps',
     summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.',
@@ -119,6 +137,7 @@ export const UPGRADE_POOL = [
     id: 'singularity',
     name: 'Vortex Singularity',
     category: 'AUTONOMOUS',
+    tags: ['gravity', 'area'],
     maxLevel: 5,
     headline: 'singularityPull',
     summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.',
@@ -130,6 +149,7 @@ export const UPGRADE_POOL = [
     id: 'shrapnel',
     name: 'Volatile Shatter',
     category: 'PASSIVE',
+    tags: ['projectile', 'kinetic'],
     maxLevel: 5,
     headline: 'shrapnelShards',
     summary: 'Kills burst into ricochet shards that trigger chain-reaction kills.',
@@ -154,6 +174,7 @@ export const UPGRADE_POOL = [
     id: 'thrusters',
     name: 'Phase Nova Thrusters',
     category: 'UTILITY',
+    tags: ['area'],
     maxLevel: 5,
     headline: 'moveSpeed',
     summary: 'Faster hull, tougher shield, and Phase Dash unleashes a damaging shockwave.',
@@ -164,11 +185,177 @@ export const UPGRADE_POOL = [
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
   },
+  // Deployables: placed or escorting units that fight on their own. Their numbers live in
+  // weapon-scaling.js and they share the DEPLOYABLE category and 'deployable' tag.
+  {
+    id: 'mines',
+    name: 'Proximity Mines',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'explosive'],
+    maxLevel: 6,
+    headline: 'mineMaxActive',
+    summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.',
+    apply(player) {
+      player.weapons.mines = (player.weapons.mines || 0) + 1;
+    }
+  },
+  {
+    id: 'turret',
+    name: 'Sentry Turret',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'projectile'],
+    maxLevel: 6,
+    headline: 'turretMaxActive',
+    summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.',
+    apply(player) {
+      player.weapons.turret = (player.weapons.turret || 0) + 1;
+    }
+  },
+  {
+    id: 'drones',
+    name: 'Escort Drones',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'projectile'],
+    maxLevel: 6,
+    headline: 'droneCount',
+    summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.',
+    apply(player) {
+      player.weapons.drones = (player.weapons.drones || 0) + 1;
+    }
+  },
+  // Critical hits (every weapon can crit; burn ticks cannot)
+  {
+    id: 'crit_chance',
+    name: 'Deadeye Targeting Lattice',
+    category: 'CRITICAL',
+    tags: ['crit'],
+    maxLevel: 6,
+    headline: 'critChance',
+    summary: 'Every weapon finds weak points more often. Crits hit harder and flash gold.',
+    apply(player) {
+      player.stats.critChance = (player.stats.critChance ?? 0) + W.critChanceStep;
+    }
+  },
+  {
+    id: 'crit_damage',
+    name: 'Overkill Resonator',
+    category: 'CRITICAL',
+    tags: ['crit'],
+    maxLevel: 6,
+    headline: 'critDamage',
+    summary: 'Critical hits from every weapon land with a heavier multiplier.',
+    apply(player) {
+      player.stats.critDamage = (player.stats.critDamage ?? (TUNING.baseCritDamage ?? 1.5)) + W.critDamageStep;
+    }
+  },
+  // Tag specialists: boost every weapon in one family (offered once you own a weapon that carries it)
+  {
+    id: 'tag_kinetic',
+    name: 'Tungsten Penetrators',
+    category: 'SPECIALIST',
+    tags: ['kinetic'],
+    maxLevel: 5,
+    headline: 'kineticDamage',
+    summary: 'KINETIC weapons hit harder: blaster bolts, helix bolts, shrapnel and orbit blades.',
+    apply(player) {
+      addTagDamage(player, 'kinetic');
+    }
+  },
+  {
+    id: 'tag_explosive',
+    name: 'Shaped Charges',
+    category: 'SPECIALIST',
+    tags: ['explosive'],
+    maxLevel: 5,
+    headline: 'explosiveDamage',
+    req(player) {
+      return player.weapons.missiles >= 1 || player.weapons.tectonicBore >= 1 || player.weapons.mines >= 1;
+    },
+    summary: 'EXPLOSIVE weapons hit harder: missile blasts and tectonic drill detonations.',
+    apply(player) {
+      addTagDamage(player, 'explosive');
+    }
+  },
+  {
+    id: 'tag_electric',
+    name: 'Overvolt Coils',
+    category: 'SPECIALIST',
+    tags: ['electric'],
+    maxLevel: 5,
+    headline: 'electricDamage',
+    req(player) {
+      return player.weapons.lightning >= 1;
+    },
+    summary: 'ELECTRIC weapons hit harder: Tesla arcs and Storm Protocol chains.',
+    apply(player) {
+      addTagDamage(player, 'electric');
+    }
+  },
+  {
+    id: 'tag_area',
+    name: 'Field Amplifier',
+    category: 'SPECIALIST',
+    tags: ['area'],
+    maxLevel: 5,
+    headline: 'areaSize',
+    req(player) {
+      const w = player.weapons;
+      return w.missiles >= 1 || w.singularity >= 1 || w.dashNova >= 1 || w.tectonicBore >= 1 || w.mines >= 1;
+    },
+    summary: 'AREA weapons reach further: missile blasts, singularity pull and collapse, dash nova and drill blasts.',
+    apply(player) {
+      player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
+    }
+  },
+  // Damage types: each card adds a status effect to one weapon
+  {
+    id: 'thermite',
+    name: 'Thermite Rounds',
+    category: 'DAMAGE TYPE',
+    tags: ['burn', 'projectile'],
+    maxLevel: 5,
+    headline: 'burnMax',
+    summary: 'Primary and helix bolts ignite targets. Each hit adds a burn stack and refreshes the fire.',
+    apply(player) {
+      player.weapons.thermite = (player.weapons.thermite || 0) + 1;
+    }
+  },
+  {
+    id: 'cryo',
+    name: 'Cryo Payload',
+    category: 'DAMAGE TYPE',
+    tags: ['chill', 'explosive'],
+    maxLevel: 5,
+    headline: 'chillSlow',
+    req(player) {
+      return player.weapons.missiles >= 1;
+    },
+    summary: 'Missile blasts chill everything they catch, slowing it. Bosses resist most of the slow.',
+    apply(player) {
+      player.weapons.cryo = (player.weapons.cryo || 0) + 1;
+    }
+  },
+  {
+    id: 'nanite',
+    name: 'Nanite Swarm',
+    category: 'DAMAGE TYPE',
+    tags: ['corrode', 'electric'],
+    maxLevel: 5,
+    headline: 'corrodeMax',
+    req(player) {
+      return player.weapons.lightning >= 1;
+    },
+    summary: 'Arcs seed corroding nanites: each stack makes the target take more damage from everything.',
+    apply(player) {
+      player.weapons.nanite = (player.weapons.nanite || 0) + 1;
+    }
+  },
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
     name: 'SYNERGY: Tectonic Claw Bore',
     category: 'EVOLUTION',
+    tags: ['explosive', 'area'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -187,6 +374,7 @@ export const UPGRADE_POOL = [
     id: 'evo_pulsar',
     name: 'SYNERGY: Pulsar Helix',
     category: 'EVOLUTION',
+    tags: ['projectile', 'kinetic'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -203,6 +391,7 @@ export const UPGRADE_POOL = [
     id: 'evo_tempest',
     name: 'SYNERGY: Storm Protocol',
     category: 'EVOLUTION',
+    tags: ['explosive', 'electric'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -214,8 +403,48 @@ export const UPGRADE_POOL = [
       player.weapons.stormProtocol = 1;
       player.weapons.missiles += 1;
     }
+  },
+  {
+    id: 'evo_siege',
+    name: 'SYNERGY: Siege Battery',
+    category: 'EVOLUTION',
+    tags: ['deployable', 'explosive'],
+    isSynergy: true,
+    maxLevel: 1,
+    req(player) {
+      return (player.weapons.mines >= 1 && player.weapons.turret >= 1);
+    },
+    headline: 'siegeShell',
+    summary: 'EVOLUTION: sentry turrets load mine charges, so every bolt that hits bursts into nearby enemies.',
+    apply(player) {
+      player.weapons.siegeBattery = 1;
+    }
+  },
+  {
+    id: 'evo_supercrit',
+    name: 'SYNERGY: Supercritical',
+    category: 'EVOLUTION',
+    tags: ['crit'],
+    isSynergy: true,
+    maxLevel: 1,
+    req(player) {
+      const lv = player.upgradeLevels;
+      return lv.crit_chance >= 2 && (lv.thermite >= 1 || lv.cryo >= 1 || lv.nanite >= 1);
+    },
+    headline: 'critAfflicted',
+    summary: 'EVOLUTION: more crits, and crits against burning, chilled or corroded targets get a far bigger bonus.',
+    apply(player) {
+      player.weapons.supercritical = 1;
+      player.stats.critChance = (player.stats.critChance ?? 0) + W.supercritChance;
+    }
   }
 ];
+
+// Tag-damage multipliers start at 1 and grow additively per card level.
+function addTagDamage(player, tag) {
+  const boosts = player.stats.tagDamage || (player.stats.tagDamage = {});
+  boosts[tag] = (boosts[tag] ?? 1) + W.tagDamageStep[tag];
+}
 
 // Cumulative roll thresholds: roll < tripleChance gives +3, roll < doubleChance gives +2.
 // Cumulative roll thresholds (roll < pentaChance → +5, < quadChance → +4, ...), all scaled by Luck.

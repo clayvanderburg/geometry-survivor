@@ -27,6 +27,7 @@ export class SoundEngine {
     this.lastGeomTime = 0;
     this.lastShotSound = 0;
     this.lastExplosionSound = 0;
+    this.lastCritSound = 0;
 
     // Interactive Music Sequencer State
     this.isPlayingMusic = false;
@@ -460,6 +461,31 @@ export class SoundEngine {
     osc.stop(t + 0.075);
   }
 
+  // Critical hit: a short bright two-partial "tink" over the impact. Throttled so a crit-heavy
+  // build (orbit blades roll crits every tick) ticks rhythmically instead of buzzing.
+  playCrit() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - this.lastCritSound < 70) return;
+    this.lastCritSound = now;
+
+    const t = this.ctx.currentTime;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    gain.connect(this.sfxGain);
+    for (let k = 0; k < 2; k++) {
+      const freq = k === 0 ? 1760 : 2637;
+      const osc = this.ctx.createOscillator();
+      osc.type = k === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.25, t + 0.05);
+      osc.connect(gain);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    }
+  }
+
   playExplosion(intensity = 1) {
     if (!this.enabled || !this.ctx) return;
     const now = performance.now();
@@ -685,6 +711,57 @@ export class SoundEngine {
       osc.start(start);
       osc.stop(start + dur + 0.02);
     });
+  }
+
+  // Lieutenant arrival: a short rising two-tone brass sweep over a sub thump (smaller than the boss sting).
+  playLieutenantArrival() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [0, 0.12].forEach((offset, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(i ? 293.66 : 220, t + offset);
+      osc.frequency.exponentialRampToValueAtTime(i ? 440 : 329.63, t + offset + 0.18);
+      gain.gain.setValueAtTime(0.001, t + offset);
+      gain.gain.linearRampToValueAtTime(0.08, t + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.32);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.34);
+    });
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(70, t);
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.4);
+    subGain.gain.setValueAtTime(0.22, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.46);
+  }
+
+  // Gunner plasma orb: a soft low "thoomp" so incoming fire is audible without masking the blaster.
+  playEnemyShot() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastEnemyShotSound || 0) < 90) return;
+    this.lastEnemyShotSound = now;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(240, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    gain.gain.setValueAtTime(0.05, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.15);
   }
 
   playLevelUp() {

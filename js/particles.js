@@ -12,12 +12,35 @@ export class ParticleSystem {
     this.impacts = Array.from({ length: 96 }, () => ({ x: 0, y: 0, cos: 1, sin: 0, size: 0, life: 0, maxLife: 1 }));
     this.impactCount = 0;
     this.impactNext = 0;
+    // Pooled crit flares: gold 8-point stars, same recycling scheme as the impacts.
+    this.critFlares = Array.from({ length: 48 }, () => ({ x: 0, y: 0, size: 0, spin: 0, life: 0, maxLife: 1 }));
+    this.critCount = 0;
+    this.critNext = 0;
   }
 
   clear() {
     for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages', 'infall']) this[key].length = 0;
     this.impactCount = 0;
     this.impactNext = 0;
+    this.critCount = 0;
+    this.critNext = 0;
+  }
+
+  // Critical-hit flare: a sharp gold 8-point star that snaps open and collapses (pooled, no allocation).
+  spawnCritFlare(x, y, size = 16, life = 0.18) {
+    let slot;
+    if (this.critCount < this.critFlares.length) {
+      slot = this.critFlares[this.critCount++];
+    } else {
+      slot = this.critFlares[this.critNext];
+      this.critNext = (this.critNext + 1) % this.critFlares.length;
+    }
+    slot.x = x;
+    slot.y = y;
+    slot.size = size;
+    slot.spin = (x * 0.37 + y * 0.11) % (Math.PI / 4);
+    slot.life = life;
+    slot.maxLife = life;
   }
 
   // Brief white-hot cross flare at a hit point; `angle` is the incoming direction.
@@ -342,6 +365,17 @@ export class ParticleSystem {
     }
     if (this.impactNext >= this.impactCount) this.impactNext = 0;
 
+    for (let i = this.critCount - 1; i >= 0; i--) {
+      const cf = this.critFlares[i];
+      cf.life -= dt;
+      if (cf.life <= 0) {
+        const last = this.critFlares[--this.critCount];
+        this.critFlares[this.critCount] = cf;
+        this.critFlares[i] = last;
+      }
+    }
+    if (this.critNext >= this.critCount) this.critNext = 0;
+
     // Update Float Texts
     for (let i = this.floatTexts.length - 1; i >= 0; i--) {
       const ft = this.floatTexts[i];
@@ -496,6 +530,31 @@ export class ParticleSystem {
         ctx.moveTo(im.x - ax, im.y - ay);
         ctx.lineTo(im.x + ax, im.y + ay);
       }
+      ctx.stroke();
+    }
+
+    // 6b. Crit Flares: 8-point stars (4 long rays, 4 short) that snap open then collapse.
+    // One path, stroked twice: a wide gold glow and a white-hot core.
+    if (this.critCount > 0) {
+      ctx.beginPath();
+      for (let i = 0; i < this.critCount; i++) {
+        const cf = this.critFlares[i];
+        if (!visible(cf.x, cf.y, cf.size * 1.6)) continue;
+        const t = 1 - Math.max(0, cf.life / cf.maxLife);
+        const s = cf.size * (t < 0.25 ? 0.4 + 2.4 * t : 1 - (t - 0.25) * 0.8);
+        for (let k = 0; k < 4; k++) {
+          const a = cf.spin + (k * Math.PI) / 4;
+          const len = k % 2 ? s * 0.55 : s * 1.5;
+          const c = Math.cos(a) * len, d = Math.sin(a) * len;
+          ctx.moveTo(cf.x - c, cf.y - d);
+          ctx.lineTo(cf.x + c, cf.y + d);
+        }
+      }
+      ctx.strokeStyle = 'rgba(255, 200, 40, 0.75)';
+      ctx.lineWidth = 4.5;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 252, 230, 0.95)';
+      ctx.lineWidth = 1.6;
       ctx.stroke();
     }
 

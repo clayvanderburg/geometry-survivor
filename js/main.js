@@ -5,14 +5,25 @@ import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
+import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, RARITY, rarityFor, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
-import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import {
+  WEAPON_SCALING as W, weaponDamage, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
+  critChance, critMultiplier
+} from './weapon-scaling.js';
+import {
+  DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
+} from './status-effects.js';
 import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
+import {
+  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
+} from './archetypes.js';
+import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
 import {
   TUNING,
   TUNING_SCHEMA,
@@ -45,19 +56,27 @@ const setHidden = (el, hidden) => {
 };
 
 // Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
-// Unknown archetypes fall back to tier 1; anything flagged isBoss is tier 4.
+// New archetypes take their tier from ARCHETYPE_DEATH_TIER; unknown types fall back to tier 1.
+// Lieutenants always die as tier 3 (elite); anything flagged isBoss is tier 4.
 const DEATH_TIER = { swarmer: 0, mini_splitter: 0, weaver: 1, pinwheel: 1, splitter: 2, blackhole: 3, boss: 4 };
 const DEATH_FX = [
   { intensity: 0.8, shake: 0, hitStop: 0 },   // 0: swarm fodder — quick pop, no shake
   { intensity: 1.15, shake: 0, hitStop: 0 },  // 1: pinwheel/weaver — adds a white-hot core flash
   { intensity: 1.5, shake: 4, hitStop: 0 },   // 2: splitter — inner debris shatter + embers
-  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: black hole (elite) — wide second ring
+  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: lieutenant (elite) — wide second ring
   { intensity: 3.0, shake: 18, hitStop: 3 }   // 4: boss — everything, plus a chroma flash
 ];
 // Knockback impulses (px/tick for a 10px-radius hull; mass scales with radius²). Bosses are immune.
 const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
 const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
+// Sandbox buttons that drop one of each new archetype next to the ship.
+const SANDBOX_ARCHETYPES = {
+  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
+};
+
+// Crits shove a little harder and flash a gold star flare sized to the target.
+const CRIT_KNOCKBACK_MULT = 1.5;
 
 export class Game {
   constructor() {
@@ -82,6 +101,7 @@ export class Game {
     this.enemyManager = new EnemyManager();
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
+    this.enemyManager.terrain = this.asteroidManager;
 
     this.state = 'TITLE'; // TITLE, PLAYING, UPGRADE, CHEST, GAMEOVER
     this.autoFire = true;
@@ -136,6 +156,10 @@ export class Game {
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
+    this.lieutenantWave = 0;
+    this.ltCard = null;
+    this.ltCardTimer = 0;
+    this.seenArchetypes = new Set();
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -175,7 +199,11 @@ export class Game {
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1),
         miningRange: TUNING.miningRange,
-        drillScale: TUNING.drillScale
+        drillScale: TUNING.drillScale,
+        critChance: TUNING.baseCritChance ?? 0.05,
+        critDamage: TUNING.baseCritDamage ?? 1.5,
+        tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
+        areaMult: 1
       },
       weapons: {
         missiles: 0,
@@ -186,7 +214,15 @@ export class Game {
         dashNova: 0,
         pulsarHelix: 0,
         stormProtocol: 0,
-        tectonicBore: 0
+        tectonicBore: 0,
+        mines: 0,
+        turret: 0,
+        drones: 0,
+        siegeBattery: 0,
+        thermite: 0,
+        cryo: 0,
+        nanite: 0,
+        supercritical: 0
       }
     };
 
@@ -195,6 +231,7 @@ export class Game {
 
     this.particles.clear();
     this.damageNumbers?.clear();
+    (this.deployables ||= new Deployables()).clear();
     this.grid.reset();
     this.shake = 0;
     this.chromaFlash = 0;
@@ -205,6 +242,7 @@ export class Game {
     this.singularityTimer = 0;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
+    this.statusStamp = 0;
 
     this.bullets = [];
     this.missiles = [];
@@ -590,6 +628,9 @@ export class Game {
       p.stats.miningSpeed = TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.9 : 1);
       p.stats.miningRange = TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.3 : 1);
       p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
+      // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
+      p.stats.critChance = (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (p.weapons.supercritical ? W.supercritChance : 0);
+      p.stats.critDamage = (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep;
     }
 
     for (const key of ['musicVolume', 'sfxVolume']) {
@@ -638,6 +679,14 @@ export class Game {
         const bp = this.spawnAroundPlayer(300, 380);
         if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
           this.showBanner('⚠ ENEMY CAP REACHED — VORTEX NOT SPAWNED ⚠');
+        }
+      } else if (sandboxAction === 'SPAWN_LIEUTENANT') {
+        if (!this.spawnLieutenant(420, 560)) this.showBanner('⚠ ENEMY CAP REACHED — LIEUTENANT NOT SPAWNED ⚠');
+      } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
+        const type = SANDBOX_ARCHETYPES[sandboxAction];
+        const bp = this.spawnAroundPlayer(320, 420);
+        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner(`⚠ ENEMY CAP REACHED — ${ARCHETYPE_INFO[type].label} NOT SPAWNED ⚠`);
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -997,8 +1046,9 @@ export class Game {
 
     // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore) {
-      this.particles.spawnShockwave(rock.x, rock.y, W.tectonicBlastRadius, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, W.tectonicBlastRadius, this.player.stats.damage * W.tectonicDamageMult, 48);
+      const blast = tectonicBlastRadius(this.player);
+      this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
+      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48);
     }
   }
 
@@ -1023,9 +1073,9 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
     if (p.weapons.dashNova > 0) {
-      const novaRadius = W.novaRadius(p.weapons.dashNova);
-      this.particles.spawnShockwave(p.x, p.y, novaRadius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, novaRadius, W.novaDamage(p.weapons.dashNova), 160);
+      const radius = novaRadius(p, p.weapons.dashNova);
+      this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
+      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160);
     }
   }
 
@@ -1046,14 +1096,19 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, maxR * 0.55, 325, 6, 0.5);
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
 
+    // The blast also wipes every hostile plasma orb in flight.
+    this.enemyManager.enemyBullets?.clear();
+
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
-      if (e.isBoss) {
+      // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
+      if (e.isBoss || e.isLieutenant) {
         const dmg = e.maxHp * 0.4;
         e.hp -= dmg;
         e.hitFlash = 1;
+        e.sinceHit = 0; // counts as a hit, so a REGENERATING lieutenant's regen pauses too
         this.damageNumbers?.add(e, dmg, 'supernova');
         if (e.hp <= 0) this.killEnemy(e, true);
       } else {
@@ -1070,8 +1125,12 @@ export class Game {
 
   // Weapons and explosions ONLY damage enemies — never asteroids!
   // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
+  // Blasts deal full damage to anything touching the center and fade linearly toward the rim
+  // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
+  // potential while crowds take less per head.
   damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area) {
     const enemies = this.enemyManager.enemies;
+    const edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       const dx = e.x - cx;
@@ -1079,20 +1138,35 @@ export class Game {
       const dSq = dx * dx + dy * dy;
       if (dSq <= (radius + e.radius) * (radius + e.radius)) {
         const d = Math.sqrt(dSq) || 1;
-        this.hitEnemy(e, dmg, source, (dx / d) * knock, (dy / d) * knock);
+        const reach = Math.max(0, Math.min(1, (d - e.radius) / radius));
+        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
   }
 
-  // Single entry point for weapon damage: HP, hit flash, damage number, knockback and kill.
-  // (kx, ky) is a knockback impulse in px/tick for a 10px-radius hull; heavier hulls move less.
+  // Single entry point for weapon damage: armor/Conduit links and corrosion, crit roll, HP, hit flash,
+  // damage number, knockback, on-hit statuses and kill. (kx, ky) is a knockback impulse in px/tick
+  // for a 10px-radius hull; heavier hulls move less. DoT ticks (DOT_SOURCES) never crit or re-apply
+  // statuses. The damage number shows what actually landed.
   hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+    const p = this.player;
+    dmg *= armorTakenMult(e) * statusTakenMult(e);
+    const dot = DOT_SOURCES[source] === true;
+    const chance = dot || !p ? 0 : critChance(p);
+    const crit = chance > 0 && Math.random() < chance;
+    if (crit) {
+      dmg *= critMultiplier(p, isAfflicted(e));
+      kx *= CRIT_KNOCKBACK_MULT;
+      ky *= CRIT_KNOCKBACK_MULT;
+      this.onCriticalHit(e);
+    }
     e.hp -= dmg;
-    e.hitFlash = Math.max(e.hitFlash || 0, flash);
-    this.damageNumbers?.add(e, dmg, source);
+    e.sinceHit = 0;
+    e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
+    this.damageNumbers?.add(e, dmg, source, crit);
     if ((kx || ky) && !e.isBoss) {
-      const k = (TUNING.knockbackMult ?? 1.0) * 100 / (e.radius * e.radius);
+      const k = (TUNING.knockbackMult ?? 1.0) * (e.knockMult ?? 1) * 100 / (e.radius * e.radius);
       let nx = (e.knockX || 0) + kx * k;
       let ny = (e.knockY || 0) + ky * k;
       const mag = Math.hypot(nx, ny);
@@ -1104,6 +1178,13 @@ export class Game {
       e.knockY = ny;
     }
     if (e.hp <= 0) this.killEnemy(e);
+    else if (!dot && p) applyOnHitStatuses(p, e, source);
+  }
+
+  // Crit feedback: a gold star flare on the hull plus a bright tick (the sound is throttled in audio.js).
+  onCriticalHit(e) {
+    this.particles.spawnCritFlare?.(e.x, e.y, 10 + e.radius * 0.9);
+    this.sound.playCrit?.();
   }
 
   // Screen shake is reserved for heavy moments; every source goes through the user's multiplier.
@@ -1127,7 +1208,7 @@ export class Game {
     enemies.splice(enemyIndex, 1);
     this.kills++;
 
-    const tier = e.isBoss ? 4 : DEATH_TIER[e.type] ?? 1;
+    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
     const intensity = fx.intensity;
     this.sound.playExplosion(intensity);
@@ -1159,9 +1240,18 @@ export class Game {
         const a = e.rotation + (k * Math.PI * 2) / 3;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
           instant: true,
-          vx: Math.cos(a) * 6.5,
-          vy: Math.sin(a) * 6.5
+          vx: Math.cos(a) * 5,
+          vy: Math.sin(a) * 5
         });
+      }
+    }
+
+    // A SPLITTING lieutenant bursts into regular copies of its archetype.
+    if (e.splits > 0) {
+      const waveScale = this.getWaveScale();
+      for (let k = 0; k < e.splits; k++) {
+        const a = e.rotation + (k * Math.PI * 2) / e.splits;
+        this.enemyManager.queueSpawn(e.type, e.x + Math.cos(a) * e.radius, e.y + Math.sin(a) * e.radius, waveScale, { instant: true });
       }
     }
 
@@ -1180,6 +1270,7 @@ export class Game {
       this.spawnRelicChest(e.x, e.y, true);
     } else if (!fromBomb && this.chests.length < 3) {
       const chestChance = (
+        e.isLieutenant ? 0.02 :
         e.type === 'blackhole' ? 0.008 :
         e.type === 'splitter' ? 0.0012 :
         e.type === 'weaver' ? 0.0004 :
@@ -1200,7 +1291,7 @@ export class Game {
           y: e.y,
           vx: Math.cos(a) * 11.5,
           vy: Math.sin(a) * 11.5,
-          damage: this.player.stats.damage * W.shrapnelDamageMult,
+          damage: weaponDamage(this.player, 'shrapnel'),
           pierce: 1,
           hue: 48,
           radius: 4,
@@ -1214,8 +1305,9 @@ export class Game {
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
     if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
+    if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
-    const geomCount = e.isBoss ? 14 : e.type === 'blackhole' ? 4 : e.type === 'splitter' ? 2 : 1;
+    const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
     for (let g = 0; g < geomCount; g++) {
       const ga = Math.random() * Math.PI * 2;
       const gSpd = 1.5 + Math.random() * 4.5;
@@ -1227,7 +1319,7 @@ export class Game {
         vy: Math.sin(ga) * gSpd,
         xp: Math.max(1, Math.round(e.xp / geomCount)),
         rotation: Math.random() * Math.PI * 2,
-        hue: e.isBoss ? 48 : 145,
+        hue: e.isBoss || e.isLieutenant ? 48 : 145,
         life: 16,
         magnetized: fromBomb
       });
@@ -1310,7 +1402,125 @@ export class Game {
   }
 
   contactDamage(e) {
-    return (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  // Gunner orbs scale with the wave exactly like contact damage.
+  enemyBulletDamage(b) {
+    return b.damage * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  // Shared by contact and plasma-orb hits. Returns true when the hit was fatal (caller ends the run).
+  damagePlayer(dmg, shake = 16) {
+    const p = this.player;
+    p.shieldFlash = 1;
+    p.hp -= dmg;
+    p.invuln = 0.65;
+    this.multiplier = Math.max(1.0, this.multiplier * 0.75);
+    this.addShake(shake);
+    this.chromaFlash = 0.5;
+    this.sound.playExplosion(1.8);
+    this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
+    this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
+    return p.hp <= 0;
+  }
+
+  endRunIfDead() {
+    const p = this.player;
+    if (p.hp > 0) return false;
+    p.hp = 0;
+    this.updateHUD();
+    this.triggerGameOver();
+    return true;
+  }
+
+  // Plasma orbs: blocked by rock, pass through a dash's invulnerability, absorbed by the shield.
+  updateEnemyBullets(dt) {
+    this.enemyBulletHit ||= (b) => {
+      if (this.player.invuln > 0 || this.player.hp <= 0) return false;
+      this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
+      this.damagePlayer(this.enemyBulletDamage(b), 10);
+      return true;
+    };
+    this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
+    return this.endRunIfDead();
+  }
+
+  // One lieutenant per non-boss wave, `lieutenantDelay` seconds in. A pending boss keeps priority on
+  // free enemy slots, and a lieutenant blocked by the cap simply retries on later ticks of the wave.
+  updateLieutenantSchedule() {
+    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || this.wave % 3 === 0) return;
+    if (this.lieutenantWave === this.wave || this.waveTimer < (TUNING.lieutenantDelay ?? 6)) return;
+    if (this.pendingBossSpawns.length > 0) return;
+    if (this.spawnLieutenant()) this.lieutenantWave = this.wave;
+  }
+
+  spawnLieutenant(minDist = 480, maxDist = 700, type = null) {
+    const lt = rollLieutenant(this.wave, lieutenantTypes(this.wave), Math.random, type);
+    const pos = this.spawnAroundPlayer(minDist, maxDist);
+    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), { warmup: LIEUTENANT_WARMUP, lieutenant: lt });
+  }
+
+  showLieutenantCard(kind, kicker, name, epithet, detail) {
+    this.ltCardSerial = (this.ltCardSerial || 0) + 1;
+    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail };
+    this.ltCardTimer = LIEUTENANT_CARD_TIME;
+  }
+
+  onLieutenantArrived(e) {
+    this.particles.spawnShockwave(e.x, e.y, 240, e.hue, 4, 0.5);
+    this.particles.spawnShockwave(e.x, e.y, 150, 220, 3, 0.35);
+    this.grid.applyImpulse(e.x, e.y, 60, 260, e.hue);
+    this.addShake(6);
+    this.sound.playLieutenantArrival?.();
+    const mods = lieutenantModLabels(e).join(' · ');
+    this.showLieutenantCard('arrival', '▲ LIEUTENANT ▲', e.name, e.epithet, `${mods} · ${Math.round(e.maxHp).toLocaleString()} HP`);
+  }
+
+  // Modest guaranteed reward: Void Cores (outside the per-wave cap), gold XP geoms and the kill score.
+  onLieutenantDefeated(e, pts, fromBomb) {
+    const cores = Math.max(0, Math.round(TUNING.lieutenantCoreReward ?? 1));
+    for (let c = 0; c < cores; c++) {
+      const ca = Math.random() * Math.PI * 2;
+      this.geoms.push({
+        isCore: true, coreAmount: 1, x: e.x, y: e.y,
+        vx: Math.cos(ca) * 3, vy: Math.sin(ca) * 3,
+        xp: 2, rotation: 0, hue: 280, life: 24, magnetized: true
+      });
+    }
+    this.coresDroppedThisWave += cores;
+    this.particles.spawnShockwave(e.x, e.y, 260, 48, 5, 0.55);
+    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp)} XP`];
+    if (cores > 0) rewards.push(`+${cores} ❖ VOID CORE${cores > 1 ? 'S' : ''}`);
+    this.showLieutenantCard('defeat', fromBomb ? '▲ LIEUTENANT VAPORIZED ▲' : '▲ LIEUTENANT DOWN ▲', e.name, e.epithet, rewards.join(' · '));
+  }
+
+  // First appearance of a new archetype this run: a one-line intel card on what it does.
+  announceArchetype(type) {
+    const info = ARCHETYPE_INFO[type];
+    if (!info || this.seenArchetypes.has(type)) return;
+    if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
+    this.seenArchetypes.add(type);
+    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro);
+  }
+
+  updateLieutenantHUD() {
+    const card = this.ltCardTimer > 0 ? this.ltCard : null;
+    const cardEl = document.getElementById('lt-card');
+    if (!cardEl) return;
+    if (card && card.id !== this.ltCardShownId) {
+      this.ltCardShownId = card.id;
+      document.getElementById('lt-card-kicker').textContent = card.kicker;
+      document.getElementById('lt-card-name').textContent = card.name;
+      document.getElementById('lt-card-epithet').textContent = card.epithet;
+      document.getElementById('lt-card-detail').textContent = card.detail;
+      cardEl.className = `lt-card lt-card-${card.kind}`;
+      cardEl.style.animation = 'none';
+      void cardEl.offsetWidth;
+      cardEl.style.animation = '';
+    }
+    setHidden(cardEl, !card);
+    if (card) cardEl.classList[this.ltCardTimer < 0.4 ? 'add' : 'remove']('lt-card-out');
   }
 
   showBossCard(kind, kicker, e, detail) {
@@ -1456,24 +1666,74 @@ export class Game {
     const waveScale = this.getWaveScale();
     const pt = this.spawnAroundPlayer(440, 740);
 
-    const roll = Math.random();
-    if (roll < 0.44) {
+    // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
+    const pack = pickWavePack(this.wave);
+    const em = this.enemyManager;
+    const queuedBefore = em.spawnIndicators.length;
+    const spread = (type, count, minD = 420, maxD = 720) => {
+      for (let i = 0; i < count; i++) {
+        const p2 = this.spawnAroundPlayer(minD, maxD);
+        em.queueSpawn(type, p2.x, p2.y, waveScale);
+      }
+    };
+    const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
+    if (pack === 'swarm') {
       const count = Math.min(34, 12 + this.wave * 2);
-      this.enemyManager.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
-    } else if (roll < 0.66) {
+      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
+    } else if (pack === 'skirmish') {
       for (let i = 0; i < 3 + Math.floor(this.wave * 0.6); i++) {
         const p2 = this.spawnAroundPlayer(420, 720);
-        this.enemyManager.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
+        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
       }
-    } else if (roll < 0.86) {
-      const count = 2 + Math.floor(this.wave * 0.4);
+    } else if (pack === 'splitter') {
+      spread('splitter', 2 + Math.floor(this.wave * 0.4), 450, 750);
+    } else if (pack === 'blackhole') {
+      em.queueSpawn('blackhole', pt.x, pt.y, waveScale);
+    } else if (pack === 'bruiser') {
+      spread('bruiser', Math.min(3, 1 + Math.floor(since('bruiser') / 4)), 460, 720);
+    } else if (pack === 'gunner') {
+      spread('gunner', Math.min(5, 2 + Math.floor(since('gunner') / 4)), 520, 760);
+    } else if (pack === 'shielder') {
+      // Shielders lead a pinwheel escort, so the pack advances behind the plates.
+      const count = Math.min(3, 1 + Math.floor(since('shielder') / 5));
       for (let i = 0; i < count; i++) {
-        const p2 = this.spawnAroundPlayer(450, 750);
-        this.enemyManager.queueSpawn('splitter', p2.x, p2.y, waveScale);
+        const p2 = this.spawnAroundPlayer(460, 720);
+        em.queueSpawn('shielder', p2.x, p2.y, waveScale);
+        for (let k = 0; k < 2; k++) em.queueSpawn('pinwheel', p2.x + (k ? 40 : -40), p2.y + 34, waveScale);
       }
-    } else {
-      this.enemyManager.queueSpawn('blackhole', pt.x, pt.y, waveScale);
+    } else if (pack === 'blinker') {
+      spread('blinker', Math.min(7, 3 + Math.floor(since('blinker') / 3)), 480, 760);
+    } else if (pack === 'conduit') {
+      // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
+      em.queueSpawn('conduit', pt.x, pt.y, waveScale);
+      for (let k = 0; k < 3; k++) {
+        const a = (k * Math.PI * 2) / 3;
+        em.queueSpawn('pinwheel', pt.x + Math.cos(a) * 60, pt.y + Math.sin(a) * 60, waveScale);
+      }
+      if (this.wave >= 8) em.queueSpawn('bruiser', pt.x + 80, pt.y, waveScale);
     }
+    // Only announce a newcomer that actually made it past the enemy cap.
+    if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+  }
+
+  // Auto-aim: nearest target, but a hull whose shield plates face the ship counts as 260 px further
+  // away, so the turret prefers something it can actually hurt and swings back once you flank.
+  findAutoAimTarget(x, y) {
+    const enemies = this.enemyManager.enemies;
+    let best = null;
+    let bestScore = Infinity;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      const dx = e.x - x;
+      const dy = e.y - y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const score = e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
   }
 
   findNearestEnemy(x, y) {
@@ -1513,7 +1773,7 @@ export class Game {
     const maxRockRadius = manager.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
     this.projectileEnemyIndex ||= new SpatialIndex();
     this.projectileEnemyIndex.rebuild(this.enemyManager.enemies);
-    const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.radius), 0);
+    const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.shieldArc ? enemy.shieldRadius : enemy.radius), 0);
     // Death effects may append shrapnel; those projectiles start moving next tick.
     const pending = this.bullets;
     this.bullets = [];
@@ -1528,6 +1788,14 @@ export class Game {
       const midX = (x0 + b.x) / 2, midY = (y0 + b.y) / 2;
       for (const e of this.projectileEnemyIndex.query(midX, midY, segmentRadius + maxEnemyRadius + b.radius)) {
         if (e.dead || b.hitEnemies.has(e)) continue;
+        // Shield plates (Shielders, SHIELDED lieutenants) stop shots arriving from the front.
+        if (e.shieldArc) {
+          const ts = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.shieldRadius + b.radius);
+          if (ts !== null && shieldBlocks(e, x0 + (b.x - x0) * ts, y0 + (b.y - y0) * ts, b.vx, b.vy)) {
+            hits.push({ t: ts, shield: e });
+            continue;
+          }
+        }
         const t = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.radius + b.radius);
         if (t !== null) hits.push({ t, enemy: e });
       }
@@ -1548,8 +1816,19 @@ export class Game {
           this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
           break;
         }
+        if (hit.shield) {
+          if (hit.shield.dead) continue; // killed earlier in this segment: its plates are gone
+          blocked = true;
+          const hx = x0 + (b.x - x0) * hit.t;
+          const hy = y0 + (b.y - y0) * hit.t;
+          hit.shield.shieldFlash = 1;
+          this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(hy - hit.shield.y, hx - hit.shield.x), 1.1, 4, 195, 6);
+          break;
+        }
         const e = hit.enemy;
         if (e.dead) continue;
+        // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last.
+        const pierceMult = Math.pow(TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
         b.hitEnemies.add(e);
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
@@ -1558,7 +1837,12 @@ export class Game {
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
-        this.hitEnemy(e, b.damage, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        if (b.blastRadius) {
+          // Siege Battery shells burst on impact (cover still stops the shell itself).
+          this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 2.5, 0.22);
+          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5);
+        }
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
@@ -1598,7 +1882,7 @@ export class Game {
         y: noseY,
         vx: Math.cos(a) * p.stats.bulletSpeed,
         vy: Math.sin(a) * p.stats.bulletSpeed,
-        damage: p.stats.damage,
+        damage: weaponDamage(p, 'blaster'),
         pierce: p.stats.pierce,
         hue: TUNING.bulletColorHue ?? 186,
         radius: TUNING.bulletRadius ?? 4.2,
@@ -1615,7 +1899,7 @@ export class Game {
           y: p.y,
           vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
-          damage: p.stats.damage * W.helixDamageMult,
+          damage: weaponDamage(p, 'helix'),
           pierce: p.stats.pierce,
           hue: 48,
           radius: 4.5,
@@ -1639,7 +1923,8 @@ export class Game {
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
         speed: W.missileSpeed(level),
-        damage: p.stats.damage * W.missileDamageMult(level),
+        damage: weaponDamage(p, 'missile', level),
+        blastRadius: missileBlastRadius(p),
         hue: p.weapons.stormProtocol ? 52 : 325,
         trail: [],
         life: 3.2
@@ -1683,7 +1968,7 @@ export class Game {
       currX = target.x;
       currY = target.y;
 
-      this.hitEnemy(target, p.stats.damage * W.lightningDamageMult(level), 'lightning', kx, ky);
+      this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky);
     }
   }
 
@@ -1691,7 +1976,7 @@ export class Game {
     const p = this.player;
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    const pullRadius = W.singularityPullRadius(level);
+    const pullRadius = singularityPullRadius(p, level);
     this.singularities.push({
       x: p.x,
       y: p.y,
@@ -1701,9 +1986,9 @@ export class Game {
       pullRadius,
       // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
       // the payoff is the collapse pulse over 85% of the pull radius.
-      damage: p.stats.damage * W.singularityDamageMult(level),
+      damage: weaponDamage(p, 'singularity', level),
       collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
-      collapseDamage: p.stats.damage * W.singularityCollapseDamageMult(level) * (TUNING.singularityCollapseMult ?? 1.0),
+      collapseDamage: weaponDamage(p, 'collapse', level),
       life: 2.6,
       maxLife: 2.6,
       spin: 0,
@@ -2059,6 +2344,7 @@ export class Game {
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
+    if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
     if (held) {
       this.updateHUD();
       return;
@@ -2098,6 +2384,7 @@ export class Game {
 
     // Scheduled encounters retain their wave scaling and get the first free slots.
     this.processPendingBossSpawns();
+    this.updateLieutenantSchedule();
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnWavePack();
@@ -2183,7 +2470,7 @@ export class Game {
     if (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)) {
       p.angle = Math.atan2(gp.aimY, gp.aimX);
     } else if (this.autoAim) {
-      const nearest = this.findNearestEnemy(p.x, p.y);
+      const nearest = this.findAutoAimTarget(p.x, p.y);
       if (nearest) {
         p.angle = Math.atan2(nearest.y - p.y, nearest.x - p.x);
       } else {
@@ -2253,6 +2540,7 @@ export class Game {
       const orbCount = W.orbitalBlades(p.weapons.orbitals);
       const orbRadius = W.orbitalRadius(p.weapons.orbitals);
       const enemies = this.enemyManager.enemies;
+      const bladeDamage = weaponDamage(p, 'orbital', p.weapons.orbitals);
 
       for (let o = 0; o < orbCount; o++) {
         const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
@@ -2264,14 +2552,18 @@ export class Game {
           if (e.dead) continue;
           const dx = e.x - ox;
           const dy = e.y - oy;
-          if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
+          if (dx * dx + dy * dy < (e.radius + W.orbitalBladeRadius) * (e.radius + W.orbitalBladeRadius)) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            this.hitEnemy(e, p.stats.damage * W.orbitalDamageMult, 'orbital', 0, 0, 0.6);
+            this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
           }
         }
       }
     }
+
+    // Deployables (mines, sentry turrets, escort drones) place and fire before the bullet sweep,
+    // so their bolts move, bend and collide with everything else this tick.
+    this.deployables?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
@@ -2309,9 +2601,11 @@ export class Game {
       }
 
       if (detonated) {
-        this.particles.spawnShockwave(m.x, m.y, W.missileBlastRadius, m.hue, 3.5, 0.3);
+        const blast = m.blastRadius ?? W.missileBlastRadius;
+        this.particles.spawnShockwave(m.x, m.y, blast, m.hue, 3.5, 0.3);
         this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
-        this.damageEnemiesInRadius(m.x, m.y, W.missileBlastRadius, m.damage, m.hue, 'missile', KNOCKBACK.missile);
+        if (p.weapons.cryo) this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
+        this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
         if (p.weapons.stormProtocol) {
           this.fireChainLightning(W.stormChainLevel, m.x, m.y);
@@ -2325,6 +2619,9 @@ export class Game {
     this.updateSingularities(dt);
     this.updateWellEffects();
 
+    // 7b. Damage types: burn ticks, chill and corrode timers (status-effects.js)
+    updateStatusEffects(this, dt);
+
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers
     // Warned boss spawns tear at the grid harder as their countdown runs out.
     for (const sp of this.enemyManager.spawnIndicators) {
@@ -2336,33 +2633,29 @@ export class Game {
       for (const boss of arrivals) this.onBossArrived(boss);
       arrivals.length = 0;
     }
+    if (this.enemyManager.shotsFired !== this.enemyShotsHeard) {
+      this.enemyShotsHeard = this.enemyManager.shotsFired;
+      this.sound.playEnemyShot?.();
+    }
+    const ltArrivals = this.enemyManager.lieutenantArrivals;
+    if (ltArrivals?.length) {
+      for (const lt of ltArrivals) this.onLieutenantArrived(lt);
+      ltArrivals.length = 0;
+    }
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
+    if (this.updateEnemyBullets(dt)) return;
 
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
-          p.shieldFlash = 1;
-          const hitDmg = this.contactDamage(e);
-          p.hp -= hitDmg;
-          p.invuln = 0.65;
-          this.multiplier = Math.max(1.0, this.multiplier * 0.75);
-          this.addShake(16);
-          this.chromaFlash = 0.5;
-          this.sound.playExplosion(1.8);
-          this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
-          this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
+          this.damagePlayer(this.contactDamage(e));
 
-          if (!e.isBoss) {
-            this.killEnemy(e);
-          }
-          if (p.hp <= 0) {
-            p.hp = 0;
-            this.updateHUD();
-            this.triggerGameOver();
-            return;
-          }
+          // Sturdy hulls (Bruisers, Lieutenants) bounce off; everything else but bosses pops on impact.
+          if (e.sturdy) bounceFromShip(e, p.x, p.y);
+          else if (!e.isBoss) this.killEnemy(e);
+          if (this.endRunIfDead()) return;
         }
       }
     }
@@ -2490,6 +2783,7 @@ export class Game {
     weaponsBar.innerHTML = tags.join('');
 
     this.updateBossHUD(this.getBossHudModel());
+    this.updateLieutenantHUD();
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -2539,8 +2833,8 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      ctx.fillStyle = e.isBoss ? '#ff2a55' : 'rgba(255, 0, 127, 0.75)';
-      const sz = e.isBoss ? 4 : 1.8;
+      ctx.fillStyle = e.isBoss ? '#ff2a55' : e.isLieutenant ? '#eef2ff' : 'rgba(255, 0, 127, 0.75)';
+      const sz = e.isBoss ? 4 : e.isLieutenant ? 3.2 : 1.8;
       ctx.fillRect(mx + e.x * scaleX - sz * 0.5, my + e.y * scaleY - sz * 0.5, sz, sz);
     }
 
@@ -2598,6 +2892,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
+      else if (enemies[i].isLieutenant) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#dfe6ff', 'LT');
     }
     if (soonest < Infinity) {
       const pulse = 0.5 + 0.5 * Math.cos(soonest * Math.PI * 5);
@@ -2822,7 +3117,9 @@ export class Game {
       ctx.fill();
     }
 
+    this.deployables?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
+    drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
@@ -2845,8 +3142,8 @@ export class Game {
           ctx.beginPath();
           for (let s = 0; s < 3; s++) {
             const sa = (s * Math.PI * 2) / 3;
-            const vx = Math.cos(sa) * 10;
-            const vy = Math.sin(sa) * 10;
+            const vx = Math.cos(sa) * 15;
+            const vy = Math.sin(sa) * 15;
             if (s === 0) ctx.moveTo(vx, vy);
             else ctx.lineTo(vx, vy);
           }
@@ -2856,6 +3153,7 @@ export class Game {
         }
       }
 
+      this.deployables?.drawEscorts(ctx, this);
       this.drawCrabShip(ctx, p);
     }
 

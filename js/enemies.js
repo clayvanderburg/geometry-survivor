@@ -2,9 +2,15 @@
 import { TUNING } from './config.js';
 import { SpatialIndex } from './spatial-index.js';
 import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
+import { EnemyBulletPool } from './enemy-bullets.js';
+import {
+  archetypeStats, updateArchetype, speedCap, traceArchetype, drawArchetypeOverlay, drawConduitLinks, isArchetype, SHIELDER
+} from './archetypes.js';
+import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph } from './lieutenants.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
+const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
 export const KNOCKBACK_DECAY = 0.8;
@@ -19,6 +25,13 @@ export class EnemyManager {
     this.spawnIndicators = [];
     // Bosses that materialized this tick; the game drains this to stage their entrance.
     this.bossArrivals = [];
+    this.lieutenantArrivals = [];
+    // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
+    this.enemyBullets = new EnemyBulletPool();
+    // Optional terrain (AsteroidManager) so blinkers never land inside rock; null in unit tests.
+    this.terrain = null;
+    // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
+    this.aiEnv = { player: null, dirX: 0, dirY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, width: 0, height: 0 };
   }
 
   clear() {
@@ -27,6 +40,8 @@ export class EnemyManager {
     this.enemies = [];
     this.spawnIndicators = [];
     this.bossArrivals = [];
+    this.lieutenantArrivals = [];
+    this.enemyBullets.clear();
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -39,6 +54,7 @@ export class EnemyManager {
     config.hp *= hpMult;
     config.maxHp *= hpMult;
     config.speed *= spdMult;
+    config.speedScale = (config.speedScale || 1) * spdMult;
     this.spawnIndicators.push({
       type,
       x,
@@ -62,6 +78,10 @@ export class EnemyManager {
   }
 
   getArchetype(type, waveScale = 1, extra = {}) {
+    if (extra.lieutenant) {
+      return applyLieutenant(this.getArchetype(type, waveScale), extra.lieutenant, this.getArchetype('boss', waveScale).maxHp);
+    }
+    if (isArchetype(type)) return archetypeStats(type, waveScale);
     switch (type) {
       case 'swarmer':
         return {
@@ -112,10 +132,12 @@ export class EnemyManager {
           vRot: -0.045
         };
       case 'mini_splitter':
+        // Softened (balance report: splitters caused most deaths): lighter contact hit, a touch slower.
         return {
           hp: 14 * waveScale,
           maxHp: 14 * waveScale,
-          speed: 4.3,
+          speed: 3.8,
+          contactMult: 0.6,
           radius: 9,
           sides: 3,
           hue: 50,
@@ -201,10 +223,38 @@ export class EnemyManager {
           isBoss: !!c.isBoss,
           name: c.name || null,
           epithet: c.epithet || null,
-          pulsePhase: Math.random() * Math.PI * 2
+          pulsePhase: Math.random() * Math.PI * 2,
+          // Archetype AI + lieutenant state (see archetypes.js / lieutenants.js); inert for legacy types.
+          state: sp.type === 'gunner' ? 'idle' : sp.type === 'blinker' ? 'drift' : 'advance',
+          aiTimer: 1 + Math.random() * 1.5,
+          aimAngle: angle,
+          strafeSign: Math.random() < 0.5 ? -1 : 1,
+          speedScale: c.speedScale || 1,
+          burstSpeed: 0,
+          knockMult: c.knockMult ?? 1,
+          baseKnockMult: c.knockMult ?? 1,
+          contactMult: c.contactMult || 1,
+          sturdy: !!c.sturdy,
+          armor: c.armor || 0,
+          cadence: c.cadence || 1,
+          regen: c.regen || 0,
+          splits: c.splits || 0,
+          volley: c.volley || 1,
+          shieldArc: c.shieldArc || 0,
+          shieldAngle: angle,
+          shieldRadius: c.radius + SHIELDER.plateGap,
+          shieldFlash: 0,
+          linked: 0,
+          links: [],
+          sinceHit: 99,
+          blinkX: 0,
+          blinkY: 0,
+          isLieutenant: !!c.isLieutenant,
+          mods: c.mods || null
         };
         this.enemies.push(spawned);
         if (spawned.isBoss) this.bossArrivals.push(spawned);
+        else if (spawned.isLieutenant) this.lieutenantArrivals.push(spawned);
         grid.applyImpulse(sp.x, sp.y, 12, 65, c.hue);
         this.spawnIndicators.splice(i, 1);
       }
@@ -216,6 +266,13 @@ export class EnemyManager {
     this.bulletIndex.rebuild(bullets);
     const enemyOrder = new Map(enemies.map((enemy, index) => [enemy, index]));
     const maxRadius = enemies.reduce((max, enemy) => Math.max(max, enemy.radius), 0);
+    const env = this.aiEnv;
+    env.player = player;
+    env.dt = dt;
+    env.grid = grid;
+    env.particles = particles;
+    env.width = width;
+    env.height = height;
 
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
@@ -230,7 +287,13 @@ export class EnemyManager {
       const dirX = dxPlayer / distPlayer;
       const dirY = dyPlayer / distPlayer;
 
-      if (e.type === 'swarmer') {
+      env.dirX = dirX;
+      env.dirY = dirY;
+      env.dist = distPlayer;
+      if (isArchetype(e.type)) this.softSeparation(e, i, enemyOrder, maxRadius, env);
+      if (updateArchetype(e, this, env)) {
+        // Driven by archetypes.js (Bruiser, Gunner, Shielder, Blinker, Conduit).
+      } else if (e.type === 'swarmer') {
         // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
         let sepX = 0, sepY = 0;
         let alignX = 0, alignY = 0;
@@ -347,11 +410,13 @@ export class EnemyManager {
         }
       }
 
-      // Normalize max speed
+      // Normalize max speed (a Bruiser charge raises the cap; Conduit links add haste;
+      // CHILL lowers it through speedScale, see status-effects.js)
+      const cap = speedCap(e) * (e.speedScale ?? 1);
       const curSpd = Math.hypot(e.vx, e.vy);
-      if (curSpd > e.speed) {
-        e.vx = (e.vx / curSpd) * e.speed;
-        e.vy = (e.vy / curSpd) * e.speed;
+      if (curSpd > cap) {
+        e.vx = (e.vx / curSpd) * cap;
+        e.vy = (e.vy / curSpd) * cap;
       }
 
       // Gravity drift rides on top of the capped steering, then bleeds off.
@@ -381,12 +446,34 @@ export class EnemyManager {
 
       this.enemyIndex.update(e);
 
-      // Save short neon ribbon trail for fast movers
-      if (e.type === 'swarmer' || e.type === 'weaver' || e.type === 'mini_splitter') {
+      // Save short neon ribbon trail for fast movers (and charging / hasted elites)
+      if (e.type === 'swarmer' || e.type === 'weaver' || e.type === 'mini_splitter' || e.burstSpeed > 0 || e.cadence > 1) {
         e.trail.push({ x: e.x, y: e.y });
         if (e.trail.length > 6) e.trail.shift();
+      } else if (e.trail.length) {
+        e.trail.length = 0; // a finished charge drops its ribbon
       }
     }
+  }
+
+  // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
+  softSeparation(e, i, enemyOrder, maxRadius, env) {
+    let sx = 0;
+    let sy = 0;
+    for (const other of this.enemyIndex.query(e.x, e.y, e.radius + maxRadius + 6)) {
+      if (enemyOrder.get(other) === i) continue;
+      const ox = e.x - other.x;
+      const oy = e.y - other.y;
+      const minD = e.radius + other.radius + 6;
+      const dSq = ox * ox + oy * oy;
+      if (dSq < minD * minD && dSq > 0.1) {
+        const d = Math.sqrt(dSq);
+        sx += (ox / d) * 0.35;
+        sy += (oy / d) * 0.35;
+      }
+    }
+    env.sepX = sx;
+    env.sepY = sy;
   }
 
   draw(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
@@ -399,6 +486,10 @@ export class EnemyManager {
       const sp = this.spawnIndicators[i];
       if (sp.config.isBoss) {
         if (visible(sp.x, sp.y, BOSS_TELEGRAPH_RADIUS + 10)) this.drawBossTelegraph(ctx, sp);
+        continue;
+      }
+      if (sp.config.isLieutenant) {
+        if (visible(sp.x, sp.y, sp.config.radius * 3.6 + 10)) drawLieutenantTelegraph(ctx, sp);
         continue;
       }
       if (!visible(sp.x, sp.y, sp.config.radius * 2.6 + 4)) continue;
@@ -414,15 +505,23 @@ export class EnemyManager {
     // 2. Draw Enemies
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
-      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4 : e.radius * (e.isBoss ? 2.2 : 1.4) + 24;
+      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4
+        : e.type === 'conduit' ? 250
+        : e.type === 'bruiser' && e.state === 'windup' ? 300
+        : e.type === 'blinker' && e.state === 'telegraph' ? 280
+        : e.type === 'gunner' && e.state === 'aim' ? 190
+        : e.radius * (e.isBoss || e.isLieutenant ? 2.2 : 1.4) + 24;
       if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
       // Hit pop: the hull swells briefly with the white flash so every connecting shot reads.
       const pulse = 1 + Math.sin(e.pulsePhase) * 0.08 + e.hitFlash * 0.14;
       const r = e.radius * pulse;
+      // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
+      // version of their own hue, so the archetype stays recognisable.
+      const chilled = e.st && e.st.chillT > 0;
       const color = e.hitFlash > 0
         ? '#ffffff'
-        : `hsl(${e.hue}, 100%, 62%)`;
-      const glowColor = `hsla(${e.hue}, 100%, 55%, 0.42)`;
+        : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, 62%)`;
+      const glowColor = chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
 
       // Ribbon Trail
       // Tapered ribbon: fades toward the tail, brightest at the enemy.
@@ -437,6 +536,7 @@ export class EnemyManager {
       }
 
       if (e.type === 'blackhole') this.drawBlackholeAura(ctx, e, r);
+      if (e.type === 'conduit') drawConduitLinks(ctx, e);
 
       ctx.save();
       ctx.translate(e.x, e.y);
@@ -474,6 +574,8 @@ export class EnemyManager {
           ctx.arc(0, 0, r, 0, Math.PI * 2);
           ctx.moveTo(r * 0.55, 0);
           ctx.arc(0, 0, r * 0.55, 0, Math.PI * 1.5);
+        } else if (isArchetype(e.type)) {
+          traceArchetype(ctx, e, r);
         } else {
           // Regular Polygon (Splitter Hexagon, Mini Triangle, Boss Octagon)
           for (let s = 0; s < e.sides; s++) {
@@ -503,6 +605,11 @@ export class EnemyManager {
 
       ctx.restore();
 
+      drawArchetypeOverlay(ctx, e, r);
+      if (e.isLieutenant) {
+        drawLieutenantAura(ctx, e, r);
+        drawLieutenantBar(ctx, e, r);
+      }
       if (e.isBoss) this.drawBossAura(ctx, e, r);
 
       // Boss HP bar floating above polyhedron
@@ -515,6 +622,9 @@ export class EnemyManager {
         ctx.fillRect(e.x - bw * 0.5, e.y - e.radius - 14, bw * Math.max(0, e.hp / e.maxHp), bh);
       }
     }
+
+    // Hostile plasma orbs ride above the hulls so they are never hidden by a crowd.
+    this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);
 
     ctx.restore();
   }

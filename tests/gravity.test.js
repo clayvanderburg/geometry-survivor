@@ -12,6 +12,7 @@ const { EnemyManager } = await import('../js/enemies.js');
 const { WarpGrid } = await import('../js/grid.js');
 const { ParticleSystem } = await import('../js/particles.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
+const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
 const { wellFalloff, wellPullScale, playerPullCap, PLAYER_ESCAPE_THRUST_SHARE } = await import('../js/gravity.js');
 const silent = new Proxy({}, { get: () => () => {} });
 const stubGrid = { applyImpulse() {}, applyImplosion() {} };
@@ -179,22 +180,29 @@ test('a Vortex Singularity drags a scattered pack into a tight clump before it c
 });
 
 test('singularity collapse is an implosion damage pulse over 85% of its pull radius', () => {
-  const { game, manager } = arena();
-  game.player.weapons.singularity = 2;
-  const inside = addEnemy(manager, 'pinwheel', 2000, 2000);
-  const outside = addEnemy(manager, 'pinwheel', 2000, 2000);
-  game.fireSingularity(2);
-  const sg = game.singularities[0];
-  Object.assign(sg, { x: 2000, y: 2000, vx: 0, vy: 0, life: 1 / 60 });
-  assert.equal(sg.collapseDamage, 11 * (10 + 2 * 5) * TUNING.singularityCollapseMult);
-  assert.equal(sg.collapseRadius, sg.pullRadius * 0.85);
-  Object.assign(inside, { x: 2000 + sg.collapseRadius * 0.9, y: 2000, hp: 1e6, maxHp: 1e6 });
-  Object.assign(outside, { x: 2000 + sg.pullRadius + 60, y: 2000, hp: 1e6, maxHp: 1e6 });
-  game.updateSingularities(1 / 60);
-  assert.equal(game.singularities.length, 0);
-  assert.ok(sg.dead, 'collapsed singularity is flagged so its infall streams die with it');
-  assert.equal(inside.hp, 1e6 - sg.collapseDamage);
-  assert.equal(outside.hp, 1e6);
+  // Exact full-damage checks; blast edge falloff has its own test.
+  const savedFalloff = TUNING.splashEdgeFalloff;
+  TUNING.splashEdgeFalloff = 0;
+  try {
+    const { game, manager } = arena();
+    game.player.weapons.singularity = 2;
+    const inside = addEnemy(manager, 'pinwheel', 2000, 2000);
+    const outside = addEnemy(manager, 'pinwheel', 2000, 2000);
+    game.fireSingularity(2);
+    const sg = game.singularities[0];
+    Object.assign(sg, { x: 2000, y: 2000, vx: 0, vy: 0, life: 1 / 60 });
+    assert.equal(sg.collapseDamage, 11 * W.singularityCollapseDamageMult(2) * TUNING.singularityCollapseMult);
+    assert.equal(sg.collapseRadius, sg.pullRadius * 0.85);
+    Object.assign(inside, { x: 2000 + sg.collapseRadius * 0.9, y: 2000, hp: 1e6, maxHp: 1e6 });
+    Object.assign(outside, { x: 2000 + sg.pullRadius + 60, y: 2000, hp: 1e6, maxHp: 1e6 });
+    game.updateSingularities(1 / 60);
+    assert.equal(game.singularities.length, 0);
+    assert.ok(sg.dead, 'collapsed singularity is flagged so its infall streams die with it');
+    assert.equal(inside.hp, 1e6 - sg.collapseDamage);
+    assert.equal(outside.hp, 1e6);
+  } finally {
+    TUNING.splashEdgeFalloff = savedFalloff;
+  }
 });
 
 test('grid wells form a smooth funnel that never folds points through the core', () => {
