@@ -3,8 +3,9 @@
 // nothing here throws or blocks play. Without the function (local dev server, offline, slow network)
 // the GLOBAL tab falls back to the local board with an OFFLINE note.
 //
-// Boards are per game version: runs are sent with GAME_VERSION, the GLOBAL tab opens on the current
-// version's board, and a compact selector switches to earlier versions that have runs, or ALL-TIME.
+// One shared board that never resets: the GLOBAL tab opens on ALL-TIME, where every run shows the game
+// version it was flown on. Runs are sent with GAME_VERSION and also filed per version, so a compact
+// selector can filter the board to a single version.
 import { sanitizeCallsign, formatRunTime, ALL_TIME } from './leaderboard-rules.js';
 import { GAME_VERSION, compareVersions, isVersionString, versionLabel } from './version.js';
 
@@ -94,14 +95,14 @@ export function normalizeBoardVersion(value, current = GAME_VERSION) {
 }
 
 // The version selector under the GLOBAL tab: the current version, every other version the server
-// reports runs for (newest first), then ALL-TIME. Each option: { id, label, current, active }.
+// reports runs for (newest first), with ALL-TIME first. Each option: { id, label, current, active }.
 export function buildVersionOptions({ current = GAME_VERSION, versions = [], selected = current } = {}) {
   const ids = [...new Set([current, ...(Array.isArray(versions) ? versions : []).filter(isVersionString)])]
     .sort((a, b) => compareVersions(b, a));
   const active = normalizeBoardVersion(selected, current);
   return [
-    ...ids.map(id => ({ id, label: versionLabel(id), current: id === current, active: id === active })),
-    { id: ALL_TIME, label: 'ALL-TIME', current: false, active: active === ALL_TIME }
+    { id: ALL_TIME, label: 'ALL-TIME', current: false, active: active === ALL_TIME },
+    ...ids.map(id => ({ id, label: versionLabel(id), current: id === current, active: id === active }))
   ];
 }
 
@@ -112,7 +113,7 @@ export class GlobalLeaderboard {
     this.timeoutMs = timeoutMs;
     this.storage = storage;
     this.current = version; // the version this client is: its runs go to this board
-    this.version = version; // the board on screen: a version or ALL_TIME (GLOBAL opens on the current version)
+    this.version = ALL_TIME; // the board on screen: ALL_TIME (default) or a single version as a filter
     this.versions = [];     // versions the server reports runs for
     this.cache = new Map(); // board -> { entries, total }, so switching back is instant
     this.status = 'idle'; // idle | loading | ready | offline
@@ -313,9 +314,11 @@ export function describeSubmit(state) {
   if (state.ok) {
     const censor = state.censored ? ' // CALLSIGN FILTERED' : '';
     const version = isVersionString(state.version) ? versionLabel(state.version) : '';
-    return state.rank
-      ? { text: `◎ GLOBAL RANK #${state.rank}${version ? ` · ${version}` : ''}${censor}`, tone: 'gold' }
-      : { text: `OUTSIDE ${version || 'GLOBAL'} TOP ${state.boardSize || 100} // KEEP FLYING${censor}`, tone: 'cyan' };
+    // The headline rank is on the shared all-time board; the run's version rides along beside it.
+    const rank = state.allTimeRank === undefined ? state.rank : state.allTimeRank;
+    if (rank) return { text: `◎ GLOBAL RANK #${rank}${version ? ` · ${version}` : ''}${censor}`, tone: 'gold' };
+    if (state.rank && version) return { text: `◎ #${state.rank} ON ${version} // OUTSIDE ALL-TIME TOP ${state.boardSize || 100}${censor}`, tone: 'cyan' };
+    return { text: `OUTSIDE GLOBAL TOP ${state.boardSize || 100} // KEEP FLYING${censor}`, tone: 'cyan' };
   }
   if (state.reason === 'cooldown') return { text: 'GLOBAL UPLINK COOLING DOWN // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'outdated') return { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' };
