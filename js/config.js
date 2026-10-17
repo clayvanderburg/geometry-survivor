@@ -1,5 +1,5 @@
 // Centralized Live Tuning Configuration & Cross-Tab Sync for VEXOLITH // SURVIVOR
-const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v3';
+const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v4'; // v4: retuned difficulty ramp + XP curve (old saves would pin the old values)
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
@@ -114,8 +114,8 @@ export const DEFAULT_TUNING = {
   // hand weights are relative: general upgrades weigh 1)
   xpCurveBase: 25,
   xpCurveStep: 16,
-  xpCurveStepMid: 100,
-  xpCurveStepLate: 60,
+  xpCurveStepMid: 150,
+  xpCurveStepLate: 500,
   weaponSlots: 6,
   newWeaponChance: 0.2,
   newWeaponPity: 6,
@@ -127,24 +127,24 @@ export const DEFAULT_TUNING = {
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
   // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
   waveLength: 22,
-  waveHpStart: 1,
+  waveHpStart: 2.5,
   waveHpPerWave: 0.25,
-  waveHpGrowth: 1.09,
-  waveHpGrowthFrom: 6,
-  spawnIntervalStart: 2.6,
-  spawnIntervalPerWave: 0.14,
-  spawnIntervalMin: 0.75,
-  packSizeMult: 1.0,
+  waveHpGrowth: 1.065,
+  waveHpGrowthFrom: 25,
+  spawnIntervalStart: 3.6,
+  spawnIntervalPerWave: 0.1,
+  spawnIntervalMin: 0.9,
+  packSizeMult: 0.8,
   swarmPackPerWave: 2,
-  swarmPackMax: 34,
+  swarmPackMax: 40,
   skirmishPackPerWave: 0.6,
-  skirmishPackMax: 99,
+  skirmishPackMax: 24,
   splitterPackPerWave: 0.4,
-  splitterPackMax: 99,
-  bossHpMult: 1,
-  damageRampBase: 1,
-  damageRampFrom: 5,
-  damageRampPerWave: 0.08,
+  splitterPackMax: 10,
+  bossHpMult: 0.5,
+  damageRampBase: 0.5,
+  damageRampFrom: 15,
+  damageRampPerWave: 0.04,
   xpPerWave: 0
 };
 

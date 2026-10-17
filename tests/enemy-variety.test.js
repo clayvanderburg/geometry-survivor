@@ -24,7 +24,7 @@ globalThis.document = {
 };
 
 const { Game } = await import('../js/main.js');
-const { EnemyManager } = await import('../js/enemies.js');
+const { EnemyManager, damageRampAt } = await import('../js/enemies.js');
 const { EnemyBulletPool } = await import('../js/enemy-bullets.js');
 const { DamageNumbers } = await import('../js/damage-numbers.js');
 const {
@@ -168,7 +168,7 @@ test('bruisers shrug off knockback and survive ramming the ship; swarmers still 
   game.update(1 / 60);
   assert.ok(manager.enemies.includes(ram), 'a sturdy bruiser bounces off instead of dying on contact');
   assert.ok(game.player.hp < 100);
-  assert.ok(Math.abs(100 - game.player.hp - 18 * 1.5) < 1e-9, 'bruiser contact hits 1.5x harder');
+  assert.ok(Math.abs(100 - game.player.hp - 18 * 1.5 * damageRampAt(game.wave)) < 1e-9, 'bruiser contact hits 1.5x harder');
 });
 
 test('gunner holds its range band and fires a slow orb only after a visible aim', () => {
@@ -223,12 +223,12 @@ test('enemy orbs are pooled, blocked by rock, absorbed by the shield and skip a 
   manager.enemyBullets.spawn(1900, 2000, 4, 0, TUNING.enemyBulletDamage);
   for (let t = 0; t < 40 && manager.enemyBullets.count; t++) game.updateEnemyBullets(1 / 60);
   assert.equal(manager.enemyBullets.count, 0);
-  assert.equal(game.player.hp, 100 - TUNING.enemyBulletDamage, 'the shield outline takes the orb at its listed damage');
+  assert.equal(game.player.hp, 100 - TUNING.enemyBulletDamage * damageRampAt(1), 'the shield outline takes the orb at its listed damage (wave-1 ramp)');
 
   game.player.invuln = 1;
   manager.enemyBullets.spawn(1900, 2000, 4, 0, TUNING.enemyBulletDamage);
   for (let t = 0; t < 30; t++) game.updateEnemyBullets(1 / 60);
-  assert.equal(game.player.hp, 100 - TUNING.enemyBulletDamage, 'a dash (invulnerability) passes straight through');
+  assert.equal(game.player.hp, 100 - TUNING.enemyBulletDamage * damageRampAt(1), 'a dash (invulnerability) passes straight through');
   assert.equal(manager.enemyBullets.count, 1, 'the orb flies on past the ship');
 
   game.triggerSupernova();

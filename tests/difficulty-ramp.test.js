@@ -116,7 +116,7 @@ test('pack cadence reads the spawn-interval ramp', () => {
 });
 
 test('pack sizes read the per-wave growth, caps and the global multiplier', () => {
-  const queued = (values, pack, wave) => withTuning({ ...values, spawnWeightSwarm: 0, spawnWeightSkirmish: 0, spawnWeightSplitter: 0, spawnWeightBlackhole: 0,
+  const queued = (values, pack, wave) => withTuning({ packSizeMult: 1, swarmPackPerWave: 2, swarmPackMax: 34, skirmishPackMax: 99, splitterPackMax: 99, ...values, spawnWeightSwarm: 0, spawnWeightSkirmish: 0, spawnWeightSplitter: 0, spawnWeightBlackhole: 0,
     spawnWeightBruiser: 0, spawnWeightGunner: 0, spawnWeightShielder: 0, spawnWeightBlinker: 0, spawnWeightConduit: 0, [pack]: 1 }, () => {
     const g = rampGame({ wave });
     g.spawnWavePack();
@@ -135,7 +135,7 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
 });
 
 test('contact and plasma-orb damage share the damage ramp', () => {
-  withTuning({ damageRampFrom: 10, damageRampPerWave: 0.2 }, () => {
+  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.2 }, () => {
     assert.equal(damageRampAt(10), 1);
     assert.ok(Math.abs(damageRampAt(15) - 2) < 1e-9);
     const g = rampGame({ wave: 15 });

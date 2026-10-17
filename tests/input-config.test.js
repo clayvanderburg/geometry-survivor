@@ -68,10 +68,10 @@ test('tuning rejects poison values and clamps persisted schema bounds', () => {
   assert.equal(config.normalizeTuningValue('musicBpm', Infinity), config.DEFAULT_TUNING.musicBpm);
   assert.equal(config.normalizeTuningValue('moveSpeed', -100), 2);
   assert.equal(config.normalizeTuningValue('carapaceColor', '<bad>'), config.DEFAULT_TUNING.carapaceColor);
-  storage.set('vectra_survivor_tuning_v3', JSON.stringify({ moveSpeed: 999, baseDamage: 'oops', evil: true }));
+  storage.set('vectra_survivor_tuning_v4', JSON.stringify({ moveSpeed: 999, baseDamage: 'oops', evil: true }));
   config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 14); assert.equal(config.TUNING.baseDamage, 11);
   assert.equal(config.TUNING.evil, undefined);
-  storage.delete('vectra_survivor_tuning_v3'); config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 5);
+  storage.delete('vectra_survivor_tuning_v4'); config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 5);
 });
 
 test('save normalization tolerates malformed entries and bounds permanent ranks', () => {

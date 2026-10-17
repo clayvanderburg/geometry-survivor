@@ -25,7 +25,7 @@ globalThis.document = {
 const hidden = id => document.getElementById(id).classList.contains('hidden');
 
 const { Game, bossEpithet } = await import('../js/main.js');
-const { EnemyManager } = await import('../js/enemies.js');
+const { EnemyManager, contactDamageAt } = await import('../js/enemies.js');
 const { SoundEngine } = await import('../js/audio.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const silent = new Proxy({}, { get: () => () => {} });
@@ -84,11 +84,11 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   const [boss] = liveBosses(g);
   assert.equal(boss.name, 'PRISMATIC DREADNOUGHT');
   assert.equal(boss.epithet, 'WAVE 3 WARDEN');
-  assert.equal(boss.maxHp, 650 * g.getWaveScale(), 'presentation does not change boss stats');
+  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult, 'presentation does not change boss stats');
   assert.equal(calls.arrivals, 1);
   assert.deepEqual(g.enemyManager.bossArrivals, [], 'arrivals are drained once staged');
   assert.equal(g.bossCard.kind, 'arrival');
-  assert.equal(g.bossCard.detail, `${Math.round(boss.maxHp).toLocaleString()} HP · 38 CONTACT DMG`);
+  assert.equal(g.bossCard.detail, `${Math.round(boss.maxHp).toLocaleString()} HP · ${Math.round(contactDamageAt(boss, 3))} CONTACT DMG`);
   assert.ok(g.shake <= 24, 'arrival shake stays within the existing cap');
   assert.equal(g.getBossStage(), 2);
   assert.equal(g.getBossHudModel().warning, null);
@@ -161,7 +161,7 @@ test('boss health bars appear with a boss, stack compactly, and hide when none r
   assert.equal(hidden('boss-bar-1'), true);
   assert.equal(document.getElementById('boss-bar-name-0').textContent, 'PRISMATIC DREADNOUGHT');
   assert.equal(document.getElementById('boss-bar-epithet-0').textContent, 'WAVE 3 WARDEN');
-  assert.equal(document.getElementById('boss-bar-hp-0').textContent, '260 / 650');
+  assert.equal(document.getElementById('boss-bar-hp-0').textContent, `${Math.ceil(boss.hp).toLocaleString()} / ${Math.round(boss.maxHp).toLocaleString()}`);
   assert.equal(document.getElementById('boss-bar-fill-0').style.width, '40.0%');
   assert.equal(hidden('boss-bar-more'), true);
 
