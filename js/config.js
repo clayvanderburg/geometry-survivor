@@ -67,7 +67,13 @@ export const DEFAULT_TUNING = {
   // 7. Boss Encounters (presentation only; boss stats and rewards are unchanged)
   bossWarningTime: 3.0,
   bossHitStop: 0.1,
-  bossSlowMo: 0.5
+  bossSlowMo: 0.5,
+
+  // 8. Hit Feedback & Damage Numbers
+  knockbackMult: 1.0,
+  hitStopMult: 1.0,
+  damageNumberCap: 48,
+  damageNumberScale: 1.0
 };
 
 export const TUNING_SCHEMA = [
@@ -157,6 +163,15 @@ export const TUNING_SCHEMA = [
       { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
       { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
       { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' }
+    ]
+  },
+  {
+    group: '💥 Hit Feedback & Damage Numbers',
+    items: [
+      { key: 'knockbackMult', label: 'Enemy Hit Knockback', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
+      { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
+      { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
+      { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
     ]
   }
 ];

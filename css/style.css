@@ -1363,6 +1363,20 @@ html, body {
   cursor: pointer;
 }
 
+/* Pause-menu on/off toggles (e.g. floating damage numbers): dim when OFF, cyan when ON. */
+.pause-toggle-btn {
+  padding: 12px 18px;
+  font-size: 13px;
+  border-color: rgba(139, 163, 199, 0.55);
+  color: #8ba3c7;
+  background: rgba(5, 10, 24, 0.6);
+}
+
+.pause-toggle-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 /* Controller focus highlight (menus navigated with d-pad / left stick) */
 .gp-focus {
   outline: 2px solid var(--gold) !important;

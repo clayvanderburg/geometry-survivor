@@ -8,10 +8,35 @@ export class ParticleSystem {
     this.floatTexts = [];
     this.afterimages = [];
     this.infall = [];
+    // Pooled hit-impact flares: fixed slots recycled oldest-first, drawn as one batched path.
+    this.impacts = Array.from({ length: 96 }, () => ({ x: 0, y: 0, cos: 1, sin: 0, size: 0, life: 0, maxLife: 1 }));
+    this.impactCount = 0;
+    this.impactNext = 0;
   }
 
   clear() {
     for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages', 'infall']) this[key].length = 0;
+    this.impactCount = 0;
+    this.impactNext = 0;
+  }
+
+  // Brief white-hot cross flare at a hit point; `angle` is the incoming direction.
+  spawnImpact(x, y, angle, size = 7, life = 0.1) {
+    let slot;
+    if (this.impactCount < this.impacts.length) {
+      slot = this.impacts[this.impactCount++];
+    } else {
+      // Full: overwrite in round-robin order (the oldest flare is the nearest to fading anyway).
+      slot = this.impacts[this.impactNext];
+      this.impactNext = (this.impactNext + 1) % this.impacts.length;
+    }
+    slot.x = x;
+    slot.y = y;
+    slot.cos = Math.cos(angle);
+    slot.sin = Math.sin(angle);
+    slot.size = size;
+    slot.life = life;
+    slot.maxLife = life;
   }
 
   // Burst of velocity-stretched neon line sparks (Geometry Wars signature explosion)
@@ -305,6 +330,18 @@ export class ParticleSystem {
       }
     }
 
+    // Update Impact Flares (swap-remove inside the fixed pool)
+    for (let i = this.impactCount - 1; i >= 0; i--) {
+      const im = this.impacts[i];
+      im.life -= dt;
+      if (im.life <= 0) {
+        const last = this.impacts[--this.impactCount];
+        this.impacts[this.impactCount] = im;
+        this.impacts[i] = last;
+      }
+    }
+    if (this.impactNext >= this.impactCount) this.impactNext = 0;
+
     // Update Float Texts
     for (let i = this.floatTexts.length - 1; i >= 0; i--) {
       const ft = this.floatTexts[i];
@@ -443,7 +480,26 @@ export class ParticleSystem {
       ctx.stroke();
     }
 
-    // 6. Floating Text Popups
+    // 6. Hit Impact Flares: one batched stroke — a long flare across the shot, a short one along it.
+    if (this.impactCount > 0) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let i = 0; i < this.impactCount; i++) {
+        const im = this.impacts[i];
+        if (!visible(im.x, im.y, im.size * 1.5)) continue;
+        const s = im.size * (0.3 + 0.7 * Math.max(0, im.life / im.maxLife));
+        const ax = im.cos * s * 0.55, ay = im.sin * s * 0.55;
+        const px = -im.sin * s, py = im.cos * s;
+        ctx.moveTo(im.x - px, im.y - py);
+        ctx.lineTo(im.x + px, im.y + py);
+        ctx.moveTo(im.x - ax, im.y - ay);
+        ctx.lineTo(im.x + ax, im.y + ay);
+      }
+      ctx.stroke();
+    }
+
+    // 7. Floating Text Popups
     ctx.textAlign = 'center';
     for (let i = 0; i < this.floatTexts.length; i++) {
       const ft = this.floatTexts[i];

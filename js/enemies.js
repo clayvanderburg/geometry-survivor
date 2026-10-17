@@ -6,6 +6,9 @@ import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
 
+// Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
+export const KNOCKBACK_DECAY = 0.8;
+
 export class EnemyManager {
   constructor({ maxEnemies = 200 } = {}) {
     const budget = Number(maxEnemies);
@@ -191,6 +194,9 @@ export class EnemyManager {
           rotation: Math.random() * Math.PI * 2,
           vRot: c.vRot,
           hitFlash: 0,
+          knockX: 0,
+          knockY: 0,
+          dmgNum: null, // last floating damage number (DamageNumbers fast path)
           trail: [],
           isBoss: !!c.isBoss,
           name: c.name || null,
@@ -356,6 +362,16 @@ export class EnemyManager {
       e.gvx = gvx * GRAVITY_DRIFT_DRAG;
       e.gvy = gvy * GRAVITY_DRIFT_DRAG;
 
+      // Hit knockback is a separate decaying displacement, so it is not erased by the speed clamp
+      // above and never feeds back into flocking velocity (swarms flinch, then keep flowing).
+      if (e.knockX || e.knockY) {
+        e.x += e.knockX;
+        e.y += e.knockY;
+        e.knockX *= KNOCKBACK_DECAY;
+        e.knockY *= KNOCKBACK_DECAY;
+        if (Math.abs(e.knockX) + Math.abs(e.knockY) < 0.02) e.knockX = e.knockY = 0;
+      }
+
       // Arena wall bounce
       const pad = e.radius + 8;
       if (e.x < pad) { e.x = pad; e.vx *= -0.8; }
@@ -400,7 +416,8 @@ export class EnemyManager {
       const e = this.enemies[i];
       const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4 : e.radius * (e.isBoss ? 2.2 : 1.4) + 24;
       if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
-      const pulse = 1 + Math.sin(e.pulsePhase) * 0.08;
+      // Hit pop: the hull swells briefly with the white flash so every connecting shot reads.
+      const pulse = 1 + Math.sin(e.pulsePhase) * 0.08 + e.hitFlash * 0.14;
       const r = e.radius * pulse;
       const color = e.hitFlash > 0
         ? '#ffffff'
