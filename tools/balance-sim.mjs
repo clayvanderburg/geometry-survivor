@@ -207,6 +207,20 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
         Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' ') || '—', weaponLevels.toFixed(1)];
     })));
 
+    // Upgrade exhaustion: when the slots fill, when hands first run short, and when level-ups find
+    // nothing left (the ALL SYSTEMS MAXED full-shield-repair fallback).
+    const stamp = (rs, key) => {
+      const hits = rs.filter(r => r[key]);
+      if (!hits.length) return '—';
+      const label = `${mmss(median(hits.map(r => r[key].time)))} · L${median(hits.map(r => r[key].level))}`;
+      return hits.length === rs.length ? label : `${label} (${hits.length}/${rs.length})`;
+    };
+    out.push('\n## Upgrade exhaustion (median time · level, among runs that got there)');
+    out.push(table(['strategy', 'all slots filled', 'first hand < 3 cards', 'first empty hand (MAXED)', 'MAXED level-ups / run'], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      return [s.name, stamp(rs, 'slotsFullAt'), stamp(rs, 'thinHandAt'), stamp(rs, 'maxedAt'), mean(rs.map(r => r.maxedCount || 0)).toFixed(1)];
+    })));
+
     // Difficulty curve per wave, pooled across strategies.
     const maxWave = Math.max(...runs.map(r => r.wave));
     const rows = [];

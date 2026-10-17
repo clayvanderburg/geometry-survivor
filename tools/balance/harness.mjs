@@ -28,6 +28,7 @@ const { ProgressionManager, META_UPGRADES } = await import('../../js/progression
 const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../../js/upgrades.js');
 const { TUNING, DEFAULT_TUNING } = await import('../../js/config.js');
 const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
+const { weaponSlots } = await import('../../js/loadout.js');
 
 export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, W as WEAPON_SCALING };
 
@@ -210,6 +211,26 @@ function installInstrumentation(game, metrics) {
     return dmg;
   };
 
+  // Upgrade exhaustion: hands with fewer than 3 cards, and empty hands (the ALL SYSTEMS MAXED full
+  // shield repair fallback), with the time and level each first happened.
+  game.triggerLevelUp = function () {
+    const r = proto.triggerLevelUp.call(this);
+    const n = game.currentChoices.length;
+    const stamp = { time: game.elapsedTime, level: game.player.level };
+    if (game.state !== 'UPGRADE') {
+      metrics.maxedCount++;
+      metrics.maxedAt ??= stamp;
+    } else if (n < 3) metrics.thinHandAt ??= stamp;
+    return r;
+  };
+
+  // Gunner plasma orbs are scored as their own "orb" type (they used to show as an unknown killer).
+  game.enemyBulletDamage = function (b) {
+    const dmg = proto.enemyBulletDamage.call(this, b);
+    metrics.hurt({ type: 'orb' }, Math.min(dmg, Math.max(0, game.player.hp)), dmg, game);
+    return dmg;
+  };
+
   const addCores = game.progression.addCores.bind(game.progression);
   game.progression.addCores = (n) => { metrics.cores += n; addCores(n); };
 }
@@ -249,6 +270,10 @@ export function createMetrics() {
     levels: [],       // elapsed time of each level-up
     cores: 0,
     killer: null,
+    maxedCount: 0,    // level-ups that found nothing to offer (full shield repair instead)
+    maxedAt: null,    // { time, level } of the first such level-up
+    thinHandAt: null, // { time, level } of the first hand with fewer than 3 cards
+    slotsFullAt: null, // { time, level } when every weapon slot was filled
     damage(src, eff, raw) {
       m.dealt[src] = (m.dealt[src] || 0) + eff;
       m.dealtRaw[src] = (m.dealtRaw[src] || 0) + raw;
@@ -319,6 +344,44 @@ export function botControls(game, pilot, state) {
     const dx = p.x - sp.x, dy = p.y - sp.y;
     const d = Math.hypot(dx, dy) || 1;
     if (d < 140) { fx += (dx / d) * 0.6; fy += (dy / d) * 0.6; }
+  }
+  // Gunner plasma orbs: sidestep any orb whose straight path passes close to the ship within ~0.8 s,
+  // and dash through one that is about to land (a dash's invulnerability lets orbs pass).
+  let dodgeNow = false;
+  const orbs = game.enemyManager.enemyBullets?.active || [];
+  for (let i = 0; i < orbs.length; i++) {
+    const b = orbs[i];
+    const rx = p.x - b.x, ry = p.y - b.y;
+    const v2 = b.vx * b.vx + b.vy * b.vy || 1;
+    const t = (rx * b.vx + ry * b.vy) / v2; // ticks until closest approach
+    if (t < 0 || t > 48) continue;
+    const mx = rx - b.vx * t, my = ry - b.vy * t; // ship offset from the orb's path at closest approach
+    const miss = Math.hypot(mx, my);
+    const reach = p.radius + b.radius + 14;
+    if (miss > reach + 26) continue;
+    const m = miss || 1;
+    const sx = miss > 0.5 ? mx / m : -b.vy / Math.sqrt(v2), sy = miss > 0.5 ? my / m : b.vx / Math.sqrt(v2);
+    const w = (1 - t / 60) * 2.2;
+    fx += sx * w;
+    fy += sy * w;
+    if (t < 9 && miss < reach) dodgeNow = true;
+  }
+  // Bruisers: step out of a marked charge lane (wind-up or charge), and dash if one is about to hit.
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.type !== 'bruiser' || (e.state !== 'windup' && e.state !== 'charge')) continue;
+    const ax = Math.cos(e.aimAngle), ay = Math.sin(e.aimAngle);
+    const rx = p.x - e.x, ry = p.y - e.y;
+    const along = rx * ax + ry * ay;
+    if (along < -10 || along > 460) continue;
+    const perp = rx * -ay + ry * ax; // signed distance from the lane
+    const width = e.radius + p.radius + 34;
+    if (Math.abs(perp) > width) continue;
+    const side = perp >= 0 ? 1 : -1;
+    const w = 2.6 * (1 - Math.abs(perp) / width) + 0.6;
+    fx += -ay * side * w;
+    fy += ax * side * w;
+    if (e.state === 'charge' && along < 90) dodgeNow = true;
   }
   const threat = Math.hypot(fx, fy);
   // Circle the pack instead of backing straight into a wall.
@@ -396,7 +459,7 @@ export function botControls(game, pilot, state) {
   const mag = Math.hypot(fx, fy);
   const moveX = mag > 0.02 ? fx / mag : 0;
   const moveY = mag > 0.02 ? fy / mag : 0;
-  const dash = p.dashCooldown <= 0 && p.invuln <= 0 && (nearest < 22 || close >= 5);
+  const dash = p.dashCooldown <= 0 && p.invuln <= 0 && (nearest < 22 || close >= 5 || dodgeNow);
   const bomb = p.bombs > 0 && p.invuln <= 0 && (
     (p.hp < p.maxHp * 0.35 && crowd >= 10) || (bossNear && p.hp < p.maxHp * 0.5)
   );
@@ -458,11 +521,13 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     let ticks = 0;
     const levelAt = []; // level at each whole minute
     const xpAt = [];    // cumulative XP collected at each whole minute
+    const enemiesAt = []; // enemies alive at each whole minute
     for (; ticks < maxTicks && game.state !== 'GAMEOVER'; ticks++) {
       if (god) game.player.hp = game.player.maxHp;
       if (ticks % 3600 === 0) {
         levelAt.push(game.player.level);
         xpAt.push(Math.round(totalXpForLevel(game.player.level) + game.player.xp));
+        enemiesAt.push(game.enemyManager.enemies.length);
       }
       pipeline.push(botControls(game, pilot, botState));
       if (pipeline.length >= latency) controls = pipeline.shift();
@@ -478,6 +543,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
         if (game.state === 'UPGRADE') game.selectUpgrade(pickCard(game.currentChoices, strategy));
         else game.closeChestModal();
       }
+      if (!metrics.slotsFullAt && (game.player.loadout || []).length >= weaponSlots(game.player)) metrics.slotsFullAt = { time: game.elapsedTime, level: game.player.level };
       if (game.player.level !== lastLevel) {
         for (let l = lastLevel; l < game.player.level; l++) metrics.levels.push(game.elapsedTime);
         lastLevel = game.player.level;
@@ -511,6 +577,11 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       loadout: [...(game.player.loadout || [])],
       levelAt,
       xpAt,
+      maxedCount: metrics.maxedCount,
+      maxedAt: metrics.maxedAt,
+      thinHandAt: metrics.thinHandAt,
+      slotsFullAt: metrics.slotsFullAt,
+      enemiesAt,
       dealt: metrics.dealt,
       dealtRaw: metrics.dealtRaw,
       kills_by_source: metrics.kills,
