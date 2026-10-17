@@ -56,7 +56,7 @@ export function pickWavePack(wave, rand = Math.random) {
   return 'swarm';
 }
 
-// Archetypes a lieutenant can be built from at this wave (fodder and black holes never lead).
+// Archetypes a lieutenant can be built from at this wave (fodder and vortexes never lead).
 export function lieutenantTypes(wave) {
   const types = ['pinwheel', 'weaver', 'splitter'];
   for (const type of Object.keys(ARCHETYPE_INFO)) {
