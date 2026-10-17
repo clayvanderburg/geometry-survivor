@@ -78,8 +78,8 @@ export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
 
-// The crab's starting kit: Pew Pews plus Wing Rockets at LV 1.
-export const STARTING_WEAPONS = ['blaster', 'rockets'];
+// The crab's starting kit: Pew Pews only; Wing Rockets join through NEW WEAPON like every other weapon.
+export const STARTING_WEAPONS = ['blaster'];
 
 // Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).
 export function weaponTags(id) {

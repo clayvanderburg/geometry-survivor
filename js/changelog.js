@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.11.1',
+    date: '2026-10-17',
+    title: 'Pew Pews Only',
+    notes: [
+      { type: 'balance', text: 'You now launch with just the Pew Pews. Wing Rockets moved into the NEW WEAPON pool with every other weapon.' }
+    ]
+  },
+  {
     version: '0.11.0',
     date: '2026-10-17',
     title: 'Elites Grind Through Asteroids',

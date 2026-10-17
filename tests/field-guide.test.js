@@ -264,7 +264,7 @@ test('preview scenes actually show the behaviour they describe', () => {
 test('weapons tab is a thin adapter: every upgrade card is listed, new cards appear automatically', () => {
   const html = tabHTML('weapons');
   for (const u of UPGRADE_POOL) assert.ok(html.includes(`data-entry="${u.id}"`), `${u.id} missing from WEAPONS`);
-  assert.ok(html.includes('WING ROCKETS') && html.includes('PEW PEWS'), 'starting kit comes from the loadout registry');
+  assert.ok(html.includes('PEW PEWS') && !html.includes('WING ROCKETS'), 'starting kit (Pew Pews only) comes from the loadout registry');
   const fake = [...UPGRADE_POOL, { id: 'plasma_whip', name: 'Plasma Whip', category: 'MELEE', tags: ['kinetic'], maxLevel: 4, summary: 'Lashes nearby hulls.' }];
   const g = weaponGuide({ plasma_whip: 2 }, fake);
   const whip = g.categories.find(c => c.id === 'MELEE').items[0];
