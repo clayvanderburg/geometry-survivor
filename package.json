@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "balance": "node tools/balance-sim.mjs",
     "start": "node tools/serve.js"
   },
   "engines": {
