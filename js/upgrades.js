@@ -1,5 +1,6 @@
 // Roguelite Upgrades, Luck Multi-Level Rolls (+2 / +3 Levels), Mining Drill, and Golden Synergies
 import { TUNING } from './config.js';
+import { WEAPON_SCALING as W } from './weapon-scaling.js';
 
 // Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
 // +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
@@ -54,8 +55,8 @@ export const UPGRADE_POOL = [
     headline: 'bulletCount',
     summary: 'Adds plasma vectors to every volley in a wider harmonic arc.',
     apply(player) {
-      player.stats.bulletCount += 2;
-      player.stats.spreadAngle += 0.11;
+      player.stats.bulletCount += W.multishotBolts;
+      player.stats.spreadAngle += W.multishotSpread;
     }
   },
   {
