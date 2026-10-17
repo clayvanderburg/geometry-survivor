@@ -148,11 +148,11 @@ export const TUNING_SCHEMA = [
   {
     group: '🌀 Gravity Wells & Singularities',
     items: [
-      { key: 'blackholePullRadius', label: 'Black Hole Pull Radius', type: 'range', min: 80, max: 400, step: 5, unit: 'px' },
-      { key: 'blackholePlayerPull', label: 'Black Hole Tug on Ship (capped)', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
-      { key: 'blackholeEnemyPull', label: 'Black Hole Pull on Enemies', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
-      { key: 'blackholeBulletBend', label: 'Black Hole Bullet Bending', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
-      { key: 'blackholePickupPull', label: 'Black Hole Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
+      { key: 'blackholePullRadius', label: 'Vortex Pull Radius', type: 'range', min: 80, max: 400, step: 5, unit: 'px' },
+      { key: 'blackholePlayerPull', label: 'Vortex Tug on Ship (capped)', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
+      { key: 'blackholeEnemyPull', label: 'Vortex Pull on Enemies', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
+      { key: 'blackholeBulletBend', label: 'Vortex Bullet Bending', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
+      { key: 'blackholePickupPull', label: 'Vortex Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'singularityPull', label: 'Vortex Singularity Pull', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'px/t²' },
       { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' }
     ]

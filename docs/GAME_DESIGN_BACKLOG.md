@@ -65,6 +65,7 @@
 - Boss introductions need warning, title/name, audiovisual impact, special attack patterns, recognizable silhouette and distinctive rewards.
 
 ## 7. Gravity wells, black holes and wormholes
+- **Naming (decided):** the crimson gravity *enemies* are **Vortexes** (killable; internal type `blackhole`). "Black hole" is reserved for the planned **black hole portal** feature below.
 - **Suspected issue:** existing gravity pull is not visibly/mechanically noticeable; verify actual forces on player/enemies and whether effect is too subtle.
 - Improve inward particle movement, trajectory bending, warped grid, collapse and explosion feedback. Potential beat pulses.
 - New wormholes/anomalies: hidden in mined asteroid pockets OR randomly rip open in space; linked or unpredictable destinations, including across the map.
