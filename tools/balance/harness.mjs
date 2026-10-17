@@ -237,7 +237,7 @@ export function createHeadlessGame({ metaRank = 0 } = {}) {
 }
 
 // --- Metrics ----------------------------------------------------------------------------------
-function createMetrics() {
+export function createMetrics() {
   const m = {
     dealt: {},        // source -> effective damage (overkill excluded)
     dealtRaw: {},     // source -> raw damage including overkill
@@ -257,7 +257,9 @@ function createMetrics() {
       m.kills[src] = (m.kills[src] || 0) + 1;
       const type = e.isBoss ? 'boss' : e.type;
       m.killsByType[type] = (m.killsByType[type] || 0) + 1;
-      if (e.bornAt === undefined) return;
+      // Time-to-kill measures weapons: enemies swept by a Supernova or rammed before any weapon hit
+      // them would otherwise count as zero-second "one-hit" kills and drag the medians down.
+      if (e.bornAt === undefined || !e.hitsTaken) return;
       // Exposure = first hit -> death; a sparse histogram in 1/30 s bins keeps pooled medians exact enough.
       const key = `${type}|${game.wave}`;
       const t = m.ttk[key] || (m.ttk[key] = { n: 0, hist: {}, life: 0, hits: 0, oneHit: 0 });
@@ -267,7 +269,7 @@ function createMetrics() {
       t.hist[bin] = (t.hist[bin] || 0) + 1;
       t.life += game.elapsedTime - e.bornAt;
       t.hits += e.hitsTaken || 0;
-      if ((e.hitsTaken || 0) <= 1) t.oneHit++;
+      if (e.hitsTaken === 1) t.oneHit++;
       waveRow(game.wave).kills++;
     },
     hurt(e, eff, raw, game) {
@@ -588,11 +590,18 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
 }
 
 // Upgrades whose install changes player.weapons are weapons; everything else is a stat card.
+// Each card is installed through the game's own applyUpgradeLevels on a copy of a real fresh-run
+// player, so a new card that touches player fields a hand-made stub lacks is still classified.
 export function classifyUpgrades() {
+  const fresh = withSeed('classify', {}, () => {
+    const game = createHeadlessGame();
+    game.resetRun();
+    return JSON.stringify(game.player);
+  });
   return UPGRADE_POOL.map((u) => {
-    const player = { stats: { luck: 1, damage: 10, moveSpeed: 5, fireRate: 6, bulletSpeed: 14, bulletCount: 2, spreadAngle: 0.1, pierce: 1, magnetRadius: 100, xpMultiplier: 1, miningSpeed: 75, miningRange: 43, drillScale: 1 }, weapons: { missiles: 1, lightning: 1 }, upgradeLevels: { mining_speed: 2, multishot: 2, firerate: 2 }, hp: 100, maxHp: 100, bombs: 0 };
+    const player = JSON.parse(fresh);
     const before = JSON.stringify(player.weapons);
-    u.apply(player);
+    applyUpgradeLevels(player, { ...u, levelJump: 1 });
     return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isWeapon: JSON.stringify(player.weapons) !== before };
   });
 }

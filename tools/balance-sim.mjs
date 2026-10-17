@@ -19,23 +19,38 @@ function parseArgs(argv) {
   const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const next = () => argv[++i];
-    if (a === '--runs') opts.runs = Math.max(1, parseInt(next(), 10));
+    const next = () => {
+      const v = argv[++i];
+      if (v === undefined) throw new Error(`${a} needs a value (see --help)`);
+      return v;
+    };
+    // Reject typos instead of silently running with NaN (zero runs, NaN enemy HP, ...).
+    const number = (min, parse = Number) => {
+      const v = parse(next());
+      if (!Number.isFinite(v)) throw new Error(`${a} needs a number (see --help)`);
+      return Math.max(min, v);
+    };
+    const int = (min) => number(min, v => parseInt(v, 10));
+    if (a === '--runs') opts.runs = int(1);
     else if (a === '--seed') opts.seed = next();
     else if (a === '--strategies') opts.strategies = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (a === '--focus') opts.focus = true;
-    else if (a === '--max-minutes') opts.maxMinutes = Math.max(0.5, Number(next()));
-    else if (a === '--workers') opts.workers = Math.max(1, parseInt(next(), 10));
-    else if (a === '--meta') opts.meta = Math.max(0, parseInt(next(), 10));
+    else if (a === '--max-minutes') opts.maxMinutes = number(0.5);
+    else if (a === '--workers') opts.workers = int(1);
+    else if (a === '--meta') opts.meta = int(0);
     else if (a === '--skill') opts.skill = next();
     else if (a === '--tune') {
-      const [k, v] = next().split('=');
-      opts.tune[k] = Number(v);
+      const spec = next();
+      const eq = spec.indexOf('=');
+      const v = Number(spec.slice(eq + 1));
+      if (eq < 1 || spec.slice(eq + 1).trim() === '' || !Number.isFinite(v)) throw new Error(`--tune needs key=number, got "${spec}"`);
+      opts.tune[spec.slice(0, eq)] = v;
     } else if (a === '--weapon') {
       const spec = next();
       const eq = spec.indexOf('=');
+      if (eq < 1) throw new Error(`--weapon needs key=expr, got "${spec}"`);
       opts.weapons[spec.slice(0, eq)] = spec.slice(eq + 1);
-    } else if (a === '--bench-seeds') opts.benchSeeds = Math.max(1, parseInt(next(), 10));
+    } else if (a === '--bench-seeds') opts.benchSeeds = int(1);
     else if (a === '--no-bench') opts.bench = false;
     else if (a === '--bench-only') opts.benchOnly = true;
     else if (a === '--json') opts.json = next();
@@ -249,6 +264,7 @@ async function main() {
   const h = await import('./balance/harness.mjs');
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
+  if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 
   const strategies = opts.benchOnly ? [] : buildStrategies(h.UPGRADE_POOL, { focus: opts.focus, only: opts.strategies });

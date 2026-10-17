@@ -6,7 +6,7 @@ All numbers are from the deterministic simulator (seed `vexolith`, fresh pilot w
 
 ## TL;DR
 
-- **Runs are short and front-loaded easy.** A fresh pilot's median run is **5:19** (wave 15). Waves 1–7 cost under 20 shield per wave and 58% of wave 1–3 swarmers die to the first bolt; then 84% of runs die between waves 9 and 20 (2:56–7:20). Proposed target: **8–10 min median** for a fresh pilot (see [Run length](#run-length-vs-a-proposed-target)).
+- **Runs are short and front-loaded easy.** A fresh pilot's median run is **5:19** (wave 15). Waves 1–7 cost under 20 shield per wave and 58% of wave 1–3 swarmers die to their first hit; then 84% of runs die between waves 9 and 20 (2:56–7:20). Proposed target: **8–10 min median** for a fresh pilot (see [Run length](#run-length-vs-a-proposed-target)).
 - **One applied fix:** Prism Split (multishot) was a trap card — the worst focus card (median 3:34) and a *loss* of DPS at LV 1–3 in the static bench, because its widening fan left the aimed target in the gap between the inner bolts (and LV 7 wrapped 16 bolts over 782°). `WEAPON_SCALING.multishotSpread` **0.11 → 0.04** lifts the projectile build from **3:47 → 5:53** median and focus-multishot from **3:34 → 5:08**.
 - **Splitters + their mini-splitters deal 55–78% of all shield damage** in every build. They are the single biggest difficulty driver and the main reason runs end; fixing them needs code in `enemies.js` / `killEnemy` (recommended below, not applied).
 - **Aegis Orbiting Blades are dead weight**: ≤1% of damage in every strategy, including when picked first. A bigger orbit (tested) does not fix it; it needs a mechanic change.
@@ -91,17 +91,17 @@ Data sets below: **before** = `--runs 10 --focus --no-bench` on the original cod
 - **Bosses are not a threat:** ≤5% of shield damage, and 3 killing blows in 180 runs. Time-to-kill is 8.7–12.4 s from the first hit, which suits a "major event", but they rarely touch the ship.
 - **Vortexes:** ≤4% of shield damage. Their burst-on-death (`vortex_burst`, ~1% of damage dealt) will disappear when vortexes become invulnerable portals; the simulator measures it but does not depend on it.
 
-**Time to kill (first hit → death, median / mean hits; all runs):**
+**Time to kill (first hit → death, median / mean hits; all runs; enemies swept by a Supernova or rammed before any weapon hit them are excluded):**
 
 | type | W1–3 | W7–9 | W13–15 | W21–25 |
 |---|---|---|---|---|
-| swarmer | 0.00 s / 1.5 (58% one-hit) | 0.10 s / 2.6 | 0.20 s / 3.9 | 0.37 s / 6.7 |
-| mini-splitter | 0.10 s / 2.2 | 0.17 s / 4.1 | 0.20 s / 6.5 | 0.27 s / 10.5 |
-| weaver | 0.13 s / 2.6 | 0.53 s / 4.8 | 0.83 s / 7.8 | 0.90 s / 13.8 |
-| pinwheel | 0.17 s / 3.0 | 0.70 s / 5.4 | 1.00 s / 8.4 | 1.13 s / 14.5 |
-| splitter | 0.53 s / 6.4 | 1.47 s / 11.5 | 1.80 s / 17.5 | 1.83 s / 31.1 |
-| vortex | 1.67 s / 13.8 | 3.40 s / 24.9 | 3.63 s / 35.5 | 3.37 s / 55.3 |
-| boss | 8.67 s / 78.5 | 12.17 s / 107 | 11.07 s / 142 | 8.67 s / 205 |
+| swarmer | 0.00 s / 1.5 (58% one-hit) | 0.10 s / 2.7 | 0.23 s / 4.2 | 0.40 s / 7.0 |
+| mini-splitter | 0.10 s / 2.2 | 0.17 s / 4.1 | 0.23 s / 6.5 | 0.30 s / 10.5 |
+| weaver | 0.13 s / 2.6 | 0.57 s / 4.9 | 0.87 s / 8.1 | 0.90 s / 14.1 |
+| pinwheel | 0.17 s / 3.0 | 0.73 s / 5.5 | 1.07 s / 8.9 | 1.17 s / 14.9 |
+| splitter | 0.53 s / 6.4 | 1.53 s / 11.8 | 1.90 s / 18.4 | 1.87 s / 31.9 |
+| vortex | 1.67 s / 13.8 | 3.53 s / 25.7 | 3.93 s / 37.8 | 3.47 s / 56.9 |
+| boss | 8.67 s / 78.5 | 12.17 s / 108 | 11.10 s / 145 | 8.67 s / 205 |
 
 This confirms the playtest note "many enemies die too quickly and feel alike". In waves 1–3, **pinwheels and weavers die in 0.13–0.17 s**, one or two blaster volleys, which is barely slower than a swarmer pop. Durable archetypes only become durable from wave ~7. After wave ~13, TTK flattens for every type because player damage keeps pace with the HP curve. The difficulty spike comes from contact pressure, not from tankier enemies.
 

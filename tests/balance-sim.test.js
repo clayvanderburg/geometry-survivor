@@ -42,6 +42,27 @@ test('every weapon card in UPGRADE_POOL is discovered and deals damage under its
   }
 });
 
+test('time-to-kill only counts enemies a weapon actually hit (Supernova sweeps and rams are excluded)', () => {
+  const m = h.createMetrics();
+  const game = { wave: 4, elapsedTime: 10 };
+  m.kill({ type: 'swarmer', bornAt: 8 }, 'supernova', game);
+  m.kill({ type: 'swarmer', bornAt: 8, firstHitAt: 9.5, hitsTaken: 1 }, 'blaster', game);
+  m.kill({ type: 'swarmer', bornAt: 8, firstHitAt: 9, hitsTaken: 3 }, 'blaster', game);
+  assert.equal(m.killsByType.swarmer, 3);
+  const t = m.ttk['swarmer|4'];
+  assert.equal(t.n, 2);
+  assert.equal(t.oneHit, 1);
+  assert.equal(t.hits, 4);
+});
+
+test('weapon discovery installs each card on a real fresh-run player', () => {
+  const byId = Object.fromEntries(h.classifyUpgrades().map(c => [c.id, c]));
+  for (const u of h.UPGRADE_POOL) assert.ok(byId[u.id], `${u.id} classified`);
+  assert.equal(byId.missiles.isWeapon, true);
+  assert.equal(byId.pierce.isWeapon, false);
+  assert.equal(byId.multishot.isWeapon, false);
+});
+
 test('strategies cover every upgrade automatically and drop unknown ids', () => {
   const pool = [{ id: 'alpha', name: 'A' }, { id: 'evo', name: 'E', isSynergy: true }];
   const list = buildStrategies(pool, { focus: true });
