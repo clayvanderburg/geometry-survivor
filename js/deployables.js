@@ -6,7 +6,7 @@
 // damage goes through Game.hitEnemy: turret/drone bolts ride the shared bullet sweep (asteroid
 // cover blocks them), mine bursts use Game.damageEnemiesInRadius.
 import { TUNING } from './config.js';
-import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius } from './weapon-scaling.js';
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
 
@@ -125,8 +125,8 @@ export class Deployables {
     m.age = 0;
     m.life = W.mineLifetime(level);
     m.trigger = W.mineTriggerRadius(level);
-    m.blast = W.mineBlastRadius(level);
-    m.damage = p.stats.damage * W.mineDamageMult(level) * (TUNING.deployableDamageMult ?? 1);
+    m.blast = mineBlastRadius(p, level);
+    m.damage = weaponDamage(p, 'mine', level);
     m.spin = this.time * 1.7;
   }
 
@@ -241,11 +241,11 @@ export class Deployables {
 
   fireTurretBolt(game, t, level) {
     const p = game.player;
-    const damage = p.stats.damage * W.turretDamageMult(level) * (TUNING.deployableDamageMult ?? 1);
+    const damage = weaponDamage(p, 'turret', level);
     const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
     if (p.weapons.siegeBattery) {
-      b.blastRadius = W.siegeShellRadius;
-      b.blastDamage = damage * W.siegeShellDamageMult;
+      b.blastRadius = siegeShellRadius(p);
+      b.blastDamage = weaponDamage(p, 'siege', level);
       b.hue = 24; // amber-hot shells read as explosive
     }
     t.flash = 1;
@@ -277,7 +277,7 @@ export class Deployables {
     const spacing = TUNING.droneFormationRadius ?? 54;
     const range = W.droneRange(level);
     const rate = W.droneFireRate(level);
-    const damage = p.stats.damage * W.droneDamageMult(level) * (TUNING.deployableDamageMult ?? 1);
+    const damage = weaponDamage(p, 'drone', level);
     for (let i = 0; i < n; i++) {
       const d = this.drones[i];
       const [slotAngle, slotScale] = n === 1 ? DRONE_SLOTS[2] : DRONE_SLOTS[i];

@@ -602,6 +602,8 @@ export function classifyUpgrades() {
     const player = JSON.parse(fresh);
     const before = JSON.stringify(player.weapons);
     applyUpgradeLevels(player, { ...u, levelJump: 1 });
-    return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isWeapon: JSON.stringify(player.weapons) !== before };
+    // Damage-type cards (Thermite, Cryo, Nanite) flag a weapon modifier, not a weapon of their own.
+    const isModifier = u.category === 'DAMAGE TYPE';
+    return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isModifier, isWeapon: !isModifier && JSON.stringify(player.weapons) !== before };
   });
 }

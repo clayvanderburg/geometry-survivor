@@ -27,6 +27,7 @@ export class SoundEngine {
     this.lastGeomTime = 0;
     this.lastShotSound = 0;
     this.lastExplosionSound = 0;
+    this.lastCritSound = 0;
 
     // Interactive Music Sequencer State
     this.isPlayingMusic = false;
@@ -458,6 +459,31 @@ export class SoundEngine {
     gain.connect(this.sfxGain);
     osc.start(t);
     osc.stop(t + 0.075);
+  }
+
+  // Critical hit: a short bright two-partial "tink" over the impact. Throttled so a crit-heavy
+  // build (orbit blades roll crits every tick) ticks rhythmically instead of buzzing.
+  playCrit() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - this.lastCritSound < 70) return;
+    this.lastCritSound = now;
+
+    const t = this.ctx.currentTime;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    gain.connect(this.sfxGain);
+    for (let k = 0; k < 2; k++) {
+      const freq = k === 0 ? 1760 : 2637;
+      const osc = this.ctx.createOscillator();
+      osc.type = k === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.25, t + 0.05);
+      osc.connect(gain);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    }
   }
 
   playExplosion(intensity = 1) {
