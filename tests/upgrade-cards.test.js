@@ -226,3 +226,24 @@ test('Storm Protocol shows its extra missile launcher as +1 STORM on missile car
   assert.deepEqual(d.bonus, { amount: 1, label: 'STORM' });
   assert.match(levelText(d), /LV 1 → LV 2 <span class="lv-bonus">\+1 STORM<\/span>/);
 });
+
+test('missile and turret cards preview the faster, lighter-hitting retune', () => {
+  const p = makePlayer();
+  const d = TUNING.baseDamage;
+  const row = (desc, id) => desc.rows.find((r) => r.id === id);
+  p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
+  const m = describeUpgrade(p, { ...byId('missiles'), levelJump: 1 });
+  // Salvos every 1.44 s -> 1.36 s (was 1.80 s -> 1.70 s); each missile hits 20% lighter than before.
+  assert.deepEqual(row(m, 'missileCooldown'), { id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.36s' });
+  assert.equal(row(m, 'missileDamage').before, (d * W.missileDamageMult(1)).toFixed(1));
+  assert.equal(row(m, 'missileDamage').after, (d * W.missileDamageMult(2)).toFixed(1));
+  assert.ok(Math.abs(W.missileDamageMult(1) - 0.8 * 3 * 1.8 / 2) < 1e-9);
+
+  p.upgradeLevels.turret = 1; p.weapons.turret = 1;
+  const t = describeUpgrade(p, { ...byId('turret'), levelJump: 1 });
+  // Twice the bolts (3.05/s -> 6.10/s at LV 1) at half the damage per bolt.
+  assert.deepEqual(row(t, 'turretFireRate'), { id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '7.00/s' });
+  const k = TUNING.deployableDamageMult ?? 1;
+  assert.equal(row(t, 'turretDamage').before, (d * W.turretDamageMult(1) * k).toFixed(1));
+  assert.equal(row(t, 'turretDamage').after, (d * W.turretDamageMult(2) * k).toFixed(1));
+});

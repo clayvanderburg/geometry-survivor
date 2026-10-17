@@ -1,4 +1,8 @@
 // High-Velocity Sparks, Geometric Shatter Shards, Shockwaves, and Lightning FX
+const FLASH_POOL = 64;
+const TRAIL_CAP = 48;
+const LIGHTNING_CAP = 72;
+const LIGHTNING_REJAG = 0.035; // seconds between re-jags of a lingering bolt (the crackle flicker)
 export class ParticleSystem {
   constructor() {
     this.sparks = [];
@@ -16,14 +20,62 @@ export class ParticleSystem {
     this.critFlares = Array.from({ length: 48 }, () => ({ x: 0, y: 0, size: 0, spin: 0, life: 0, maxLife: 1 }));
     this.critCount = 0;
     this.critNext = 0;
+    // Pooled glow flashes (muzzle, launch and impact blooms): soft disc plus white-hot core.
+    this.flashes = Array.from({ length: FLASH_POOL }, () => ({ x: 0, y: 0, size: 0, hue: 0, life: 0, maxLife: 1 }));
+    this.flashCount = 0;
+    this.flashNext = 0;
+    // Fading exhaust trails left behind by detonated missiles (polyline handed over, not copied).
+    this.trails = [];
+    // Live tuning source ({ vfxIntensity, vfxLinger }); main.js points this at TUNING. Missing
+    // values fall back to 1 so standalone systems (Field Guide previews, tests) look the same.
+    this.tuning = null;
   }
 
+  // Brightness/width multiplier and lifetime multiplier for weapon effects (user knobs).
+  get intensity() { return this.tuning?.vfxIntensity ?? 1; }
+  get linger() { return this.tuning?.vfxLinger ?? 1; }
+
   clear() {
-    for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages', 'infall']) this[key].length = 0;
+    for (const key of ['sparks', 'shards', 'shockwaves', 'lightnings', 'floatTexts', 'afterimages', 'infall', 'trails']) this[key].length = 0;
     this.impactCount = 0;
     this.impactNext = 0;
     this.critCount = 0;
     this.critNext = 0;
+    this.flashCount = 0;
+    this.flashNext = 0;
+  }
+
+  // Glow flash: a soft hue disc that swells while a white core collapses (pooled, no allocation).
+  // Lifetime scales with vfxLinger.
+  spawnFlash(x, y, size, hue = 190, life = 0.16) {
+    let slot;
+    if (this.flashCount < this.flashes.length) {
+      slot = this.flashes[this.flashCount++];
+    } else {
+      slot = this.flashes[this.flashNext];
+      this.flashNext = (this.flashNext + 1) % this.flashes.length;
+    }
+    slot.x = x;
+    slot.y = y;
+    slot.size = size;
+    slot.hue = hue;
+    slot.life = slot.maxLife = life * this.linger;
+  }
+
+  // Exhaust trail that keeps glowing after its owner is gone. `points` ({x, y}[]) is taken over.
+  spawnTrail(points, hue, width = 1, life = 0.4) {
+    if (!points || points.length < 2) return;
+    if (this.trails.length >= TRAIL_CAP) this.trails.shift();
+    const l = life * this.linger;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const pt = points[i];
+      if (pt.x < minX) minX = pt.x;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+    this.trails.push({ points, hue, width, life: l, maxLife: l, minX, minY, maxX, maxY });
   }
 
   // Critical-hit flare: a sharp gold 8-point star that snaps open and collapses (pooled, no allocation).
@@ -140,7 +192,10 @@ export class ParticleSystem {
   }
 
   // inward = true contracts from maxRadius to the centre and brightens (implosion wind-up).
+  // Outward rings last vfxLinger x `duration`; inward rings keep their timing (they are synced
+  // to gameplay, e.g. the singularity wind-up).
   spawnShockwave(x, y, maxRadius, hue, lineWidth = 4, duration = 0.42, inward = false) {
+    if (!inward) duration *= this.linger;
     this.shockwaves.push({
       x,
       y,
@@ -182,31 +237,63 @@ export class ParticleSystem {
     }
   }
 
-  spawnLightning(x1, y1, x2, y2, hue = 190) {
-    const segments = [];
-    const steps = 6;
-    let cx = x1;
-    let cy = y1;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const tx = x1 + (x2 - x1) * t;
-      const ty = y1 + (y2 - y1) * t;
-      const jitter = i < steps ? (Math.random() - 0.5) * 26 : 0;
-      const perpX = -(y2 - y1);
-      const perpY = x2 - x1;
-      const len = Math.hypot(perpX, perpY) || 1;
-      const nx = tx + (perpX / len) * jitter;
-      const ny = ty + (perpY / len) * jitter;
-      segments.push({ x1: cx, y1: cy, x2: nx, y2: ny });
-      cx = nx;
-      cy = ny;
+  // Tesla bolt from (x1, y1) to (x2, y2): a jagged main channel with optional side forks. It lingers
+  // (life x vfxLinger) and re-jags every LIGHTNING_REJAG seconds while it fades, so it crackles
+  // instead of vanishing. `width` scales every stroke; `branches` is the number of side forks.
+  spawnLightning(x1, y1, x2, y2, hue = 190, width = 1, life = 0.28, branches = -1) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const steps = Math.max(4, Math.min(14, Math.round(len / 22)));
+    const amp = Math.min(30, 5 + len * 0.085);
+    if (branches < 0) branches = len > 90 ? 1 + (Math.random() < 0.45 ? 1 : 0) : len > 45 ? 1 : 0;
+    const forks = [];
+    for (let k = 0; k < branches; k++) {
+      const m = 2 + Math.floor(Math.random() * 3);
+      forks.push({
+        at: 1 + Math.floor(Math.random() * (steps - 1)), // main-channel vertex the fork leaves from
+        ang: (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.6),
+        len: len * (0.22 + Math.random() * 0.2),
+        off: new Float32Array(m + 1)
+      });
     }
-    this.lightnings.push({
-      segments,
+    const l = life * this.linger;
+    const pad = amp + len * 0.45;
+    const bolt = {
+      x1, y1, x2, y2,
+      ux: dx / len, uy: dy / len, len, amp,
+      off: new Float32Array(steps + 1),
+      forks,
       hue,
-      life: 0.18,
-      maxLife: 0.18
-    });
+      width,
+      flick: 1,
+      rejag: LIGHTNING_REJAG,
+      life: l,
+      maxLife: l,
+      minX: Math.min(x1, x2) - pad, maxX: Math.max(x1, x2) + pad,
+      minY: Math.min(y1, y2) - pad, maxY: Math.max(y1, y2) + pad
+    };
+    this.jag(bolt);
+    if (this.lightnings.length >= LIGHTNING_CAP) this.lightnings.shift();
+    this.lightnings.push(bolt);
+    return bolt;
+  }
+
+  // Re-roll a bolt's perpendicular offsets (ends pinned, the middle swings widest) and its forks.
+  jag(bolt) {
+    const off = bolt.off;
+    const n = off.length - 1;
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      off[i] = (Math.random() - 0.5) * 2 * bolt.amp * (0.35 + 0.65 * Math.sin(Math.PI * t));
+    }
+    off[0] = off[n] = 0;
+    for (let k = 0; k < bolt.forks.length; k++) {
+      const f = bolt.forks[k];
+      const m = f.off.length - 1;
+      for (let j = 1; j <= m; j++) f.off[j] = (Math.random() - 0.5) * f.len * 0.45;
+      f.off[0] = 0;
+    }
   }
 
   spawnFloatText(x, y, text, color = '#00f3ff', size = 14) {
@@ -337,13 +424,37 @@ export class ParticleSystem {
       }
     }
 
-    // Update Lightnings
+    // Update Lightnings: lingering bolts re-jag and flicker as they fade.
     for (let i = this.lightnings.length - 1; i >= 0; i--) {
-      this.lightnings[i].life -= dt;
-      if (this.lightnings[i].life <= 0) {
+      const l = this.lightnings[i];
+      l.life -= dt;
+      if (l.life <= 0) {
         this.lightnings.splice(i, 1);
+        continue;
+      }
+      l.rejag -= dt;
+      if (l.rejag <= 0) {
+        l.rejag += LIGHTNING_REJAG;
+        this.jag(l);
+        l.flick = l.life / l.maxLife > 0.8 ? 1 : 0.55 + Math.random() * 0.45;
       }
     }
+
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      this.trails[i].life -= dt;
+      if (this.trails[i].life <= 0) this.trails.splice(i, 1);
+    }
+
+    for (let i = this.flashCount - 1; i >= 0; i--) {
+      const fl = this.flashes[i];
+      fl.life -= dt;
+      if (fl.life <= 0) {
+        const last = this.flashes[--this.flashCount];
+        this.flashes[this.flashCount] = fl;
+        this.flashes[i] = last;
+      }
+    }
+    if (this.flashNext >= this.flashCount) this.flashNext = 0;
 
     // Update Afterimages
     for (let i = this.afterimages.length - 1; i >= 0; i--) {
@@ -411,6 +522,40 @@ export class ParticleSystem {
     }
   }
 
+  // Build the main-channel path of a bolt from its current offsets.
+  traceBolt(ctx, l) {
+    const off = l.off;
+    const n = off.length - 1;
+    const px = -l.uy, py = l.ux;
+    ctx.beginPath();
+    ctx.moveTo(l.x1, l.y1);
+    for (let i = 1; i <= n; i++) {
+      const d = (l.len * i) / n;
+      ctx.lineTo(l.x1 + l.ux * d + px * off[i], l.y1 + l.uy * d + py * off[i]);
+    }
+  }
+
+  // Build every fork path of a bolt: each leaves a main-channel vertex at an angle and jitters out.
+  traceForks(ctx, l) {
+    const n = l.off.length - 1;
+    const px = -l.uy, py = l.ux;
+    ctx.beginPath();
+    for (let k = 0; k < l.forks.length; k++) {
+      const f = l.forks[k];
+      const d0 = (l.len * f.at) / n;
+      const sx = l.x1 + l.ux * d0 + px * l.off[f.at];
+      const sy = l.y1 + l.uy * d0 + py * l.off[f.at];
+      const c = Math.cos(f.ang), s = Math.sin(f.ang);
+      const fx = l.ux * c - l.uy * s, fy = l.ux * s + l.uy * c;
+      const m = f.off.length - 1;
+      ctx.moveTo(sx, sy);
+      for (let j = 1; j <= m; j++) {
+        const d = (f.len * j) / m;
+        ctx.lineTo(sx + fx * d - fy * f.off[j], sy + fy * d + fx * f.off[j]);
+      }
+    }
+  }
+
   draw(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
     const visible = (x, y, r) => x + r >= camX && y + r >= camY && x - r <= camX + viewW && y - r <= camY + viewH;
     ctx.save();
@@ -438,24 +583,43 @@ export class ParticleSystem {
       ctx.restore();
     }
 
-    // 2. Draw Expanding Shockwave Rings
+    // 2. Draw Expanding Shockwave Rings. Outward rings hold their brightness a little before fading
+    // (alpha eases out) and keep a minimum width so they stay readable to the end.
+    const vfx = this.intensity;
     for (let i = 0; i < this.shockwaves.length; i++) {
       const sw = this.shockwaves[i];
       if (!visible(sw.x, sw.y, sw.radius + sw.lineWidth * 3)) continue;
       const fade = Math.max(0, sw.life / sw.maxLife);
-      const alpha = sw.inward ? Math.min(1, 1.25 - fade) : fade;
+      const alpha = sw.inward ? Math.min(1, 1.25 - fade) : Math.pow(fade, 0.7);
       // Outer neon halo
-      ctx.strokeStyle = `hsla(${sw.hue}, 100%, 60%, ${alpha * 0.55})`;
-      ctx.lineWidth = sw.lineWidth * 2.5 * alpha;
+      ctx.strokeStyle = `hsla(${sw.hue}, 100%, 60%, ${Math.min(1, alpha * 0.55 * vfx)})`;
+      ctx.lineWidth = sw.lineWidth * 2.5 * (0.35 + 0.65 * alpha) * vfx;
       ctx.beginPath();
       ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
       ctx.stroke();
 
       // Inner white-hot core ring
-      ctx.strokeStyle = `hsla(${sw.hue}, 100%, 88%, ${alpha * 0.9})`;
-      ctx.lineWidth = Math.max(1, sw.lineWidth * alpha);
+      ctx.strokeStyle = `hsla(${sw.hue}, 100%, 88%, ${Math.min(1, alpha * 0.9 * vfx)})`;
+      ctx.lineWidth = Math.max(1, sw.lineWidth * (0.4 + 0.6 * alpha) * vfx);
       ctx.beginPath();
       ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 2b. Lingering exhaust trails: a wide soft glow under a thin bright core, fading out.
+    for (let i = 0; i < this.trails.length; i++) {
+      const tr = this.trails[i];
+      if (tr.maxX + 12 < camX || tr.minX - 12 > camX + viewW || tr.maxY + 12 < camY || tr.minY - 12 > camY + viewH) continue;
+      const a = Math.max(0, tr.life / tr.maxLife);
+      const pts = tr.points;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+      ctx.strokeStyle = `hsla(${tr.hue}, 100%, 62%, ${Math.min(1, a * 0.28 * vfx)})`;
+      ctx.lineWidth = 7 * tr.width * vfx * (0.5 + 0.5 * a);
+      ctx.stroke();
+      ctx.strokeStyle = `hsla(${tr.hue}, 100%, 80%, ${Math.min(1, a * 0.6 * vfx)})`;
+      ctx.lineWidth = 1.8 * tr.width;
       ctx.stroke();
     }
 
@@ -495,23 +659,56 @@ export class ParticleSystem {
     // streaks cost a handful of strokes. The outer band is dim; the inner band runs white-hot.
     if (this.infall.length) this.drawInfall(ctx, visible);
 
-    // 5. Draw Chain Lightning Arcs
-    for (let i = 0; i < this.lightnings.length; i++) {
-      const l = this.lightnings[i];
-      if (!l.segments.some(seg => Math.max(seg.x1, seg.x2) >= camX && Math.min(seg.x1, seg.x2) <= camX + viewW && Math.max(seg.y1, seg.y2) >= camY && Math.min(seg.y1, seg.y2) <= camY + viewH)) continue;
-      const alpha = l.life / l.maxLife;
-      ctx.strokeStyle = `hsla(${l.hue}, 100%, 75%, ${alpha})`;
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      for (const seg of l.segments) {
-        ctx.moveTo(seg.x1, seg.y1);
-        ctx.lineTo(seg.x2, seg.y2);
+    // 5. Draw Chain Lightning Arcs: outer halo, hue glow and white-hot core over the main channel,
+    // then glow + core over the side forks. Bright for the first moments, then a flickering fade.
+    if (this.lightnings.length) {
+      ctx.lineJoin = 'bevel';
+      for (let i = 0; i < this.lightnings.length; i++) {
+        const l = this.lightnings[i];
+        if (l.maxX < camX || l.minX > camX + viewW || l.maxY < camY || l.minY > camY + viewH) continue;
+        const t = 1 - l.life / l.maxLife;
+        const alpha = (t < 0.15 ? 1 : Math.pow((1 - t) / 0.85, 1.2)) * l.flick;
+        const w = l.width * vfx;
+        this.traceBolt(ctx, l);
+        if (l.width >= 0.7) {
+          // Crackle stubs (thin bolts) skip the wide halo: it is the costliest pass.
+          ctx.strokeStyle = `hsla(${l.hue}, 100%, 62%, ${Math.min(1, alpha * 0.3 * vfx)})`;
+          ctx.lineWidth = 13 * w;
+          ctx.stroke();
+        }
+        ctx.strokeStyle = `hsla(${l.hue}, 100%, 72%, ${Math.min(1, alpha * 0.85 * vfx)})`;
+        ctx.lineWidth = 5 * w * (0.6 + 0.4 * alpha);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, alpha)})`;
+        ctx.lineWidth = 1.9 * w * (0.6 + 0.4 * alpha);
+        ctx.stroke();
+        if (l.forks.length) {
+          this.traceForks(ctx, l);
+          ctx.strokeStyle = `hsla(${l.hue}, 100%, 72%, ${Math.min(1, alpha * 0.6 * vfx)})`;
+          ctx.lineWidth = 3 * w * (0.6 + 0.4 * alpha);
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, alpha * 0.8)})`;
+          ctx.lineWidth = 1.1 * w;
+          ctx.stroke();
+        }
       }
-      ctx.stroke();
+      ctx.lineJoin = 'miter';
+    }
 
-      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+    // 5b. Glow flashes: soft swelling hue disc plus a collapsing white core.
+    for (let i = 0; i < this.flashCount; i++) {
+      const fl = this.flashes[i];
+      if (!visible(fl.x, fl.y, fl.size * 1.3)) continue;
+      const a = Math.max(0, fl.life / fl.maxLife);
+      const k = 1 - a;
+      ctx.fillStyle = `hsla(${fl.hue}, 100%, 62%, ${Math.min(1, a * 0.3 * vfx)})`;
+      ctx.beginPath();
+      ctx.arc(fl.x, fl.y, fl.size * (0.75 + 0.5 * k), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `hsla(${fl.hue}, 100%, 92%, ${Math.min(1, a * 0.85 * vfx)})`;
+      ctx.beginPath();
+      ctx.arc(fl.x, fl.y, fl.size * 0.34 * (1 - 0.6 * k), 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // 6. Hit Impact Flares: one batched stroke — a long flare across the shot, a short one along it.

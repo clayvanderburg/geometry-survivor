@@ -3,6 +3,9 @@
 // upgrades only for owned weapons; a NEW WEAPON card (see upgrades.js) fills a free slot with a pick
 // of 1 of 3 unowned weapons. Discarding a weapon frees its slot (upgrades.js discardWeapon).
 //
+// Passives (PASSIVES below, e.g. Volatile Shatter) are not weapons: they take no slot and level
+// through ordinary level-up hands.
+//
 // Each weapon: `levelId` is the UPGRADE_POOL line that is the weapon's own level (null for Pew Pews,
 // whose power comes from its upgrade lines), `levelKey` the player.weapons key that line raises,
 // `tagSources` the WEAPON_TAGS entries the weapon fires (its tag chips and the tag cards it unlocks).
@@ -42,11 +45,6 @@ export const WEAPONS = [
     summary: 'Saw-triangles orbit the hull and shred anything they touch.'
   },
   {
-    id: 'shrapnel', name: 'Volatile Shatter', hudName: 'Shatter', levelId: 'shrapnel', levelKey: 'shrapnel', category: 'PASSIVE', tagSources: ['shrapnel'],
-    color: '#d6dde8',
-    summary: 'Kills burst into ricochet shards that set off chain reactions.'
-  },
-  {
     id: 'mines', name: 'Proximity Mines', hudName: 'Proximity Mines', levelId: 'mines', levelKey: 'mines', category: 'DEPLOYABLE', tagSources: ['mine'],
     color: '#ff5a5a',
     summary: 'Mines dropped in your wake that arm, then burst when an enemy drifts close.'
@@ -63,6 +61,19 @@ export const WEAPONS = [
   }
 ];
 
+// Passives fight on their own but are not weapons: no slot, no NEW WEAPON pick, never discarded.
+// Their UPGRADE_POOL line (`upgradeId`) is a general upgrade offered in normal level-up hands with
+// the usual level jumps; owning it at LV 1+ unlocks the tag cards for its `tagSources` tags.
+export const PASSIVES = [
+  {
+    id: 'shrapnel', name: 'Volatile Shatter', upgradeId: 'shrapnel', levelKey: 'shrapnel', tagSources: ['shrapnel'],
+    color: '#d6dde8',
+    summary: 'Kills burst into ricochet shards that set off chain reactions.'
+  }
+];
+
+export const PASSIVE_BY_ID = Object.fromEntries(PASSIVES.map((x) => [x.id, x]));
+
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
@@ -70,9 +81,9 @@ export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.lev
 // The crab's starting kit: Pew Pews only; Wing Rockets join through NEW WEAPON like every other weapon.
 export const STARTING_WEAPONS = ['blaster'];
 
-// Union of the weapon's tags (chips on its cards and loadout slot).
+// Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).
 export function weaponTags(id) {
-  const w = WEAPON_BY_ID[id];
+  const w = WEAPON_BY_ID[id] || PASSIVE_BY_ID[id];
   const tags = [];
   for (const src of w?.tagSources || []) for (const t of WEAPON_TAGS[src] || []) if (!tags.includes(t)) tags.push(t);
   return tags;
@@ -97,9 +108,18 @@ export function weaponLevel(p, id) {
   return w?.levelId ? (p.upgradeLevels?.[w.levelId] || 0) : 0;
 }
 
-// Every tag carried by an owned weapon (tag cards are only offered for these).
+// Passives the player has installed (LV 1+), in registry order.
+export function ownedPassives(p) {
+  return PASSIVES.filter((x) => (p.upgradeLevels?.[x.upgradeId] || p.weapons?.[x.levelKey] || 0) > 0).map((x) => x.id);
+}
+
+// Passive level shown on the loadout panel.
+export const passiveLevel = (p, id) => p.upgradeLevels?.[PASSIVE_BY_ID[id]?.upgradeId] || 0;
+
+// Every tag carried by an owned weapon or passive (tag cards are only offered for these).
 export function ownedTags(p) {
   const tags = new Set();
   for (const id of ownedWeapons(p)) for (const t of weaponTags(id)) tags.add(t);
+  for (const id of ownedPassives(p)) for (const t of weaponTags(id)) tags.add(t);
   return tags;
 }

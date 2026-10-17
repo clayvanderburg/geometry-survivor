@@ -54,17 +54,33 @@ export const DEFAULT_TUNING = {
   musicBpm: 132,
   screenShakeMult: 1.0,
   gridWarpMult: 1.0,
+  vfxIntensity: 1.0,
+  vfxLinger: 1.0,
   enemySpeedMult: 1.0,
   enemyHpMult: 1.0,
 
   // 6. Gravity Wells & Singularities (pulls are px/tick² at the core, eased to 0 at the rim)
   blackholePullRadius: 200,
-  blackholePlayerPull: 0.4,
+  // Ship tug as a share of the ship's own thrust: edge share at the rim, ramping linearly to the inner
+  // share at `blackholePlayerPullInnerAt` × radius from the core, then holding (always < 100%: escapable).
+  blackholePlayerPullEdge: 0.5,
+  blackholePlayerPullInner: 0.75,
+  blackholePlayerPullInnerAt: 0.5,
   blackholeEnemyPull: 0.45,
   blackholeBulletBend: 0.22,
   blackholePickupPull: 0.3,
   singularityPull: 0.75,
   singularityCollapseMult: 1.0,
+
+  // 6b. Spawn Placement & Pursuit (where enemies appear and how they close in; not how many or how tough)
+  spawnRingMarginMin: 40,
+  spawnRingMarginMax: 160,
+  spawnAheadBias: 0.5,
+  spawnOnscreenTelegraph: 1.4,
+  spawnMinDist: 260,
+  pursuitCatchupStart: 900,
+  pursuitCatchupMax: 1.8,
+  lieutenantSpeedMult: 1.35,
 
   // 7. Boss Encounters (presentation only; boss stats and rewards are unchanged)
   bossWarningTime: 3.0,
@@ -215,6 +231,8 @@ export const TUNING_SCHEMA = [
       { key: 'musicBpm', label: 'Synthwave Tempo (BPM)', type: 'range', min: 85, max: 180, step: 1, unit: 'BPM' },
       { key: 'screenShakeMult', label: 'Screen Shake Intensity', type: 'range', min: 0.0, max: 2.5, step: 0.1, unit: 'x' },
       { key: 'gridWarpMult', label: 'Neon Grid Warp Force', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
+      { key: 'vfxIntensity', label: 'Weapon FX Brightness & Size', type: 'range', min: 0.3, max: 2.0, step: 0.05, unit: 'x' },
+      { key: 'vfxLinger', label: 'Weapon FX Linger (fade time)', type: 'range', min: 0.3, max: 2.5, step: 0.05, unit: 'x' },
       { key: 'enemySpeedMult', label: 'Enemy Speed Multiplier', type: 'range', min: 0.4, max: 2.5, step: 0.05, unit: 'x' },
       { key: 'enemyHpMult', label: 'Enemy HP Multiplier', type: 'range', min: 0.3, max: 3.0, step: 0.1, unit: 'x' }
     ]
@@ -223,12 +241,27 @@ export const TUNING_SCHEMA = [
     group: '🌀 Gravity Wells & Singularities',
     items: [
       { key: 'blackholePullRadius', label: 'Vortex Pull Radius', type: 'range', min: 80, max: 400, step: 5, unit: 'px' },
-      { key: 'blackholePlayerPull', label: 'Vortex Tug on Ship (capped)', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
+      { key: 'blackholePlayerPullEdge', label: 'Vortex Tug on Ship at Rim (share of thrust)', type: 'range', min: 0, max: 0.8, step: 0.05, unit: 'x' },
+      { key: 'blackholePlayerPullInner', label: 'Vortex Tug on Ship, Inner (share of thrust)', type: 'range', min: 0, max: 0.8, step: 0.05, unit: 'x' },
+      { key: 'blackholePlayerPullInnerAt', label: 'Inner Tug Reached at (share of radius from core)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
       { key: 'blackholeEnemyPull', label: 'Vortex Pull on Enemies', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'blackholeBulletBend', label: 'Vortex Bullet Bending', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
       { key: 'blackholePickupPull', label: 'Vortex Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'singularityPull', label: 'Vortex Singularity Pull', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'px/t²' },
       { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' }
+    ]
+  },
+  {
+    group: '📍 Spawn Placement & Pursuit',
+    items: [
+      { key: 'spawnRingMarginMin', label: 'Spawn Ring: Min Distance Past Screen Edge', type: 'range', min: 0, max: 400, step: 10, unit: 'px' },
+      { key: 'spawnRingMarginMax', label: 'Spawn Ring: Max Distance Past Screen Edge', type: 'range', min: 20, max: 800, step: 10, unit: 'px' },
+      { key: 'spawnAheadBias', label: 'Share of Spawns Ahead of the Ship', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'spawnOnscreenTelegraph', label: 'On-Screen Spawn Telegraph', type: 'range', min: 0.6, max: 3.0, step: 0.1, unit: 's' },
+      { key: 'spawnMinDist', label: 'Min Spawn Distance from Ship', type: 'range', min: 120, max: 600, step: 10, unit: 'px' },
+      { key: 'pursuitCatchupStart', label: 'Off-Screen Catch-Up Starts Beyond', type: 'range', min: 400, max: 3000, step: 50, unit: 'px' },
+      { key: 'pursuitCatchupMax', label: 'Off-Screen Catch-Up Max Speed', type: 'range', min: 1.0, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'lieutenantSpeedMult', label: 'Lieutenant Move Speed', type: 'range', min: 0.5, max: 2.0, step: 0.05, unit: 'x' }
     ]
   },
   {

@@ -171,7 +171,7 @@ test('every enemy type the game can spawn has a guide entry and a preview', () =
     const em = new EnemyManager();
     const g = Object.assign(Object.create(Game.prototype), {
       enemyManager: em, wave: 12, worldWidth: 4200, worldHeight: 4200,
-      spawnAroundPlayer: () => ({ x: 2000, y: 2000 }), announceArchetype() {}
+      spawnPoint: () => ({ x: 2000, y: 2000, onScreen: false }), announceArchetype() {}
     });
     g.spawnWavePack();
     assert.ok(em.spawnIndicators.length > 0, `pack ${pack.id} spawned nothing`);

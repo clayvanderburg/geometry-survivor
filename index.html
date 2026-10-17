@@ -65,7 +65,6 @@
               <input id="hud-volume-slider" type="range" min="0" max="200" step="5" value="100" />
               <span id="hud-volume-label">100%</span>
             </div>
-            <button id="btn-tuner-toggle" class="hud-btn" style="border-color:var(--gold); color:var(--gold);" title="Toggle Live Parameter Tuner [T]">⚙ TUNER [T]</button>
           </div>
         </div>
 
@@ -139,7 +138,7 @@
         <div class="upgrade-header">
           <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
           <h2 class="upgrade-title">SYSTEM PAUSED</h2>
-          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume</p>
+          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume <span class="version-tag version-tag-inline" data-game-version title="Game version"></span></p>
         </div>
 
         <div class="pause-layout">
@@ -174,7 +173,7 @@
           <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
-          <button id="btn-pause-tuner" class="neon-btn" style="border-color:var(--gold); color:var(--gold); padding:12px 18px; font-size:13px;">⚙ TOGGLE LIVE TUNING DRAWER [T]</button>
+          <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
         </div>
@@ -203,6 +202,22 @@
       </div>
     </div>
 
+    <!-- Patch notes: every version's changes, newest first (js/patch-notes.js, data in js/changelog.js) -->
+    <div id="notes-modal" class="modal-overlay guide-overlay notes-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="notes-title">
+      <div class="modal-card guide-card notes-card">
+        <div class="guide-header">
+          <div>
+            <div class="glitch-subtitle">SHIP LOG // WHAT CHANGED</div>
+            <h2 id="notes-title" class="guide-title">📜 PATCH NOTES</h2>
+            <div class="guide-progress notes-sub"><span>YOU ARE FLYING <span class="version-tag" data-game-version></span></span><span>GLOBAL SCORES ARE RANKED PER VERSION</span></div>
+          </div>
+          <button id="btn-notes-close" class="neon-btn guide-close-btn">◀ BACK [ESC]</button>
+        </div>
+        <div id="notes-body" class="guide-body notes-body" tabindex="-1"></div>
+        <div class="guide-foot"><span><b>↑ ↓</b> / <b>D-pad</b> browse</span><span><b>ENTER</b> / <b>A</b> open a version</span><span><b>ESC</b> / <b>B</b> back</span></div>
+      </div>
+    </div>
+
     <!-- In-Game Slide-Over Live Tuner & Sandbox Drawer -->
     <div id="tuner-drawer" class="tuner-drawer hidden">
       <div class="tuner-drawer-header">
@@ -210,7 +225,7 @@
           <div style="font-size:13px; font-weight:800; color:var(--cyan); letter-spacing:1.5px;">⚙ LIVE TUNING STUDIO</div>
           <div style="font-size:10px; color:#8ba3c7;">Changes apply live! Copy &amp; paste to Agent when happy.</div>
         </div>
-        <button id="btn-close-tuner" class="hud-btn">✕ [T]</button>
+        <button id="btn-close-tuner" class="hud-btn">✕</button>
       </div>
       <div class="tuner-drawer-actions">
         <button id="btn-drawer-copy" class="hud-btn active" style="border-color:var(--gold); color:var(--gold);">📋 COPY TUNING FOR AGENT</button>
@@ -241,6 +256,11 @@
           <div>
             <div class="glitch-subtitle">GEOMETRIC SWARM &amp; ASTEROID EXCAVATION ROGUELITE</div>
             <h1 class="neon-title">VEXOLITH<span>//</span><wbr>SURVIVOR</h1>
+            <!-- Version tag + patch notes, right under the logo (version text comes from js/version.js) -->
+            <div class="title-meta">
+              <span class="version-tag" data-game-version title="Game version: leaderboards are ranked per version"></span>
+              <button id="btn-title-notes" class="neon-btn notes-open-btn notes-hub-btn" title="What changed in each version">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
+            </div>
           </div>
           <div class="hub-header-side">
             <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
@@ -266,13 +286,20 @@
 
           <!-- Right: Highscore Leaderboard & Pilot Callsign -->
           <div class="hub-panel">
-            <div class="panel-header">
+            <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
-              <span class="panel-sub">Top Arena Runs</span>
+              <div class="board-tabs" role="tablist" aria-label="Highscore board">
+                <button class="board-tab active" data-board-tab="global" role="tab" aria-selected="true">◎ GLOBAL</button>
+                <button class="board-tab" data-board-tab="local" role="tab" aria-selected="false">MY RUNS</button>
+              </div>
             </div>
             <div class="name-entry-bar" style="margin-bottom:10px;">
               <label for="title-pilot-name" class="name-label">PILOT CALLSIGN:</label>
               <input id="title-pilot-name" type="text" maxlength="18" class="name-input" placeholder="MADKING" value="MADKING" />
+            </div>
+            <div class="board-status board-filter">
+              <div id="highscore-note" class="board-note" aria-live="polite"></div>
+              <div id="title-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
             </div>
             <div id="highscore-list" class="highscore-list"></div>
 
@@ -280,7 +307,7 @@
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
-              <span><b>[T] Key:</b> Live Tuning Studio · <b>[G]:</b> Field Guide</span>
+              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
@@ -288,7 +315,6 @@
 
         <div class="title-actions" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
           <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
-          <a href="tuner.html" target="_blank" class="neon-btn" style="text-decoration:none; border-color:var(--gold); color:var(--gold); padding:14px 20px; font-size:13px;">⚙ OPEN TUNING STUDIO</a>
         </div>
       </div>
     </div>
@@ -326,7 +352,10 @@
         <div class="hub-header">
           <div>
             <div id="gameover-subtitle" class="glitch-subtitle danger-text">SHIELD COLLAPSED // SESSION COMPLETE</div>
-            <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
+            <div class="go-title-row">
+              <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
+              <span class="version-tag" data-game-version title="Game version of this run"></span>
+            </div>
           </div>
           <div class="wallet-pill">
             <span class="wallet-icon">❖</span>
@@ -338,6 +367,7 @@
         </div>
 
         <div id="gameover-stats" class="gameover-stats"></div>
+        <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
 
         <div class="hub-columns">
           <div class="hub-panel">
@@ -349,14 +379,22 @@
           </div>
 
           <div class="hub-panel">
-            <div class="panel-header">
+            <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
-              <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
+              <div class="board-tabs" role="tablist" aria-label="Highscore board">
+                <button class="board-tab active" data-board-tab="global" role="tab" aria-selected="true">◎ GLOBAL</button>
+                <button class="board-tab" data-board-tab="local" role="tab" aria-selected="false">MY RUNS</button>
+              </div>
             </div>
             <div class="name-entry-bar" style="margin-bottom:10px;">
               <label for="go-pilot-name" class="name-label">ENTER NAME:</label>
               <input id="go-pilot-name" type="text" maxlength="18" class="name-input" placeholder="ENTER NAME" />
               <button id="btn-save-name" class="save-name-btn">SAVE</button>
+            </div>
+            <div id="go-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
+            <div class="board-status">
+              <span id="go-board-note" class="board-note" aria-live="polite"></span>
+              <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
             </div>
             <div id="go-highscore-list" class="highscore-list"></div>
           </div>

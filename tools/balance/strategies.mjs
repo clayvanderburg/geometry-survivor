@@ -6,9 +6,9 @@
 // ignored, and every upgrade also gets an automatic "focus:<id>" strategy, so weapons added later are
 // covered without editing this file.
 export const NAMED_STRATEGIES = [
-  { name: 'projectile', desc: 'Pew Pews lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['multishot', 'firerate', 'pierce', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret', 'shrapnel'] },
-  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'rockets', 'mines', 'shrapnel'] },
-  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'shrapnel', 'drones'] },
+  { name: 'projectile', desc: 'Pew Pews lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['multishot', 'firerate', 'pierce', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret'] },
+  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'rockets', 'mines'] },
+  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
   { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters'], weapons: ['singularity', 'mines'] },
   { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters'], pilot: { mineBias: 1.0 } },
   { name: 'random', desc: 'Uniformly random card picks (NEW WEAPON included)', priorities: [] }

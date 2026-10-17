@@ -13,7 +13,7 @@ const { WarpGrid } = await import('../js/grid.js');
 const { ParticleSystem } = await import('../js/particles.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
-const { wellFalloff, wellPullScale, playerPullCap, PLAYER_ESCAPE_THRUST_SHARE } = await import('../js/gravity.js');
+const { wellFalloff, wellPullScale, playerPullCap, playerPullShare, playerPullCapShare, MAX_PLAYER_PULL_SHARE, SHIP_THRUST_PER_TICK } = await import('../js/gravity.js');
 const silent = new Proxy({}, { get: () => () => {} });
 const stubGrid = { applyImpulse() {}, applyImplosion() {} };
 const stubSparks = { applyGravityWell() {} };
@@ -62,60 +62,104 @@ test('well falloff is pinned: full at the core, 62.5% at half radius, zero at an
 
 test('gravity strengths are live-tunable schema sliders whose bounds contain the defaults', () => {
   const items = new Map(TUNING_SCHEMA.flatMap(group => group.items).map(item => [item.key, item]));
-  for (const key of ['blackholePullRadius', 'blackholePlayerPull', 'blackholeEnemyPull', 'blackholeBulletBend', 'blackholePickupPull', 'singularityPull', 'singularityCollapseMult']) {
+  for (const key of ['blackholePullRadius', 'blackholePlayerPullEdge', 'blackholePlayerPullInner', 'blackholePlayerPullInnerAt', 'blackholeEnemyPull', 'blackholeBulletBend', 'blackholePickupPull', 'singularityPull', 'singularityCollapseMult']) {
     const item = items.get(key);
     assert.ok(item, `${key} missing from TUNING_SCHEMA`);
     assert.equal(item.type, 'range');
     assert.ok(item.min <= DEFAULT_TUNING[key] && DEFAULT_TUNING[key] <= item.max, key);
   }
-  // At default tuning a single black hole's core pull already sits under the ship's escape cap.
-  assert.ok(DEFAULT_TUNING.blackholePlayerPull < playerPullCap(DEFAULT_TUNING.moveSpeed));
+  // No slider can push a share of thrust to (or past) 100%.
+  for (const key of ['blackholePlayerPullEdge', 'blackholePlayerPullInner']) assert.ok(items.get(key).max <= MAX_PLAYER_PULL_SHARE && MAX_PLAYER_PULL_SHARE < 1);
 });
 
-test('an idle ship is visibly tugged inside a black hole, with more pull nearer the core', () => {
+test('vortex tug on the ship: 50% of thrust at the rim, linear to 75% at half radius, holding 75% to the core', () => {
+  const R = DEFAULT_TUNING.blackholePullRadius;
+  const share = (d) => playerPullShare(d, R, 22, DEFAULT_TUNING);
+  assert.equal(DEFAULT_TUNING.blackholePlayerPullEdge, 0.5);
+  assert.equal(DEFAULT_TUNING.blackholePlayerPullInner, 0.75);
+  assert.equal(DEFAULT_TUNING.blackholePlayerPullInnerAt, 0.5);
+  assert.equal(share(R), 0, 'nothing at or beyond the rim');
+  assert.equal(share(R + 50), 0);
+  assert.ok(Math.abs(share(R - 1e-9) - 0.5) < 1e-9, 'edge: 50%');
+  assert.ok(Math.abs(share(R * 0.75) - 0.625) < 1e-12, 'linear: 62.5% three-quarters out');
+  assert.ok(Math.abs(share(R * 0.5) - 0.75) < 1e-12, 'half radius: 75%');
+  assert.equal(share(R * 0.25), 0.75, 'holds 75% inside half radius');
+  assert.equal(share(22), 0.75, 'still 75% at the core (event horizon)');
+  assert.ok(share(11) < 0.75 && share(0) === 0, 'eases to zero inside the hull so a ship on the centre is still');
+  for (let d = 0; d < R; d += 2) assert.ok(share(d) < 1, `share below thrust at ${d}px`);
+  for (let d = R * 0.5; d < R - 2; d += 2) assert.ok(share(d) > share(d + 2), 'rises monotonically toward the core');
+  // The tunables steer the curve: inner reached at 30% of the radius instead.
+  const tuned = { ...DEFAULT_TUNING, blackholePlayerPullEdge: 0.3, blackholePlayerPullInner: 0.6, blackholePlayerPullInnerAt: 0.3 };
+  assert.ok(Math.abs(playerPullShare(R * 0.3, R, 0, tuned) - 0.6) < 1e-12);
+  assert.ok(Math.abs(playerPullShare(R * 0.65, R, 0, tuned) - 0.45) < 1e-12);
+  // Even maxed-out sliders stay under thrust.
+  const maxed = { ...DEFAULT_TUNING, blackholePlayerPullEdge: 5, blackholePlayerPullInner: 5 };
+  assert.equal(playerPullCapShare(maxed), MAX_PLAYER_PULL_SHARE);
+  assert.ok(playerPullShare(R * 0.4, R, 0, maxed) <= MAX_PLAYER_PULL_SHARE);
+});
+
+test('in game the ship feels exactly that share of its thrust, and an idle ship is dragged in', () => {
+  const thrust = TUNING.moveSpeed * SHIP_THRUST_PER_TICK;
+  const R = TUNING.blackholePullRadius;
+  for (const [d, expect] of [[R - 0.5, 0.5 + 0.25 * 0.5 / (R * 0.5)], [R * 0.75, 0.625], [R * 0.5, 0.75], [R * 0.2, 0.75]]) {
+    const { game, manager } = arena();
+    const bh = addEnemy(manager, 'blackhole', 2000, 2000);
+    pin(bh, 2000, 2000);
+    game.gravityWells = [bh];
+    game.player.x = 2000 + d;
+    game.applyWellPullToPlayer(game.player);
+    assert.ok(Math.abs(-game.player.vx / thrust - expect) < 1e-9, `at ${d}px the tug is ${(-game.player.vx / thrust).toFixed(3)} of thrust`);
+    assert.ok(game.player.gravityTug < thrust);
+  }
   const travel = (start) => {
     const { game, manager } = arena();
     const bh = addEnemy(manager, 'blackhole', 2000, 2000);
     game.player.x = 2000 + start;
-    for (let t = 0; t < 30; t++) { pin(bh, 2000, 2000); game.update(1 / 60); }
+    for (let t = 0; t < 20; t++) { pin(bh, 2000, 2000); game.update(1 / 60); }
     return start - (game.player.x - 2000);
   };
-  const near = travel(70);
-  const mid = travel(130);
-  const outside = travel(TUNING.blackholePullRadius + 40);
-  assert.ok(mid > 12, `mid-radius tug only moved the ship ${mid.toFixed(1)}px in 0.5s`);
-  assert.ok(near > mid, 'pull must grow toward the core');
-  assert.equal(outside, 0, 'no pull outside the radius');
+  assert.ok(travel(R - 10) > 30, 'an idle ship just inside the rim is pulled in hard');
+  assert.equal(travel(R + 40), 0, 'no pull outside the radius');
 });
 
 test('the ship always escapes stacked black holes at base move speed, even from the event horizon', () => {
-  const maxPull = TUNING_SCHEMA.flatMap(group => group.items).find(item => item.key === 'blackholePlayerPull').max;
+  const items = TUNING_SCHEMA.flatMap(group => group.items);
+  const maxShare = items.find(item => item.key === 'blackholePlayerPullInner').max;
   try {
-    for (const pull of [DEFAULT_TUNING.blackholePlayerPull, maxPull]) {
-      TUNING.blackholePlayerPull = pull;
+    for (const [edge, inner] of [[DEFAULT_TUNING.blackholePlayerPullEdge, DEFAULT_TUNING.blackholePlayerPullInner], [maxShare, maxShare]]) {
+      TUNING.blackholePlayerPullEdge = edge;
+      TUNING.blackholePlayerPullInner = inner;
+      const maxed = inner === maxShare;
       const { game, manager } = arena();
       game.player.stats.moveSpeed = DEFAULT_TUNING.moveSpeed;
-      // Worst case: three wells stacked on one spot, ship starting against the horizon.
+      // Worst case: three wells stacked on one spot, ship starting against the horizon. At default
+      // tuning the wells keep drifting after the ship; with maxed sliders they are held still (a chasing
+      // well then only loses ground slowly, which the terminal-speed check below covers).
       const wells = [0, 1, 2].map(() => addEnemy(manager, 'blackhole', 2000, 2000));
       for (const w of wells) w.hp = w.maxHp = 1e9;
       game.player.x = 2000 + wells[0].radius + game.player.radius;
       game.keys.KeyD = true;
       const cap = playerPullCap(game.player.stats.moveSpeed);
+      assert.ok(cap < game.player.stats.moveSpeed * SHIP_THRUST_PER_TICK, 'summed pull cap is below thrust');
       let last = game.player.x - wells[0].x;
-      for (let t = 0; t < 240; t++) {
+      for (let t = 0; t < 600 && last <= TUNING.blackholePullRadius; t++) {
+        if (maxed) for (const w of wells) pin(w, 2000, 2000);
         game.update(1 / 60);
         const dist = game.player.x - wells[0].x;
-        if (t > 2) assert.ok(dist > last, `pull ${pull}: ship lost ground at tick ${t}`);
-        // Gravity never removes more than the capped share of thrust per tick.
+        // From a standstill at the core the ship needs a short run-up against a 75% pull (drifting wells can
+        // gain a few px in the first ticks); after that it must pull away every tick.
+        if (t > 20) assert.ok(dist > last, `share ${inner}: ship lost ground at tick ${t}`);
         assert.ok(game.player.gravityTug <= cap + 1e-12);
         last = dist;
       }
-      assert.ok(last > TUNING.blackholePullRadius, `pull ${pull}: ship still trapped ${last.toFixed(0)}px from the wells after 4s`);
+      assert.ok(last > TUNING.blackholePullRadius, `share ${inner}: ship still trapped ${last.toFixed(0)}px from the wells after 10s`);
       // Worst-case terminal speed against a capped pull is (1 - share) of move speed, faster than a chasing well.
-      assert.ok((1 - PLAYER_ESCAPE_THRUST_SHARE) * DEFAULT_TUNING.moveSpeed > wells[0].speed);
+      assert.ok((1 - playerPullCapShare()) * DEFAULT_TUNING.moveSpeed > wells[0].speed);
     }
   } finally {
-    TUNING.blackholePlayerPull = DEFAULT_TUNING.blackholePlayerPull; // keep later tests on defaults even if this fails
+    // keep later tests on defaults even if this fails
+    TUNING.blackholePlayerPullEdge = DEFAULT_TUNING.blackholePlayerPullEdge;
+    TUNING.blackholePlayerPullInner = DEFAULT_TUNING.blackholePlayerPullInner;
   }
 });
 

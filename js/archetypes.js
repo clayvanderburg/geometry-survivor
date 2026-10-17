@@ -167,8 +167,10 @@ export function bruiserChargeLength(e) {
   return BRUISER.chargeSpeed * (e.speedScale || 1) * BRUISER.charge * 60;
 }
 
-// --- Per-type AI. `env` is reused by EnemyManager every tick: { player, dirX, dirY, dist, dt, sepX, sepY,
-//     grid, particles, width, height }. `m` is the EnemyManager (enemyIndex, enemyBullets, terrain).
+// --- Per-type AI. `env` is reused by EnemyManager every tick: { player, dirX, dirY, moveX, moveY, dist, dt,
+//     sepX, sepY, grid, particles, width, height }. dirX/dirY point straight at the ship (aim, shields);
+//     moveX/moveY are the approach direction bent round blocking rock (js/pursuit.js), used to close in.
+//     `m` is the EnemyManager (enemyIndex, enemyBullets, terrain).
 
 function updateBruiser(e, m, env) {
   const { dirX, dirY, dist, dt } = env;
@@ -176,8 +178,8 @@ function updateBruiser(e, m, env) {
   e.aiTimer -= dt * (e.state === 'advance' ? e.cadence : 1);
   if (e.state === 'advance') {
     e.aimAngle = turnToward(e.aimAngle, toPlayer, BRUISER.turnRate * dt);
-    e.vx = (e.vx + dirX * 0.2 + env.sepX) * 0.9;
-    e.vy = (e.vy + dirY * 0.2 + env.sepY) * 0.9;
+    e.vx = (e.vx + env.moveX * 0.2 + env.sepX) * 0.9;
+    e.vy = (e.vy + env.moveY * 0.2 + env.sepY) * 0.9;
     if (e.aiTimer <= 0 && dist < BRUISER.triggerRange && dist > e.radius + 30) {
       e.state = 'windup';
       e.aiTimer = BRUISER.windup;
@@ -217,8 +219,11 @@ function updateGunner(e, m, env) {
   const radial = dist > GUNNER.range + GUNNER.band ? 1 : dist < GUNNER.range - GUNNER.band ? -1 : 0;
   const strafe = e.strafeSign * (radial === 0 ? 0.2 : 0.08);
   const plant = e.state === 'aim' ? 0.35 : 1;
-  e.vx = (e.vx + (dirX * radial * 0.3 - dirY * strafe) * plant + env.sepX) * 0.9;
-  e.vy = (e.vy + (dirY * radial * 0.3 + dirX * strafe) * plant + env.sepY) * 0.9;
+  // Closing in follows the rock-aware approach; backing off and strafing use the straight line.
+  const rx = radial > 0 ? env.moveX : dirX;
+  const ry = radial > 0 ? env.moveY : dirY;
+  e.vx = (e.vx + (rx * radial * 0.3 - dirY * strafe) * plant + env.sepX) * 0.9;
+  e.vy = (e.vy + (ry * radial * 0.3 + dirX * strafe) * plant + env.sepY) * 0.9;
 
   if (e.state === 'aim') {
     e.aiTimer -= dt;
@@ -254,9 +259,8 @@ function fireGunner(e, m) {
 }
 
 function updateShielder(e, m, env) {
-  const { dirX, dirY } = env;
-  e.vx = (e.vx + dirX * 0.2 + env.sepX) * 0.9;
-  e.vy = (e.vy + dirY * 0.2 + env.sepY) * 0.9;
+  e.vx = (e.vx + env.moveX * 0.2 + env.sepX) * 0.9;
+  e.vy = (e.vy + env.moveY * 0.2 + env.sepY) * 0.9;
   e.rotation = e.shieldAngle;
 }
 
@@ -287,8 +291,8 @@ function updateBlinker(e, m, env) {
     return;
   }
   const swirl = e.strafeSign * 0.24;
-  e.vx = (e.vx + dirX * 0.32 - dirY * swirl + env.sepX) * 0.9;
-  e.vy = (e.vy + dirY * 0.32 + dirX * swirl + env.sepY) * 0.9;
+  e.vx = (e.vx + env.moveX * 0.32 - dirY * swirl + env.sepX) * 0.9;
+  e.vy = (e.vy + env.moveY * 0.32 + dirX * swirl + env.sepY) * 0.9;
   e.aiTimer -= dt * e.cadence;
   if (e.aiTimer <= 0 && dist < 760) {
     if (pickBlinkTarget(e, m, env)) {
@@ -354,8 +358,8 @@ function updateConduit(e, m, env) {
   }
   // Hang back behind its pack: hold ~320 px from the ship and drift toward the linked allies.
   const radial = dist > CONDUIT.keepAway + 60 ? 0.22 : dist < CONDUIT.keepAway - 40 ? -0.3 : 0;
-  let ax = dirX * radial;
-  let ay = dirY * radial;
+  let ax = (radial > 0 ? env.moveX : dirX) * radial;
+  let ay = (radial > 0 ? env.moveY : dirY) * radial;
   if (e.links.length > 0) {
     const n = e.links.length;
     const len = Math.hypot(cx / n, cy / n) || 1;
