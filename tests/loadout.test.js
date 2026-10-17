@@ -226,6 +226,27 @@ test('discarding Pew Pews removes Prism Split, Hyper-Capacitor, Phase Piercer, T
   assert.ok(g.bullets.some((b) => b.source === 'rocket'), 'rockets still fire');
 });
 
+test('a discard keeps live tuner changes to base stats (the run-start snapshot follows the tuner)', () => {
+  const g = freshGame();
+  const p = g.player;
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.firerate, levelJump: 2 });
+  fill(p, ['missiles']);
+  withTuning({ fireRate: DEFAULT_TUNING.fireRate * 2, moveSpeed: DEFAULT_TUNING.moveSpeed * 1.5 }, () => {
+    g.applyLiveTuning();
+    const tuned = { fireRate: p.stats.fireRate, moveSpeed: p.stats.moveSpeed };
+    discardWeapon(p, 'missiles');
+    assert.ok(Math.abs(p.stats.fireRate - tuned.fireRate) < 1e-9, `fire rate ${p.stats.fireRate} vs tuned ${tuned.fireRate}`);
+    assert.ok(Math.abs(p.stats.moveSpeed - tuned.moveSpeed) < 1e-9);
+  });
+});
+
+test('sandbox Trigger Level-Up moves the XP bar onto the new level', () => {
+  const g = freshGame();
+  g.applyLiveTuning('FORCE_LEVELUP');
+  assert.equal(g.player.level, 2);
+  assert.equal(g.player.xpToNext, xpToNextLevel(2));
+});
+
 test('pause-menu discard goes through a confirm step', () => {
   const g = freshGame();
   fill(g.player, ['missiles']);

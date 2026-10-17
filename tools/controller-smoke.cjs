@@ -72,7 +72,10 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
     await press(A);
     await expect('UPGRADE', 'NEW WEAPON opens the weapon pick');
     if (!(await page.evaluate(() => __game.currentChoices.length === 3 && __game.currentChoices.every(c => c.isWeaponPick)))) throw Error('weapon pick should offer 3 weapons');
-    await page.waitForTimeout(200);
+    // A pressed again right away is ignored (the pick restarts the menu grace, as a double-click guard).
+    await press(A);
+    await expect('UPGRADE', 'an immediate second A must not equip a weapon blind');
+    await page.waitForTimeout(400);
     await page.screenshot({ path: 'controller-weapon-pick.png' });
     const slotsBefore = await page.evaluate(() => __game.player.loadout.length);
     await press(RIGHT);

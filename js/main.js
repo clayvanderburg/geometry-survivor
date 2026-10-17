@@ -50,6 +50,7 @@ const SINGULARITY_GRID_DEPTH = 260;
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
 const BOSS_BAR_ROWS = 3;
+const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
 
 // "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
 export function bossEpithet(wave) {
@@ -630,23 +631,27 @@ export class Game {
     const p = this.player;
     if (p) {
       const bonuses = this.progression.getBonuses();
-      const upgLv = p.upgradeLevels || {};
+      const liveStats = (upgLv, weapons) => ({
+        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
+        fireRate: TUNING.fireRate * bonuses.fireRateMult * Math.pow(1.26, upgLv.firerate || 0) * (weapons.pulsarHelix ? 1.15 : 1),
+        bulletSpeed: TUNING.bulletSpeed * Math.pow(1.15, upgLv.firerate || 0),
+        damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.25, upgLv.pierce || 0),
+        magnetRadius: TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0),
+        xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0),
+        luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
+        coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
+        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
+        miningRange: TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
+        drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
+        // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
+        critChance: (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep
+      });
 
       p.radius = TUNING.shipRadius;
-      p.stats.moveSpeed = TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0);
-      p.stats.fireRate = TUNING.fireRate * bonuses.fireRateMult * Math.pow(1.26, upgLv.firerate || 0) * (p.weapons.pulsarHelix ? 1.15 : 1);
-      p.stats.bulletSpeed = TUNING.bulletSpeed * Math.pow(1.15, upgLv.firerate || 0);
-      p.stats.damage = TUNING.baseDamage * bonuses.damageMult * Math.pow(1.25, upgLv.pierce || 0);
-      p.stats.magnetRadius = TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0);
-      p.stats.xpMultiplier = TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0);
-      p.stats.luck = TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25;
-      p.stats.coreDropMult = TUNING.coreDropMult * bonuses.coreMult;
-      p.stats.miningSpeed = TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.9 : 1);
-      p.stats.miningRange = TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.3 : 1);
-      p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
-      // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
-      p.stats.critChance = (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (p.weapons.supercritical ? W.supercritChance : 0);
-      p.stats.critDamage = (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep;
+      Object.assign(p.stats, liveStats(p.upgradeLevels || {}, p.weapons));
+      // Weapon discards rebuild stats from the run-start snapshot, so it takes the tuned base values too.
+      if (p.base) Object.assign(p.base.stats, liveStats({}, {}));
     }
 
     for (const key of ['musicVolume', 'sfxVolume']) {
@@ -679,6 +684,7 @@ export class Game {
         this.spawnRelicChest(p.x + Math.cos(p.angle) * 95, p.y + Math.sin(p.angle) * 95, false);
       } else if (sandboxAction === 'FORCE_LEVELUP' && this.state === 'PLAYING') {
         p.level++;
+        p.xpToNext = xpToNextLevel(p.level);
         this.triggerLevelUp();
       } else if (sandboxAction === 'ADD_CORES') {
         this.sessionCores += 50;
@@ -2240,15 +2246,21 @@ export class Game {
     if (tip) tip.innerHTML = hint;
   }
 
+  // Clicks (mouse, or controller A via MenuNavigator) on cards that appeared a moment ago are ignored:
+  // the second click of a double-click on NEW WEAPON would otherwise equip a weapon the player never saw.
   renderChoiceCards(descs) {
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
+    const shownAt = performance.now();
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
-      card.addEventListener('click', () => this.selectUpgrade(idx));
+      card.addEventListener('click', () => {
+        if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+        this.selectUpgrade(idx);
+      });
       container.appendChild(card);
     });
   }
@@ -2264,6 +2276,11 @@ export class Game {
     this.setUpgradeHeader(`SLOT ${ownedWeapons(p).length + 1} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
       'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Equip');
     this.renderChoiceCards(this.currentChoices.map((c) => describeWeaponPick(p, c.weaponId)));
+    // On narrow screens the hand scrolls; start the pick at its header, not where NEW WEAPON was.
+    const modal = document.getElementById('upgrade-modal');
+    for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
+    // Same modal state, so the controller grace (set on state changes) is restarted by hand.
+    this.menuGrace = Math.max(this.menuGrace, CHOICE_CLICK_GUARD_MS / 1000);
     this.sound.playLevelUp();
   }
 
