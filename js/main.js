@@ -25,7 +25,9 @@ import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
-import { GlobalLeaderboard, buildBoardView, renderBoardView, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
+import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
+import { GAME_VERSION, versionLabel } from './version.js';
+import { PatchNotesUI } from './patch-notes.js';
 import { wellPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
@@ -100,6 +102,8 @@ const SANDBOX_ARCHETYPES = {
 const GUIDE_TOAST_TIME = 2.8;
 const GUIDE_SCAN_TICKS = 6;
 const GUIDE_STATES = ['TITLE', 'PAUSED', 'GAMEOVER'];
+// Screens with a PATCH NOTES button (the notes overlay closes itself if the state moves on).
+const NOTES_STATES = ['TITLE', 'PAUSED'];
 
 // Crits shove a little harder and flash a gold star flare sized to the target.
 const CRIT_KNOCKBACK_MULT = 1.5;
@@ -162,6 +166,11 @@ export class Game {
     // Field Guide overlay (built on first open) sits on top of the title, pause or game-over screen.
     this.guideOpen = false;
     this.fieldGuide = null;
+    // Patch notes overlay (title and pause). Never opens by itself: a NEW badge on its buttons says
+    // when there are notes for a version the player hasn't read.
+    this.notesOpen = false;
+    this.patchNotes = new PatchNotesUI({ onClose: () => this.onNotesClosed() });
+    this.renderVersionTags();
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
@@ -352,6 +361,13 @@ export class Game {
     document.querySelectorAll('[data-board-tab]').forEach((btn) => {
       btn.addEventListener('click', () => this.setBoardTab(btn.dataset.boardTab));
     });
+    // Version selector buttons are re-rendered when the server reports new versions: delegate.
+    document.querySelectorAll('[data-board-versions]').forEach((container) => {
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest?.('[data-board-version]');
+        if (btn) this.setBoardVersion(btn.dataset.boardVersion);
+      });
+    });
     if (goNameInput) {
       goNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -380,6 +396,10 @@ export class Game {
 
       if (this.guideOpen) {
         this.handleGuideKey(e, onControl);
+        return;
+      }
+      if (this.notesOpen) {
+        this.handleNotesKey(e, onControl);
         return;
       }
 
@@ -549,6 +569,9 @@ export class Game {
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
+    }
+    for (const id of ['btn-title-notes', 'btn-pause-notes']) {
+      document.getElementById(id)?.addEventListener('click', () => this.openNotes());
     }
     this.syncDamageNumbersButton();
 
@@ -781,6 +804,7 @@ export class Game {
 
   renderHubUI() {
     this.syncGuideBadges();
+    this.syncNotesBadges();
     const cores = this.progression.data.cores;
     const hubCoresEl = document.getElementById('hub-cores-count');
     const goCoresEl = document.getElementById('go-cores-count');
@@ -848,6 +872,8 @@ export class Game {
       });
       renderBoardView(document.getElementById('highscore-list'), document.getElementById('highscore-note'), view);
       renderBoardView(document.getElementById('go-highscore-list'), document.getElementById('go-board-note'), view);
+      renderVersionOptions(document.getElementById('title-board-versions'), view.versions);
+      renderVersionOptions(document.getElementById('go-board-versions'), view.versions);
       const rankEl = document.getElementById('go-global-rank');
       if (rankEl) {
         const { text, tone } = describeSubmit(this.globalSubmit);
@@ -864,6 +890,14 @@ export class Game {
     // Re-opening GLOBAL after a failed fetch tries the network again.
     if (this.boardTab === 'global' && this.globalBoard && this.globalBoard.status !== 'ready') this.refreshGlobalBoard();
     else this.renderBoards();
+  }
+
+  // GLOBAL board version selector: the current version (default), earlier versions with runs, or 'all'.
+  setBoardVersion(version) {
+    if (!this.globalBoard) return;
+    const changed = this.globalBoard.setVersion(version);
+    // Picking any version, even the one on screen, re-syncs it (and retries after a failed fetch).
+    if (changed || this.globalBoard.status !== 'loading') this.refreshGlobalBoard();
   }
 
   refreshGlobalBoard() {
@@ -888,7 +922,13 @@ export class Game {
       if (this.globalSubmitToken !== token) return;
       this.globalSubmit = result;
       if (result.ok) this.lastGlobalRunId = result.id;
-      this.renderBoards();
+      // The answer carries the run's own version board; another board on screen (e.g. ALL-TIME) is re-read
+      // so the new run shows up there too.
+      if (result.ok && typeof this.globalBoard.refresh === 'function' && this.globalBoard.version !== (result.version || 'all')) {
+        this.refreshGlobalBoard();
+      } else {
+        this.renderBoards();
+      }
     });
   }
 
@@ -2728,6 +2768,10 @@ export class Game {
       this.updateGuideController(gp, dt);
       return;
     }
+    if (this.notesOpen) {
+      this.updateNotesController(gp, dt);
+      return;
+    }
     const menus = {
       TITLE: ['title-modal', 'btn-start-game'],
       UPGRADE: ['upgrade-modal', null],
@@ -2778,6 +2822,7 @@ export class Game {
 
     // The guide only lives over the title, pause and game-over screens.
     if (this.guideOpen && !GUIDE_STATES.includes(this.state)) this.closeGuide();
+    if (this.notesOpen && !NOTES_STATES.includes(this.state)) this.closeNotes();
     const gp = this.pollGamepad();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
@@ -3319,7 +3364,7 @@ export class Game {
   }
 
   openGuide({ tab = null, focusId = null } = {}) {
-    if (this.guideOpen || !GUIDE_STATES.includes(this.state)) return false;
+    if (this.guideOpen || this.notesOpen || !GUIDE_STATES.includes(this.state)) return false;
     this.fieldGuide ||= new FieldGuideUI({
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
@@ -3423,6 +3468,108 @@ export class Game {
       guide.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
       this.guideFocusEl = null;
       this.menuNav.setFocus(guide.activeTabButton());
+    } else if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    }
+  }
+
+  // --- Version tag & patch notes -------------------------------------------------------------------
+
+  // Every [data-game-version] element shows GAME_VERSION (title logo, pause, game over, notes header).
+  renderVersionTags() {
+    document.querySelectorAll?.('[data-game-version]').forEach((el) => { el.textContent = versionLabel(GAME_VERSION); });
+  }
+
+  // Glowing NEW on every PATCH NOTES button until this version's notes have been opened.
+  syncNotesBadges() {
+    const show = !!this.patchNotes?.hasNew();
+    document.querySelectorAll?.('[data-notes-badge]').forEach((el) => el.classList.toggle('hidden', !show));
+  }
+
+  openNotes() {
+    if (this.notesOpen || this.guideOpen || !NOTES_STATES.includes(this.state) || !this.patchNotes) return false;
+    this.notesReturnFocus = document.activeElement;
+    if (!this.patchNotes.open()) return false;
+    this.notesOpen = true;
+    this.resetInput();
+    this.menuNav?.clear();
+    this.syncNotesBadges();
+    // Focus moves into the notes so Enter/Space can't click the (now covered) button that opened them.
+    this.patchNotes.body.focus?.({ preventScroll: true });
+    return true;
+  }
+
+  closeNotes() {
+    this.patchNotes?.close();
+  }
+
+  onNotesClosed() {
+    this.notesOpen = false;
+    this.menuNav?.clear();
+    this.menuState = null;
+    this.syncNotesBadges();
+    this.notesReturnFocus?.focus?.();
+  }
+
+  // Keyboard in the notes: arrows/PgUp/PgDn scroll, Enter/Space on a version header toggles it,
+  // Esc/Backspace close. Like the guide, keys never reach the screen behind it.
+  handleNotesKey(e, onControl) {
+    const notes = this.patchNotes;
+    const code = e.code;
+    const focused = document.activeElement;
+    const inNotes = !!focused && notes.root.contains(focused);
+    if (code === 'Tab') {
+      const stops = [...notes.root.querySelectorAll('button:not([disabled])')].filter(el => el.getClientRects().length > 0);
+      const i = inNotes ? stops.indexOf(focused) : -1;
+      const next = i === -1 ? (e.shiftKey ? stops.length - 1 : 0)
+        : e.shiftKey ? (i === 0 ? stops.length - 1 : null) : (i === stops.length - 1 ? 0 : null);
+      if (next !== null && stops[next]) {
+        e.preventDefault();
+        stops[next].focus();
+      }
+      return;
+    }
+    if (!inNotes && (code === 'Enter' || code === 'NumpadEnter')) {
+      e.preventDefault();
+      return;
+    }
+    onControl = onControl && inNotes;
+    const page = (notes.body.clientHeight || 400) * 0.85;
+    const actions = {
+      Escape: () => this.closeNotes(),
+      Backspace: () => this.closeNotes(),
+      ArrowUp: () => notes.scrollBy(-90),
+      ArrowDown: () => notes.scrollBy(90),
+      PageUp: () => notes.scrollBy(-page),
+      PageDown: () => notes.scrollBy(page),
+      Home: () => notes.scrollBy(-1e6),
+      End: () => notes.scrollBy(1e6)
+    };
+    if (code === 'Space' && !onControl) actions.Space = () => notes.scrollBy(e.shiftKey ? -page : page);
+    const action = actions[code];
+    if (!action) return;
+    e.preventDefault();
+    if (e.repeat && !code.startsWith('Arrow') && !code.startsWith('Page')) return;
+    action();
+  }
+
+  // Controller in the notes: d-pad/left stick walks the version headers and note groups (scrolling with
+  // them), right stick scrolls, A opens/closes a version, B or Start goes back.
+  updateNotesController(gp, dt) {
+    const notes = this.patchNotes;
+    if (this.menuState !== 'NOTES') {
+      this.menuState = 'NOTES';
+      this.menuGrace = 0.25;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !notes?.root) return;
+    this.menuNav.update(notes.root, gp, dt, notes.firstHead());
+    if (gp.aimY) notes.scrollBy(gp.aimY * 16);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) {
+      this.closeNotes();
     } else if (gp.pressed(PAD.A)) {
       this.sound.init();
       this.menuNav.activate();

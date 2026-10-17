@@ -138,7 +138,7 @@
         <div class="upgrade-header">
           <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
           <h2 class="upgrade-title">SYSTEM PAUSED</h2>
-          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume</p>
+          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume <span class="version-tag version-tag-inline" data-game-version title="Game version"></span></p>
         </div>
 
         <div class="pause-layout">
@@ -173,6 +173,7 @@
           <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
+          <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
         </div>
@@ -198,6 +199,22 @@
         </div>
         <div id="guide-body" class="guide-body" tabindex="-1"></div>
         <div class="guide-foot"><span><b>← →</b> / <b>LB RB</b> tabs</span><span><b>↑ ↓</b> / <b>D-pad</b> browse</span><span><b>ESC</b> / <b>B</b> back</span></div>
+      </div>
+    </div>
+
+    <!-- Patch notes: every version's changes, newest first (js/patch-notes.js, data in js/changelog.js) -->
+    <div id="notes-modal" class="modal-overlay guide-overlay notes-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="notes-title">
+      <div class="modal-card guide-card notes-card">
+        <div class="guide-header">
+          <div>
+            <div class="glitch-subtitle">SHIP LOG // WHAT CHANGED</div>
+            <h2 id="notes-title" class="guide-title">📜 PATCH NOTES</h2>
+            <div class="guide-progress notes-sub"><span>YOU ARE FLYING <span class="version-tag" data-game-version></span></span><span>GLOBAL SCORES ARE RANKED PER VERSION</span></div>
+          </div>
+          <button id="btn-notes-close" class="neon-btn guide-close-btn">◀ BACK [ESC]</button>
+        </div>
+        <div id="notes-body" class="guide-body notes-body" tabindex="-1"></div>
+        <div class="guide-foot"><span><b>↑ ↓</b> / <b>D-pad</b> browse</span><span><b>ENTER</b> / <b>A</b> open a version</span><span><b>ESC</b> / <b>B</b> back</span></div>
       </div>
     </div>
 
@@ -239,6 +256,11 @@
           <div>
             <div class="glitch-subtitle">GEOMETRIC SWARM &amp; ASTEROID EXCAVATION ROGUELITE</div>
             <h1 class="neon-title">VEXOLITH<span>//</span><wbr>SURVIVOR</h1>
+            <!-- Version tag + patch notes, right under the logo (version text comes from js/version.js) -->
+            <div class="title-meta">
+              <span class="version-tag" data-game-version title="Game version: leaderboards are ranked per version"></span>
+              <button id="btn-title-notes" class="neon-btn notes-open-btn notes-hub-btn" title="What changed in each version">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
+            </div>
           </div>
           <div class="hub-header-side">
             <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
@@ -275,7 +297,10 @@
               <label for="title-pilot-name" class="name-label">PILOT CALLSIGN:</label>
               <input id="title-pilot-name" type="text" maxlength="18" class="name-input" placeholder="MADKING" value="MADKING" />
             </div>
-            <div id="highscore-note" class="board-note" aria-live="polite"></div>
+            <div class="board-status board-filter">
+              <div id="highscore-note" class="board-note" aria-live="polite"></div>
+              <div id="title-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
+            </div>
             <div id="highscore-list" class="highscore-list"></div>
 
             <div class="controls-mini">
@@ -327,7 +352,10 @@
         <div class="hub-header">
           <div>
             <div id="gameover-subtitle" class="glitch-subtitle danger-text">SHIELD COLLAPSED // SESSION COMPLETE</div>
-            <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
+            <div class="go-title-row">
+              <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
+              <span class="version-tag" data-game-version title="Game version of this run"></span>
+            </div>
           </div>
           <div class="wallet-pill">
             <span class="wallet-icon">❖</span>
@@ -363,6 +391,7 @@
               <input id="go-pilot-name" type="text" maxlength="18" class="name-input" placeholder="ENTER NAME" />
               <button id="btn-save-name" class="save-name-btn">SAVE</button>
             </div>
+            <div id="go-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
             <div class="board-status">
               <span id="go-board-note" class="board-note" aria-live="polite"></span>
               <span id="go-rank-badge" class="panel-sub">Leaderboard</span>
