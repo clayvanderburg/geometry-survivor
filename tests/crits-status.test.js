@@ -326,3 +326,25 @@ test('resetRun seeds crit stats from tuning and clears status bookkeeping', () =
   assert.equal(g.statusStamp, 0);
   reset();
 });
+
+test('live tuning re-derives crit stats from the tuned base plus owned crit card levels', () => {
+  reset();
+  const p = makePlayer();
+  applyUpgradeLevels(p, { ...byId('crit_chance'), levelJump: 2 });
+  applyUpgradeLevels(p, byId('crit_damage'));
+  applyUpgradeLevels(p, byId('thermite'));
+  applyUpgradeLevels(p, byId('evo_supercrit'));
+  const g = Object.assign(game([], p), {
+    progression: { getBonuses: () => ({ moveSpeedMult: 1, fireRateMult: 1, damageMult: 1, magnetMult: 1, xpMult: 1, coreMult: 1 }) }
+  });
+  TUNING.baseCritChance = 0.2;
+  TUNING.baseCritDamage = 2;
+  g.applyLiveTuning();
+  assert.ok(Math.abs(p.stats.critChance - (0.2 + 2 * W.critChanceStep + W.supercritChance)) < 1e-9);
+  assert.equal(p.stats.critDamage, 2 + W.critDamageStep);
+  reset();
+  g.applyLiveTuning();
+  assert.ok(Math.abs(p.stats.critChance - (DEFAULT_TUNING.baseCritChance + 2 * W.critChanceStep + W.supercritChance)) < 1e-9);
+  assert.equal(p.stats.critDamage, DEFAULT_TUNING.baseCritDamage + W.critDamageStep);
+  reset();
+});

@@ -605,6 +605,9 @@ export class Game {
       p.stats.miningSpeed = TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.9 : 1);
       p.stats.miningRange = TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.3 : 1);
       p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
+      // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
+      p.stats.critChance = (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (p.weapons.supercritical ? W.supercritChance : 0);
+      p.stats.critDamage = (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep;
     }
 
     for (const key of ['musicVolume', 'sfxVolume']) {
