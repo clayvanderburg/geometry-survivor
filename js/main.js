@@ -45,7 +45,9 @@ import {
 } from './config.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
-const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => TUNING[key] !== DEFAULT_TUNING[key]);
+// Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
+const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
+const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
 
 // Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
 const SINGULARITY_IMPLODE_TIME = 0.35;
@@ -678,7 +680,7 @@ export class Game {
   }
 
   applyLiveTuning(sandboxAction = null) {
-    if (this.state !== 'TITLE' && this.state !== 'GAMEOVER') this.runTainted = true;
+    if (this.state !== 'TITLE' && this.state !== 'GAMEOVER' && (sandboxAction || isTuningModified())) this.runTainted = true;
     this.sound.applyTuning();
 
     const p = this.player;

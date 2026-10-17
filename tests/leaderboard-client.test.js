@@ -215,12 +215,26 @@ test('game over: runs flown with the dev tuner are kept off the global board', a
   assert.match(describeSubmit(fake.globalSubmit).text, /DEV TUNER/);
 
   fake.runTainted = false;
-  const key = Object.keys(DEFAULT_TUNING).find(k => typeof DEFAULT_TUNING[k] === 'number');
+  const key = Object.keys(DEFAULT_TUNING).find(k => typeof DEFAULT_TUNING[k] === 'number' && !/Volume$/.test(k));
   TUNING[key] = DEFAULT_TUNING[key] + 1;
   Game.prototype.submitGlobalRun.call(fake, RUN);
   assert.deepEqual(fake.globalSubmit, { reason: 'tainted' }, 'saved tuner changes count too');
   TUNING[key] = DEFAULT_TUNING[key];
   assert.equal(submitted, 0);
+
+  // Pause-menu volume sliders are player settings: moving them mid-run keeps the run eligible.
+  const live = { state: 'PLAYING', runTainted: false, sound: { applyTuning() {} }, player: null };
+  TUNING.musicVolume = DEFAULT_TUNING.musicVolume + 0.5;
+  TUNING.sfxVolume = DEFAULT_TUNING.sfxVolume + 0.5;
+  try { Game.prototype.applyLiveTuning.call(live); } catch { /* the rest of the live-apply path needs a full game */ }
+  assert.equal(live.runTainted, false, 'volume changes do not taint the run');
+  fake.runTainted = false;
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  assert.deepEqual(fake.globalSubmit, { pending: true }, 'saved volume settings do not block submission');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  TUNING.musicVolume = DEFAULT_TUNING.musicVolume;
+  TUNING.sfxVolume = DEFAULT_TUNING.sfxVolume;
+  submitted = 0;
 
   Game.prototype.submitGlobalRun.call(fake, RUN);
   assert.deepEqual(fake.globalSubmit, { pending: true });
