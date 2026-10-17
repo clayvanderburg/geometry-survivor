@@ -5,7 +5,7 @@
 import { TUNING } from './config.js';
 import { RARITY, rarityFor, applyUpgradeLevels, levelJumpChances } from './upgrades.js';
 import {
-  WEAPON_SCALING as W, TAG_INFO, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
+  WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack
 } from './weapon-scaling.js';
 
@@ -42,7 +42,8 @@ export const STAT_ROWS = [
 
   // Primary blaster
   { id: 'bulletCount', label: 'Projectiles', get: (p) => p.stats.bulletCount, fmt: int, headline: 'count', unit: 'PROJECTILES' },
-  { id: 'volleyArc', label: 'Volley arc', get: (p) => (p.stats.spreadAngle * Math.max(0, p.stats.bulletCount - 1) * 180) / Math.PI, fmt: (v) => `${Math.round(v)}°` },
+  { id: 'prismLayout', label: 'Newest streams', get: (p) => p.stats.bulletCount, fmt: (v) => prismNewestGroup(v) },
+  { id: 'rocketDamage', label: 'Wing rocket hit', get: (p) => weaponDamage(p, 'rocket'), fmt: dec1 },
   { id: 'fireRate', label: 'Fire rate', get: (p) => p.stats.fireRate, fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'FIRE RATE' },
   { id: 'bulletSpeed', label: 'Bolt speed', get: (p) => p.stats.bulletSpeed, fmt: dec1, headline: 'pct', unit: 'BOLT SPEED' },
   { id: 'pierce', label: 'Pierce', get: (p) => p.stats.pierce, fmt: int, headline: 'count', unit: 'PIERCE' },

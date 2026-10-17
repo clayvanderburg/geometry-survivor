@@ -55,10 +55,9 @@ export const UPGRADE_POOL = [
     tags: ['projectile', 'kinetic'],
     maxLevel: 7,
     headline: 'bulletCount',
-    summary: 'Adds plasma vectors to every volley in a wider harmonic arc.',
+    summary: 'Adds a pair of blaster streams: rear, then sides, then diagonals. Your forward pair never moves.',
     apply(player) {
       player.stats.bulletCount += W.multishotBolts;
-      player.stats.spreadAngle += W.multishotSpread;
     }
   },
   {

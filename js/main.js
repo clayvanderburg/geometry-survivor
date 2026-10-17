@@ -11,7 +11,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, RARITY, rarityFor, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import {
-  WEAPON_SCALING as W, weaponDamage, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
+  WEAPON_SCALING as W, weaponDamage, prismStreams, areaMult, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   critChance, critMultiplier
 } from './weapon-scaling.js';
 import {
@@ -190,7 +190,6 @@ export class Game {
         fireRate: TUNING.fireRate * bonuses.fireRateMult,
         bulletSpeed: TUNING.bulletSpeed,
         bulletCount: 2,
-        spreadAngle: 0.14,
         pierce: 1,
         damage: TUNING.baseDamage * bonuses.damageMult,
         magnetRadius: TUNING.magnetRadius * bonuses.magnetMult,
@@ -237,6 +236,7 @@ export class Game {
     this.chromaFlash = 0;
     this.hitStopTicks = 0;
     this.fireAccumulator = 0;
+    this.rocketTimer = 0.8;
     this.missileTimer = 0;
     this.lightningTimer = 0;
     this.singularityTimer = 0;
@@ -1868,14 +1868,13 @@ export class Game {
 
   firePrimaryWeapon() {
     const p = this.player;
-    const count = p.stats.bulletCount;
-    const totalSpread = p.stats.spreadAngle * (count - 1);
-    const startAngle = p.angle - totalSpread * 0.5;
-
-    for (let i = 0; i < count; i++) {
-      const a = count === 1 ? p.angle : startAngle + (i / (count - 1)) * totalSpread;
-      const noseX = p.x + Math.cos(a) * 16;
-      const noseY = p.y + Math.sin(a) * 16;
+    // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
+    const sideX = -Math.sin(p.angle);
+    const sideY = Math.cos(p.angle);
+    for (const stream of prismStreams(p.stats.bulletCount)) {
+      const a = p.angle + stream.angle;
+      const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
+      const noseY = p.y + Math.sin(a) * 16 + sideY * stream.lateral;
 
       this.bullets.push({
         x: noseX,
@@ -1910,6 +1909,37 @@ export class Game {
 
     this.sound.playLaser();
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
+  }
+
+  // Starting kit: one dumbfire rocket from each outer wing tip, always along the hull's heading
+  // (where the crab is flying), independent of the turret's aim. Direct hit plus a small blast.
+  fireWingRockets() {
+    const p = this.player;
+    const heading = p.drillAngle ?? p.angle;
+    const fx = Math.cos(heading), fy = Math.sin(heading);
+    const damage = weaponDamage(p, 'rocket');
+    for (const side of [-1, 1]) {
+      // Wing tip in hull space: (0.25r forward, 1.12r out), matching drawCrabShip's carapace wings.
+      const wx = p.x + fx * p.radius * 0.25 - fy * side * p.radius * 1.12;
+      const wy = p.y + fy * p.radius * 0.25 + fx * side * p.radius * 1.12;
+      this.bullets.push({
+        x: wx,
+        y: wy,
+        vx: fx * W.wingRocketSpeed,
+        vy: fy * W.wingRocketSpeed,
+        damage,
+        pierce: 1,
+        hue: 28,
+        radius: 4.5,
+        life: W.wingRocketLife,
+        source: 'rocket',
+        kind: 'rocket',
+        knock: KNOCKBACK.missile,
+        blastRadius: W.wingRocketBlastRadius * areaMult(p),
+        blastDamage: damage * W.wingRocketBlastShare
+      });
+    }
+    this.sound.playLaser(0.55);
   }
 
   fireSwarmMissiles(level) {
@@ -2509,6 +2539,11 @@ export class Game {
         this.firePrimaryWeapon();
       }
     }
+    this.rocketTimer -= dt;
+    if (shouldFire && this.rocketTimer <= 0) {
+      this.fireWingRockets();
+      this.rocketTimer = W.wingRocketCooldown;
+    }
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -2784,6 +2819,30 @@ export class Game {
 
     this.updateBossHUD(this.getBossHudModel());
     this.updateLieutenantHUD();
+  }
+
+  // Wing rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
+  drawWingRocket(ctx, b) {
+    const a = Math.atan2(b.vy, b.vx);
+    const c = Math.cos(a), s = Math.sin(a);
+    const flame = 9 + Math.random() * 7;
+    ctx.strokeStyle = 'hsla(32, 100%, 58%, 0.75)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(b.x - c * 6, b.y - s * 6);
+    ctx.lineTo(b.x - c * (6 + flame), b.y - s * (6 + flame));
+    ctx.stroke();
+    ctx.fillStyle = '#ffd9a8';
+    ctx.strokeStyle = 'hsla(22, 100%, 60%, 1)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(b.x + c * 7, b.y + s * 7);
+    ctx.lineTo(b.x - c * 5 - s * 3.5, b.y - s * 5 + c * 3.5);
+    ctx.lineTo(b.x - c * 3, b.y - s * 3);
+    ctx.lineTo(b.x - c * 5 + s * 3.5, b.y - s * 5 - c * 3.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -3081,6 +3140,10 @@ export class Game {
 
     for (let i = 0; i < this.bullets.length; i++) {
       const b = this.bullets[i];
+      if (b.kind === 'rocket') {
+        this.drawWingRocket(ctx, b);
+        continue;
+      }
       const tailX = b.x - b.vx * 1.4;
       const tailY = b.y - b.vy * 1.4;
 
