@@ -1850,7 +1850,9 @@ export class Game {
     const pending = this.bullets;
     this.bullets = [];
     for (const b of pending) {
-      const x0 = b.x, y0 = b.y;
+      // sweepX/Y: a bolt spawned at a barrel tip sweeps from its gun on the first tick so point-blank targets still get hit.
+      const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
+      if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
       b.x += b.vx;
       b.y += b.vy;
       b.life -= dt;

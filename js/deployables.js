@@ -249,6 +249,8 @@ export class Deployables {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
     const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
+    b.sweepX = t.x; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
+    b.sweepY = t.y;
     if (p.weapons.siegeBattery) {
       b.blastRadius = siegeShellRadius(p);
       b.blastDamage = weaponDamage(p, 'siege', level);

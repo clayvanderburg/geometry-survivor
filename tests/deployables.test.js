@@ -332,3 +332,12 @@ test('a live turret fires its doubled rate of half-damage bolts', () => {
   assert.ok(Math.abs(bolts.length - 2 * W.turretFireRate(1)) <= 1, `${bolts.length} bolts in 2 s`);
   for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(1));
 });
+
+test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
+  const close = enemy(2012, 2000); // inside the 34 px muzzle
+  const g = arena({ enemies: [close] });
+  g.player.weapons.turret = 1;
+  g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
+  g.updateBullets(DT);
+  assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
+});
