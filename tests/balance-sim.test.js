@@ -37,7 +37,8 @@ test('every weapon card in UPGRADE_POOL is discovered and deals damage under its
   const base = h.benchUpgrade({ scenario: 'chase', bench });
   for (const w of weapons) {
     const r = h.benchUpgrade({ upgradeId: w.id, level: 3, scenario: 'chase', bench });
-    const own = Object.keys(r.dps).filter(k => !(k in base.dps) && r.dps[k] > 0);
+    // Starting weapons (Wing Rockets) already fire at LV 1 in the baseline: their source must grow.
+    const own = Object.keys(r.dps).filter(k => r.dps[k] > 0 && (!(k in base.dps) || (w.id === 'rockets' && k === 'rocket' && r.dps[k] > base.dps[k] * 1.25)));
     assert.ok(own.length > 0, `${w.id} produced no damage source of its own: ${JSON.stringify(r.dps)}`);
   }
 });
@@ -68,7 +69,7 @@ test('strategies cover every upgrade automatically and drop unknown ids', () => 
   const list = buildStrategies(pool, { focus: true });
   assert.ok(list.some(s => s.name === 'focus:alpha'));
   assert.ok(!list.some(s => s.name === 'focus:evo'));
-  for (const s of list) assert.ok(s.priorities.every(id => id === 'synergy' || id === 'alpha'));
+  for (const s of list) assert.ok(s.priorities.every(id => id === 'synergy' || id === 'new_weapon' || id === 'alpha'));
   assert.deepEqual(buildStrategies(pool, { only: ['focus:alpha'] }).map(s => s.name), ['focus:alpha']);
 });
 
@@ -76,4 +77,14 @@ test('card picks follow strategy priority, with evolutions matched by "synergy"'
   const choices = [{ id: 'magnet' }, { id: 'evo_x', isSynergy: true }, { id: 'pierce' }];
   assert.equal(h.pickCard(choices, { priorities: ['pierce', 'synergy'] }), 2);
   assert.equal(h.pickCard(choices, { priorities: ['synergy', 'pierce'] }), 1);
+});
+
+test('strategies take NEW WEAPON and equip their preferred weapons', () => {
+  const hand = [{ id: 'magnet' }, { id: 'new_weapon', isNewWeapon: true }, { id: 'pierce' }];
+  assert.equal(h.pickCard(hand, { priorities: ['new_weapon', 'pierce'] }), 1);
+  const picks = [{ id: 'weapon:orbitals', weaponId: 'orbitals', isWeaponPick: true }, { id: 'weapon:missiles', weaponId: 'missiles', isWeaponPick: true }];
+  assert.equal(h.pickCard(picks, { priorities: [], weapons: ['missiles', 'orbitals'] }), 1);
+  const focus = buildStrategies([{ id: 'missiles', name: 'M' }], { only: ['focus:missiles'] })[0];
+  assert.deepEqual(focus.priorities, ['missiles', 'new_weapon']);
+  assert.deepEqual(focus.weapons, ['missiles']);
 });

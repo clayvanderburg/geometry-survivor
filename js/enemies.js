@@ -12,6 +12,11 @@ export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
 const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
 
+// Contact damage of a hull touching the ship at a given wave (bosses hit harder; +8% per wave after 5).
+export function contactDamageAt(e, wave) {
+  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, wave - 5) * 0.08);
+}
+
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
 export const KNOCKBACK_DECAY = 0.8;
 

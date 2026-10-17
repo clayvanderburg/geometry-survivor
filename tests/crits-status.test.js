@@ -13,7 +13,7 @@ const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { DamageNumbers, CRIT_COLOR } = await import('../js/damage-numbers.js');
 const { EnemyManager } = await import('../js/enemies.js');
-const { UPGRADE_POOL, applyUpgradeLevels } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, WEAPON_TAGS, TAG_INFO, weaponDamage, critMultiplier } = await import('../js/weapon-scaling.js');
 const { updateStatusEffects, damageTakenMult, isAfflicted } = await import('../js/status-effects.js');
@@ -287,11 +287,19 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(1) * 1.3);
 });
 
-test('tag cards are only offered once a weapon carries the tag', () => {
-  const p = makePlayer();
-  for (const id of ['tag_explosive', 'tag_electric', 'tag_area', 'cryo', 'nanite']) assert.equal(byId(id).req(p), false, id);
-  assert.equal(byId('tag_kinetic').req, undefined, 'the blaster is always kinetic');
-  assert.equal(byId('thermite').req, undefined, 'the blaster always fires bolts to ignite');
+test('tag cards are only offered once an equipped weapon carries the tag', () => {
+  const p = makePlayer(); // equips only Pew Pews (PROJECTILE KINETIC)
+  for (const id of ['tag_explosive', 'tag_electric', 'tag_area']) assert.equal(byId(id).req(p), false, id);
+  for (const id of ['cryo', 'nanite']) assert.equal(loadoutAllows(p, byId(id)), false, id);
+  assert.equal(byId('tag_kinetic').req(p), true, 'Pew Pews are kinetic');
+  assert.equal(loadoutAllows(p, byId('thermite')), true, 'Pew Pews fire bolts to ignite');
+  p.loadout = ['blaster', 'rockets'];
+  assert.equal(byId('tag_explosive').req(p), true, 'wing rockets are explosive');
+  assert.equal(byId('tag_area').req(p), true, 'wing rockets are area');
+  assert.equal(loadoutAllows(p, byId('cryo')), true, 'wing rockets carry cryo');
+  p.loadout = ['rockets'];
+  assert.equal(byId('tag_kinetic').req(p), false, 'no kinetic weapon equipped');
+  assert.equal(loadoutAllows(p, byId('thermite')), false, 'no Pew Pews, no thermite');
 });
 
 test('every weapon card carries tags rendered as chips, and every tag has a chip style', () => {

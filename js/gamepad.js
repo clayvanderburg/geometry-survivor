@@ -44,7 +44,8 @@ export function pickInDirection(from, rects, dx, dy) {
   return best;
 }
 
-const FOCUSABLE = 'button:not([disabled]), a[href], input[type="range"], .upgrade-option';
+// [data-gp-nav] marks other focus stops (e.g. Field Guide entries, so the d-pad can browse and scroll them).
+const FOCUSABLE = 'button:not([disabled]), a[href], input[type="range"], .upgrade-option, [data-gp-nav]';
 
 export class MenuNavigator {
   constructor() {

@@ -173,3 +173,30 @@ Known limits: one bot pilot, so skill-dependent and aim-dependent weapons are ju
 **How:** `js/weapon-scaling.js` keeps each weapon's counts, cooldowns and ranges and *solves* damage per hit from the curve (`POTENTIAL_DPS` mirrors the formulas). `tests/weapon-balance.test.js` holds every weapon within 1% of the curve, requires new weapon cards to join it, and checks damage per hit never drops on level-up. To keep per-hit damage rising, a few count curves were eased: missile cooldown `1.9 − 0.1·L`, Tesla Arc cooldown `1.65 − 0.1·L`, drones `min(3, L)`, turret cooldown `8.5 − 0.5·L`, turret fire rate `2.6 + 0.45·L`. Shrapnel (needs kills) and the dash nova (needs dashes) stay outside the curve.
 
 **Real fights (chase bench, 50 wave-6 chasers, own-source DPS at L3 / L6):** missiles 530 / 824, mines 449 / 588, singularity 727 / 852 (L5), orbitals 228 / 493, drones 140 / 296, lightning 163 / 401, turret 102 / 205. Area weapons still lead in crowds because splash isn't part of the potential; that is the "difficulty of use" layer left for tuning.
+
+## Weapon loadout and leveling (design change)
+
+**Designer intent:** start with the ship's own weapons, carry at most 6, see level-ups only for what you carry (plus general upgrades), add weapons through frequent NEW WEAPON cards, and level much faster so a long run reaches LV 50+ with a few epic/legendary weapons instead of many weak ones.
+
+**What changed**
+
+- **Loadout (`js/loadout.js`).** 6 slots (`weaponSlots`). The crab starts with Pew Pews + Wing Rockets LV 1. Level-up hands offer level-ups and weapon-specific upgrades only for equipped weapons, general upgrades always, and tag cards only for tags an equipped weapon carries. A NEW WEAPON card joins a hand with 35% chance while a slot is free (`newWeaponChance`) and is guaranteed after 2 hands without one (`newWeaponPity` 3); it opens a pick of 1 of 3 unequipped weapons with exact LV 1 stats. Caches never offer it. Discarding (pause menu) removes a weapon, its level, its own upgrades and any evolution that no longer qualifies.
+- **Weighted hands.** Equipped weapon level-ups weigh 3, weapon-specific lines 1.5, general cards 1, tag cards 0.7, evolutions 4 × luck (all TUNING). Every weapon line goes to **LV 8** (Prism Split and Phase Piercer too), so six weapons hold ~50 weapon levels, and lucky +3/+4/+5 jumps land on weapons you already use.
+- **Wing Rockets** are a leveled weapon on the shared DPS curve: 2 rockets per volley every 1.0 s at LV 1, 0.7 s from LV 6, up to 6 rockets at LV 8, blast 50 → 78 px. Damage per hit is solved from `DPS_TARGET` like the other weapons (`POTENTIAL_DPS.rockets`). Cryo Payload now also chills rocket blasts.
+- **LV 7–8 curves.** To keep damage per hit rising: missile cooldown floors at 1.2 s, Tesla Arc cooldown at 0.95 s, turret deploy cooldown at 5.5 s. LV 1–6 numbers are unchanged. `tests/weapon-balance.test.js` checks every weapon to LV 8.
+- **XP curve.** XP to next level was `12`, then `×1.32 + 6` per level, which priced LV 40 out of reach. It is now a stepped line: 25 + 16 per level to LV 20, +100 per level to LV 40, then +60 per level (`xpCurveBase`, `xpCurveStep`, `xpCurveStepMid`, `xpCurveStepLate`).
+
+**How the curve was chosen.** XP income depends on how well the pilot keeps killing, and it climbs fast as packs grow and spawns speed up (about 300 XP/min in minute 1, 600–900 in minute 3, 2–5K/min from minute 5). The simulator now reports **level by minute**, **XP per minute** and the **end-of-run loadout**, and `--god` keeps the ship alive to measure pacing past the bot's usual death. A first try (+8/+12/+16 per level) let a bot reach LV 60 by minute 10. A steep middle band (+350 per level) starved the bot, which then couldn't kill late waves; income collapsed and intervals passed 60 s by minute 8. The shipped values sit between the two.
+
+| measure (seed `vexolith`) | old curve | new curve |
+|---|---:|---:|
+| average bot, 6 strategies × 6 runs: level at death (median by strategy) | 11–18 | 14–22 |
+| seconds per level-up in minutes 1–3 | 5 → 25+ | 9–15 |
+| level at 3:00 / 5:00 (runs alive) | ~L12 / ~L16 | L14–17 / L21–31 |
+| god mode, 4 strategies × 1 run: level at 12:00 / 20:00 | — | L32–44 / L40–50 |
+| god mode: seconds per level-up after minute 8 | — | 30–60 |
+| weapons equipped at death (mean, 6 strategies) | — | 4.2–6.0 |
+
+Survival for the average bot is about where it was (median 2:42–5:03 by strategy): runs still end at the wave 9–18 difficulty spike described above, so the "average 12-minute run" and "strong 30-minute run" targets depend on the run-length tuning, not on this curve. Even in god mode, XP income drops after minute ~12 for weaker builds because the bot can no longer kill late waves (the `1.09^(wave−6)` HP term). If runs get longer, re-check pacing with `npm run balance -- --god --max-minutes 30` and adjust the four `xpCurve*` values. Strong builds (missiles + Tesla + Storm Protocol, or orbitals + shatter + drones) reach 6 weapons by ~3–4 minutes.
+
+**Open:** Wing Rockets fire along the hull heading, so in the static bench (fixed heading) they add only +24 → +282 DPS from LV 2 to LV 8, below the area autonomous weapons; their potential DPS matches the curve, and the gap is the "difficulty of use" layer. Proximity Mines still bench near zero in the static pack (the ship doesn't move, so no mines are laid among targets), as before.

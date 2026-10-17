@@ -3,27 +3,35 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
-import { UPGRADE_POOL, RARITY, rarityFor, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import {
-  WEAPON_SCALING as W, weaponDamage, prismStreams, areaMult, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  critChance, critMultiplier
+  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
+  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines
+} from './upgrades.js';
+import {
+  WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
+  wingRocketBlastRadius, critChance, critMultiplier
 } from './weapon-scaling.js';
+import { STARTING_WEAPONS, WEAPON_BY_ID, ownedWeapons, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
-import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText } from './upgrade-cards.js';
+import {
+  describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
+} from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
+import { detectEncounters, hostileEntry } from './field-guide.js';
+import { FieldGuideUI } from './field-guide-ui.js';
 import {
   TUNING,
   TUNING_SCHEMA,
@@ -44,6 +52,7 @@ const SINGULARITY_GRID_DEPTH = 260;
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
 const BOSS_BAR_ROWS = 3;
+const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
 
 // "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
 export function bossEpithet(wave) {
@@ -74,6 +83,12 @@ const HIT_STOP_MAX_TICKS = 3;
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
 };
+
+// Field Guide: how long the in-run "FIELD GUIDE UPDATED" toast stays up, and how often (fixed ticks)
+// the camera view is scanned for hostiles the player has never logged.
+const GUIDE_TOAST_TIME = 2.8;
+const GUIDE_SCAN_TICKS = 6;
+const GUIDE_STATES = ['TITLE', 'PAUSED', 'GAMEOVER'];
 
 // Crits shove a little harder and flash a gold star flare sized to the target.
 const CRIT_KNOCKBACK_MULT = 1.5;
@@ -123,6 +138,9 @@ export class Game {
     this.menuGrace = 0;
 
     this.currentChoices = [];
+    // Field Guide overlay (built on first open) sits on top of the title, pause or game-over screen.
+    this.guideOpen = false;
+    this.fieldGuide = null;
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
@@ -160,6 +178,9 @@ export class Game {
     this.ltCard = null;
     this.ltCardTimer = 0;
     this.seenArchetypes = new Set();
+    this.guideToast = null;
+    this.guideToastTimer = 0;
+    this.guideScanTick = 0;
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -183,8 +204,11 @@ export class Game {
       bombs: 2 + bonuses.extraBombs,
       level: 1,
       xp: 0,
-      xpToNext: 12,
+      xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
+      // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
+      loadout: [],
+      newWeaponDrought: 0,
       stats: {
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult,
         fireRate: TUNING.fireRate * bonuses.fireRateMult,
@@ -205,6 +229,7 @@ export class Game {
         areaMult: 1
       },
       weapons: {
+        rockets: 0,
         missiles: 0,
         orbitals: 0,
         lightning: 0,
@@ -224,6 +249,12 @@ export class Game {
         supercritical: 0
       }
     };
+
+    // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
+    snapshotBase(this.player);
+    for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    this.discardPending = null;
+    this.weaponBarHtml = null;
 
     this.camX = centerX - this.width * 0.5;
     this.camY = centerY - this.height * 0.5;
@@ -319,11 +350,24 @@ export class Game {
       // Space on a focused button/link activates that control instead of a menu shortcut.
       const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
 
+      if (this.guideOpen) {
+        this.handleGuideKey(e, onControl);
+        return;
+      }
+
       this.sound.init();
       const code = e.code;
       this.keys[code] = true;
       // Held movement is stateful; abilities and toggles fire only on the initial press.
       if (e.repeat) return;
+
+      // [G] opens the Field Guide from the title, pause and game-over screens (and pauses a live run).
+      if (code === 'KeyG' && (this.state === 'PLAYING' || GUIDE_STATES.includes(this.state))) {
+        e.preventDefault();
+        if (this.state === 'PLAYING') this.togglePause();
+        this.openGuide();
+        return;
+      }
 
       if (this.state === 'TITLE' && code === 'Space' && !onControl) {
         e.preventDefault();
@@ -476,6 +520,9 @@ export class Game {
     if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
+    for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
+      document.getElementById(id)?.addEventListener('click', () => this.openGuide());
+    }
     this.syncDamageNumbersButton();
 
     // Volume Sliders (HUD & Pause Menu)
@@ -614,23 +661,27 @@ export class Game {
     const p = this.player;
     if (p) {
       const bonuses = this.progression.getBonuses();
-      const upgLv = p.upgradeLevels || {};
+      const liveStats = (upgLv, weapons) => ({
+        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
+        fireRate: TUNING.fireRate * bonuses.fireRateMult * Math.pow(1.26, upgLv.firerate || 0) * (weapons.pulsarHelix ? 1.15 : 1),
+        bulletSpeed: TUNING.bulletSpeed * Math.pow(1.15, upgLv.firerate || 0),
+        damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.25, upgLv.pierce || 0),
+        magnetRadius: TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0),
+        xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0),
+        luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
+        coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
+        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
+        miningRange: TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
+        drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
+        // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
+        critChance: (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep
+      });
 
       p.radius = TUNING.shipRadius;
-      p.stats.moveSpeed = TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0);
-      p.stats.fireRate = TUNING.fireRate * bonuses.fireRateMult * Math.pow(1.26, upgLv.firerate || 0) * (p.weapons.pulsarHelix ? 1.15 : 1);
-      p.stats.bulletSpeed = TUNING.bulletSpeed * Math.pow(1.15, upgLv.firerate || 0);
-      p.stats.damage = TUNING.baseDamage * bonuses.damageMult * Math.pow(1.25, upgLv.pierce || 0);
-      p.stats.magnetRadius = TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0);
-      p.stats.xpMultiplier = TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0);
-      p.stats.luck = TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25;
-      p.stats.coreDropMult = TUNING.coreDropMult * bonuses.coreMult;
-      p.stats.miningSpeed = TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.9 : 1);
-      p.stats.miningRange = TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.3 : 1);
-      p.stats.drillScale = TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (p.weapons.tectonicBore ? 1.25 : 1);
-      // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
-      p.stats.critChance = (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (p.weapons.supercritical ? W.supercritChance : 0);
-      p.stats.critDamage = (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep;
+      Object.assign(p.stats, liveStats(p.upgradeLevels || {}, p.weapons));
+      // Weapon discards rebuild stats from the run-start snapshot, so it takes the tuned base values too.
+      if (p.base) Object.assign(p.base.stats, liveStats({}, {}));
     }
 
     for (const key of ['musicVolume', 'sfxVolume']) {
@@ -663,6 +714,7 @@ export class Game {
         this.spawnRelicChest(p.x + Math.cos(p.angle) * 95, p.y + Math.sin(p.angle) * 95, false);
       } else if (sandboxAction === 'FORCE_LEVELUP' && this.state === 'PLAYING') {
         p.level++;
+        p.xpToNext = xpToNextLevel(p.level);
         this.triggerLevelUp();
       } else if (sandboxAction === 'ADD_CORES') {
         this.sessionCores += 50;
@@ -702,6 +754,7 @@ export class Game {
   }
 
   renderHubUI() {
+    this.syncGuideBadges();
     const cores = this.progression.data.cores;
     const hubCoresEl = document.getElementById('hub-cores-count');
     const goCoresEl = document.getElementById('go-cores-count');
@@ -826,6 +879,8 @@ export class Game {
       this.resetInput();
       this.mouse.down = false;
       this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
+      this.discardPending = null;
+      this.renderLoadoutPanel();
       if (pauseModal) pauseModal.classList.remove('hidden');
       if (pauseBtn) {
         pauseBtn.textContent = '▶ RESUME [P]';
@@ -844,6 +899,7 @@ export class Game {
 
   startGame() {
     this.sound.init();
+    if (this.guideOpen) this.closeGuide();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.add('hidden');
@@ -1402,7 +1458,7 @@ export class Game {
   }
 
   contactDamage(e) {
-    return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return contactDamageAt(e, this.wave);
   }
 
   // Gunner orbs scale with the wave exactly like contact damage.
@@ -1461,9 +1517,9 @@ export class Game {
     return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), { warmup: LIEUTENANT_WARMUP, lieutenant: lt });
   }
 
-  showLieutenantCard(kind, kicker, name, epithet, detail) {
+  showLieutenantCard(kind, kicker, name, epithet, detail, link = '') {
     this.ltCardSerial = (this.ltCardSerial || 0) + 1;
-    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail };
+    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail, link };
     this.ltCardTimer = LIEUTENANT_CARD_TIME;
   }
 
@@ -1474,6 +1530,7 @@ export class Game {
     this.addShake(6);
     this.sound.playLieutenantArrival?.();
     const mods = lieutenantModLabels(e).join(' · ');
+    this.logGuideEntries(['lieutenant', e.type]);
     this.showLieutenantCard('arrival', '▲ LIEUTENANT ▲', e.name, e.epithet, `${mods} · ${Math.round(e.maxHp).toLocaleString()} HP`);
   }
 
@@ -1501,7 +1558,10 @@ export class Game {
     if (!info || this.seenArchetypes.has(type)) return;
     if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
     this.seenArchetypes.add(type);
-    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro);
+    // The intel card doubles as the Field Guide link (no separate toast for it).
+    const logged = this.logGuideEntries([type], false).length > 0;
+    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro,
+      logged ? '📖 NEW FIELD GUIDE ENTRY · [G] TO READ' : '📖 IN YOUR FIELD GUIDE · [G]');
   }
 
   updateLieutenantHUD() {
@@ -1514,6 +1574,8 @@ export class Game {
       document.getElementById('lt-card-name').textContent = card.name;
       document.getElementById('lt-card-epithet').textContent = card.epithet;
       document.getElementById('lt-card-detail').textContent = card.detail;
+      const link = document.getElementById('lt-card-link');
+      if (link) link.textContent = card.link || '';
       cardEl.className = `lt-card lt-card-${card.kind}`;
       cardEl.style.animation = 'none';
       void cardEl.offsetWidth;
@@ -1539,6 +1601,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
     this.sound.playBossArrival();
     const hp = Math.round(e.maxHp).toLocaleString();
+    this.logGuideEntries(['boss']);
     this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
   }
 
@@ -1861,7 +1924,7 @@ export class Game {
     while (p.xp >= p.xpToNext && this.state === 'PLAYING') {
       p.xp -= p.xpToNext;
       p.level++;
-      p.xpToNext = Math.round(p.xpToNext * 1.32 + 6);
+      p.xpToNext = xpToNextLevel(p.level);
       this.triggerLevelUp();
     }
   }
@@ -1911,17 +1974,26 @@ export class Game {
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
   }
 
-  // Starting kit: one dumbfire rocket from each outer wing tip, always along the hull's heading
-  // (where the crab is flying), independent of the turret's aim. Direct hit plus a small blast.
-  fireWingRockets() {
+  // Starting weapon: dumbfire rockets from the outer wing tips, always along the hull's heading (where
+  // the crab is flying), independent of the turret's aim. Direct hit plus a small blast. Rockets
+  // alternate wings; each extra pair launches a little further back and fans slightly outward.
+  fireWingRockets(level = this.player.weapons.rockets || 1) {
     const p = this.player;
     const heading = p.drillAngle ?? p.angle;
-    const fx = Math.cos(heading), fy = Math.sin(heading);
-    const damage = weaponDamage(p, 'rocket');
-    for (const side of [-1, 1]) {
+    const damage = weaponDamage(p, 'rocket', level);
+    const blastRadius = wingRocketBlastRadius(p, level);
+    const count = W.wingRocketCount(level);
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const tier = Math.floor(i / 2);
+      const a = heading + side * tier * 0.07;
+      const fx = Math.cos(a), fy = Math.sin(a);
+      const hx = Math.cos(heading), hy = Math.sin(heading);
       // Wing tip in hull space: (0.25r forward, 1.12r out), matching drawCrabShip's carapace wings.
-      const wx = p.x + fx * p.radius * 0.25 - fy * side * p.radius * 1.12;
-      const wy = p.y + fy * p.radius * 0.25 + fx * side * p.radius * 1.12;
+      const fwd = p.radius * 0.25 - tier * 7;
+      const out = p.radius * 1.12 + tier * 3;
+      const wx = p.x + hx * fwd - hy * side * out;
+      const wy = p.y + hy * fwd + hx * side * out;
       this.bullets.push({
         x: wx,
         y: wy,
@@ -1935,7 +2007,7 @@ export class Game {
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
-        blastRadius: W.wingRocketBlastRadius * areaMult(p),
+        blastRadius,
         blastDamage: damage * W.wingRocketBlastShare
       });
     }
@@ -2186,7 +2258,9 @@ export class Game {
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 145, 5, 0.5);
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
 
-    this.currentChoices = rollUpgrades(this.player, 3);
+    // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
+    // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons.
+    this.currentChoices = rollLevelUpHand(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2196,40 +2270,180 @@ export class Game {
       return;
     }
 
+    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve');
+    this.renderChoiceCards(this.currentChoices.map((upg) => (upg.isNewWeapon ? describeNewWeapon(this.player) : describeUpgrade(this.player, upg))));
+    document.getElementById('upgrade-modal').classList.remove('hidden');
+  }
+
+  setUpgradeHeader(subtitle, title, hint) {
+    const modal = document.getElementById('upgrade-modal');
+    const sub = modal.querySelector?.('.glitch-subtitle');
+    const head = modal.querySelector?.('.upgrade-title');
+    const tip = modal.querySelector?.('.upgrade-hint');
+    if (sub) sub.textContent = subtitle;
+    if (head) head.textContent = title;
+    if (tip) tip.innerHTML = hint;
+  }
+
+  // Clicks (mouse, or controller A via MenuNavigator) on cards that appeared a moment ago are ignored:
+  // the second click of a double-click on NEW WEAPON would otherwise equip a weapon the player never saw.
+  renderChoiceCards(descs) {
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
-
-    this.currentChoices.forEach((upg, idx) => {
-      const view = renderUpgradeCard(describeUpgrade(this.player, upg), `[${idx + 1}]`);
+    const shownAt = performance.now();
+    descs.forEach((d, idx) => {
+      const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
-      card.addEventListener('click', () => this.selectUpgrade(idx));
+      card.addEventListener('click', () => {
+        if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+        this.selectUpgrade(idx);
+      });
       container.appendChild(card);
     });
+  }
 
-    document.getElementById('upgrade-modal').classList.remove('hidden');
+  // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
+  openWeaponPick() {
+    this.currentChoices = rollWeaponPicks(this.player, 3);
+    if (this.currentChoices.length === 0) {
+      this.closeUpgradeModal();
+      return;
+    }
+    const p = this.player;
+    this.setUpgradeHeader(`SLOT ${ownedWeapons(p).length + 1} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+      'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Equip');
+    this.renderChoiceCards(this.currentChoices.map((c) => describeWeaponPick(p, c.weaponId)));
+    // On narrow screens the hand scrolls; start the pick at its header, not where NEW WEAPON was.
+    const modal = document.getElementById('upgrade-modal');
+    for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
+    // Same modal state, so the controller grace (set on state changes) is restarted by hand.
+    this.menuGrace = Math.max(this.menuGrace, CHOICE_CLICK_GUARD_MS / 1000);
+    this.sound.playLevelUp();
+  }
+
+  closeUpgradeModal() {
+    this.currentChoices = [];
+    document.getElementById('upgrade-modal').classList.add('hidden');
+    this.state = 'PLAYING';
+    this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
+    this.processPendingLevelUps();
+    this.updateHUD();
   }
 
   selectUpgrade(index) {
     if (this.state !== 'UPGRADE') return;
     const upg = this.currentChoices[index];
     if (!upg) return;
+    const p = this.player;
+
+    if (upg.isNewWeapon) {
+      this.openWeaponPick();
+      return;
+    }
+    if (upg.isWeaponPick) {
+      acquireWeapon(p, upg.weaponId);
+      const weapon = WEAPON_BY_ID[upg.weaponId];
+      this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
+      this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
+      this.closeUpgradeModal();
+      return;
+    }
 
     const jump = this.applyUpgrade(upg);
-    this.currentChoices = [];
-
-    document.getElementById('upgrade-modal').classList.add('hidden');
-    this.state = 'PLAYING';
-    this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
-    this.processPendingLevelUps();
+    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
+    this.closeUpgradeModal();
+  }
+
+  // --- Weapon loadout (pause-menu panel + HUD strip) --------------------------------------------
+
+  // Pause-menu LOADOUT panel: one card per slot with level, tags and weapon-specific upgrades. DISCARD
+  // asks for confirmation in place (CONFIRM / KEEP), then frees the slot so NEW WEAPON cards return.
+  renderLoadoutPanel() {
+    const panel = document.getElementById('pause-loadout');
+    if (!panel || !this.player) return;
+    const p = this.player;
+    const owned = ownedWeapons(p);
+    const slots = weaponSlots();
+    const count = document.getElementById('pause-loadout-count');
+    if (count) count.textContent = `${owned.length} / ${slots} SLOTS`;
+    const chips = (id) => weaponTags(id).filter((t) => TAG_INFO[t])
+      .map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('');
+    const html = [];
+    for (let i = 0; i < Math.max(slots, owned.length); i++) {
+      const id = owned[i];
+      if (!id) {
+        html.push(`<div class="loadout-slot empty"><div class="loadout-slot-top"><span class="loadout-slot-num">SLOT ${i + 1}</span></div><div class="loadout-empty-text">EMPTY // NEW WEAPON cards show up in level-ups while a slot is free</div></div>`);
+        continue;
+      }
+      const w = WEAPON_BY_ID[id];
+      const level = weaponLevel(p, id);
+      const lineList = weaponUpgradeLines(p, id);
+      // Pew Pews has no level of its own: it grows through its upgrade lines.
+      const lineLevels = lineList.reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
+      const lvText = w.levelId
+        ? `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${UPGRADE_BY_ID[w.levelId].maxLevel}</span>`
+        : lineLevels ? `${lineLevels} UPGRADE${lineLevels === 1 ? '' : 'S'}` : 'BASE';
+      const lines = lineList
+        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `LV ${l.level}`}</span>`).join('');
+      const pending = this.discardPending === id;
+      // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
+      const removes = lineList.filter((l) => !(UPGRADE_BY_ID[l.id].owners || []).some((o) => o !== id && owned.includes(o)));
+      const removeText = removes.length ? ` and ${removes.map((l) => l.name.replace('SYNERGY: ', '')).join(', ')}` : '';
+      const actions = pending
+        ? `<div class="loadout-confirm">Discard ${w.name}${w.levelId ? ` LV ${level}` : ''}${removeText}? The slot opens for a NEW WEAPON.</div>
+          <div class="loadout-actions"><button class="neon-btn loadout-btn danger" data-discard-confirm="${id}">✕ CONFIRM DISCARD</button><button class="neon-btn loadout-btn" data-discard-cancel="${id}">KEEP</button></div>`
+        : `<div class="loadout-actions"><button class="neon-btn loadout-btn" data-discard="${id}"${owned.length <= 1 ? ' disabled title="Your last weapon cannot be discarded"' : ''}>DISCARD</button></div>`;
+      html.push(`<div class="loadout-slot${pending ? ' confirming' : ''}" style="--wc:${w.color}">
+        <div class="loadout-slot-top"><span class="loadout-slot-num">SLOT ${i + 1}</span><span class="loadout-lv">${lvText}</span></div>
+        <div class="loadout-name">${w.name}</div>
+        <div class="upg-tags">${chips(id)}</div>
+        ${lines ? `<div class="loadout-lines">${lines}</div>` : ''}
+        ${actions}
+      </div>`);
+    }
+    panel.innerHTML = html.join('');
+    panel.querySelectorAll?.('[data-discard]').forEach((b) => b.addEventListener('click', () => {
+      this.discardPending = b.getAttribute('data-discard');
+      this.renderLoadoutPanel();
+      this.focusLoadoutButton(`[data-discard-cancel="${this.discardPending}"]`);
+    }));
+    panel.querySelectorAll?.('[data-discard-cancel]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.getAttribute('data-discard-cancel');
+      this.discardPending = null;
+      this.renderLoadoutPanel();
+      this.focusLoadoutButton(`[data-discard="${id}"]`);
+    }));
+    panel.querySelectorAll?.('[data-discard-confirm]').forEach((b) => b.addEventListener('click', () => {
+      this.confirmDiscard(b.getAttribute('data-discard-confirm'));
+    }));
+  }
+
+  // Keep keyboard and controller focus on the slot whose buttons were just re-rendered.
+  focusLoadoutButton(selector) {
+    const el = document.querySelector?.(`#pause-loadout ${selector}`);
+    if (!el) return;
+    if (this.gpActive && this.menuNav) this.menuNav.setFocus(el);
+    else el.focus?.();
+  }
+
+  confirmDiscard(id) {
+    const removed = discardWeapon(this.player, id);
+    this.discardPending = null;
+    if (removed) {
+      const w = WEAPON_BY_ID[id];
+      this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${w.name.toUpperCase()} DISCARDED // SLOT FREE`, '#ff77b7', 15);
+    }
+    this.renderLoadoutPanel();
+    this.focusLoadoutButton('[data-discard]:not([disabled])');
     this.updateHUD();
   }
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
+    this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.playSupernova();
 
@@ -2307,6 +2521,10 @@ export class Game {
   // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
   // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
   updateMenuController(gp, dt) {
+    if (this.guideOpen) {
+      this.updateGuideController(gp, dt);
+      return;
+    }
     const menus = {
       TITLE: ['title-modal', 'btn-start-game'],
       UPGRADE: ['upgrade-modal', null],
@@ -2355,6 +2573,8 @@ export class Game {
     if (this.bossFlash > 0) this.bossFlash = Math.max(0, this.bossFlash - dt * 2.4);
     this.shieldRotation += dt * 1.4;
 
+    // The guide only lives over the title, pause and game-over screens.
+    if (this.guideOpen && !GUIDE_STATES.includes(this.state)) this.closeGuide();
     const gp = this.pollGamepad();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
@@ -2532,17 +2752,19 @@ export class Game {
 
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
-    if (shouldFire) {
+    if (shouldFire && ownsWeapon(p, 'blaster')) {
       this.fireAccumulator += dt * p.stats.fireRate;
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
       }
     }
-    this.rocketTimer -= dt;
-    if (shouldFire && this.rocketTimer <= 0) {
-      this.fireWingRockets();
-      this.rocketTimer = W.wingRocketCooldown;
+    if (p.weapons.rockets > 0) {
+      this.rocketTimer -= dt;
+      if (shouldFire && this.rocketTimer <= 0) {
+        this.fireWingRockets(p.weapons.rockets);
+        this.rocketTimer = W.wingRocketCooldown(p.weapons.rockets);
+      }
     }
 
     // 4. Autonomous Weapons
@@ -2677,6 +2899,7 @@ export class Game {
       for (const lt of ltArrivals) this.onLieutenantArrived(lt);
       ltArrivals.length = 0;
     }
+    this.updateFieldGuide(dt);
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
     if (this.updateEnemyBullets(dt)) return;
 
@@ -2805,20 +3028,199 @@ export class Game {
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
 
-    const weaponsBar = document.getElementById('active-weapons-bar');
+    // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed),
+    // then every other installed upgrade. Same level wording as the cards ("LV 3"); synergies are
+    // one-shot evolutions. Rarity belongs to a roll, not a weapon, so chips stay rarity-neutral.
     const tags = [];
+    const owned = ownedWeapons(p);
+    for (let i = 0; i < Math.max(weaponSlots(), owned.length); i++) {
+      const w = WEAPON_BY_ID[owned[i]];
+      if (!w) {
+        tags.push('<span class="weapon-slot-chip empty" title="Free weapon slot">+</span>');
+        continue;
+      }
+      const lv = w.levelId ? ` LV ${weaponLevel(p, w.id)}${bonusText(bonusLevels(p, w.levelId))}` : '';
+      tags.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${w.name}">${w.hudName}${lv}</span>`);
+    }
+    tags.push('<span class="weapon-bar-break"></span>');
     for (const upg of UPGRADE_POOL) {
       const lv = p.upgradeLevels[upg.id];
-      if (lv) {
-        // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
-        // Rarity belongs to a roll, not a weapon, so tags stay neutral; evolutions keep their own color.
-        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}${bonusText(bonusLevels(p, upg.id))}`}</span>`);
+      if (lv && upgradeKind(upg) !== 'weapon') {
+        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
       }
     }
-    weaponsBar.innerHTML = tags.join('');
+    const barHtml = tags.join('');
+    if (barHtml !== this.weaponBarHtml) {
+      this.weaponBarHtml = barHtml;
+      document.getElementById('active-weapons-bar').innerHTML = barHtml;
+    }
 
     this.updateBossHUD(this.getBossHudModel());
     this.updateLieutenantHUD();
+    this.updateGuideToast();
+  }
+
+  // --- Field Guide ---------------------------------------------------------------------------
+
+  // Hostiles in view that were never logged unlock their guide entry (scanned every few ticks).
+  updateFieldGuide(dt) {
+    if (this.guideToastTimer > 0) this.guideToastTimer = Math.max(0, this.guideToastTimer - dt);
+    this.guideScanTick = (this.guideScanTick || 0) + 1;
+    if (this.guideScanTick < GUIDE_SCAN_TICKS) return;
+    this.guideScanTick = 0;
+    const seen = this.progression?.data?.guide?.seen;
+    if (!seen) return;
+    const view = { x: this.camX, y: this.camY, w: this.width, h: this.height };
+    const found = detectEncounters(this.enemyManager.enemies, view, id => seen.includes(id));
+    if (found.length) this.logGuideEntries(found);
+  }
+
+  // Saves newly met hostiles and (optionally) raises the toast. Returns the ids that were new.
+  logGuideEntries(ids, toast = true) {
+    const added = this.progression?.unlockGuideEntries?.(ids) || [];
+    if (!added.length) return added;
+    if (toast) {
+      const names = added.map(id => hostileEntry(id)?.name || id.toUpperCase());
+      const merge = this.guideToastTimer > 0.4 && this.guideToast;
+      this.guideToastSerial = (this.guideToastSerial || 0) + 1;
+      this.guideToast = { id: this.guideToastSerial, text: (merge ? [this.guideToast.text, ...names] : names).join(' · ') };
+      this.guideToastTimer = GUIDE_TOAST_TIME;
+    }
+    this.syncGuideBadges();
+    return added;
+  }
+
+  updateGuideToast() {
+    const el = document.getElementById('guide-toast');
+    if (!el) return;
+    const toast = this.guideToastTimer > 0 && this.state === 'PLAYING' ? this.guideToast : null;
+    if (toast && toast.id !== this.guideToastShownId) {
+      this.guideToastShownId = toast.id;
+      const text = document.getElementById('guide-toast-text');
+      if (text) text.textContent = `${toast.text} · [G]`;
+    }
+    setHidden(el, !toast);
+    if (toast) el.classList[this.guideToastTimer < 0.4 ? 'add' : 'remove']('guide-toast-out');
+  }
+
+  // "· 2 NEW" on every Field Guide button while unread entries wait.
+  syncGuideBadges() {
+    const fresh = this.progression?.data?.guide?.fresh.length || 0;
+    for (const id of ['guide-badge-title', 'guide-badge-pause', 'guide-badge-go']) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = fresh ? ` · ${fresh} NEW` : '';
+    }
+  }
+
+  openGuide({ tab = null, focusId = null } = {}) {
+    if (this.guideOpen || !GUIDE_STATES.includes(this.state)) return false;
+    this.fieldGuide ||= new FieldGuideUI({
+      progression: this.progression,
+      getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
+      onClose: () => this.onGuideClosed()
+    });
+    // Opening with unread entries jumps straight to the first one.
+    const fresh = this.progression.data.guide.fresh.find(id => hostileEntry(id));
+    const target = focusId ?? fresh ?? null;
+    this.guideReturnFocus = document.activeElement;
+    this.guideOpen = true;
+    this.resetInput();
+    this.fieldGuide.open({ tab: target ? 'hostiles' : tab, focusId: target });
+    this.guideFocusEl = target ? this.fieldGuide.reveal(target) : null;
+    this.menuNav?.clear();
+    // Focus moves into the guide so Enter/Space can't click the (now covered) button that opened it.
+    (this.guideFocusEl || this.fieldGuide.body).focus?.({ preventScroll: true });
+    return true;
+  }
+
+  closeGuide() {
+    this.fieldGuide?.close();
+  }
+
+  onGuideClosed() {
+    this.guideOpen = false;
+    this.guideFocusEl = null;
+    this.menuNav?.clear();
+    this.menuState = null;
+    this.syncGuideBadges();
+    this.guideReturnFocus?.focus?.();
+  }
+
+  handleGuideKey(e, onControl) {
+    const guide = this.fieldGuide;
+    const code = e.code;
+    // Keys never reach the screen behind the guide: Tab cycles inside it, and Enter/Space on a control
+    // outside it (e.g. RESUME on the pause menu) would otherwise click it and resume the run under the guide.
+    const focused = document.activeElement;
+    const inGuide = !!focused && guide.root.contains(focused);
+    if (code === 'Tab') {
+      const stops = [...guide.root.querySelectorAll('button:not([disabled]), [tabindex="0"]')];
+      const i = inGuide ? stops.indexOf(focused) : -1;
+      const next = i === -1 ? (e.shiftKey ? stops.length - 1 : 0)
+        : e.shiftKey ? (i === 0 ? stops.length - 1 : null) : (i === stops.length - 1 ? 0 : null);
+      if (next !== null && stops[next]) {
+        e.preventDefault();
+        stops[next].focus();
+      }
+      return;
+    }
+    if (!inGuide && (code === 'Enter' || code === 'NumpadEnter')) {
+      e.preventDefault();
+      return;
+    }
+    onControl = onControl && inGuide;
+    const page = (guide.body.clientHeight || 400) * 0.85;
+    const actions = {
+      Escape: () => this.closeGuide(),
+      Backspace: () => this.closeGuide(),
+      KeyG: () => this.closeGuide(),
+      ArrowLeft: () => guide.cycleTab(-1),
+      KeyQ: () => guide.cycleTab(-1),
+      ArrowRight: () => guide.cycleTab(1),
+      KeyE: () => guide.cycleTab(1),
+      Digit1: () => guide.setTab('hostiles'),
+      Digit2: () => guide.setTab('mechanics'),
+      Digit3: () => guide.setTab('weapons'),
+      ArrowUp: () => guide.scrollBy(-90),
+      ArrowDown: () => guide.scrollBy(90),
+      PageUp: () => guide.scrollBy(-page),
+      PageDown: () => guide.scrollBy(page),
+      Home: () => guide.scrollBy(-1e6),
+      End: () => guide.scrollBy(1e6)
+    };
+    if (code === 'Space' && !onControl) actions.Space = () => guide.scrollBy(e.shiftKey ? -page : page);
+    const action = actions[code];
+    if (!action) return;
+    e.preventDefault();
+    if (e.repeat && !code.startsWith('Arrow') && !code.startsWith('Page')) return;
+    action();
+  }
+
+  // Controller in the guide: d-pad/left stick moves focus (auto-scrolling), right stick scrolls,
+  // LB/RB switch tabs, A activates, B or Start goes back.
+  updateGuideController(gp, dt) {
+    const guide = this.fieldGuide;
+    if (this.menuState !== 'GUIDE') {
+      this.menuState = 'GUIDE';
+      this.menuGrace = 0.25;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !guide) return;
+    const fallback = this.guideFocusEl?.isConnected ? this.guideFocusEl : guide.activeTabButton();
+    this.menuNav.update(guide.root, gp, dt, fallback);
+    if (gp.aimY) guide.scrollBy(gp.aimY * 16);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) {
+      this.closeGuide();
+    } else if (gp.pressed(PAD.LB) || gp.pressed(PAD.RB)) {
+      guide.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
+      this.guideFocusEl = null;
+      this.menuNav.setFocus(guide.activeTabButton());
+    } else if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    }
   }
 
   // Wing rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.

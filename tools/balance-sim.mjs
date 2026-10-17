@@ -9,14 +9,14 @@
 //   npm run balance -- --json balance.json  # raw per-run results for further analysis
 //
 // Flags: --runs N  --seed S  --strategies a,b  --focus  --max-minutes M  --workers N  --meta RANK
-//        --skill expert|average|novice  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --help
+//        --skill expert|average|novice  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --help
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function parseArgs(argv) {
-  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null };
+  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -39,6 +39,7 @@ function parseArgs(argv) {
     else if (a === '--workers') opts.workers = int(1);
     else if (a === '--meta') opts.meta = int(0);
     else if (a === '--skill') opts.skill = next();
+    else if (a === '--god') opts.god = true;
     else if (a === '--tune') {
       const spec = next();
       const eq = spec.indexOf('=');
@@ -114,7 +115,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
   const out = [];
   const capS = opts.maxMinutes * 60;
   out.push(`# Balance simulation`);
-  out.push(`seed \`${opts.seed}\` · ${opts.runs} run(s) per strategy · cap ${opts.maxMinutes} min game time · ${opts.skill} pilot · armory rank ${opts.meta} · ${Object.keys(opts.tune).length ? 'tuning ' + JSON.stringify(opts.tune) : 'default tuning'}${Object.keys(opts.weapons).length ? ' · weapons ' + JSON.stringify(opts.weapons) : ''} · ${wallSeconds.toFixed(0)} s wall`);
+  out.push(`seed \`${opts.seed}\` · ${opts.runs} run(s) per strategy · cap ${opts.maxMinutes} min game time · ${opts.skill} pilot${opts.god ? ' (god mode: pacing only)' : ''} · armory rank ${opts.meta} · ${Object.keys(opts.tune).length ? 'tuning ' + JSON.stringify(opts.tune) : 'default tuning'}${Object.keys(opts.weapons).length ? ' · weapons ' + JSON.stringify(opts.weapons) : ''} · ${wallSeconds.toFixed(0)} s wall`);
 
   if (runs.length) {
     const byStrat = new Map(strategies.map(s => [s.name, runs.filter(r => r.strategy === s.name)]));
@@ -161,7 +162,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
     })));
 
     // Level pacing.
-    const marks = [5, 10, 15, 20, 25];
+    const marks = [5, 10, 15, 20, 25, 30, 40, 50, 60];
     out.push('\n## Level-up pacing (median time to reach level; levels/min over the run)');
     out.push(table(['strategy', 'levels/min', ...marks.map(l => `L${l}`)], strategies.map(s => {
       const rs = byStrat.get(s.name);
@@ -170,6 +171,40 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
         const hits = rs.map(r => r.levels[l - 2]).filter(v => v !== undefined);
         return hits.length * 2 > rs.length ? mmss(median(hits)) : hits.length ? `(${hits.length}/${rs.length})` : '—';
       })];
+    })));
+
+    // Level reached by game minute (runs still alive at that minute), and level-up interval there.
+    const minutes = [1, 2, 3, 5, 8, 10, 12, 15, 20, 25, 30].filter(m => m * 60 <= capS);
+    out.push('\n## Level by minute (median level of runs alive at that minute; median seconds per level-up in the minute before)');
+    out.push(table(['strategy', ...minutes.map(m => `${m}:00`)], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      return [s.name, ...minutes.map(m => {
+        const alive = rs.filter(r => r.levelAt && r.levelAt.length > m);
+        if (!alive.length) return '—';
+        const lv = median(alive.map(r => r.levelAt[m]));
+        const gain = median(alive.map(r => r.levelAt[m] - r.levelAt[m - 1]));
+        return `L${lv} (${gain > 0 ? (60 / gain).toFixed(0) + 's' : '—'})`;
+      })];
+    })));
+
+    out.push('\n## XP collected per minute (median over runs alive through that minute)');
+    out.push(table(['strategy', ...minutes.map(m => `${m}:00`)], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      return [s.name, ...minutes.map(m => {
+        const alive = rs.filter(r => r.xpAt && r.xpAt.length > m);
+        return alive.length ? num(median(alive.map(r => r.xpAt[m] - r.xpAt[m - 1]))) : '—';
+      })];
+    })));
+
+    // Loadout: weapons equipped at the end of the run (NEW WEAPON picks).
+    out.push('\n## Loadout at end of run (weapons equipped, most common first; mean weapon levels gained)');
+    out.push(table(['strategy', 'weapons (mean)', 'equipped (count across runs)', 'weapon levels (mean)'], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      const counts = {};
+      rs.forEach(r => (r.loadout || []).forEach(id => { counts[id] = (counts[id] || 0) + 1; }));
+      const weaponLevels = mean(rs.map(r => (r.loadout || []).reduce((a, id) => a + (r.build[id] || 0), 0)));
+      return [s.name, mean(rs.map(r => (r.loadout || []).length)).toFixed(1),
+        Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' ') || '—', weaponLevels.toFixed(1)];
     })));
 
     // Difficulty curve per wave, pooled across strategies.
@@ -273,7 +308,7 @@ async function main() {
   const jobs = [];
   for (const s of strategies) {
     for (let i = 0; i < opts.runs; i++) {
-      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill } });
+      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill, god: opts.god } });
     }
   }
   // Long runs first so the pool drains evenly.
@@ -311,6 +346,7 @@ function readHelp() {
   --workers N       worker threads (default: CPU count, max 8)
   --meta R          give every Void Armory upgrade rank R (capped at its max)
   --skill S         pilot reaction latency: expert (1 tick), average (12, default), novice (20), or ticks
+  --god             keep the ship alive (measures XP / level pacing over a full-length run)
   --tune k=v        override a DEFAULT_TUNING value (repeatable) for A/B comparisons
   --weapon k=expr   override a weapon-scaling entry: a number or an arrow fn, e.g. "orbitalRadius=lv => 80 + lv * 8"
   --bench-seeds N   seeds averaged per bench case (default 2)

@@ -201,8 +201,9 @@ test('weapons fire with the shared scaling the cards preview', () => {
 
 test('5x jackpot caches use compact cards so both rows of rewards fit one screen', () => {
   const g = game();
-  // First draw lands the penta tier; later draws tie, so rewards install in pool order:
-  // Rotary Claw twice, then Tectonic Claw Bore (5 changed stats, incl. its AREA-scaled blast radius).
+  // Pew Pews lines are maxed, so with tied draws the heaviest-weighted eligible card wins, in pool order:
+  // Rotary Claw twice, then Tectonic Claw Bore (an evolution, 5 changed stats incl. its AREA-scaled blast).
+  for (const id of ['multishot', 'firerate', 'pierce', 'thermite']) g.player.upgradeLevels[id] = byId(id).maxLevel;
   withRandom([0.0001], () => g.openRelicChest({ guaranteedSuper: false }));
   const grid = elements.get('chest-rewards-grid');
   const cards = grid.children.slice(-5);

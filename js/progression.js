@@ -78,6 +78,22 @@ function boundedInteger(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER)
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
 }
 
+// Field Guide unlocks: `seen` ids (hostiles met in any run) and `fresh` ids (unlocked, not yet read in
+// the guide: they carry a NEW badge). Ids are guide entry ids (see js/field-guide.js); unknown but
+// well-formed ids are kept so a save from a newer build survives a round trip.
+const GUIDE_ID = /^[a-z0-9_]{1,40}$/;
+const GUIDE_MAX_IDS = 200;
+
+export function normalizeGuide(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const ids = (list) => Array.isArray(list)
+    ? [...new Set(list.filter(id => typeof id === 'string' && GUIDE_ID.test(id)))].slice(0, GUIDE_MAX_IDS)
+    : [];
+  const seen = ids(source.seen);
+  const fresh = ids(source.fresh).filter(id => seen.includes(id));
+  return { seen, fresh };
+}
+
 export function normalizeSave(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const sourceRanks = source.ranks && typeof source.ranks === 'object' ? source.ranks : {};
@@ -99,6 +115,7 @@ export function normalizeSave(value) {
     cores: boundedInteger(source.cores, 15),
     totalRuns: boundedInteger(source.totalRuns, 0),
     ranks,
+    guide: normalizeGuide(source.guide),
     highscores: savedScores.length ? savedScores : DEFAULT_HIGHSCORES.map(entry => ({ ...entry }))
   };
 }
@@ -183,6 +200,32 @@ export class ProgressionManager {
       coreMult: 1 + this.getRank('harvester') * 0.20,
       miningMult: 1 + this.getRank('harvester') * 0.22
     };
+  }
+
+  isGuideUnlocked(id) {
+    return this.data.guide.seen.includes(id);
+  }
+
+  // Unlocks guide entries (one save for the batch). Returns the ids that were actually new.
+  unlockGuideEntries(ids) {
+    const guide = this.data.guide;
+    const added = [];
+    for (const id of ids) {
+      if (typeof id !== 'string' || !GUIDE_ID.test(id) || guide.seen.includes(id) || guide.seen.length >= GUIDE_MAX_IDS) continue;
+      guide.seen.push(id);
+      guide.fresh.push(id);
+      added.push(id);
+    }
+    if (added.length) this.save();
+    return added;
+  }
+
+  // Entries the player has now looked at lose their NEW badge.
+  markGuideViewed(ids) {
+    const guide = this.data.guide;
+    const before = guide.fresh.length;
+    guide.fresh = guide.fresh.filter(id => !ids.includes(id));
+    if (guide.fresh.length !== before) this.save();
   }
 
   recordRun({ name, score, multiplier, wave, kills, timeStr }) {
