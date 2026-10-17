@@ -9,7 +9,11 @@ import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
-import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import {
+  WEAPON_SCALING as W, weaponDamage, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
+  critChance, critMultiplier
+} from './weapon-scaling.js';
+import { DOT_SOURCES, damageTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects } from './status-effects.js';
 import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
@@ -58,6 +62,8 @@ const DEATH_FX = [
 const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
 const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
+// Crits shove a little harder and flash a gold star flare sized to the target.
+const CRIT_KNOCKBACK_MULT = 1.5;
 
 export class Game {
   constructor() {
@@ -175,7 +181,11 @@ export class Game {
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1),
         miningRange: TUNING.miningRange,
-        drillScale: TUNING.drillScale
+        drillScale: TUNING.drillScale,
+        critChance: TUNING.baseCritChance ?? 0.05,
+        critDamage: TUNING.baseCritDamage ?? 1.5,
+        tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
+        areaMult: 1
       },
       weapons: {
         missiles: 0,
@@ -186,7 +196,11 @@ export class Game {
         dashNova: 0,
         pulsarHelix: 0,
         stormProtocol: 0,
-        tectonicBore: 0
+        tectonicBore: 0,
+        thermite: 0,
+        cryo: 0,
+        nanite: 0,
+        supercritical: 0
       }
     };
 
@@ -205,6 +219,7 @@ export class Game {
     this.singularityTimer = 0;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
+    this.statusStamp = 0;
 
     this.bullets = [];
     this.missiles = [];
@@ -997,8 +1012,9 @@ export class Game {
 
     // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore) {
-      this.particles.spawnShockwave(rock.x, rock.y, W.tectonicBlastRadius, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, W.tectonicBlastRadius, this.player.stats.damage * W.tectonicDamageMult, 48);
+      const blast = tectonicBlastRadius(this.player);
+      this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
+      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48);
     }
   }
 
@@ -1023,9 +1039,9 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
     if (p.weapons.dashNova > 0) {
-      const novaRadius = W.novaRadius(p.weapons.dashNova);
-      this.particles.spawnShockwave(p.x, p.y, novaRadius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, novaRadius, W.novaDamage(p.weapons.dashNova), 160);
+      const radius = novaRadius(p, p.weapons.dashNova);
+      this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
+      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160);
     }
   }
 
@@ -1085,12 +1101,24 @@ export class Game {
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
   }
 
-  // Single entry point for weapon damage: HP, hit flash, damage number, knockback and kill.
-  // (kx, ky) is a knockback impulse in px/tick for a 10px-radius hull; heavier hulls move less.
+  // Single entry point for weapon damage: corrosion, crit roll, HP, hit flash, damage number,
+  // knockback, on-hit statuses and kill. (kx, ky) is a knockback impulse in px/tick for a
+  // 10px-radius hull; heavier hulls move less. DoT ticks (DOT_SOURCES) never crit or re-apply statuses.
   hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+    const p = this.player;
+    dmg *= damageTakenMult(e);
+    const dot = DOT_SOURCES[source] === true;
+    const chance = dot || !p ? 0 : critChance(p);
+    const crit = chance > 0 && Math.random() < chance;
+    if (crit) {
+      dmg *= critMultiplier(p, isAfflicted(e));
+      kx *= CRIT_KNOCKBACK_MULT;
+      ky *= CRIT_KNOCKBACK_MULT;
+      this.onCriticalHit(e);
+    }
     e.hp -= dmg;
-    e.hitFlash = Math.max(e.hitFlash || 0, flash);
-    this.damageNumbers?.add(e, dmg, source);
+    e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
+    this.damageNumbers?.add(e, dmg, source, crit);
     if ((kx || ky) && !e.isBoss) {
       const k = (TUNING.knockbackMult ?? 1.0) * 100 / (e.radius * e.radius);
       let nx = (e.knockX || 0) + kx * k;
@@ -1104,6 +1132,13 @@ export class Game {
       e.knockY = ny;
     }
     if (e.hp <= 0) this.killEnemy(e);
+    else if (!dot && p) applyOnHitStatuses(p, e, source);
+  }
+
+  // Crit feedback: a gold star flare on the hull plus a bright tick (the sound is throttled in audio.js).
+  onCriticalHit(e) {
+    this.particles.spawnCritFlare?.(e.x, e.y, 10 + e.radius * 0.9);
+    this.sound.playCrit?.();
   }
 
   // Screen shake is reserved for heavy moments; every source goes through the user's multiplier.
@@ -1200,7 +1235,7 @@ export class Game {
           y: e.y,
           vx: Math.cos(a) * 11.5,
           vy: Math.sin(a) * 11.5,
-          damage: this.player.stats.damage * W.shrapnelDamageMult,
+          damage: weaponDamage(this.player, 'shrapnel'),
           pierce: 1,
           hue: 48,
           radius: 4,
@@ -1598,7 +1633,7 @@ export class Game {
         y: noseY,
         vx: Math.cos(a) * p.stats.bulletSpeed,
         vy: Math.sin(a) * p.stats.bulletSpeed,
-        damage: p.stats.damage,
+        damage: weaponDamage(p, 'blaster'),
         pierce: p.stats.pierce,
         hue: TUNING.bulletColorHue ?? 186,
         radius: TUNING.bulletRadius ?? 4.2,
@@ -1615,7 +1650,7 @@ export class Game {
           y: p.y,
           vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
-          damage: p.stats.damage * W.helixDamageMult,
+          damage: weaponDamage(p, 'helix'),
           pierce: p.stats.pierce,
           hue: 48,
           radius: 4.5,
@@ -1639,7 +1674,8 @@ export class Game {
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
         speed: W.missileSpeed(level),
-        damage: p.stats.damage * W.missileDamageMult(level),
+        damage: weaponDamage(p, 'missile', level),
+        blastRadius: missileBlastRadius(p),
         hue: p.weapons.stormProtocol ? 52 : 325,
         trail: [],
         life: 3.2
@@ -1683,7 +1719,7 @@ export class Game {
       currX = target.x;
       currY = target.y;
 
-      this.hitEnemy(target, p.stats.damage * W.lightningDamageMult(level), 'lightning', kx, ky);
+      this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky);
     }
   }
 
@@ -1691,7 +1727,7 @@ export class Game {
     const p = this.player;
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    const pullRadius = W.singularityPullRadius(level);
+    const pullRadius = singularityPullRadius(p, level);
     this.singularities.push({
       x: p.x,
       y: p.y,
@@ -1701,9 +1737,9 @@ export class Game {
       pullRadius,
       // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
       // the payoff is the collapse pulse over 85% of the pull radius.
-      damage: p.stats.damage * W.singularityDamageMult(level),
+      damage: weaponDamage(p, 'singularity', level),
       collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
-      collapseDamage: p.stats.damage * W.singularityCollapseDamageMult(level) * (TUNING.singularityCollapseMult ?? 1.0),
+      collapseDamage: weaponDamage(p, 'collapse', level),
       life: 2.6,
       maxLife: 2.6,
       spin: 0,
@@ -2253,6 +2289,7 @@ export class Game {
       const orbCount = W.orbitalBlades(p.weapons.orbitals);
       const orbRadius = W.orbitalRadius(p.weapons.orbitals);
       const enemies = this.enemyManager.enemies;
+      const bladeDamage = weaponDamage(p, 'orbital');
 
       for (let o = 0; o < orbCount; o++) {
         const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
@@ -2267,7 +2304,7 @@ export class Game {
           if (dx * dx + dy * dy < (e.radius + 12) * (e.radius + 12)) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
             this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            this.hitEnemy(e, p.stats.damage * W.orbitalDamageMult, 'orbital', 0, 0, 0.6);
+            this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
           }
         }
       }
@@ -2309,9 +2346,11 @@ export class Game {
       }
 
       if (detonated) {
-        this.particles.spawnShockwave(m.x, m.y, W.missileBlastRadius, m.hue, 3.5, 0.3);
+        const blast = m.blastRadius ?? W.missileBlastRadius;
+        this.particles.spawnShockwave(m.x, m.y, blast, m.hue, 3.5, 0.3);
         this.particles.spawnExplosionSparks(m.x, m.y, 20, m.hue, 2, 11, 2);
-        this.damageEnemiesInRadius(m.x, m.y, W.missileBlastRadius, m.damage, m.hue, 'missile', KNOCKBACK.missile);
+        if (p.weapons.cryo) this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
+        this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
         if (p.weapons.stormProtocol) {
           this.fireChainLightning(W.stormChainLevel, m.x, m.y);
@@ -2324,6 +2363,9 @@ export class Game {
     // 7. Update Player Vortex Singularities, then grid funnels & infall streams for every well
     this.updateSingularities(dt);
     this.updateWellEffects();
+
+    // 7b. Damage types: burn ticks, chill and corrode timers (status-effects.js)
+    updateStatusEffects(this, dt);
 
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers
     // Warned boss spawns tear at the grid harder as their countdown runs out.
@@ -2822,6 +2864,7 @@ export class Game {
     }
 
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
+    drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {

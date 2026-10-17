@@ -73,7 +73,15 @@ export const DEFAULT_TUNING = {
   knockbackMult: 1.0,
   hitStopMult: 1.0,
   damageNumberCap: 48,
-  damageNumberScale: 1.0
+  damageNumberScale: 1.0,
+
+  // 9. Crits & Damage Types (run-start crit stats; status strengths scale the card values)
+  baseCritChance: 0.05,
+  baseCritDamage: 1.5,
+  burnDamageMult: 1.0,
+  chillSlowMult: 1.0,
+  chillBossMult: 0.4,
+  corrodeMult: 1.0
 };
 
 export const TUNING_SCHEMA = [
@@ -172,6 +180,17 @@ export const TUNING_SCHEMA = [
       { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
       { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
       { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
+    ]
+  },
+  {
+    group: '🎯 Crits & Damage Types',
+    items: [
+      { key: 'baseCritChance', label: 'Base Crit Chance', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
+      { key: 'baseCritDamage', label: 'Base Crit Damage', type: 'range', min: 1.1, max: 4.0, step: 0.05, unit: 'x' },
+      { key: 'burnDamageMult', label: 'Burn (Thermite) DoT Strength', type: 'range', min: 0, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'chillSlowMult', label: 'Chill (Cryo) Slow Strength', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'x' },
+      { key: 'chillBossMult', label: 'Chill Slow Applied to Bosses', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'corrodeMult', label: 'Corrode Damage-Taken / Stack', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 'x' }
     ]
   }
 ];

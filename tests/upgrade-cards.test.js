@@ -37,9 +37,13 @@ function makePlayer() {
       moveSpeed: TUNING.moveSpeed, fireRate: TUNING.fireRate, bulletSpeed: TUNING.bulletSpeed,
       bulletCount: 2, spreadAngle: 0.14, pierce: 1, damage: TUNING.baseDamage,
       magnetRadius: TUNING.magnetRadius, xpMultiplier: TUNING.xpMultiplier, luck: TUNING.baseLuck,
-      coreDropMult: 1, miningSpeed: TUNING.miningSpeed, miningRange: TUNING.miningRange, drillScale: TUNING.drillScale
+      coreDropMult: 1, miningSpeed: TUNING.miningSpeed, miningRange: TUNING.miningRange, drillScale: TUNING.drillScale,
+      critChance: TUNING.baseCritChance, critDamage: TUNING.baseCritDamage, tagDamage: { kinetic: 1, explosive: 1, electric: 1 }, areaMult: 1
     },
-    weapons: { missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0 }
+    weapons: {
+      missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0,
+      thermite: 0, cryo: 0, nanite: 0, supercritical: 0
+    }
   };
 }
 
@@ -185,7 +189,7 @@ test('weapons fire with the shared scaling the cards preview', () => {
 test('5x jackpot caches use compact cards so both rows of rewards fit one screen', () => {
   const g = game();
   // First draw lands the penta tier; later draws tie, so rewards install in pool order:
-  // Rotary Claw twice, then Tectonic Claw Bore (4 changed stats).
+  // Rotary Claw twice, then Tectonic Claw Bore (5 changed stats, incl. its AREA-scaled blast radius).
   withRandom([0.0001], () => g.openRelicChest({ guaranteedSuper: false }));
   const grid = elements.get('chest-rewards-grid');
   const cards = grid.children.slice(-5);
@@ -193,7 +197,7 @@ test('5x jackpot caches use compact cards so both rows of rewards fit one screen
   for (const card of cards) {
     assert.ok((card.innerHTML.match(/class="upg-stat"/g) || []).length <= 3, 'compact cards list at most 3 rows');
   }
-  assert.ok(cards.some((card) => /\+1 more stat improved/.test(card.innerHTML)), 'trimmed rows are still counted');
+  assert.ok(cards.some((card) => /\+2 more stats improved/.test(card.innerHTML)), 'trimmed rows are still counted');
   // Normal-size caches and level-up cards keep the full row list.
-  assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic')).rows.length, 4);
+  assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic')).rows.length, 5);
 });

@@ -5,6 +5,7 @@ import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
+const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
 export const KNOCKBACK_DECAY = 0.8;
@@ -347,11 +348,12 @@ export class EnemyManager {
         }
       }
 
-      // Normalize max speed
+      // Normalize max speed (CHILL lowers the cap through speedScale, see status-effects.js)
+      const maxSpd = e.speed * (e.speedScale ?? 1);
       const curSpd = Math.hypot(e.vx, e.vy);
-      if (curSpd > e.speed) {
-        e.vx = (e.vx / curSpd) * e.speed;
-        e.vy = (e.vy / curSpd) * e.speed;
+      if (curSpd > maxSpd) {
+        e.vx = (e.vx / curSpd) * maxSpd;
+        e.vy = (e.vy / curSpd) * maxSpd;
       }
 
       // Gravity drift rides on top of the capped steering, then bleeds off.
@@ -419,10 +421,13 @@ export class EnemyManager {
       // Hit pop: the hull swells briefly with the white flash so every connecting shot reads.
       const pulse = 1 + Math.sin(e.pulsePhase) * 0.08 + e.hitFlash * 0.14;
       const r = e.radius * pulse;
+      // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
+      // version of their own hue, so the archetype stays recognisable.
+      const chilled = e.st && e.st.chillT > 0;
       const color = e.hitFlash > 0
         ? '#ffffff'
-        : `hsl(${e.hue}, 100%, 62%)`;
-      const glowColor = `hsla(${e.hue}, 100%, 55%, 0.42)`;
+        : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, 62%)`;
+      const glowColor = chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
 
       // Ribbon Trail
       // Tapered ribbon: fades toward the tail, brightest at the enemy.
