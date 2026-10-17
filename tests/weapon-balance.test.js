@@ -94,3 +94,13 @@ test('Volatile Shatter stays off the DPS curve: flat shard damage, gated by kill
   assert.ok(!('shrapnel' in POTENTIAL_DPS), 'passive, conditional on kills');
   assert.equal(W.shrapnelDamageMult, 0.75);
 });
+
+test('Escort Drones fire four times as fast for a quarter of the damage per bolt, same potential DPS', () => {
+  for (let lv = 1; lv <= maxLevel('drones'); lv++) {
+    const oldRate = 1.6 + lv * 0.3;
+    assert.ok(Math.abs(W.droneFireRate(lv) - 4 * oldRate) < 1e-9, `LV ${lv} fire rate`);
+    const oldPerBolt = DPS_TARGET(lv) / (W.droneCount(lv) * oldRate);
+    assert.ok(Math.abs(W.droneDamageMult(lv) - oldPerBolt / 4) < 1e-9, `LV ${lv} per-bolt damage`);
+    assert.ok(Math.abs(POTENTIAL_DPS.drones(lv) / DPS_TARGET(lv) - 1) < 1e-9, `LV ${lv} DPS parity`);
+  }
+});
