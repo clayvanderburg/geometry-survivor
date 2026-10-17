@@ -110,6 +110,41 @@ test('a sentry turret deploys at the ship, skips targets behind cover, and fires
   assert.equal(d.turretCount, 0, 'turret expires after its lifetime');
 });
 
+test('turret line of sight uses the bolt width, so it never fires forever into a rock it grazes', () => {
+  // The line to `grazed` clears the rock by 2px, less than a turret bolt's radius: the bullet sweep
+  // would stop every bolt, so the turret must treat that target as covered and take the clear one.
+  const grazed = enemy(2200, 2000);
+  const clear = enemy(2000, 2300);
+  const rock = { x: 2100, y: 2022, radius: 20, hp: 100 };
+  const g = arena({ enemies: [grazed, clear], rocks: [rock] });
+  g.player.weapons.turret = 1;
+  tick(g, 1.3);
+  const d = g.deployables;
+  assert.equal(d.turretCount, 1);
+  assert.equal(d.turrets[0].target, clear);
+  for (let t = 0; t < 60; t++) { d.update(DT, g); g.updateBullets(DT); }
+  assert.ok(clear.hp < clear.maxHp, 'the visible target takes the bolts');
+  assert.equal(grazed.hp, grazed.maxHp);
+});
+
+test('a second turret planted by a parked ship steps aside, but never into a rock', () => {
+  // Parked (drilling) beside a rock: the old sidestep (+90° from the aim) landed inside it, where
+  // the turret could never see a target for its whole lifetime.
+  const target = enemy(2300, 2000);
+  const rock = { x: 2000, y: 2060, radius: 40, hp: 100 };
+  const g = arena({ enemies: [target], rocks: [rock] });
+  g.player.weapons.turret = 3;
+  const d = g.deployables;
+  d.deployTurret(g, 3);
+  d.deployTurret(g, 3);
+  assert.equal(d.turretCount, 2);
+  const [a, b] = d.turrets;
+  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= 34, 'turrets do not stack');
+  assert.ok(Math.hypot(b.x - rock.x, b.y - rock.y) > rock.radius + 10, 'the sidestep avoids the rock');
+  tick(g, 0.5);
+  assert.equal(b.target, target, 'and the new turret can shoot');
+});
+
 test('escort drones fly in formation behind the hull, fire drone bolts, and never target vortex portals', () => {
   const portal = enemy(2150, 2000, { type: 'blackhole', radius: 22 });
   const g = arena({ enemies: [portal] });

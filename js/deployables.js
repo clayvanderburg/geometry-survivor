@@ -19,6 +19,11 @@ const LOS_CANDIDATES = 3;        // nearest targets tried before giving up on a 
 const TURRET_TURN_RATE = 9;      // barrel slew, rad/s
 const TURRET_AIM_TOLERANCE = 0.3;
 const TURRET_MUZZLE = 17;
+const TURRET_BOLT_RADIUS = 3.3;
+const TURRET_BASE = 14;          // base hex radius plus a little clearance from rock surfaces
+const TURRET_SPACING = 34;       // a new turret never sits closer than this to a live one
+const SIDESTEPS = [38, -38, 76, -76]; // sideways offsets tried when the ship's spot is taken
+const DRONE_BOLT_RADIUS = 2.6;
 const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
 // Formation slots (radians from the hull heading, radius scale): one drone trails directly behind,
@@ -161,7 +166,7 @@ export class Deployables {
         game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
         continue;
       }
-      t.target = this.trackTarget(game, t, t.x, t.y, range, dt);
+      t.target = this.trackTarget(game, t, t.x, t.y, range, TURRET_BOLT_RADIUS, dt);
       const tgt = t.target;
       if (!tgt) {
         t.aim += dt * 0.9; // idle sweep
@@ -190,12 +195,19 @@ export class Deployables {
     const t = this.turrets[this.turretCount++];
     t.x = p.x;
     t.y = p.y;
-    // Don't stack a new turret exactly on a live one when the ship is parked.
-    for (let i = 0; i < this.turretCount - 1; i++) {
-      const o = this.turrets[i];
-      if (Math.hypot(o.x - t.x, o.y - t.y) < 34) {
-        t.x += Math.cos(p.angle + Math.PI / 2) * 38;
-        t.y += Math.sin(p.angle + Math.PI / 2) * 38;
+    // Don't stack a new turret on a live one when the ship is parked: step sideways to the first
+    // spot clear of turrets and rock (a turret inside a rock could never see a target). If none is
+    // clear, stay under the ship.
+    if (!this.turretSpotClear(game, t.x, t.y, this.turretCount - 1)) {
+      const side = p.angle + Math.PI / 2;
+      for (let k = 0; k < SIDESTEPS.length; k++) {
+        const x = p.x + Math.cos(side) * SIDESTEPS[k];
+        const y = p.y + Math.sin(side) * SIDESTEPS[k];
+        if (this.turretSpotClear(game, x, y, this.turretCount - 1)) {
+          t.x = x;
+          t.y = y;
+          break;
+        }
       }
     }
     t.life = t.maxLife = W.turretDuration(level);
@@ -208,10 +220,29 @@ export class Deployables {
     game.grid.applyImpulse(t.x, t.y, 12, 70, DEPLOYABLE_HUES.turret);
   }
 
+  // A turret spot is clear when no other live turret sits within TURRET_SPACING, it is inside the
+  // arena, and no rock overlaps the turret base.
+  turretSpotClear(game, x, y, others) {
+    for (let i = 0; i < others; i++) {
+      const o = this.turrets[i];
+      if ((o.x - x) ** 2 + (o.y - y) ** 2 < TURRET_SPACING * TURRET_SPACING) return false;
+    }
+    if (x < 30 || y < 30 || x > game.worldWidth - 30 || y > game.worldHeight - 30) return false;
+    const am = game.asteroidManager;
+    if (!am || !am.asteroids || am.asteroids.length === 0) return true;
+    const rocks = am.getNearbyAsteroids(x, y, am.cellsFor ? am.cellsFor(TURRET_BASE) : 2);
+    for (let i = 0; i < rocks.length; i++) {
+      const rock = rocks[i];
+      const r = rock.radius + TURRET_BASE;
+      if (rock.hp > 0 && (rock.x - x) ** 2 + (rock.y - y) ** 2 < r * r) return false;
+    }
+    return true;
+  }
+
   fireTurretBolt(game, t, level) {
     const p = game.player;
     const damage = p.stats.damage * W.turretDamageMult(level) * (TUNING.deployableDamageMult ?? 1);
-    const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, 3.3, 'turret', W.turretRange(level));
+    const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
     if (p.weapons.siegeBattery) {
       b.blastRadius = W.siegeShellRadius;
       b.blastDamage = damage * W.siegeShellDamageMult;
@@ -266,7 +297,7 @@ export class Deployables {
       if (d.trailCount < TRAIL_LEN) d.trailCount++;
       if (d.flash > 0) d.flash = Math.max(0, d.flash - dt * 10);
 
-      d.target = this.trackTarget(game, d, d.x, d.y, range, dt);
+      d.target = this.trackTarget(game, d, d.x, d.y, range, DRONE_BOLT_RADIUS, dt);
       const tgt = d.target;
       const face = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : heading;
       d.angle += wrapAngle(face - d.angle) * 0.3;
@@ -277,7 +308,7 @@ export class Deployables {
       }
       while (d.fireAcc >= 1) {
         d.fireAcc -= 1;
-        this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, 2.6, 'drone', range);
+        this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
         d.flash = 1;
       }
     }
@@ -286,7 +317,7 @@ export class Deployables {
   // ---- Shared targeting & bolts ----
   // Keep a unit's target while it stays valid and in range; re-pick the nearest visible one every
   // RETARGET_TIME seconds (or at once when the old target dies or leaves range).
-  trackTarget(game, unit, x, y, range, dt) {
+  trackTarget(game, unit, x, y, range, boltRadius, dt) {
     unit.retarget -= dt;
     let tgt = unit.target;
     if (tgt) {
@@ -294,7 +325,7 @@ export class Deployables {
       if (!isDeployableTarget(tgt) || (tgt.x - x) ** 2 + (tgt.y - y) ** 2 > reach * reach) tgt = null;
     }
     if (!tgt || unit.retarget <= 0) {
-      tgt = this.acquireTarget(game, x, y, range);
+      tgt = this.acquireTarget(game, x, y, range, boltRadius);
       unit.retarget = RETARGET_TIME;
     }
     return tgt;
@@ -302,7 +333,7 @@ export class Deployables {
 
   // Nearest valid enemy within range whose line of fire is not blocked by an asteroid. Tries the
   // nearest few candidates without sorting or allocating.
-  acquireTarget(game, x, y, range) {
+  acquireTarget(game, x, y, range, boltRadius = 0) {
     const enemies = game.enemyManager.enemies;
     let skip0 = null;
     let skip1 = null;
@@ -322,7 +353,7 @@ export class Deployables {
         }
       }
       if (!best) return null;
-      if (this.clearShot(game, x, y, best)) return best;
+      if (this.clearShot(game, x, y, best, boltRadius)) return best;
       if (attempt === 0) skip0 = best;
       else skip1 = best;
     }
@@ -338,8 +369,9 @@ export class Deployables {
     return false;
   }
 
-  // Same cover rule as the bullet sweep: a rock surface between the muzzle and the target's hull blocks.
-  clearShot(game, x0, y0, e) {
+  // Same cover rule as the bullet sweep: a rock surface within a bolt's radius of the line between
+  // the muzzle and the target's hull blocks (otherwise a grazing rock would eat every bolt).
+  clearShot(game, x0, y0, e, boltRadius = 0) {
     const am = game.asteroidManager;
     if (!am || !am.asteroids || am.asteroids.length === 0) return true;
     if (this.maxRock < 0) {
@@ -351,12 +383,12 @@ export class Deployables {
     const reach = Math.max(0, dist - e.radius);
     const x1 = x0 + (dx / dist) * reach;
     const y1 = y0 + (dy / dist) * reach;
-    const cells = Math.ceil((reach / 2 + this.maxRock) / am.cellSize);
+    const cells = Math.ceil((reach / 2 + this.maxRock + boltRadius) / am.cellSize);
     const rocks = am.getNearbyAsteroids((x0 + x1) / 2, (y0 + y1) / 2, cells);
     for (let i = 0; i < rocks.length; i++) {
       const rock = rocks[i];
       if (rock.hp <= 0) continue;
-      if (game.segmentHitTime(x0, y0, x1, y1, rock.x, rock.y, rock.radius) !== null) return false;
+      if (game.segmentHitTime(x0, y0, x1, y1, rock.x, rock.y, rock.radius + boltRadius) !== null) return false;
     }
     return true;
   }
