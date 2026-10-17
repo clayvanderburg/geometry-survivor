@@ -14,17 +14,19 @@ const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
 
 // --- Difficulty ramp (TUNING "Difficulty Ramp" group) ------------------------------------------
 // Enemy HP scale of a wave (bosses and lieutenants included; speed caps also read it):
-// (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), the exponential only past that wave.
+// (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), compounding only past that wave.
 export function waveScaleAt(wave) {
+  const start = TUNING.waveHpStart ?? 1;
   const perWave = TUNING.waveHpPerWave ?? 0.25;
   const growth = TUNING.waveHpGrowth ?? 1.09;
   const from = TUNING.waveHpGrowthFrom ?? 6;
-  return (1 + (wave - 1) * perWave) * Math.pow(growth, Math.max(0, wave - from));
+  return (start + (wave - 1) * perWave) * Math.pow(growth, Math.max(0, wave - from));
 }
 
-// Contact and plasma-orb damage multiplier of a wave: +damageRampPerWave per wave after damageRampFrom.
+// Contact and plasma-orb damage multiplier of a wave: damageRampBase, plus damageRampPerWave per wave
+// after damageRampFrom.
 export function damageRampAt(wave) {
-  return 1 + Math.max(0, wave - (TUNING.damageRampFrom ?? 5)) * (TUNING.damageRampPerWave ?? 0.08);
+  return (TUNING.damageRampBase ?? 1) + Math.max(0, wave - (TUNING.damageRampFrom ?? 5)) * (TUNING.damageRampPerWave ?? 0.08);
 }
 
 // XP carried by a kill at a given wave: the enemy's base XP × (1 + xpPerWave·(w−1)).
@@ -196,8 +198,8 @@ export class EnemyManager {
         };
       case 'boss':
         return {
-          hp: 650 * waveScale,
-          maxHp: 650 * waveScale,
+          hp: 650 * waveScale * (TUNING.bossHpMult ?? 1),
+          maxHp: 650 * waveScale * (TUNING.bossHpMult ?? 1),
           speed: 1.35,
           radius: 36,
           sides: 8,

@@ -21,8 +21,9 @@ const fieldGuide = await import('../js/field-guide.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 const RAMP_KEYS = [
-  'waveLength', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'spawnIntervalStart', 'spawnIntervalPerWave', 'spawnIntervalMin',
-  'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'splitterPackPerWave', 'damageRampFrom', 'damageRampPerWave', 'xpPerWave'
+  'waveLength', 'waveHpStart', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'spawnIntervalStart', 'spawnIntervalPerWave', 'spawnIntervalMin',
+  'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
+  'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {
@@ -63,9 +64,9 @@ test('every Difficulty Ramp key is in the tuner group with an in-range default',
 });
 
 test('enemy HP scale follows the linear and compound ramp terms, for the game and the Field Guide', () => {
-  withTuning({ waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4 }, () => {
+  withTuning({ waveHpStart: 2, waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4 }, () => {
     for (const wave of [1, 4, 5, 12, 40]) {
-      const expected = (1 + (wave - 1) * 0.5) * Math.pow(1.1, Math.max(0, wave - 4));
+      const expected = (2 + (wave - 1) * 0.5) * Math.pow(1.1, Math.max(0, wave - 4));
       assert.ok(Math.abs(waveScaleAt(wave) - expected) < 1e-9, `wave ${wave}`);
       assert.equal(Game.prototype.getWaveScale.call({ wave }), waveScaleAt(wave));
       assert.equal(fieldGuide.waveScaleAt(wave), waveScaleAt(wave));
@@ -75,6 +76,17 @@ test('enemy HP scale follows the linear and compound ramp terms, for the game an
     g.enemyManager.queueSpawn('swarmer', 0, 0, g.getWaveScale(), { instant: true });
     assert.ok(Math.abs(g.enemyManager.spawnIndicators[0].config.maxHp - 10 * waveScaleAt(9)) < 1e-9);
   });
+});
+
+test('boss HP multiplier scales bosses, and lieutenants through their share of boss HP', () => {
+  const manager = new EnemyManager();
+  const lt = { type: 'pinwheel', name: 'X', epithet: 'Y', mods: ['hasted'] };
+  const [boss1, lt1] = withTuning({ bossHpMult: 1 }, () => [manager.getArchetype('boss', 4).maxHp, manager.getArchetype('pinwheel', 4, { lieutenant: lt }).maxHp]);
+  const [boss2, lt2] = withTuning({ bossHpMult: 2 }, () => [manager.getArchetype('boss', 4).maxHp, manager.getArchetype('pinwheel', 4, { lieutenant: lt }).maxHp]);
+  assert.equal(boss1, 650 * 4);
+  assert.equal(boss2, 2 * boss1);
+  assert.ok(lt2 > lt1, 'lieutenants follow boss HP');
+  assert.equal(withTuning({ bossHpMult: 2 }, () => manager.getArchetype('swarmer', 4).maxHp), 40, 'regular hulls are unaffected');
 });
 
 test('waves advance every waveLength seconds and bosses stay on every third wave', () => {
@@ -116,6 +128,8 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
   assert.equal(queued({ skirmishPackPerWave: 1 }, 'spawnWeightSkirmish', 10), 3 + 10);
   assert.equal(queued({ splitterPackPerWave: 0.5 }, 'spawnWeightSplitter', 10), 2 + 5);
   assert.equal(queued({ splitterPackPerWave: 0.5, packSizeMult: 0.5 }, 'spawnWeightSplitter', 10), 4);
+  assert.equal(queued({ splitterPackPerWave: 0.5, splitterPackMax: 5 }, 'spawnWeightSplitter', 10), 5);
+  assert.equal(queued({ skirmishPackPerWave: 1, skirmishPackMax: 8 }, 'spawnWeightSkirmish', 10), 8);
   assert.equal(queued({ packSizeMult: 2 }, 'spawnWeightBlinker', 5), 6, 'capped packs scale too');
   withTuning({ packSizeMult: 0.25 }, () => assert.equal(packSize(1), 1, 'never below one hull'));
 });
@@ -128,6 +142,10 @@ test('contact and plasma-orb damage share the damage ramp', () => {
     assert.ok(Math.abs(g.contactDamage({ contactMult: 1 }) - 36) < 1e-9);
     assert.ok(Math.abs(contactDamageAt({ isBoss: true }, 15) - 76) < 1e-9);
     assert.ok(Math.abs(g.enemyBulletDamage({ damage: 12 }) - 24) < 1e-9);
+  });
+  withTuning({ damageRampBase: 0.5, damageRampFrom: 10, damageRampPerWave: 0.1 }, () => {
+    assert.equal(damageRampAt(3), 0.5);
+    assert.ok(Math.abs(contactDamageAt({ contactMult: 1 }, 20) - 18 * 1.5) < 1e-9);
   });
 });
 

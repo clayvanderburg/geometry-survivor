@@ -196,14 +196,14 @@ export const MECHANIC_ENTRIES = [
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
       'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
-      `Contact damage is 18 per hit (bosses 38) and grows ${pct(TUNING.damageRampPerWave ?? 0.08)} per wave after wave ${TUNING.damageRampFrom ?? 5} (plasma orbs too). A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
+      `Contact damage is ${Math.round(18 * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round(38 * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base (plasma orbs too). A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
   {
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.`,
-      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of its wave-1 value per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
+      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
     ]
   },
   {

@@ -127,6 +127,7 @@ export const DEFAULT_TUNING = {
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
   // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
   waveLength: 22,
+  waveHpStart: 1,
   waveHpPerWave: 0.25,
   waveHpGrowth: 1.09,
   waveHpGrowthFrom: 6,
@@ -137,7 +138,11 @@ export const DEFAULT_TUNING = {
   swarmPackPerWave: 2,
   swarmPackMax: 34,
   skirmishPackPerWave: 0.6,
+  skirmishPackMax: 99,
   splitterPackPerWave: 0.4,
+  splitterPackMax: 99,
+  bossHpMult: 1,
+  damageRampBase: 1,
   damageRampFrom: 5,
   damageRampPerWave: 0.08,
   xpPerWave: 0
@@ -305,6 +310,7 @@ export const TUNING_SCHEMA = [
     group: '📈 Difficulty Ramp',
     items: [
       { key: 'waveLength', label: 'Wave Length (bosses every 3 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
+      { key: 'waveHpStart', label: 'Enemy HP: Wave 1 Scale', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
       { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },
       { key: 'waveHpGrowth', label: 'Enemy HP: Compound Growth / Wave', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
       { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
@@ -315,7 +321,11 @@ export const TUNING_SCHEMA = [
       { key: 'swarmPackPerWave', label: 'Boid Swarm: Extra Boids / Wave', type: 'range', min: 0, max: 6, step: 0.1, unit: '' },
       { key: 'swarmPackMax', label: 'Boid Swarm: Max Boids', type: 'range', min: 6, max: 80, step: 1, unit: '' },
       { key: 'skirmishPackPerWave', label: 'Skirmish Pack: Extra Hulls / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'skirmishPackMax', label: 'Skirmish Pack: Max Hulls', type: 'range', min: 3, max: 99, step: 1, unit: '' },
       { key: 'splitterPackPerWave', label: 'Splitter Pack: Extra Splitters / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'splitterPackMax', label: 'Splitter Pack: Max Splitters', type: 'range', min: 2, max: 99, step: 1, unit: '' },
+      { key: 'bossHpMult', label: 'Boss HP (lieutenants follow)', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 'x' },
+      { key: 'damageRampBase', label: 'Contact/Orb Damage Before the Ramp', type: 'range', min: 0.2, max: 3, step: 0.05, unit: 'x' },
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
       { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }

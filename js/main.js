@@ -1745,13 +1745,13 @@ export class Game {
       const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
       em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
     } else if (pack === 'skirmish') {
-      const count = packSize(3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6)));
+      const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnAroundPlayer(420, 720);
         em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
       }
     } else if (pack === 'splitter') {
-      spread('splitter', packSize(2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4))), 450, 750);
+      spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale);
     } else if (pack === 'bruiser') {
