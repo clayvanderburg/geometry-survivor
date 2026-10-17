@@ -271,3 +271,33 @@ test('weapons tab is a thin adapter: every upgrade card is listed, new cards app
   assert.deepEqual([whip.name, whip.owned, whip.tags[0].label], ['Plasma Whip', 2, 'KINETIC']);
   assert.ok(g.rarity.some(r => r.id === 'legendary') && g.tags.some(t => t.id === 'electric'));
 });
+
+test('keys pressed in the guide never activate the screen behind it', () => {
+  const resume = { id: 'btn-resume-game', tagName: 'BUTTON', focus() { document.activeElement = this; } };
+  const inside = { tagName: 'BUTTON', focus() { document.activeElement = this; } };
+  let scrolled = 0;
+  const g = Object.assign(Object.create(Game.prototype), {
+    state: 'PAUSED', guideOpen: true,
+    fieldGuide: {
+      root: { contains: el => el === inside, querySelectorAll: () => [inside] },
+      body: { clientHeight: 400 },
+      scrollBy: dy => { scrolled += dy; },
+      cycleTab() {}, setTab() {}
+    },
+    closeGuide() { this.guideOpen = false; }
+  });
+  const key = (code) => {
+    const e = { code, repeat: false, shiftKey: false, prevented: false, preventDefault() { this.prevented = true; } };
+    g.handleGuideKey(e, document.activeElement?.tagName === 'BUTTON');
+    return e;
+  };
+  document.activeElement = resume;
+  assert.equal(key('Enter').prevented, true, 'Enter on RESUME behind the guide is swallowed');
+  const space = key('Space');
+  assert.ok(space.prevented && scrolled > 0, 'Space scrolls the guide instead of clicking RESUME');
+  assert.equal(key('Tab').prevented, true);
+  assert.equal(document.activeElement, inside, 'Tab pulls focus back into the guide');
+  assert.equal(key('Enter').prevented, false, 'Enter on a guide control still clicks it');
+  assert.equal(g.state, 'PAUSED');
+  document.activeElement = null;
+});

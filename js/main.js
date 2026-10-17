@@ -2269,6 +2269,7 @@ export class Game {
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
+    this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.playSupernova();
 
@@ -2398,6 +2399,8 @@ export class Game {
     if (this.bossFlash > 0) this.bossFlash = Math.max(0, this.bossFlash - dt * 2.4);
     this.shieldRotation += dt * 1.4;
 
+    // The guide only lives over the title, pause and game-over screens.
+    if (this.guideOpen && !GUIDE_STATES.includes(this.state)) this.closeGuide();
     const gp = this.pollGamepad();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
@@ -2934,6 +2937,8 @@ export class Game {
     this.fieldGuide.open({ tab: target ? 'hostiles' : tab, focusId: target });
     this.guideFocusEl = target ? this.fieldGuide.reveal(target) : null;
     this.menuNav?.clear();
+    // Focus moves into the guide so Enter/Space can't click the (now covered) button that opened it.
+    (this.guideFocusEl || this.fieldGuide.body).focus?.({ preventScroll: true });
     return true;
   }
 
@@ -2953,6 +2958,26 @@ export class Game {
   handleGuideKey(e, onControl) {
     const guide = this.fieldGuide;
     const code = e.code;
+    // Keys never reach the screen behind the guide: Tab cycles inside it, and Enter/Space on a control
+    // outside it (e.g. RESUME on the pause menu) would otherwise click it and resume the run under the guide.
+    const focused = document.activeElement;
+    const inGuide = !!focused && guide.root.contains(focused);
+    if (code === 'Tab') {
+      const stops = [...guide.root.querySelectorAll('button:not([disabled]), [tabindex="0"]')];
+      const i = inGuide ? stops.indexOf(focused) : -1;
+      const next = i === -1 ? (e.shiftKey ? stops.length - 1 : 0)
+        : e.shiftKey ? (i === 0 ? stops.length - 1 : null) : (i === stops.length - 1 ? 0 : null);
+      if (next !== null && stops[next]) {
+        e.preventDefault();
+        stops[next].focus();
+      }
+      return;
+    }
+    if (!inGuide && (code === 'Enter' || code === 'NumpadEnter')) {
+      e.preventDefault();
+      return;
+    }
+    onControl = onControl && inGuide;
     const page = (guide.body.clientHeight || 400) * 0.85;
     const actions = {
       Escape: () => this.closeGuide(),
