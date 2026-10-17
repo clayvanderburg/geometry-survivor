@@ -11,6 +11,7 @@ import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
 import { PLAYER_ESCAPE_THRUST_SHARE } from './gravity.js';
+import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -223,6 +224,14 @@ export const MECHANIC_ENTRIES = [
     ]
   },
   {
+    id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
+    body: () => [
+      `You carry up to ${weaponSlots()} weapons. The crab starts with ${STARTING_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(' and ')}. Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
+      'While a slot is free, a NEW WEAPON card turns up often (and at least every few level-ups): pick it to choose 1 of 3 new weapons. With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.',
+      'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.'
+    ]
+  },
+  {
     id: 'rarity', icon: '★', title: 'UPGRADE RARITY = LEVEL JUMP',
     body: () => [
       'Each level-up card rolls how many levels it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. EVOLUTION cards are one-shot synergies with their own magenta tier.',
@@ -304,10 +313,12 @@ export const MECHANIC_ENTRIES = [
 // --- Weapons: a thin adapter over UPGRADE_POOL / WEAPON_TAGS -------------------------------------
 // Categories are taken from the pool in order, so new cards and categories show up with no edits.
 // Recipes are optional hints for evolutions (unknown ids are simply skipped).
-export const STARTING_KIT = [
-  { key: 'blaster', name: 'TWIN PLASMA TURRET', text: 'Your main gun: two parallel streams straight at your aim. Prism Split adds pairs in a fixed order without moving the forward pair.' },
-  { key: 'rocket', name: 'WING ROCKETS', text: 'Each outer wing launches a slow dumbfire rocket along the hull\'s heading (where you fly, not where you aim): direct hit + small blast.' }
-];
+// The crab's starting weapons, straight from the loadout registry.
+export const STARTING_KIT = STARTING_WEAPONS.map((id) => ({
+  key: id,
+  name: WEAPON_BY_ID[id].name.toUpperCase(),
+  text: WEAPON_BY_ID[id].summary
+}));
 
 const EVOLUTION_RECIPES = {
   evo_tectonic: 'Rotary Claw Overclock LV 2',
@@ -341,7 +352,7 @@ export function weaponGuide(levels = null, pool = UPGRADE_POOL) {
     });
   }
   return {
-    kit: STARTING_KIT.map(k => ({ ...k, tags: tagChips(WEAPON_TAGS[k.key]) })),
+    kit: STARTING_KIT.map(k => ({ ...k, tags: tagChips(weaponTags(k.key)) })),
     categories,
     tags: Object.entries(TAG_INFO).map(([id, t]) => ({ id, label: t.label, color: t.color })),
     rarity: Object.entries(RARITY).map(([id, r]) => ({ id, label: r.label, color: r.color }))
