@@ -8,7 +8,7 @@ import { DamageNumbers } from './damage-numbers.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
-import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
+import { UPGRADE_POOL, RARITY, rarityFor, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
 import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
@@ -1908,7 +1908,7 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, (RARITY[upg.rarity] || RARITY.common).color, 15);
+    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
     this.processPendingLevelUps();
     this.updateHUD();
   }
@@ -2483,7 +2483,8 @@ export class Game {
       const lv = p.upgradeLevels[upg.id];
       if (lv) {
         // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
-        tags.push(`<span class="weapon-tag rarity-${upg.rarity}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}${bonusText(bonusLevels(p, upg.id))}`}</span>`);
+        // Rarity belongs to a roll, not a weapon, so tags stay neutral; evolutions keep their own color.
+        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}${bonusText(bonusLevels(p, upg.id))}`}</span>`);
       }
     }
     weaponsBar.innerHTML = tags.join('');

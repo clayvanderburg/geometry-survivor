@@ -3,7 +3,7 @@
 // on a deep copy of the player and diffs STAT_ROWS, which read the same values and WEAPON_SCALING
 // formulas the game simulates with.
 import { TUNING } from './config.js';
-import { RARITY, applyUpgradeLevels, levelJumpChances } from './upgrades.js';
+import { RARITY, rarityFor, applyUpgradeLevels, levelJumpChances } from './upgrades.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
 
 const MAX_ROWS = 6;
@@ -14,6 +14,7 @@ const dec1 = (v) => (Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(1));
 const secs = (v) => `${v.toFixed(2)}s`;
 const pct = (v) => `${Math.round(v * 100)}%`;
 const pct1 = (v) => `${(v * 100).toFixed(1)}%`;
+const pct2 = (v) => `${(v * 100).toFixed(2)}%`;
 const mult = (v) => `${v.toFixed(2)}x`;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
@@ -66,8 +67,10 @@ export const STAT_ROWS = [
 
   // Luck
   { id: 'luck', label: 'Luck', get: (p) => p.stats.luck, fmt: pct, headline: 'points', unit: 'LUCK' },
-  { id: 'doubleRoll', label: '+2 level roll chance', get: (p) => { const c = levelJumpChances(p.stats.luck || 1); return c.doubleChance - c.tripleChance; }, fmt: pct1 },
-  { id: 'tripleRoll', label: '+3 level roll chance', get: (p) => levelJumpChances(p.stats.luck || 1).tripleChance, fmt: pct1 },
+  { id: 'doubleRoll', label: '+2 level (uncommon) chance', get: (p) => { const c = levelJumpChances(p.stats.luck || 1); return c.doubleChance - c.tripleChance; }, fmt: pct1 },
+  { id: 'tripleRoll', label: '+3 level (rare) chance', get: (p) => { const c = levelJumpChances(p.stats.luck || 1); return c.tripleChance - c.quadChance; }, fmt: pct1 },
+  { id: 'quadRoll', label: '+4 level (epic) chance', get: (p) => { const c = levelJumpChances(p.stats.luck || 1); return c.quadChance - c.pentaChance; }, fmt: pct2 },
+  { id: 'pentaRoll', label: '+5 level (legendary) chance', get: (p) => levelJumpChances(p.stats.luck || 1).pentaChance, fmt: pct2 },
 
   // Geom Attractor Field
   { id: 'magnetRadius', label: 'Pickup radius', get: (p) => p.stats.magnetRadius, fmt: int, headline: 'pct', unit: 'PICKUP RADIUS' },
@@ -138,7 +141,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
 
   const lead = changed.find((r) => r.id === upg.headline) || changed[0];
   const headline = lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase();
-  const rarity = RARITY[upg.rarity] ? upg.rarity : 'common';
+  const rarity = rarityFor(upg, jump);
 
   return {
     id: upg.id,
@@ -180,7 +183,7 @@ export function levelText(d, installed = false) {
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).
 export function renderUpgradeCard(d, keyLabel, installed = false) {
   const ribbon = d.jump > 1
-    ? `<div class="upg-jump-ribbon">${d.jump === 3 ? '★★' : '★'} LUCKY ROLL // +${d.jump} LEVELS</div>`
+    ? `<div class="upg-jump-ribbon">${'★'.repeat(d.jump - 1)} +${d.jump} LEVELS</div>`
     : '';
   const rows = d.rows.map((r) => `
           <div class="upg-stat"><span class="upg-stat-label">${r.label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`).join('');
@@ -192,7 +195,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
       <div>
         <div class="upg-top">
           <span class="upg-key">${keyLabel}</span>
-          <span class="upg-badge">${d.rarityLabel} · ${d.category}</span>
+          <span class="upg-badge">${d.rarityLabel === d.category ? d.category : `${d.rarityLabel} · ${d.category}`}</span>
         </div>
         <div class="upg-name">${d.name}</div>
         <div class="upg-headline">${d.headline}</div>

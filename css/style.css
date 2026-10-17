@@ -205,8 +205,8 @@ html, body {
   color: var(--rarity);
 }
 
-.weapon-tag.rarity-legendary {
-  background: rgba(255, 204, 0, 0.14);
+.weapon-tag.rarity-evolution {
+  background: rgba(255, 79, 216, 0.14);
 }
 
 .hud-right {
@@ -896,6 +896,7 @@ html, body {
 .rarity-rare { --rarity: #3d9bff; --rarity-soft: rgba(61, 155, 255, 0.36); --rarity-bg: rgba(10, 26, 60, 0.94); }
 .rarity-epic { --rarity: #b565ff; --rarity-soft: rgba(181, 101, 255, 0.38); --rarity-bg: rgba(36, 14, 60, 0.94); }
 .rarity-legendary { --rarity: #ffcc00; --rarity-soft: rgba(255, 204, 0, 0.4); --rarity-bg: rgba(48, 36, 8, 0.94); }
+.rarity-evolution { --rarity: #ff4fd8; --rarity-soft: rgba(255, 79, 216, 0.4); --rarity-bg: rgba(48, 8, 40, 0.94); }
 
 .upgrade-option {
   position: relative;
@@ -926,30 +927,31 @@ html, body {
   transform: none;
 }
 
-/* Lucky multi-level roll: a magenta ribbon, deliberately outside the rarity palette. */
+/* Multi-level roll: the ribbon wears the card's rarity color, since rarity is the jump size. */
 .upg-jump-ribbon {
   position: absolute;
   top: -11px;
   right: 12px;
   padding: 3px 10px;
   border-radius: 99px;
-  background: linear-gradient(90deg, #ff007f, #ff4fa8);
-  color: #fff;
+  background: var(--rarity);
+  color: #05060f;
   font-size: 10.5px;
   font-weight: 900;
   letter-spacing: 1px;
   white-space: nowrap;
-  box-shadow: 0 0 14px rgba(255, 0, 127, 0.75);
+  box-shadow: 0 0 14px var(--rarity-soft);
 }
 
-.jump-3 .upg-jump-ribbon {
+.jump-4 .upg-jump-ribbon,
+.jump-5 .upg-jump-ribbon {
   outline: 1px solid #fff;
   animation: jump-ribbon-pulse 0.8s ease-in-out infinite alternate;
 }
 
 @keyframes jump-ribbon-pulse {
-  from { box-shadow: 0 0 10px rgba(255, 0, 127, 0.6); }
-  to { box-shadow: 0 0 24px rgba(255, 0, 127, 1); }
+  from { box-shadow: 0 0 10px var(--rarity-soft); }
+  to { box-shadow: 0 0 26px var(--rarity); }
 }
 
 .upg-top {
@@ -1052,9 +1054,8 @@ html, body {
   color: var(--text-dim);
 }
 
-.jump-2 .upg-level,
-.jump-3 .upg-level {
-  color: #ff66b2;
+.upgrade-option[class*="jump-"] .upg-level {
+  color: var(--rarity);
 }
 
 /* Cache rewards: center however many cards the jackpot installed. */

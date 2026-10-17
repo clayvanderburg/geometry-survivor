@@ -20,7 +20,8 @@
 - Sharper projectile impacts, selective screen shake/hit-stop, ship banking/recoil and thruster trails.
 - Animate drilling sparks, fractures and debris; protect readability amid visual spectacle.
 - HUD and upgrade cards: headline benefit enlarged (e.g. **+2 PROJECTILES**), clear summary and optional detailed explanation, **before → after** numerical stats.
-- Consistent rarity mapping: common white/gray, uncommon green, rare blue, epic purple, legendary gold. Distinguish rarity from +2/+3 level rolls.
+- **Rarity = rolled level jump (decided):** +1 common (white/gray), +2 uncommon (green), +3 rare (blue), +4 epic (purple), +5 legendary (gold). Evolutions/synergies are their own magenta tier. Odds are tunable (`doubleLevelChance` … `pentaLevelChance`) and scale with Luck.
+- **Weapon balance target (decided):** every weapon should have about the same potential DPS at the same level; difficulty of use is tuned separately later.
 - Optional floating damage numbers and easily recognizable critical-hit feedback.
 
 ## 2. Mining, terrain and resources
