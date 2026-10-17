@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Weapon loadout: starting weapons, 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
+// Weapon loadout: starting weapon (Pew Pews), 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
 // weapon picks, discards, Wing Rockets as a leveled weapon, and the stepped XP curve. The balance
 // harness stubs the browser and builds a real Game, so resetRun and the level-up flow are the game's own.
 const h = await import('../tools/balance/harness.mjs');
@@ -41,14 +41,15 @@ function lcg(seed = 7) {
 
 const fill = (p, ids) => ids.forEach((id) => assert.ok(acquireWeapon(p, id), `equip ${id}`));
 
-test('a run starts with Pew Pews and Wing Rockets LV 1 in 2 of 6 slots', () => {
+test('a run starts with Pew Pews only in 1 of 6 slots; Wing Rockets join through NEW WEAPON', () => {
   const p = freshGame().player;
-  assert.deepEqual(p.loadout, ['blaster', 'rockets']);
-  assert.equal(p.upgradeLevels.rockets, 1);
-  assert.equal(p.weapons.rockets, 1);
+  assert.deepEqual(p.loadout, ['blaster']);
+  assert.ok(!(p.upgradeLevels.rockets > 0));
+  assert.ok(!(p.weapons.rockets > 0));
   assert.equal(weaponSlots(), DEFAULT_TUNING.weaponSlots);
   assert.equal(DEFAULT_TUNING.weaponSlots, 6);
-  assert.equal(freeSlots(p), 4);
+  assert.equal(freeSlots(p), 5);
+  assert.ok(rollWeaponPicks(p, 99).some((c) => c.weaponId === 'rockets'), 'rockets are in the NEW WEAPON pool');
   assert.equal(p.xpToNext, xpToNextLevel(1));
   assert.ok(p.base, 'run-start snapshot for discards');
 });
@@ -57,10 +58,10 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   const p = freshGame().player;
   const seen = new Set();
   withRandom(() => { for (let i = 0; i < 400; i++) for (const c of rollUpgrades(p, 3)) seen.add(c.id); }, lcg(11));
-  for (const id of ['rockets', 'multishot', 'firerate', 'pierce', 'thermite', 'cryo', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic', 'tag_explosive', 'tag_area']) {
+  for (const id of ['multishot', 'firerate', 'pierce', 'thermite', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic']) {
     assert.ok(seen.has(id), `${id} is offered at run start`);
   }
-  for (const id of ['missiles', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
+  for (const id of ['rockets', 'cryo', 'tag_explosive', 'tag_area', 'missiles', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
     assert.ok(!seen.has(id), `${id} needs its weapon first`);
   }
   // Equipping Tesla Arc unlocks its level, Nanite Swarm and the ELECTRIC tag card.
@@ -109,7 +110,7 @@ test('NEW WEAPON shows up by chance and is guaranteed after the pity count', () 
 
 test('six weapons fill the loadout: no more NEW WEAPON cards and no seventh weapon', () => {
   const p = freshGame().player;
-  fill(p, ['missiles', 'lightning', 'orbitals', 'mines']);
+  fill(p, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
   assert.equal(ownedWeapons(p).length, 6);
   assert.equal(freeSlots(p), 0);
   assert.equal(canOfferNewWeapon(p), false);
@@ -162,8 +163,8 @@ test('weapon pick cards preview exact LV 1 stats, tags and summary without touch
     assert.match(html.html, /EQUIP/);
   }
   const nw = describeNewWeapon(freshGame().player);
-  assert.equal(nw.rows[0].before, '2 / 6');
-  assert.equal(nw.rows[0].after, '3 / 6');
+  assert.equal(nw.rows[0].before, '1 / 6');
+  assert.equal(nw.rows[0].after, '2 / 6');
   assert.match(renderUpgradeCard(nw, '[2]').className, /new-weapon-card/);
   assert.equal(rollWeaponPicks(freshGame().player, 3).length, 3);
 });
@@ -174,7 +175,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   // General upgrades that must survive the discard.
   for (const id of ['overdrive', 'thrusters', 'crit_damage']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   const clean = JSON.parse(JSON.stringify({ stats: p.stats, maxHp: p.maxHp }));
-  fill(p, ['missiles', 'lightning']);
+  fill(p, ['rockets', 'missiles', 'lightning']);
   for (const id of ['missiles', 'lightning', 'cryo', 'nanite']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   applyUpgradeLevels(p, UPGRADE_BY_ID.evo_tempest);
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.tag_electric, levelJump: 2 });
@@ -198,7 +199,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   discardWeapon(p, 'rockets');
   assert.equal(p.upgradeLevels.cryo, undefined, 'last explosive carrier gone');
   assert.equal(p.weapons.rockets, 0);
-  // Stats are rebuilt exactly: same as before any weapon upgrade, minus the rocket level.
+  // Stats are rebuilt exactly: same as before any weapon was added.
   const kept = JSON.parse(JSON.stringify({ stats: p.stats, maxHp: p.maxHp }));
   kept.stats.tagDamage.electric = clean.stats.tagDamage.electric; // Overvolt Coils stays installed
   assert.deepEqual(kept, clean);
@@ -209,6 +210,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
 test('discarding Pew Pews removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite and Pulsar Helix', () => {
   const g = freshGame();
   const p = g.player;
+  fill(p, ['rockets']);
   const base = { ...p.stats };
   for (const id of ['multishot', 'firerate', 'pierce', 'thermite']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   applyUpgradeLevels(p, UPGRADE_BY_ID.evo_pulsar);
@@ -263,6 +265,7 @@ test('Wing Rockets are a leveled weapon on the shared DPS curve, firing about on
   assert.ok(W.wingRocketBlastRadius(8) > W.wingRocketBlastRadius(1), 'bigger blasts later');
   for (let lv = 1; lv <= 8; lv++) assert.ok(Math.abs(POTENTIAL_DPS.rockets(lv) / DPS_TARGET(lv) - 1) < 0.01, `LV ${lv}`);
   const g = freshGame();
+  fill(g.player, ['rockets']);
   g.player.invuln = 1e9;
   g.rocketTimer = 0;
   let volleys = 0;
@@ -314,7 +317,7 @@ test('the XP curve is a stepped line, driven by TUNING', () => {
 test('when everything is maxed and the loadout is full, level-ups fall back to a full shield repair', () => {
   const g = freshGame();
   const p = g.player;
-  fill(p, ['missiles', 'lightning', 'orbitals', 'mines']);
+  fill(p, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
   for (const u of UPGRADE_POOL) p.upgradeLevels[u.id] = u.maxLevel;
   p.hp = 10;
   g.triggerLevelUp();
@@ -404,6 +407,7 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
 
 test('owning Volatile Shatter unlocks the KINETIC tag card', () => {
   const p = freshGame().player;
+  acquireWeapon(p, 'rockets');
   discardWeapon(p, 'blaster'); // Wing Rockets alone carry no KINETIC tag
   assert.deepEqual(p.loadout, ['rockets']);
   assert.ok(!ownedTags(p).has('kinetic'));
