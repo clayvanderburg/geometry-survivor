@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.11.0',
+    date: '2026-10-17',
+    title: 'Elites Grind Through Asteroids',
+    notes: [
+      { type: 'new', text: 'Lieutenants and bosses no longer get stuck on asteroids: they plow straight at you and grind through any rock in their way, with sparks and a low scrape.' },
+      { type: 'balance', text: 'Elites mine at your base drill speed (75 per second), never boosted by your drill upgrades, so a big rock still holds them for a moment.' },
+      { type: 'new', text: 'Rock an elite breaks drops its normal ore for you to grab: geoms, gold and deep cores. A shield crystal it crushes heals no one.' }
+    ]
+  },
+  {
     version: '0.10.1',
     date: '2026-10-17',
     title: 'One Board For Everyone',

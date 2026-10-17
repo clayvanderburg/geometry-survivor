@@ -6,7 +6,7 @@
 // GAME_VERSION and adds a matching entry at the top of CHANGELOG in js/changelog.js.
 // tests/changelog.test.js fails if the two disagree.
 
-export const GAME_VERSION = '0.10.1';
+export const GAME_VERSION = '0.11.0';
 
 // First release whose runs carry a version. Runs from before it live only on the all-time board,
 // where they are labelled LEGACY_VERSION_LABEL ("pre-0.9").

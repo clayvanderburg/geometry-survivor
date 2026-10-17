@@ -110,6 +110,10 @@ export const DEFAULT_TUNING = {
   lieutenantFirstWave: 2,
   lieutenantDelay: 6,
   lieutenantCoreReward: 1,
+  // Elites (lieutenants + bosses) grind through rock at TUNING.miningSpeed (the ship's base drill DPS,
+  // no upgrades) × eliteMiningMult; eliteMining 0 turns it off (they steer round rock like the rest).
+  eliteMining: 1,
+  eliteMiningMult: 1.0,
 
   // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
   pierceFalloff: 0.7,
@@ -276,7 +280,9 @@ export const TUNING_SCHEMA = [
       { key: 'lieutenantMaxMods', label: 'Lieutenant Max Modifiers', type: 'range', min: 1, max: 2, step: 1, unit: '' },
       { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
       { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
-      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' }
+      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' },
+      { key: 'eliteMining', label: 'Elites Grind Through Asteroids', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' }
     ]
   },
   {

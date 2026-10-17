@@ -6,6 +6,8 @@
 //     moves faster, ramping to `pursuitCatchupMax`× over CATCHUP_RAMP px. Chosen over teleporting
 //     stragglers back to the spawn ring: the hull you ran from is the one that arrives, it streams in
 //     visibly on the minimap, and nothing ever changes speed on screen.
+//   - Elites (lieutenants and bosses) skip the detour while elite mining is on: they plow straight at
+//     the ship and grind through whatever rock is in the way (AsteroidManager.update, section 3).
 // Vortexes (internal type 'blackhole') never take part: they drift, they don't chase.
 import { TUNING } from './config.js';
 
@@ -19,12 +21,32 @@ const VIEW_PAD = 60; // a hull this close to the screen edge counts as on screen
 
 export const pursues = (e) => e.type !== 'blackhole';
 
+// Elites = the Field Guide ELITES group: lieutenants and bosses.
+export const isElite = (e) => !!(e && (e.isBoss || e.isLieutenant));
+
+// Elite drill DPS, read live: the ship's BASE mining speed (TUNING.miningSpeed, no upgrades or meta
+// bonuses) × eliteMiningMult. 0 when the eliteMining toggle is off.
+export function eliteMiningDps(tuning = TUNING) {
+  if (!((tuning.eliteMining ?? 1) >= 0.5)) return 0;
+  return Math.max(0, (tuning.miningSpeed ?? 75) * (tuning.eliteMiningMult ?? 1));
+}
+
+// True when this enemy goes through rock instead of round it.
+export const plowsThroughRock = (e, tuning = TUNING) => isElite(e) && eliteMiningDps(tuning) > 0;
+
 // Writes the steering direction into `out` ({ x, y }, unit length): straight at the ship, or along a
 // blocking rock's tangent. `probe` says whether this tick re-checks the look-ahead.
 export function steerAroundRocks(e, dirX, dirY, dist, terrain, dt, probe, out) {
   out.x = dirX;
   out.y = dirY;
   if (!terrain?.getNearbyAsteroids || !pursues(e)) return out;
+  if (plowsThroughRock(e)) {
+    // Straight line: rock in the way is ground down on contact, never steered round.
+    e.detourRock = null;
+    e.detourT = undefined;
+    e.detourSide = 0;
+    return out;
+  }
 
   if (probe) {
     const reach = Math.min(dist, e.radius + LOOKAHEAD);

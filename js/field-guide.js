@@ -11,6 +11,7 @@ import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
 import { playerPullCapShare } from './gravity.js';
+import { eliteMiningDps } from './pursuit.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
@@ -22,6 +23,17 @@ export const GUIDE_GROUPS = [
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const secs = (v) => `${+v.toFixed(2)} s`;
+
+// Elite mining wording (lieutenant and boss entries, mining mechanic); empty when the tuner turns it off.
+function eliteGrindSpeed() {
+  const mult = TUNING.eliteMiningMult ?? 1;
+  const base = Math.abs(mult - 1) < 1e-9 ? 'your base drill speed' : `${+mult.toFixed(2)}× your base drill speed`;
+  return `${base} (${Math.round(eliteMiningDps())}/s)`;
+}
+function eliteGrindText() {
+  if (!(eliteMiningDps() > 0)) return '';
+  return ` It grinds through asteroids at ${eliteGrindSpeed()}, unaffected by your drill upgrades, instead of going round, and the broken rock drops its ore for you.`;
+}
 
 // `what` and `tip` may be functions so their numbers always come from the live constants/TUNING.
 export const HOSTILE_ENTRIES = [
@@ -82,13 +94,13 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
-    what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).`,
+    what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
     modifiers: true
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'elite', unlockWave: 3,
-    what: () => `Arrives every 3 waves after a ${secs(TUNING.bossWarningTime ?? 3)} warning: hazard strip, klaxon and a radar ring at the spawn point. A cyan octagon with a gold spike crown and magenta halo; health bars at the top of the screen.`,
+    what: () => `Arrives every 3 waves after a ${secs(TUNING.bossWarningTime ?? 3)} warning: hazard strip, klaxon and a radar ring at the spawn point. A cyan octagon with a gold spike crown and magenta halo; health bars at the top of the screen.${eliteGrindText()}`,
     tip: 'Clear the fodder during the warning, then kite in wide circles. A kill drops a guaranteed Super Relic Cache and a spare Supernova.'
   }
 ];
@@ -301,6 +313,7 @@ export const MECHANIC_ENTRIES = [
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
       'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
+      ...(eliteMiningDps() > 0 ? [`Elites (lieutenants and bosses) are the exception: they grind through rock in their way at ${eliteGrindSpeed()} and leave the ore behind; a shield crystal they crush heals no one.`] : []),
       `Veins: GOLD (5 gold Geoms, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
     ]
   },
