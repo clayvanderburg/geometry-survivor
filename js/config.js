@@ -73,7 +73,25 @@ export const DEFAULT_TUNING = {
   knockbackMult: 1.0,
   hitStopMult: 1.0,
   damageNumberCap: 48,
-  damageNumberScale: 1.0
+  damageNumberScale: 1.0,
+
+  // 9. Enemy Variety & Lieutenants (pack weights are relative; a pack joins at its archetype's unlock wave)
+  spawnWeightSwarm: 40,
+  spawnWeightSkirmish: 20,
+  spawnWeightSplitter: 18,
+  spawnWeightBlackhole: 12,
+  spawnWeightBruiser: 12,
+  spawnWeightGunner: 12,
+  spawnWeightShielder: 9,
+  spawnWeightBlinker: 10,
+  spawnWeightConduit: 7,
+  enemyBulletSpeed: 4.2,
+  enemyBulletDamage: 12,
+  lieutenantHpShare: 0.4,
+  lieutenantMaxMods: 2,
+  lieutenantFirstWave: 2,
+  lieutenantDelay: 6,
+  lieutenantCoreReward: 1
 };
 
 export const TUNING_SCHEMA = [
@@ -172,6 +190,27 @@ export const TUNING_SCHEMA = [
       { key: 'hitStopMult', label: 'Big-Moment Hit-Stop (max 3 ticks)', type: 'range', min: 0.0, max: 2.0, step: 0.1, unit: 'x' },
       { key: 'damageNumberCap', label: 'Max Live Damage Numbers', type: 'range', min: 8, max: 120, step: 1, unit: '' },
       { key: 'damageNumberScale', label: 'Damage Number Text Size', type: 'range', min: 0.6, max: 2.0, step: 0.05, unit: 'x' }
+    ]
+  },
+  {
+    group: '👾 Enemy Variety & Lieutenants',
+    items: [
+      { key: 'spawnWeightSwarm', label: 'Pack Weight: Boid Swarm', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSkirmish', label: 'Pack Weight: Pinwheels + Weavers', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSplitter', label: 'Pack Weight: Splitters', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Black Hole', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 2+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 4+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 5+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
+      { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
+      { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'lieutenantMaxMods', label: 'Lieutenant Max Modifiers', type: 'range', min: 1, max: 2, step: 1, unit: '' },
+      { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
+      { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
+      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' }
     ]
   }
 ];
