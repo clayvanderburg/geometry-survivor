@@ -5,6 +5,7 @@ import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
+import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -200,7 +201,11 @@ export class Game {
         dashNova: 0,
         pulsarHelix: 0,
         stormProtocol: 0,
-        tectonicBore: 0
+        tectonicBore: 0,
+        mines: 0,
+        turret: 0,
+        drones: 0,
+        siegeBattery: 0
       }
     };
 
@@ -209,6 +214,7 @@ export class Game {
 
     this.particles.clear();
     this.damageNumbers?.clear();
+    (this.deployables ||= new Deployables()).clear();
     this.grid.reset();
     this.shake = 0;
     this.chromaFlash = 0;
@@ -1785,6 +1791,11 @@ export class Game {
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
         this.hitEnemy(e, b.damage, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        if (b.blastRadius) {
+          // Siege Battery shells burst on impact (cover still stops the shell itself).
+          this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 2.5, 0.22);
+          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5);
+        }
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
@@ -2501,6 +2512,10 @@ export class Game {
       }
     }
 
+    // Deployables (mines, sentry turrets, escort drones) place and fire before the bullet sweep,
+    // so their bolts move, bend and collide with everything else this tick.
+    this.deployables?.update(dt, this);
+
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
     this.updateBullets(dt);
@@ -3048,6 +3063,7 @@ export class Game {
       ctx.fill();
     }
 
+    this.deployables?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     const p = this.player;
@@ -3082,6 +3098,7 @@ export class Game {
         }
       }
 
+      this.deployables?.drawEscorts(ctx, this);
       this.drawCrabShip(ctx, p);
     }
 

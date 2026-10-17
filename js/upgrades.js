@@ -165,6 +165,44 @@ export const UPGRADE_POOL = [
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
   },
+  // Deployables: placed or escorting units that fight on their own. Their numbers live in
+  // weapon-scaling.js and they share the DEPLOYABLE category and 'deployable' tag.
+  {
+    id: 'mines',
+    name: 'Proximity Mines',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'explosive'],
+    maxLevel: 6,
+    headline: 'mineMaxActive',
+    summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.',
+    apply(player) {
+      player.weapons.mines = (player.weapons.mines || 0) + 1;
+    }
+  },
+  {
+    id: 'turret',
+    name: 'Sentry Turret',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'projectile'],
+    maxLevel: 6,
+    headline: 'turretMaxActive',
+    summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.',
+    apply(player) {
+      player.weapons.turret = (player.weapons.turret || 0) + 1;
+    }
+  },
+  {
+    id: 'drones',
+    name: 'Escort Drones',
+    category: 'DEPLOYABLE',
+    tags: ['deployable', 'projectile'],
+    maxLevel: 6,
+    headline: 'droneCount',
+    summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.',
+    apply(player) {
+      player.weapons.drones = (player.weapons.drones || 0) + 1;
+    }
+  },
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
@@ -214,6 +252,22 @@ export const UPGRADE_POOL = [
     apply(player) {
       player.weapons.stormProtocol = 1;
       player.weapons.missiles += 1;
+    }
+  },
+  {
+    id: 'evo_siege',
+    name: 'SYNERGY: Siege Battery',
+    category: 'EVOLUTION',
+    tags: ['deployable', 'explosive'],
+    isSynergy: true,
+    maxLevel: 1,
+    req(player) {
+      return (player.weapons.mines >= 1 && player.weapons.turret >= 1);
+    },
+    headline: 'siegeShell',
+    summary: 'EVOLUTION: sentry turrets load mine charges, so every bolt that hits bursts into nearby enemies.',
+    apply(player) {
+      player.weapons.siegeBattery = 1;
     }
   }
 ];

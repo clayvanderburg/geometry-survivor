@@ -47,6 +47,13 @@ npm start
    - **Relic Supply Caches**: Guaranteed drop from Bosses and very rare Luck-scaled drop from lesser enemies / Gold Veins. Opening a cache triggers the **Relic Supply Cache Jackpot Modal** (`1x` standard, or rare `2x`, `3x Triple Jackpot`, or `5x Penta-Core Mega Jackpot` free upgrades). Caches install through the same `applyUpgradeLevels` path as level-up picks, so they share one `player.upgradeLevels` state.
    - **Readable Cards (`js/upgrade-cards.js`)**: Every level-up and cache card shows an enlarged headline (e.g. `+2 PROJECTILES`), a short summary and exact **before → after** stats, computed by installing the upgrade (including its rolled level jump) on a copy of the player. Weapon formulas live in `js/weapon-scaling.js` so cards and gameplay can't drift. Rarity is the rolled level jump and sets the card color: `+1` common gray, `+2` uncommon green, `+3` rare blue, `+4` epic purple, `+5` legendary gold; evolutions are magenta. Cards, caches and HUD tags all use the same `LV n` wording.
 
+4b. **Deployables (`js/deployables.js`)** — three upgrade lines in the `DEPLOYABLE` category (tag `deployable`), numbers in `js/weapon-scaling.js` so cards preview exact before → after:
+   - **Proximity Mines**: dropped in the ship's wake on a timer while a slot is free; arm after `mineArmTime`, then burst (area damage) when an enemy enters the trigger ring, or at the end of the fuse. Levels raise max active mines, damage, drop rate, blast/trigger radius and fuse.
+   - **Sentry Turret**: planted at the ship for a limited lifetime (ring shows time left); a rotating twin barrel shoots the nearest enemy it can see — targets behind asteroids are skipped and its bolts are stopped by cover like the blaster. Levels raise fire rate, lifetime, range, damage, deploy rate and (at LV 3/6) max active turrets.
+   - **Escort Drones**: 1–3 gunships flying a V formation behind the hull with thruster trails, firing bolts at nearby visible targets (they shoot; Orbiting Blades grind).
+   - **SYNERGY: Siege Battery** (Proximity Mines + Sentry Turret): turret bolts burst on impact into nearby enemies.
+   - Deployables live in fixed pools outside the enemy list (no enemy-cap cost), freeze with pause/hit-stop/slow-mo, are cleared on run reset, and never target Vortex portals. Tuner group *Deployables*: damage multiplier, mine arming delay, drone formation spacing.
+
 5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
    - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.
    - **Hull-Hugging Shield Barrier** (`drawPlayerShield` in `js/ship-renderer.js`) wraps the crab's silhouette and is also the contact hitbox (`shieldTouches`). Its charged arc shows current shield %, thickness grows with max shield, color shifts blue → amber → critical red, and hits flash with a ripple. Hue, padding and thickness are tunable.
@@ -61,7 +68,7 @@ npm start
    - The *Enemy Variety & Lieutenants* group exposes pack spawn weights, Gunner orb speed/damage, lieutenant HP share, modifier count, first wave, arrival delay and Void Core reward.
 
 8. **Damage & Hit Feedback (`js/damage-numbers.js`, `hitEnemy` in `js/main.js`)**
-   - **Floating damage numbers** (on by default; toggle in the pause menu or with `[N]`, saved in `localStorage` as `vexolith_damage_numbers`). Rapid hits on one enemy from one weapon merge into a single rising total (new number after a 0.3 s gap or 1 s burst), live numbers are capped (`damageNumberCap`, default 48) and stacked at most three deep per spot, size grows gently with damage, and colour shows the source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, supernova gold, other (shrapnel, dash nova, bore, black-hole burst) white.
+   - **Floating damage numbers** (on by default; toggle in the pause menu or with `[N]`, saved in `localStorage` as `vexolith_damage_numbers`). Rapid hits on one enemy from one weapon merge into a single rising total (new number after a 0.3 s gap or 1 s burst), live numbers are capped (`damageNumberCap`, default 48) and stacked at most three deep per spot, size grows gently with damage, and colour shows the source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, supernova gold, mines red, turret blue, drones lime, other (shrapnel, dash nova, bore, black-hole burst) white.
    - **Impacts**: white-hot hit flash + hull pop, a pooled cross-flare at each projectile hit, and mass-scaled knockback (decaying displacement; bosses immune, orbitals/singularities never push).
    - **Kills by durability tier**: swarmers pop, pinwheels/weavers/gunners/blinkers add a core flash, splitters/bruisers/shielders/conduits shed debris + embers and shake lightly, lieutenants and vortexes (the elite tier) add a wide ring + 1-tick hit-stop, bosses add a chroma flash + 3-tick hit-stop. Supernova uses a 2-tick hit-stop. All shake goes through `screenShakeMult`; hit-stop is capped at 3 fixed ticks (`hitStopMult`).
 
@@ -81,10 +88,11 @@ npm start
 - `js/archetypes.js` — Bruiser, Gunner, Shielder, Blinker and Conduit stats, AI state machines, silhouettes/telegraphs, shield blocking, unlock waves and weighted wave packs.
 - `js/enemy-bullets.js` — Pooled hostile plasma orbs (rock-blocked, shield-outline hits).
 - `js/lieutenants.js` — Lieutenant rolls (name, epithet, modifiers), stat folding, rank aura, mini HP bar and spawn telegraph.
-- `js/upgrades.js` — In-run upgrade pool, Golden Synergies (*Tectonic Claw Bore*, *Pulsar Helix*, *Storm Protocol*), and Luck-scaled `+2`…`+5` level jump rolls (rarity).
+- `js/upgrades.js` — In-run upgrade pool, Golden Synergies (*Tectonic Claw Bore*, *Pulsar Helix*, *Storm Protocol*, *Siege Battery*), and Luck-scaled `+2`…`+5` level jump rolls (rarity).
 - `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign) and Void Armory meta-upgrades.
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
 - `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, pooled hit-impact flares, and floating text.
+- `js/deployables.js` — Proximity Mines, Sentry Turrets and Escort Drones: pooled update, targeting (nearest visible enemy), bolts through the shared bullet sweep, and neon rendering.
 - `js/damage-numbers.js` — Pooled, canvas-drawn floating damage numbers (per-enemy/per-source aggregation, live cap, persisted toggle).
 - `js/audio.js` — Procedural WebAudio synthwave sequencer and SFX engine.
 

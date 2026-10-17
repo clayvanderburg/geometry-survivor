@@ -93,7 +93,12 @@ export const DEFAULT_TUNING = {
   lieutenantMaxMods: 2,
   lieutenantFirstWave: 2,
   lieutenantDelay: 6,
-  lieutenantCoreReward: 1
+  lieutenantCoreReward: 1,
+
+  // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
+  deployableDamageMult: 1.0,
+  mineArmTime: 0.6,
+  droneFormationRadius: 54
 };
 
 export const TUNING_SCHEMA = [
@@ -215,6 +220,14 @@ export const TUNING_SCHEMA = [
       { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
       { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
       { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' }
+    ]
+  },
+  {
+    group: '🛰 Deployables',
+    items: [
+      { key: 'deployableDamageMult', label: 'Deployable Damage (mines/turrets/drones)', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'mineArmTime', label: 'Mine Arming Delay', type: 'range', min: 0.1, max: 2.0, step: 0.05, unit: 's' },
+      { key: 'droneFormationRadius', label: 'Escort Drone Formation Spacing', type: 'range', min: 30, max: 120, step: 2, unit: 'px' }
     ]
   }
 ];

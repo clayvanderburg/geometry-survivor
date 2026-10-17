@@ -56,6 +56,7 @@
 - Distinct potential types: kinetic, plasma/heat-over-time, electrical chaining, corrosive nanites/armor erosion, explosive AoE, gravity/displacement, cryogenic slowing.
 - Mines/charges, temporary automated turrets, laser/missile emplacements, perhaps defensive drones.
 - Deployables can scale via active count, duration, range, rate, and overclock modifications.
+  - **First pass in game:** Proximity Mines, Sentry Turret and Escort Drones (category `DEPLOYABLE`, tag `deployable`) scale by active count, duration/fuse, range and rate; *Siege Battery* (mines + turret) makes turret bolts burst. Laser/missile emplacements and overclocks remain open. Needs playtesting for balance.
 
 ## 6. Enemy variety and encounter pacing
 - Enemy archetypes: fast swarmers, slow durable bruisers, mini-spawners/splitters, orbiting-shield units, ranged attackers, burrowers, support/buff units, teleporters.

@@ -18,6 +18,9 @@ const pct2 = (v) => `${(v * 100).toFixed(2)}%`;
 const mult = (v) => `${v.toFixed(2)}x`;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
+const sec1 = (v) => `${v.toFixed(1)}s`;
+// Deployable hits scale with bolt damage and the tuner's deployable multiplier (same as deployables.js).
+const deployDamage = (p, m) => p.stats.damage * m * (TUNING.deployableDamageMult ?? 1);
 
 // headline: 'count' (+N UNIT), 'pct' (+N% UNIT), 'points' (+N% UNIT for ratio stats like luck),
 // or a function(before, after). newText: headline when the row comes online (before is null).
@@ -58,6 +61,25 @@ export const STAT_ROWS = [
   { id: 'shrapnelShards', label: 'Shards / burst', get: (p) => owned(p, 'shrapnel', W.shrapnelShards), fmt: int, headline: 'count', unit: 'SHARDS / BURST' },
   { id: 'shrapnelChance', label: 'Burst chance / kill', get: (p) => owned(p, 'shrapnel', W.shrapnelChance), fmt: pct },
   { id: 'shrapnelDamage', label: 'Shard damage', get: (p) => owned(p, 'shrapnel', () => p.stats.damage * W.shrapnelDamageMult), fmt: dec1 },
+
+  // Deployables: Proximity Mines, Sentry Turret (+ Siege Battery), Escort Drones
+  { id: 'mineMaxActive', label: 'Max active mines', get: (p) => owned(p, 'mines', W.mineMaxActive), fmt: int, headline: 'count', unit: 'MAX ACTIVE MINES', newText: (a) => `PROXIMITY MINES // ${a} ACTIVE` },
+  { id: 'mineDamage', label: 'Mine blast damage', get: (p) => owned(p, 'mines', (l) => deployDamage(p, W.mineDamageMult(l))), fmt: dec1 },
+  { id: 'mineCooldown', label: 'Mine drop interval', get: (p) => owned(p, 'mines', W.mineCooldown), fmt: secs },
+  { id: 'mineBlastRadius', label: 'Mine blast radius', get: (p) => owned(p, 'mines', W.mineBlastRadius), fmt: int },
+  { id: 'mineTrigger', label: 'Mine trigger radius', get: (p) => owned(p, 'mines', W.mineTriggerRadius), fmt: int },
+  { id: 'mineLifetime', label: 'Mine fuse', get: (p) => owned(p, 'mines', W.mineLifetime), fmt: sec1 },
+  { id: 'turretMaxActive', label: 'Max active turrets', get: (p) => owned(p, 'turret', W.turretMaxActive), fmt: int, headline: (b, a) => `+${a - b} SENTRY TURRET${a - b > 1 ? 'S' : ''}`, newText: (a) => `SENTRY TURRET // ${a} ACTIVE` },
+  { id: 'turretFireRate', label: 'Turret fire rate', get: (p) => owned(p, 'turret', W.turretFireRate), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'TURRET FIRE RATE' },
+  { id: 'turretDuration', label: 'Turret lifetime', get: (p) => owned(p, 'turret', W.turretDuration), fmt: sec1 },
+  { id: 'turretCooldown', label: 'Turret deploy cooldown', get: (p) => owned(p, 'turret', W.turretCooldown), fmt: secs },
+  { id: 'turretRange', label: 'Turret range', get: (p) => owned(p, 'turret', W.turretRange), fmt: int },
+  { id: 'turretDamage', label: 'Turret bolt damage', get: (p) => owned(p, 'turret', (l) => deployDamage(p, W.turretDamageMult(l))), fmt: dec1 },
+  { id: 'siegeShell', label: 'Turret shell burst', get: (p) => (p.weapons.siegeBattery ? deployDamage(p, W.turretDamageMult(Math.max(1, lv(p, 'turret'))) * W.siegeShellDamageMult) : null), fmt: dec1, newText: (a, row) => `TURRET SHELLS BURST // ${row.fmt(a)} DMG` },
+  { id: 'droneCount', label: 'Escort drones', get: (p) => owned(p, 'drones', W.droneCount), fmt: int, headline: (b, a) => `+${a - b} ESCORT DRONE${a - b > 1 ? 'S' : ''}`, newText: (a) => `+${a} ESCORT DRONE${a > 1 ? 'S' : ''}` },
+  { id: 'droneFireRate', label: 'Drone fire rate (each)', get: (p) => owned(p, 'drones', W.droneFireRate), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'DRONE FIRE RATE' },
+  { id: 'droneRange', label: 'Drone range', get: (p) => owned(p, 'drones', W.droneRange), fmt: int },
+  { id: 'droneDamage', label: 'Drone bolt damage', get: (p) => owned(p, 'drones', (l) => deployDamage(p, W.droneDamageMult(l))), fmt: dec1 },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
