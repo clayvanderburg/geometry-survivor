@@ -39,10 +39,11 @@ export const DEFAULT_TUNING = {
   chestTripleChance: 0.018,
   chestPentaChance: 0.003,
 
-  // 4. World, Asteroids & Economy
-  clusterCount: 38,
+  // 4. World, Asteroids & Economy (many small rocks: ~2x the old count at ~70% the size, similar coverage)
+  clusterCount: 44,
   rockHpMult: 1.6,
-  rockSizeMult: 1.15,
+  rockSizeMult: 0.8,
+  goldVeinChance: 0.15,
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -142,7 +143,13 @@ export const DEFAULT_TUNING = {
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
   tagCardWeight: 0.7,
-  evolutionWeight: 4
+  evolutionWeight: 4,
+
+  // 13. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
+  goldPerVein: 3,
+  goldRerollCost: 20,
+  goldRerollGrowth: 2,
+  goldLockCost: 5
 };
 
 export const TUNING_SCHEMA = [
@@ -197,7 +204,8 @@ export const TUNING_SCHEMA = [
     items: [
       { key: 'clusterCount', label: 'Asteroid Clusters (Respawn)', type: 'range', min: 5, max: 85, step: 1, unit: '' },
       { key: 'rockHpMult', label: 'Asteroid Rock HP Mult', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
-      { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.5, max: 2.2, step: 0.05, unit: 'x' },
+      { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.4, max: 2.2, step: 0.05, unit: 'x' },
+      { key: 'goldVeinChance', label: 'Gold Vein Share of Rocks', type: 'range', min: 0, max: 0.6, step: 0.01, unit: 'prob' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
@@ -320,6 +328,15 @@ export const TUNING_SCHEMA = [
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck)', type: 'range', min: 0, max: 20, step: 0.5, unit: 'x' }
+    ]
+  },
+  {
+    group: '◆ Gold, Rerolls & Locks',
+    items: [
+      { key: 'goldPerVein', label: 'Gold per Gold Vein', type: 'range', min: 0, max: 30, step: 1, unit: '' },
+      { key: 'goldRerollCost', label: 'First Reroll Cost (per hand)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
+      { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
+      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' }
     ]
   }
 ];

@@ -20,6 +20,7 @@
             <div id="multiplier-display" class="multiplier-badge">x1.0</div>
             <div id="luck-hud-display" class="luck-badge" title="Luck boosts +2/+3 Multi-Level Upgrades & Relic Chest Drops">🍀 100% LUCK</div>
             <div id="cores-hud-display" class="cores-badge" title="Void Cores harvested for permanent Armory upgrades">❖ 0 CORES</div>
+            <div id="gold-hud-display" class="gold-badge" title="Gold mined from gold veins this run: spend it to reroll or lock level-up cards">◆ 0 GOLD</div>
           </div>
         </div>
 
@@ -309,6 +310,7 @@
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
               <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar</span>
+              <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock a card (costs ◆ gold from gold veins)</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Back Radar · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
@@ -329,6 +331,11 @@
           <p class="upgrade-hint">Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve</p>
         </div>
         <div id="upgrade-choices" class="upgrade-choices-grid"></div>
+        <div id="hand-goldbar" class="hand-goldbar">
+          <div id="hand-gold-count" class="hand-gold-count">◆ 0 GOLD</div>
+          <button id="btn-reroll-hand" class="neon-btn hand-reroll-btn" disabled>↻ REROLL · 20 ◆</button>
+          <div id="hand-lock-note" class="hand-lock-note"></div>
+        </div>
       </div>
     </div>
 
