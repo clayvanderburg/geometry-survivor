@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.10.1',
+    date: '2026-10-17',
+    title: 'One Board For Everyone',
+    notes: [
+      { type: 'fix', text: 'The GLOBAL leaderboard no longer starts over with each update. It is one shared board, and every score shows the version it was set on.' },
+      { type: 'new', text: 'The VERSION buttons under the board still let you filter it to a single version.' },
+      { type: 'fix', text: 'Game over shows your rank on the shared board, next to the version you flew.' }
+    ]
+  },
+  {
     version: '0.10.0',
     date: '2026-10-17',
     title: 'Off-Screen Spawns & Stronger Vortexes',
