@@ -345,7 +345,9 @@ export function botControls(game, pilot, state) {
     const dx = p.x - r.x, dy = p.y - r.y;
     const d = Math.hypot(dx, dy) || 1;
     const gap = d - r.radius - p.radius;
-    if (pilot.mineBias > 0 && gap < mineDist) { mineDist = gap; mineTarget = r; }
+    // goldPull: a pilot that goes after gold veins treats them as this many px closer than plain rock.
+    const pull = r.oreType === 'gold_vein' ? (pilot.goldPull || 0) : 0;
+    if (pilot.mineBias > 0 && gap - pull < mineDist) { mineDist = gap - pull; mineTarget = r; }
     if (gap < 55) {
       const w = (55 - gap) / 55 * (pilot.mineBias > 0 && threat < 0.6 ? 0.2 : 1.4);
       fx += (dx / d) * w;

@@ -29,7 +29,7 @@ import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refr
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
-import { wellPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
+import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
 } from './archetypes.js';
@@ -1354,9 +1354,9 @@ export class Game {
   // Blasts deal full damage to anything touching the center and fade linearly toward the rim
   // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
   // potential while crowds take less per head.
-  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area) {
+  // edgeFalloff: share of the damage lost at the rim (linear from the centre); defaults to splashEdgeFalloff.
+  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area, edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4) {
     const enemies = this.enemyManager.enemies;
-    const edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       const dx = e.x - cx;
@@ -2168,9 +2168,9 @@ export class Game {
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
           damage: weaponDamage(p, 'helix'),
           pierce: p.stats.pierce,
-          hue: 48,
-          radius: 4.5,
-          life: 1.15
+          hue: 305, // evolution magenta: reads apart from cyan Pew Pews shots and gold XP geoms
+          radius: 6.5,
+          life: 1.3
         });
       }
     }
@@ -2489,7 +2489,7 @@ export class Game {
         if (!e.isBoss) {
           // Inward drag with a vortex twist: the drift bypasses the enemy's own speed cap, and the
           // same pull also bends its steering so flocks turn into the vortex instead of fighting it.
-          const k = wellPullScale(dx, dy, sg.pullRadius, pull, sg.radius);
+          const k = singularityPullScale(dx, dy, sg.pullRadius, pull, sg.radius);
           e.gvx = (e.gvx || 0) + (dx - dy * 0.35) * k;
           e.gvy = (e.gvy || 0) + (dy + dx * 0.35) * k;
           e.vx += dx * k;
@@ -2518,7 +2518,8 @@ export class Game {
     this.particles.spawnShockwave(sg.x, sg.y, r * 0.45, 200, 4, 0.26);
     this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
     this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
-    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity');
+    // The collapse hits full force at the core and fades to 25% at its rim (singularityCollapseEdgeFalloff).
+    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75);
   }
 
   triggerLevelUp() {

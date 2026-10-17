@@ -6,12 +6,12 @@
 // Pure helpers over a player and plain objects, so tests and the balance harness can use them without
 // a DOM. The hand itself is still rolled by upgrades.js rollLevelUpHand: rollHandAround only wraps it.
 import { TUNING } from './config.js';
-import { rollLevelUpHand, eligibleUpgrades, canOfferNewWeapon, newWeaponCard } from './upgrades.js';
+import { rollLevelUpHand, rollUpgrades, eligibleUpgrades, canOfferNewWeapon, newWeaponCard } from './upgrades.js';
 
 export const GOLD_ICON = '◆';
 export const MAX_COINS_PER_VEIN = 6; // a vein's gold is split into at most this many pickups
 
-export const goldPerVein = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldPerVein ?? 3));
+export const goldPerVein = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldPerVein ?? 2));
 
 // Pickup values for `total` gold: one coin per gold, larger amounts split evenly over MAX_COINS_PER_VEIN.
 export function goldCoins(total, maxCoins = MAX_COINS_PER_VEIN) {
@@ -50,20 +50,31 @@ export function refreshLockedCard(player, card) {
 
 // The level-up hand hook. With no lock it is exactly roll(player, count). With a lock ({ card, slot })
 // the locked card holds its slot and the other count - 1 cards come from a normal roll (same gating,
-// NEW WEAPON odds and rarity rolls), re-drawn if they would repeat the locked card.
-export function rollHandAround(player, count, lock, roll = rollLevelUpHand) {
+// NEW WEAPON odds and rarity rolls), re-drawn if they would repeat the locked card. A locked NEW WEAPON
+// card already fills the hand's NEW WEAPON spot, so the rest is a plain roll (rollPlain) without one.
+export function rollHandAround(player, count, lock, roll = rollLevelUpHand, rollPlain = rollUpgrades) {
   if (!lock?.card) return roll(player, count);
-  const drought = player.newWeaponDrought;
+  const want = Math.max(0, count - 1);
+  const id = lock.card.id;
   let rest = [];
-  for (let attempt = 0; attempt < 6; attempt++) {
-    player.newWeaponDrought = drought;
-    rest = roll(player, Math.max(0, count - 1));
-    if (!rest.some((c) => c.id === lock.card.id)) break;
+  if (lock.card.isNewWeapon) {
+    rest = rollPlain(player, want);
+    player.newWeaponDrought = 0; // a NEW WEAPON card is on show: the pity counter restarts
+  } else {
+    const drought = player.newWeaponDrought;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      player.newWeaponDrought = drought;
+      rest = roll(player, want);
+      if (!rest.some((c) => c.id === id)) break;
+    }
+    rest = rest.filter((c) => c.id !== id);
   }
-  rest = rest.filter((c) => c.id !== lock.card.id);
-  // A locked NEW WEAPON card is on show, so the NEW WEAPON pity counter restarts as for any offer.
-  if (lock.card.isNewWeapon) player.newWeaponDrought = 0;
-  const hand = rest.slice(0, Math.max(0, count - 1));
+  if (rest.length < want) {
+    // Still short (a tiny pool kept repeating the locked card): top up from a plain roll.
+    const extra = rollPlain(player, count).filter((c) => c.id !== id && !rest.some((r) => r.id === c.id));
+    rest.push(...extra.slice(0, want - rest.length));
+  }
+  const hand = rest.slice(0, want);
   hand.splice(Math.max(0, Math.min(lock.slot ?? 0, hand.length)), 0, lock.card);
   return hand;
 }

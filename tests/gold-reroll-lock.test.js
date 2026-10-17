@@ -165,6 +165,12 @@ test('a locked card passed over is guaranteed in the next hand, with one fewer r
   assert.deepEqual(counts, [2]);
   assert.deepEqual(hand.map((c) => c.id), ['a', locked.id, 'b']);
   assert.deepEqual(rollHandAround(g.player, 3, null, (pl, n) => Array.from({ length: n }, (_, i) => ({ id: i }))).length, 3);
+  // A random roll that keeps repeating the locked card is topped up, so the hand stays full.
+  const stubborn = rollHandAround(g.player, 3, { card: { id: 'x' }, slot: 0 }, () => [{ id: 'x' }, { id: 'a' }], () => [{ id: 'x' }, { id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(stubborn.map((c) => c.id), ['x', 'a', 'b']);
+  // A locked NEW WEAPON takes the hand's NEW WEAPON spot: the rest is a plain roll, even at 100% odds.
+  const nwHand = rollHandAround(g.player, 3, { card: { id: 'new_weapon', isNewWeapon: true }, slot: 2 }, () => assert.fail('no NEW WEAPON roll'), (pl, n) => Array.from({ length: n }, (_, i) => ({ id: `u${i}` })));
+  assert.deepEqual(nwHand.map((c) => c.id), ['u0', 'u1', 'new_weapon']);
   // Taking the locked card applies it and uses the lock up.
   const before = g.player.upgradeLevels[locked.id] || 0;
   g.selectUpgrade(2);
@@ -204,9 +210,10 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
   assert.match(g.lockNote, /lock dropped/);
 
   // Its weapon discarded.
-  const p = refreshLockedCard(freshGame().player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 });
-  assert.equal(p.id, 'rockets', 'valid while Wing Rockets are equipped');
   const g2 = freshGame();
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }), null, 'Wing Rockets not equipped');
+  acquireWeapon(g2.player, 'rockets');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }).id, 'rockets', 'valid while Wing Rockets are equipped');
   discardWeapon(g2.player, 'rockets');
   assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 1 }), null);
 

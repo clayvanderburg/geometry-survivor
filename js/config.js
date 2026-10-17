@@ -72,6 +72,8 @@ export const DEFAULT_TUNING = {
   blackholePickupPull: 0.3,
   singularityPull: 0.75,
   singularityCollapseMult: 1.0,
+  singularityPullFalloff: 3,
+  singularityCollapseEdgeFalloff: 0.75,
 
   // 6b. Spawn Placement & Pursuit (where enemies appear and how they close in; not how many or how tough)
   spawnRingMarginMin: 40,
@@ -146,7 +148,7 @@ export const DEFAULT_TUNING = {
   evolutionWeight: 4,
 
   // 13. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
-  goldPerVein: 3,
+  goldPerVein: 2,
   goldRerollCost: 20,
   goldRerollGrowth: 2,
   goldLockCost: 5
@@ -237,7 +239,9 @@ export const TUNING_SCHEMA = [
       { key: 'blackholeBulletBend', label: 'Vortex Bullet Bending', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
       { key: 'blackholePickupPull', label: 'Vortex Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'singularityPull', label: 'Vortex Singularity Pull', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'px/t²' },
-      { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' }
+      { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'singularityPullFalloff', label: 'Singularity Pull Falloff (1 = old curve, higher = weaker rim)', type: 'range', min: 1, max: 4, step: 0.1, unit: '^' },
+      { key: 'singularityCollapseEdgeFalloff', label: 'Singularity Collapse Damage Lost at Rim', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'x' }
     ]
   },
   {

@@ -20,7 +20,27 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'REROLL a level-up hand with gold ([R] or X): 20 gold, then 40, 80 and so on in the same level-up, back to 20 on the next one.' },
       { type: 'new', text: 'LOCK a card for 5 gold (Shift+1-3 or Y): it stays through rerolls, and if you pick another card it comes back in your next level-up.' },
       { type: 'balance', text: 'Asteroid fields are made of about twice as many smaller rocks, covering about the same space. More gold veins to find, and each rock drills faster.' },
-      { type: 'balance', text: 'Each gold vein holds 3 gold. A pilot who mines regularly can reroll every few level-ups and lock cards often.' }
+      { type: 'balance', text: 'Each gold vein holds 2 gold. Mine gold veins regularly and you can reroll about every 4 level-ups and lock cards often.' }
+    ]
+  },
+  {
+    version: '0.11.2',
+    date: '2026-10-17',
+    title: 'Vortex Nerf & Clearer Evolutions',
+    notes: [
+      { type: 'balance', text: 'Vortex Singularity is still brutal at its core, but its pull fades hard toward the rim and its collapse deals only a quarter damage at the edge.' },
+      { type: 'fix', text: 'Evolution cards now say exactly which weapon they upgrade (EVOLUTION · PEW PEWS) and that they are not a new weapon.' },
+      { type: 'fix', text: 'Pulsar Helix (a Pew Pews evolution) is now easy to see: big magenta bolts spin out of your ship with every Pew Pews shot.' },
+      { type: 'fix', text: 'Swarm Missiles got a new yellow color so their cards no longer look like evolutions.' },
+      { type: 'new', text: 'The Field Guide splits WEAPONS (your starting kit and every weapon you can equip) from UPGRADES (all other cards, evolutions and tags).' }
+    ]
+  },
+  {
+    version: '0.11.1',
+    date: '2026-10-17',
+    title: 'Pew Pews Only',
+    notes: [
+      { type: 'balance', text: 'You now launch with just the Pew Pews. Wing Rockets moved into the NEW WEAPON pool with every other weapon.' }
     ]
   },
   {

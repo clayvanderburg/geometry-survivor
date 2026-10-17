@@ -1,4 +1,4 @@
-// Field Guide screen: HOSTILES (unlock on first encounter, live previews), MECHANICS and WEAPONS.
+// Field Guide screen: HOSTILES (unlock on first encounter, live previews), MECHANICS, WEAPONS and UPGRADES.
 // HTML is built by pure functions (tested in node); FieldGuideUI wires it into #guide-modal, animates
 // only the previews that are on screen and clears NEW badges for the entries the player has seen.
 import {
@@ -9,7 +9,8 @@ import { GuidePreview, drawSilhouette, PREVIEW_DT } from './field-guide-scenes.j
 export const GUIDE_TABS = [
   { id: 'hostiles', label: 'HOSTILES' },
   { id: 'mechanics', label: 'MECHANICS' },
-  { id: 'weapons', label: 'WEAPONS' }
+  { id: 'weapons', label: 'WEAPONS' },
+  { id: 'upgrades', label: 'UPGRADES' }
 ];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -61,30 +62,46 @@ export function mechanicsHTML() {
   return `<section class="guide-section"><div class="guide-grid">${cards}</div></section>`;
 }
 
+// Shared card markup for the WEAPONS and UPGRADES tabs.
+function upgradeCardHTML(u, category) {
+  return `<article class="guide-entry guide-weapon${u.evolution ? ' evolution' : ''}${u.owned ? ' owned' : ''}" data-entry="${esc(u.id)}" data-gp-nav tabindex="0">
+      <div class="guide-entry-head"><h3>${esc(u.name.replace(/^SYNERGY:\s*/, ''))}</h3></div>
+      <div class="guide-weapon-meta">${esc(category)} · ${u.owned ? `<b>OWNED LV ${u.owned}</b>` : u.evolution ? 'ONE-SHOT' : `MAX LV ${u.maxLevel}`}</div>
+      ${u.tags.length ? `<div class="guide-chips">${u.tags.map(chipHTML).join('')}</div>` : ''}
+      <p>${esc(u.summary.replace(/^EVOLUTION:\s*/, ''))}</p>${u.recipe ? `<p class="guide-recipe"><b>UNLOCKS WITH</b> ${esc(u.recipe)}</p>` : ''}</article>`;
+}
+
+function cardSection(title, list, intro = '') {
+  return list.length
+    ? `<section class="guide-section"><h4 class="guide-section-title">${esc(title)}</h4>${intro ? `<p class="guide-legend-text">${esc(intro)}</p>` : ''}<div class="guide-grid guide-grid-cards">${list.map(x => upgradeCardHTML(x.u, x.category)).join('')}</div></section>`
+    : '';
+}
+
+const allCards = (g) => g.categories.flatMap(c => c.items.map(u => ({ u, category: c.id })));
+
+// WEAPONS: the starting kit, then every weapon that can fill a slot (its own level card).
 export function weaponsHTML(levels = null) {
   const g = weaponGuide(levels);
   const kit = g.kit.map(k => `<article class="guide-entry guide-weapon kit" data-entry="kit-${esc(k.key)}" data-gp-nav tabindex="0">
     <div class="guide-entry-head"><h3>${esc(k.name)}</h3></div><div class="guide-weapon-meta">STARTING WEAPON</div>
     <div class="guide-chips">${k.tags.map(chipHTML).join('')}</div><p>${esc(k.text)}</p></article>`).join('');
-  // Every upgrade card in pool order (category on each card), then the evolutions with their recipes.
-  const card = (u, category) => `<article class="guide-entry guide-weapon${u.evolution ? ' evolution' : ''}${u.owned ? ' owned' : ''}" data-entry="${esc(u.id)}" data-gp-nav tabindex="0">
-      <div class="guide-entry-head"><h3>${esc(u.name.replace(/^SYNERGY:\s*/, ''))}</h3></div>
-      <div class="guide-weapon-meta">${esc(category)} · ${u.owned ? `<b>OWNED LV ${u.owned}</b>` : u.evolution ? 'ONE-SHOT' : `MAX LV ${u.maxLevel}`}</div>
-      ${u.tags.length ? `<div class="guide-chips">${u.tags.map(chipHTML).join('')}</div>` : ''}
-      <p>${esc(u.summary.replace(/^EVOLUTION:\s*/, ''))}</p>${u.recipe ? `<p class="guide-recipe"><b>UNLOCKS WITH</b> ${esc(u.recipe)}</p>` : ''}</article>`;
-  const all = g.categories.flatMap(c => c.items.map(u => ({ u, category: c.id })));
-  const section = (title, list) => list.length
-    ? `<section class="guide-section"><h4 class="guide-section-title">${esc(title)}</h4><div class="guide-grid guide-grid-cards">${list.map(x => card(x.u, x.category)).join('')}</div></section>`
-    : '';
-  const cats = section('UPGRADE CARDS', all.filter(x => !x.u.evolution)) + section('EVOLUTIONS', all.filter(x => x.u.evolution));
+  const arsenal = cardSection('ARSENAL', allCards(g).filter(x => x.u.weapon), 'Pick these from NEW WEAPON cards on level-up. Each takes one of your 6 weapon slots.');
+  return `<section class="guide-section"><h4 class="guide-section-title">STARTING KIT</h4><div class="guide-grid guide-grid-cards">${kit}</div></section>${arsenal}`;
+}
+
+// UPGRADES: every other level-up card (weapon upgrades, passives, general and tag cards), then evolutions.
+export function upgradesHTML(levels = null) {
+  const g = weaponGuide(levels);
+  const all = allCards(g).filter(x => !x.u.weapon);
   const legend = `<section class="guide-section"><h4 class="guide-section-title">TAGS</h4><p class="guide-legend-text">Tag cards (Tungsten Penetrators, Shaped Charges, Overvolt Coils, Field Amplifier) boost every weapon that carries their tag.</p>
     <div class="guide-chips guide-legend">${g.tags.map(chipHTML).join('')}</div></section>`;
-  return `<section class="guide-section"><h4 class="guide-section-title">STARTING KIT</h4><div class="guide-grid guide-grid-cards">${kit}</div></section>${cats}${legend}`;
+  return cardSection('UPGRADE CARDS', all.filter(x => !x.u.evolution)) + cardSection('EVOLUTIONS', all.filter(x => x.u.evolution)) + legend;
 }
 
 export function tabHTML(tab, { isUnlocked = () => false, isFresh = () => false, levels = null } = {}) {
   if (tab === 'mechanics') return mechanicsHTML();
   if (tab === 'weapons') return weaponsHTML(levels);
+  if (tab === 'upgrades') return upgradesHTML(levels);
   return hostilesHTML(isUnlocked, isFresh);
 }
 

@@ -1,16 +1,17 @@
 // Scripted build strategies for the balance simulator. `priorities` are UPGRADE_POOL ids (or
 // "synergy" for any evolution, "new_weapon" for the NEW WEAPON card) in pick order; cards outside the
 // list are picked at random. `weapons` are loadout.js weapon ids the strategy equips, in order, when a
-// NEW WEAPON pick is offered (anything else is a random pick). Every run starts with Pew Pews + Wing
-// Rockets; weapon level-ups only appear once a weapon is equipped. Ids missing from UPGRADE_POOL are
+// NEW WEAPON pick is offered (anything else is a random pick). Every run starts with Pew Pews only
+// (STARTING_WEAPONS); weapon level-ups only appear once a weapon is equipped. Ids missing from UPGRADE_POOL are
 // ignored, and every upgrade also gets an automatic "focus:<id>" strategy, so weapons added later are
 // covered without editing this file.
 export const NAMED_STRATEGIES = [
   { name: 'projectile', desc: 'Pew Pews lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['multishot', 'firerate', 'pierce', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret'] },
-  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'mines'] },
+  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'rockets', 'mines'] },
   { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
   { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters'], weapons: ['singularity', 'mines'] },
   { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters'], pilot: { mineBias: 1.0 } },
+  { name: 'prospector', desc: 'Random card picks; the pilot drills toward nearby gold veins when calm: a regular gold miner without a mining build', priorities: [], pilot: { mineBias: 0.6, goldPull: 200 } },
   { name: 'random', desc: 'Uniformly random card picks (NEW WEAPON included)', priorities: [] }
 ];
 
