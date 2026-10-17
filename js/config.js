@@ -122,7 +122,25 @@ export const DEFAULT_TUNING = {
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
   tagCardWeight: 0.7,
-  evolutionWeight: 4
+  evolutionWeight: 4,
+
+  // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
+  // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
+  waveLength: 22,
+  waveHpPerWave: 0.25,
+  waveHpGrowth: 1.09,
+  waveHpGrowthFrom: 6,
+  spawnIntervalStart: 2.6,
+  spawnIntervalPerWave: 0.14,
+  spawnIntervalMin: 0.75,
+  packSizeMult: 1.0,
+  swarmPackPerWave: 2,
+  swarmPackMax: 34,
+  skirmishPackPerWave: 0.6,
+  splitterPackPerWave: 0.4,
+  damageRampFrom: 5,
+  damageRampPerWave: 0.08,
+  xpPerWave: 0
 };
 
 export const TUNING_SCHEMA = [
@@ -281,6 +299,26 @@ export const TUNING_SCHEMA = [
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck)', type: 'range', min: 0, max: 20, step: 0.5, unit: 'x' }
+    ]
+  },
+  {
+    group: '📈 Difficulty Ramp',
+    items: [
+      { key: 'waveLength', label: 'Wave Length (bosses every 3 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
+      { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },
+      { key: 'waveHpGrowth', label: 'Enemy HP: Compound Growth / Wave', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
+      { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
+      { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
+      { key: 'spawnIntervalPerWave', label: 'Pack Spawn Interval Drop / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 's' },
+      { key: 'spawnIntervalMin', label: 'Pack Spawn Interval Floor', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 's' },
+      { key: 'packSizeMult', label: 'Pack Size Multiplier (all packs)', type: 'range', min: 0.25, max: 3, step: 0.05, unit: 'x' },
+      { key: 'swarmPackPerWave', label: 'Boid Swarm: Extra Boids / Wave', type: 'range', min: 0, max: 6, step: 0.1, unit: '' },
+      { key: 'swarmPackMax', label: 'Boid Swarm: Max Boids', type: 'range', min: 6, max: 80, step: 1, unit: '' },
+      { key: 'skirmishPackPerWave', label: 'Skirmish Pack: Extra Hulls / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'splitterPackPerWave', label: 'Splitter Pack: Extra Splitters / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
+      { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
+      { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
     ]
   }
 ];

@@ -354,7 +354,7 @@ test('one lieutenant per non-boss wave, after the delay, behind any pending boss
   const { game, manager } = arena();
   const lieutenantsQueued = () => manager.spawnIndicators.filter(sp => sp.config.isLieutenant).length;
   game.wave = 1;
-  game.waveTimer = 21;
+  game.waveTimer = TUNING.waveLength - 1;
   game.updateLieutenantSchedule();
   assert.equal(lieutenantsQueued(), 0, 'none before lieutenantFirstWave');
 
@@ -506,7 +506,7 @@ test('enemy variety tuning keys have schema entries with in-range defaults', () 
     assert.ok(item, `${key} is exposed in the tuner`);
     assert.ok(DEFAULT_TUNING[key] >= item.min && DEFAULT_TUNING[key] <= item.max, `${key} default within range`);
   }
-  assert.ok(DEFAULT_TUNING.lieutenantDelay < 22, 'lieutenants arrive inside their wave');
+  assert.ok(DEFAULT_TUNING.lieutenantDelay < DEFAULT_TUNING.waveLength, 'lieutenants arrive inside their wave');
 });
 
 test('a new run clears orbs, lieutenant schedule and intel memory', () => {

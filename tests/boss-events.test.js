@@ -63,7 +63,7 @@ const bossWarnings = g => g.enemyManager.spawnIndicators.filter(sp => sp.config.
 test('a scheduled boss telegraphs for the full warning time before it materializes', () => {
   Object.assign(TUNING, DEFAULT_TUNING);
   const { g, calls } = bossGame();
-  g.waveTimer = 22;
+  g.waveTimer = TUNING.waveLength;
   tick(g);
   assert.equal(g.wave, 3);
   assert.deepEqual(g.pendingBossSpawns, [], 'admission happens on the scheduling tick when a slot is free');

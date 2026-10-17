@@ -5,7 +5,7 @@
 // Hostile entry ids are enemy `type` strings, plus 'lieutenant' (any elite) and 'boss'. Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING } from './config.js';
-import { EnemyManager, contactDamageAt, BOSS_NAME } from './enemies.js';
+import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
@@ -100,9 +100,7 @@ export const hostileEntry = (id) => HOSTILE_BY_ID.get(id) || null;
 export const resolveText = (v) => (typeof v === 'function' ? v() : v);
 
 // Wave scale used by the game (Game.getWaveScale), so guide stats match the real spawns.
-export function waveScaleAt(wave) {
-  return (1 + (wave - 1) * 0.25) * Math.pow(1.09, Math.max(0, wave - 6));
-}
+export { waveScaleAt };
 
 let statsManager = null;
 // Exact numbers from the real spawn config: HP (with the tuner's HP multiplier), speed in px/s and
@@ -198,14 +196,14 @@ export const MECHANIC_ENTRIES = [
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
       'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
-      `Contact damage is 18 per hit (bosses 38) and grows 8% per wave after wave 5. A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
+      `Contact damage is 18 per hit (bosses 38) and grows ${pct(TUNING.damageRampPerWave ?? 0.08)} per wave after wave ${TUNING.damageRampFrom ?? 5} (plasma orbs too). A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
   {
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
-      'A new wave every 22 s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.',
-      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP scales +25% per wave, and faster after wave 6.`
+      `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.`,
+      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of its wave-1 value per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
     ]
   },
   {

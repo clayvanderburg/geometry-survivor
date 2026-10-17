@@ -12,9 +12,39 @@ export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
 const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
 
-// Contact damage of a hull touching the ship at a given wave (bosses hit harder; +8% per wave after 5).
+// --- Difficulty ramp (TUNING "Difficulty Ramp" group) ------------------------------------------
+// Enemy HP scale of a wave (bosses and lieutenants included; speed caps also read it):
+// (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), the exponential only past that wave.
+export function waveScaleAt(wave) {
+  const perWave = TUNING.waveHpPerWave ?? 0.25;
+  const growth = TUNING.waveHpGrowth ?? 1.09;
+  const from = TUNING.waveHpGrowthFrom ?? 6;
+  return (1 + (wave - 1) * perWave) * Math.pow(growth, Math.max(0, wave - from));
+}
+
+// Contact and plasma-orb damage multiplier of a wave: +damageRampPerWave per wave after damageRampFrom.
+export function damageRampAt(wave) {
+  return 1 + Math.max(0, wave - (TUNING.damageRampFrom ?? 5)) * (TUNING.damageRampPerWave ?? 0.08);
+}
+
+// XP carried by a kill at a given wave: the enemy's base XP × (1 + xpPerWave·(w−1)).
+export function xpScaleAt(wave) {
+  return 1 + Math.max(0, wave - 1) * (TUNING.xpPerWave ?? 0);
+}
+
+// Seconds between wave packs: spawnIntervalStart − spawnIntervalPerWave·w, never below spawnIntervalMin.
+export function spawnIntervalAt(wave) {
+  return Math.max(TUNING.spawnIntervalMin ?? 0.75, (TUNING.spawnIntervalStart ?? 2.6) - wave * (TUNING.spawnIntervalPerWave ?? 0.14));
+}
+
+// Head count of a wave pack after the global pack-size multiplier (at least one).
+export function packSize(count) {
+  return Math.max(1, Math.round(count * (TUNING.packSizeMult ?? 1)));
+}
+
+// Contact damage of a hull touching the ship at a given wave (bosses hit harder).
 export function contactDamageAt(e, wave) {
-  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, wave - 5) * 0.08);
+  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * damageRampAt(wave);
 }
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.

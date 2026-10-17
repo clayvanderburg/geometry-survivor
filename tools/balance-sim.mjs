@@ -217,7 +217,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const finished = rowsW.filter(p => p.hpEnd !== null);
       rows.push([w, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
     }
-    out.push('\n## Difficulty curve per wave (all strategies pooled; waves are 22 s, bosses every 3rd)');
+    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 3rd)`);
     out.push(table(['wave', 'runs alive', 'deaths', 'HP lost', 'kills', 'enemies on field', 'shield at end', 'level at end'], rows));
 
     // Time-to-kill per enemy type per wave bucket.
@@ -299,6 +299,7 @@ async function main() {
   const h = await import('./balance/harness.mjs');
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
+  opts.waveLength = h.DEFAULT_TUNING.waveLength;
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 
