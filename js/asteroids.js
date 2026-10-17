@@ -1,5 +1,10 @@
 // Destructible Geometric Asteroid Clusters & Dedicated Crab-Claw Rotary Drilling
 import { TUNING } from './config.js';
+import { isElite, eliteMiningDps } from './pursuit.js';
+
+// Elite mining: a lieutenant/boss grinds the rock(s) it is pressed against on its way to the ship.
+export const ELITE_GRIND_CONTACT = 6; // px of surface gap that still counts as pressed against the rock
+export const ELITE_GRIND_MAX_ROCKS = 2; // rocks one elite grinds at once (the two most squarely in its way)
 
 export class AsteroidManager {
   constructor(worldWidth, worldHeight) {
@@ -8,6 +13,10 @@ export class AsteroidManager {
     this.asteroids = [];
     this.isDrilling = false;
     this.drillingRocks = [];
+    // Elite grinding this tick: count of rock contacts and the one nearest the ship (for the sound).
+    this.eliteGrinds = 0;
+    this.eliteGrindX = 0;
+    this.eliteGrindY = 0;
     this.cellSize = 140;
     this.spatialGrid = new Map();
   }
@@ -258,9 +267,19 @@ export class AsteroidManager {
     }
 
     // 3. Enemies vs Asteroids (Enemies are blocked and funneled through your carved tunnels!)
+    // Elites (lieutenants, bosses) are blocked too, but grind the rock they press into at the ship's
+    // BASE drill DPS (eliteMiningDps: TUNING.miningSpeed × eliteMiningMult, no player upgrades).
+    const eliteDps = eliteMiningDps();
+    this.eliteGrinds = 0;
+    let grindBest = Infinity;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius));
+      const grinds = eliteDps > 0 && isElite(e);
+      const contact = grinds ? ELITE_GRIND_CONTACT : 0;
+      // Up to two touched rocks, ranked by how squarely they sit on the line to the ship.
+      let g0 = null, g1 = null, s0 = 0, s1 = 0;
+      const toShip = grinds ? Math.hypot(player.x - e.x, player.y - e.y) || 1 : 1;
+      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius + contact));
       for (let j = 0; j < nearEnemy.length; j++) {
         const rock = nearEnemy[j];
         if (rock.hp <= 0) continue;
@@ -268,6 +287,15 @@ export class AsteroidManager {
         const dy = e.y - rock.y;
         const dSq = dx * dx + dy * dy;
         const minDist = e.radius + rock.radius;
+        if (grinds) {
+          const touch = minDist + contact;
+          // Pressed against it, and the rock is on the ship's side of the elite (it is in the way).
+          if (dSq < touch * touch && dSq > 0.01) {
+            const ahead = ((player.x - e.x) * -dx + (player.y - e.y) * -dy) / (toShip * Math.sqrt(dSq));
+            if (ahead > s0) { g1 = g0; s1 = s0; g0 = rock; s0 = ahead; }
+            else if (ahead > s1) { g1 = rock; s1 = ahead; }
+          }
+        }
         if (dSq < minDist * minDist && dSq > 0.01) {
           const dist = Math.sqrt(dSq);
           const nx = dx / dist;
@@ -280,6 +308,20 @@ export class AsteroidManager {
           if (dot < 0) {
             e.vx -= nx * dot * 1.1;
             e.vy -= ny * dot * 1.1;
+          }
+        }
+      }
+      if (g0) {
+        const grind = g1 && ELITE_GRIND_MAX_ROCKS > 1 ? 2 : 1;
+        for (let k = 0; k < grind; k++) {
+          const rock = k === 0 ? g0 : g1;
+          if (this.grindRock(rock, e, eliteDps, dt, particles)) destroyedAny = true;
+          const d = (rock.x - player.x) ** 2 + (rock.y - player.y) ** 2;
+          this.eliteGrinds++;
+          if (d < grindBest) {
+            grindBest = d;
+            this.eliteGrindX = rock.lastGrindX;
+            this.eliteGrindY = rock.lastGrindY;
           }
         }
       }
@@ -300,6 +342,39 @@ export class AsteroidManager {
       }
       this.rebuildSpatialHash();
     }
+  }
+
+  // One elite's grind on one rock for this tick: the same hp drain + hit flash (and so the same crack
+  // and flash rendering) as the ship's drill, sparks/debris at the contact point scaled by the live
+  // vfxIntensity (the flash also follows vfxLinger). Returns true when this grind broke the rock;
+  // it is tagged `brokenBy = 'elite'` so the shatter handler can tell it from the player's drill.
+  grindRock(rock, e, dps, dt, particles) {
+    let nx = e.x - rock.x;
+    let ny = e.y - rock.y;
+    const d = Math.hypot(nx, ny) || 1;
+    nx /= d;
+    ny /= d;
+    const cx = rock.x + nx * rock.radius;
+    const cy = rock.y + ny * rock.radius;
+    rock.lastGrindX = cx;
+    rock.lastGrindY = cy;
+    rock.hp -= dps * dt;
+    rock.hitFlash = 0.85;
+    const hue = rock.oreType && rock.oreType !== 'rock' ? rock.hue : 32;
+    const vfx = typeof particles?.intensity === 'number' ? particles.intensity : 1;
+    if (particles && Math.random() < 0.55) {
+      // Sparks spray back off the face along the rock's normal, either side of the elite's hull.
+      const count = Math.max(1, Math.round((1 + Math.random() * 2) * vfx));
+      const out = Math.atan2(ny, nx);
+      particles.spawnDirectionalSparks(cx, cy, out + (Math.random() < 0.5 ? 1 : -1) * 0.9, 1.1, count, hue, 7);
+      if (Math.random() < 0.18) particles.spawnExplosionSparks(cx, cy, 1, hue, 0.6, 2.2, 3.2); // slow rock chips
+      if (Math.random() < 0.12) particles.spawnFlash?.(cx, cy, 9 + e.radius * 0.15, hue, 0.12);
+    }
+    if (rock.hp <= 0) {
+      rock.brokenBy = 'elite';
+      return true;
+    }
+    return false;
   }
 
   draw(ctx, camX, camY, viewW, viewH) {

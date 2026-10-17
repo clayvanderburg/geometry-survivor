@@ -291,6 +291,7 @@
     function formatValue(val, item) {
       if (item.type === 'color') return val.toUpperCase();
       if (item.unit === 'prob') return `${(Number(val) * 100).toFixed(2)}%`;
+      if (item.unit === 'onoff') return Number(val) >= 0.5 ? 'ON' : 'OFF';
       const decimals = item.step < 0.01 ? 3 : item.step < 0.1 ? 2 : item.step < 1 ? 1 : 0;
       return `${Number(val).toFixed(decimals)}${item.unit || ''}`;
     }

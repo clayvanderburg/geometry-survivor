@@ -638,6 +638,7 @@ export class Game {
     const fmt = (val, item) => {
       if (item.type === 'color') return String(val).toUpperCase();
       if (item.unit === 'prob') return `${(Number(val) * 100).toFixed(2)}%`;
+      if (item.unit === 'onoff') return Number(val) >= 0.5 ? 'ON' : 'OFF';
       const dec = item.step < 0.01 ? 3 : item.step < 0.1 ? 2 : item.step < 1 ? 1 : 0;
       return `${Number(val).toFixed(dec)}${item.unit || ''}`;
     };
@@ -750,6 +751,7 @@ export class Game {
         if (valEl) {
           if (item.type === 'color') valEl.textContent = String(TUNING[item.key]).toUpperCase();
           else if (item.unit === 'prob') valEl.textContent = `${(Number(TUNING[item.key]) * 100).toFixed(2)}%`;
+          else if (item.unit === 'onoff') valEl.textContent = Number(TUNING[item.key]) >= 0.5 ? 'ON' : 'OFF';
           else {
             const dec = item.step < 0.01 ? 3 : item.step < 0.1 ? 2 : item.step < 1 ? 1 : 0;
             valEl.textContent = `${Number(TUNING[item.key]).toFixed(dec)}${item.unit || ''}`;
@@ -1144,8 +1146,13 @@ export class Game {
     this.updateHUD();
   }
 
+  // Every broken rock comes through here: the ship's drill, or an elite grinding a path (rock.brokenBy
+  // === 'elite'). Both get the same shatter effects, sound and ore drops (geoms, cores, gold-vein chest
+  // roll) for the ship to collect. Only the ship's own drilling counts as rocks mined, heals from a
+  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Claw Bore blast.
   onRockShattered(rock) {
-    this.rocksMined++;
+    const byElite = rock.brokenBy === 'elite';
+    if (!byElite) this.rocksMined++;
     this.sound.playExplosion(0.95);
     this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.9, rock.sides, rock.rotation, rock.hue, 0.9);
     this.particles.spawnExplosionSparks(rock.x, rock.y, 20, rock.hue, 2, 10, 2.0);
@@ -1175,8 +1182,12 @@ export class Game {
         this.spawnRelicChest(rock.x, rock.y, false);
       }
     } else if (rock.oreType === 'shield_vein') {
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
-      this.particles.spawnFloatText(rock.x, rock.y - 12, '+25 SHIELD CRYSTAL!', '#00ff88', 14);
+      if (byElite) {
+        this.particles.spawnFloatText(rock.x, rock.y - 12, 'SHIELD CRYSTAL CRUSHED', '#4a8f74', 12);
+      } else {
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
+        this.particles.spawnFloatText(rock.x, rock.y - 12, '+25 SHIELD CRYSTAL!', '#00ff88', 14);
+      }
     } else if (rock.oreType === 'core_vein') {
       this.particles.spawnFloatText(rock.x, rock.y - 12, '❖ DEEP CORE VEIN!', '#d68fff', 15);
       this.geoms.push({
@@ -1208,7 +1219,7 @@ export class Game {
     }
 
     // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
-    if (this.player.weapons.tectonicBore) {
+    if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
       this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48);
@@ -3152,6 +3163,11 @@ export class Game {
     }
     this.updateFieldGuide(dt);
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
+    if (this.asteroidManager.eliteGrinds > 0) {
+      // Elite grinding a path through rock: a quiet scrape that fades out ~900 px from the ship.
+      const am = this.asteroidManager;
+      this.sound.playEliteGrind?.(1 - Math.hypot(am.eliteGrindX - p.x, am.eliteGrindY - p.y) / 900);
+    }
     if (this.updateEnemyBullets(dt)) return;
 
     for (const e of [...enemies].reverse()) {
