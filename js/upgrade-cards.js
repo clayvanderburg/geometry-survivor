@@ -3,11 +3,12 @@
 // on a deep copy of the player and diffs STAT_ROWS, which read the same values and WEAPON_SCALING
 // formulas the game simulates with.
 import { TUNING } from './config.js';
-import { RARITY, rarityFor, applyUpgradeLevels, levelJumpChances } from './upgrades.js';
+import { RARITY, rarityFor, applyUpgradeLevels, levelJumpChances, acquireWeapon, UPGRADE_BY_ID } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
-  tectonicBlastRadius, mineBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack
+  tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack
 } from './weapon-scaling.js';
+import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags } from './loadout.js';
 
 const MAX_ROWS = 6;
 // Jackpot caches with more than 3 rewards wrap to two rows of cards; fewer rows keep them on one screen.
@@ -25,6 +26,8 @@ const tagBoost = (p, tag) => p.stats.tagDamage?.[tag] ?? 1;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
 const sec1 = (v) => `${v.toFixed(1)}s`;
+// Pew Pews rows only show while the blaster is equipped (it can be discarded from the loadout).
+const pew = (p, fn) => (ownsWeapon(p, 'blaster') ? fn() : null);
 // Deployable hits scale with bolt damage and the tuner's deployable multiplier (same as deployables.js).
 
 // headline: 'count' (+N UNIT), 'pct' (+N% UNIT), 'points' (+N% UNIT for ratio stats like luck),
@@ -40,14 +43,19 @@ export const STAT_ROWS = [
   { id: 'electricDamage', label: 'ELECTRIC damage bonus', get: (p) => tagBoost(p, 'electric'), fmt: tagBonus, headline: 'points', unit: 'ELECTRIC DAMAGE' },
   { id: 'areaSize', label: 'AREA size', get: (p) => areaMult(p), fmt: pct, headline: 'points', unit: 'AREA SIZE' },
 
-  // Primary blaster
-  { id: 'bulletCount', label: 'Projectiles', get: (p) => p.stats.bulletCount, fmt: int, headline: 'count', unit: 'PROJECTILES' },
-  { id: 'prismLayout', label: 'Newest streams', get: (p) => p.stats.bulletCount, fmt: (v) => prismNewestGroup(v) },
-  { id: 'rocketDamage', label: 'Wing rocket hit', get: (p) => weaponDamage(p, 'rocket'), fmt: dec1 },
-  { id: 'fireRate', label: 'Fire rate', get: (p) => p.stats.fireRate, fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'FIRE RATE' },
-  { id: 'bulletSpeed', label: 'Bolt speed', get: (p) => p.stats.bulletSpeed, fmt: dec1, headline: 'pct', unit: 'BOLT SPEED' },
-  { id: 'pierce', label: 'Pierce', get: (p) => p.stats.pierce, fmt: int, headline: 'count', unit: 'PIERCE' },
-  { id: 'damage', label: 'Bolt damage', get: (p) => weaponDamage(p, 'blaster'), fmt: dec1, headline: 'pct', unit: 'DAMAGE' },
+  // Pew Pews (primary blaster)
+  { id: 'bulletCount', label: 'Projectiles', get: (p) => pew(p, () => p.stats.bulletCount), fmt: int, headline: 'count', unit: 'PROJECTILES' },
+  { id: 'prismLayout', label: 'Newest streams', get: (p) => pew(p, () => p.stats.bulletCount), fmt: (v) => prismNewestGroup(v) },
+  { id: 'fireRate', label: 'Fire rate', get: (p) => pew(p, () => p.stats.fireRate), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'FIRE RATE' },
+  { id: 'bulletSpeed', label: 'Bolt speed', get: (p) => pew(p, () => p.stats.bulletSpeed), fmt: dec1, headline: 'pct', unit: 'BOLT SPEED' },
+  { id: 'pierce', label: 'Pierce', get: (p) => pew(p, () => p.stats.pierce), fmt: int, headline: 'count', unit: 'PIERCE' },
+  { id: 'damage', label: 'Bolt damage', get: (p) => pew(p, () => weaponDamage(p, 'blaster')), fmt: dec1, headline: 'pct', unit: 'DAMAGE' },
+
+  // Wing Rockets
+  { id: 'rocketCount', label: 'Rockets / volley', get: (p) => owned(p, 'rockets', W.wingRocketCount), fmt: int, headline: 'count', unit: 'ROCKETS / VOLLEY', newText: (a) => `WING ROCKETS // ${a} / VOLLEY` },
+  { id: 'rocketDamage', label: 'Rocket hit', get: (p) => owned(p, 'rockets', (l) => weaponDamage(p, 'rocket', l)), fmt: dec1, headline: 'pct', unit: 'ROCKET DAMAGE' },
+  { id: 'rocketCooldown', label: 'Rocket volley interval', get: (p) => owned(p, 'rockets', W.wingRocketCooldown), fmt: secs },
+  { id: 'rocketBlast', label: 'Rocket blast radius', get: (p) => owned(p, 'rockets', (l) => wingRocketBlastRadius(p, l)), fmt: int },
   { id: 'helixBolts', label: 'Helix bolts / volley', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'HELIX BOLTS / VOLLEY', newText: (a) => `+${a} HELIX BOLTS` },
   { id: 'helixDamage', label: 'Helix bolt damage', get: (p) => (p.weapons.pulsarHelix ? weaponDamage(p, 'helix') : null), fmt: dec1 },
 
@@ -131,7 +139,7 @@ export const STAT_ROWS = [
   { id: 'burnStack', label: 'Burn DPS / stack', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l)), fmt: dec1 },
   { id: 'burnStacks', label: 'Burn max stacks', get: (p) => owned(p, 'thermite', W.burnMaxStacks), fmt: int },
   { id: 'burnDuration', label: 'Burn duration', get: (p) => owned(p, 'thermite', () => W.burnDuration), fmt: secs },
-  { id: 'chillSlow', label: 'Chill slow', get: (p) => owned(p, 'cryo', (l) => chillSlow(l)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `MISSILES CHILL // -${row.fmt(a)} SPEED` },
+  { id: 'chillSlow', label: 'Chill slow', get: (p) => owned(p, 'cryo', (l) => chillSlow(l)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `BLASTS CHILL // -${row.fmt(a)} SPEED` },
   { id: 'chillBoss', label: 'Chill slow on bosses', get: (p) => owned(p, 'cryo', (l) => chillSlow(l, true)), fmt: pct },
   { id: 'chillDuration', label: 'Chill duration', get: (p) => owned(p, 'cryo', W.chillDuration), fmt: secs },
   { id: 'corrodeMax', label: 'Max damage taken', get: (p) => owned(p, 'nanite', (l) => corrodePerStack() * W.corrodeMaxStacks(l)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `ARCS CORRODE // ${row.fmt(a)} DMG TAKEN` },
@@ -218,6 +226,68 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   };
 }
 
+// The NEW WEAPON card: opens a pick of 1 of 3 unequipped weapons for a free slot.
+export function describeNewWeapon(player) {
+  const used = ownedWeapons(player).length;
+  const slots = weaponSlots();
+  return {
+    id: 'new_weapon',
+    name: 'NEW WEAPON',
+    category: 'LOADOUT',
+    tags: [],
+    summary: 'Choose 1 of 3 weapons for a free slot. Its level-ups and upgrades join your hands from then on.',
+    isSynergy: false,
+    isNewWeapon: true,
+    rarity: 'weapon',
+    rarityLabel: 'LOADOUT',
+    color: RARITY.weapon.color,
+    jump: 1,
+    headline: 'CHOOSE 1 OF 3 WEAPONS',
+    rows: [{ id: 'slots', label: 'Weapon slots used', before: `${used} / ${slots}`, after: `${used + 1} / ${slots}` }],
+    hiddenRows: 0,
+    levelHtml: `SLOT ${used + 1} OF ${slots}`
+  };
+}
+
+// A weapon offered after NEW WEAPON: its summary, tags and exact LV 1 stats (installed on a copy).
+export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
+  const weapon = WEAPON_BY_ID[weaponId];
+  const before = readRows(player);
+  const copy = deepCopy(player);
+  acquireWeapon(copy, weaponId);
+  const after = readRows(copy);
+  const changed = [];
+  STAT_ROWS.forEach((row, i) => {
+    const b = before[i];
+    const a = after[i];
+    if (a === null && b === null) return;
+    const bText = b === null ? '—' : row.fmt(b);
+    const aText = a === null ? '—' : row.fmt(a);
+    if (bText !== aText) changed.push({ id: row.id, label: row.label, before: bText, after: aText, b, a });
+  });
+  const levelUpg = weapon.levelId ? UPGRADE_BY_ID[weapon.levelId] : null;
+  const lead = changed.find((r) => r.id === levelUpg?.headline) || changed[0];
+  const maxLevel = levelUpg ? levelUpg.maxLevel : null;
+  return {
+    id: `weapon:${weaponId}`,
+    weaponId,
+    name: weapon.name,
+    category: weapon.category,
+    tags: weaponTags(weaponId).filter((t) => TAG_INFO[t]),
+    summary: weapon.summary,
+    isSynergy: false,
+    isWeaponPick: true,
+    rarity: 'weapon',
+    rarityLabel: RARITY.weapon.label,
+    color: RARITY.weapon.color,
+    jump: 1,
+    headline: lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : weapon.name.toUpperCase(),
+    rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
+    hiddenRows: Math.max(0, changed.length - maxRows),
+    levelHtml: maxLevel ? `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>` : 'EQUIP // UPGRADE LINES UNLOCK'
+  };
+}
+
 // Levels an evolution adds on top of a weapon's own level (Storm Protocol adds a missile launcher).
 export function bonusLevels(player, id) {
   if (id === 'missiles' && player.weapons?.stormProtocol) return { amount: 1, label: 'STORM' };
@@ -230,6 +300,7 @@ export function bonusText(bonus) {
 
 // Same wording everywhere: level cards "LV 2 → LV 3", caches "INSTALLED // LV 2 → LV 3", HUD "LV 3".
 export function levelText(d, installed = false) {
+  if (d.levelHtml) return d.levelHtml;
   if (d.isSynergy) return installed ? '★ EVOLUTION INSTALLED ★' : '★ EVOLUTION // UNLOCK ★';
   const from = d.fromLevel === 0 ? 'NEW' : `LV ${d.fromLevel}`;
   return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}<span class="upg-max"> / ${d.maxLevel}</span>`;
@@ -247,7 +318,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
     : '';
   const more = d.hiddenRows ? `<div class="upg-stat upg-stat-more">+${d.hiddenRows} more stat${d.hiddenRows > 1 ? 's' : ''} improved</div>` : '';
   return {
-    className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}`,
+    className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}`,
     html: `
       ${ribbon}
       <div>

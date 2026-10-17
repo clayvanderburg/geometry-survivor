@@ -25,7 +25,7 @@ const { Game } = await import('../../js/main.js');
 const { EnemyManager } = await import('../../js/enemies.js');
 const { AsteroidManager } = await import('../../js/asteroids.js');
 const { ProgressionManager, META_UPGRADES } = await import('../../js/progression.js');
-const { UPGRADE_POOL, applyUpgradeLevels } = await import('../../js/upgrades.js');
+const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../../js/upgrades.js');
 const { TUNING, DEFAULT_TUNING } = await import('../../js/config.js');
 const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
 
@@ -404,15 +404,23 @@ export function botControls(game, pilot, state) {
 }
 
 // --- Card picking -----------------------------------------------------------------------------
-// Highest priority wins; a priority list entry may be an upgrade id or "synergy" (any evolution).
-// Cards outside the list are scored randomly below every listed card.
+// Highest priority wins; a priority list entry may be an upgrade id, "synergy" (any evolution) or
+// "new_weapon" (the NEW WEAPON card). Cards outside the list are scored randomly below every listed
+// card. After NEW WEAPON, the weapon pick follows `strategy.weapons` (loadout.js ids), else random.
 export function pickCard(choices, strategy) {
   let best = 0, bestScore = -Infinity;
   const prio = strategy.priorities || [];
+  const wants = strategy.weapons || [];
   choices.forEach((c, i) => {
-    let idx = prio.indexOf(c.id);
-    if (idx === -1 && c.isSynergy) idx = prio.indexOf('synergy');
-    const score = idx === -1 ? Math.random() : 100 - idx + (c.levelJump || 1) * 0.01;
+    let score;
+    if (c.isWeaponPick) {
+      const idx = wants.indexOf(c.weaponId);
+      score = idx === -1 ? Math.random() : 100 - idx;
+    } else {
+      let idx = prio.indexOf(c.id);
+      if (idx === -1 && c.isSynergy) idx = prio.indexOf('synergy');
+      score = idx === -1 ? Math.random() : 100 - idx + (c.levelJump || 1) * 0.01;
+    }
     if (score > bestScore) { bestScore = score; best = i; }
   });
   return best;
@@ -422,7 +430,8 @@ export function pickCard(choices, strategy) {
 export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 
 // --- One simulated run ------------------------------------------------------------------------
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average' }) {
+// `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank });
     const metrics = createMetrics();
@@ -440,12 +449,21 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     game.resetRun();
     game.state = 'PLAYING';
     game.spawnWavePack();
+    // God mode: hits still land (knockback, multiplier loss) but never take the last point of shield.
+    if (god) game.damagePlayer = function (dmg, shake) { return Game.prototype.damagePlayer.call(this, Math.min(dmg, this.player.hp - 1), shake); };
 
     const maxTicks = Math.round(maxSeconds * 60);
     let lastWave = 1;
     let lastLevel = 1;
     let ticks = 0;
+    const levelAt = []; // level at each whole minute
+    const xpAt = [];    // cumulative XP collected at each whole minute
     for (; ticks < maxTicks && game.state !== 'GAMEOVER'; ticks++) {
+      if (god) game.player.hp = game.player.maxHp;
+      if (ticks % 3600 === 0) {
+        levelAt.push(game.player.level);
+        xpAt.push(Math.round(totalXpForLevel(game.player.level) + game.player.xp));
+      }
       pipeline.push(botControls(game, pilot, botState));
       if (pipeline.length >= latency) controls = pipeline.shift();
       game.update(DT);
@@ -490,6 +508,9 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       cores: metrics.cores,
       rocksMined: game.rocksMined,
       build: { ...game.player.upgradeLevels },
+      loadout: [...(game.player.loadout || [])],
+      levelAt,
+      xpAt,
       dealt: metrics.dealt,
       dealtRaw: metrics.dealtRaw,
       kills_by_source: metrics.kills,
@@ -529,8 +550,10 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
     game.wave = bench.targetWave;
     const p = game.player;
     if (upgradeId) {
+      // Install exactly `level` levels (starting weapons such as Wing Rockets are already LV 1).
       const upg = UPGRADE_POOL.find(u => u.id === upgradeId);
-      applyUpgradeLevels(p, { ...upg, levelJump: level });
+      const jump = level - (p.upgradeLevels[upgradeId] || 0);
+      if (jump > 0) applyUpgradeLevels(p, { ...upg, levelJump: jump });
     }
     const scale = game.getWaveScale();
     const em = game.enemyManager;

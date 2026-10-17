@@ -108,7 +108,21 @@ export const DEFAULT_TUNING = {
   burnDamageMult: 1.0,
   chillSlowMult: 1.0,
   chillBossMult: 0.4,
-  corrodeMult: 1.0
+  corrodeMult: 1.0,
+
+  // 12. Leveling & Weapon Loadout (XP to next level = base + step per level, steeper from LV 20 / LV 40;
+  // hand weights are relative: general upgrades weigh 1)
+  xpCurveBase: 25,
+  xpCurveStep: 16,
+  xpCurveStepMid: 100,
+  xpCurveStepLate: 60,
+  weaponSlots: 6,
+  newWeaponChance: 0.35,
+  newWeaponPity: 3,
+  weaponLevelWeight: 3,
+  weaponLineWeight: 1.5,
+  tagCardWeight: 0.7,
+  evolutionWeight: 4
 };
 
 export const TUNING_SCHEMA = [
@@ -251,6 +265,22 @@ export const TUNING_SCHEMA = [
       { key: 'chillSlowMult', label: 'Chill (Cryo) Slow Strength', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'x' },
       { key: 'chillBossMult', label: 'Chill Slow Applied to Bosses', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' },
       { key: 'corrodeMult', label: 'Corrode Damage-Taken / Stack', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 'x' }
+    ]
+  },
+  {
+    group: '🎒 Leveling & Weapon Loadout',
+    items: [
+      { key: 'xpCurveBase', label: 'XP for Level 2', type: 'range', min: 2, max: 200, step: 1, unit: '' },
+      { key: 'xpCurveStep', label: 'XP Step / Level (LV 1-19)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
+      { key: 'xpCurveStepMid', label: 'XP Step / Level (LV 20-39)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
+      { key: 'xpCurveStepLate', label: 'XP Step / Level (LV 40+)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
+      { key: 'weaponSlots', label: 'Weapon Slots', type: 'range', min: 2, max: 10, step: 1, unit: '' },
+      { key: 'newWeaponChance', label: 'NEW WEAPON Card Chance / Hand', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'evolutionWeight', label: 'Evolution Weight (x Luck)', type: 'range', min: 0, max: 20, step: 0.5, unit: 'x' }
     ]
   }
 ];

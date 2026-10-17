@@ -29,7 +29,7 @@ test('all weapons deliver the same potential DPS at the same level', () => {
 
 test('damage per hit never drops when a weapon levels up', () => {
   const perHit = {
-    missiles: W.missileDamageMult, lightning: W.lightningDamageMult, singularity: W.singularityDamageMult,
+    rockets: W.wingRocketDamageMult, missiles: W.missileDamageMult, lightning: W.lightningDamageMult, singularity: W.singularityDamageMult,
     collapse: W.singularityCollapseDamageMult, orbitals: W.orbitalDamageMult, mines: W.mineDamageMult,
     turret: W.turretDamageMult, drones: W.droneDamageMult
   };

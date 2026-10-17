@@ -9,15 +9,21 @@ import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
-import { UPGRADE_POOL, RARITY, rarityFor, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import {
-  WEAPON_SCALING as W, weaponDamage, prismStreams, areaMult, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  critChance, critMultiplier
+  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
+  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines
+} from './upgrades.js';
+import {
+  WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
+  wingRocketBlastRadius, critChance, critMultiplier
 } from './weapon-scaling.js';
+import { STARTING_WEAPONS, WEAPON_BY_ID, ownedWeapons, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
-import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText } from './upgrade-cards.js';
+import {
+  describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
+} from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
@@ -183,8 +189,11 @@ export class Game {
       bombs: 2 + bonuses.extraBombs,
       level: 1,
       xp: 0,
-      xpToNext: 12,
+      xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
+      // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
+      loadout: [],
+      newWeaponDrought: 0,
       stats: {
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult,
         fireRate: TUNING.fireRate * bonuses.fireRateMult,
@@ -205,6 +214,7 @@ export class Game {
         areaMult: 1
       },
       weapons: {
+        rockets: 0,
         missiles: 0,
         orbitals: 0,
         lightning: 0,
@@ -224,6 +234,12 @@ export class Game {
         supercritical: 0
       }
     };
+
+    // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
+    snapshotBase(this.player);
+    for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    this.discardPending = null;
+    this.weaponBarHtml = null;
 
     this.camX = centerX - this.width * 0.5;
     this.camY = centerY - this.height * 0.5;
@@ -826,6 +842,8 @@ export class Game {
       this.resetInput();
       this.mouse.down = false;
       this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
+      this.discardPending = null;
+      this.renderLoadoutPanel();
       if (pauseModal) pauseModal.classList.remove('hidden');
       if (pauseBtn) {
         pauseBtn.textContent = '▶ RESUME [P]';
@@ -1861,7 +1879,7 @@ export class Game {
     while (p.xp >= p.xpToNext && this.state === 'PLAYING') {
       p.xp -= p.xpToNext;
       p.level++;
-      p.xpToNext = Math.round(p.xpToNext * 1.32 + 6);
+      p.xpToNext = xpToNextLevel(p.level);
       this.triggerLevelUp();
     }
   }
@@ -1911,17 +1929,26 @@ export class Game {
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
   }
 
-  // Starting kit: one dumbfire rocket from each outer wing tip, always along the hull's heading
-  // (where the crab is flying), independent of the turret's aim. Direct hit plus a small blast.
-  fireWingRockets() {
+  // Starting weapon: dumbfire rockets from the outer wing tips, always along the hull's heading (where
+  // the crab is flying), independent of the turret's aim. Direct hit plus a small blast. Rockets
+  // alternate wings; each extra pair launches a little further back and fans slightly outward.
+  fireWingRockets(level = this.player.weapons.rockets || 1) {
     const p = this.player;
     const heading = p.drillAngle ?? p.angle;
-    const fx = Math.cos(heading), fy = Math.sin(heading);
-    const damage = weaponDamage(p, 'rocket');
-    for (const side of [-1, 1]) {
+    const damage = weaponDamage(p, 'rocket', level);
+    const blastRadius = wingRocketBlastRadius(p, level);
+    const count = W.wingRocketCount(level);
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const tier = Math.floor(i / 2);
+      const a = heading + side * tier * 0.07;
+      const fx = Math.cos(a), fy = Math.sin(a);
+      const hx = Math.cos(heading), hy = Math.sin(heading);
       // Wing tip in hull space: (0.25r forward, 1.12r out), matching drawCrabShip's carapace wings.
-      const wx = p.x + fx * p.radius * 0.25 - fy * side * p.radius * 1.12;
-      const wy = p.y + fy * p.radius * 0.25 + fx * side * p.radius * 1.12;
+      const fwd = p.radius * 0.25 - tier * 7;
+      const out = p.radius * 1.12 + tier * 3;
+      const wx = p.x + hx * fwd - hy * side * out;
+      const wy = p.y + hy * fwd + hx * side * out;
       this.bullets.push({
         x: wx,
         y: wy,
@@ -1935,7 +1962,7 @@ export class Game {
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
-        blastRadius: W.wingRocketBlastRadius * areaMult(p),
+        blastRadius,
         blastDamage: damage * W.wingRocketBlastShare
       });
     }
@@ -2186,7 +2213,9 @@ export class Game {
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 145, 5, 0.5);
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
 
-    this.currentChoices = rollUpgrades(this.player, 3);
+    // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
+    // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons.
+    this.currentChoices = rollLevelUpHand(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2196,35 +2225,163 @@ export class Game {
       return;
     }
 
+    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve');
+    this.renderChoiceCards(this.currentChoices.map((upg) => (upg.isNewWeapon ? describeNewWeapon(this.player) : describeUpgrade(this.player, upg))));
+    document.getElementById('upgrade-modal').classList.remove('hidden');
+  }
+
+  setUpgradeHeader(subtitle, title, hint) {
+    const modal = document.getElementById('upgrade-modal');
+    const sub = modal.querySelector?.('.glitch-subtitle');
+    const head = modal.querySelector?.('.upgrade-title');
+    const tip = modal.querySelector?.('.upgrade-hint');
+    if (sub) sub.textContent = subtitle;
+    if (head) head.textContent = title;
+    if (tip) tip.innerHTML = hint;
+  }
+
+  renderChoiceCards(descs) {
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
-
-    this.currentChoices.forEach((upg, idx) => {
-      const view = renderUpgradeCard(describeUpgrade(this.player, upg), `[${idx + 1}]`);
+    descs.forEach((d, idx) => {
+      const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
       card.addEventListener('click', () => this.selectUpgrade(idx));
       container.appendChild(card);
     });
+  }
 
-    document.getElementById('upgrade-modal').classList.remove('hidden');
+  // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
+  openWeaponPick() {
+    this.currentChoices = rollWeaponPicks(this.player, 3);
+    if (this.currentChoices.length === 0) {
+      this.closeUpgradeModal();
+      return;
+    }
+    const p = this.player;
+    this.setUpgradeHeader(`SLOT ${ownedWeapons(p).length + 1} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+      'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Equip');
+    this.renderChoiceCards(this.currentChoices.map((c) => describeWeaponPick(p, c.weaponId)));
+    this.sound.playLevelUp();
+  }
+
+  closeUpgradeModal() {
+    this.currentChoices = [];
+    document.getElementById('upgrade-modal').classList.add('hidden');
+    this.state = 'PLAYING';
+    this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
+    this.processPendingLevelUps();
+    this.updateHUD();
   }
 
   selectUpgrade(index) {
     if (this.state !== 'UPGRADE') return;
     const upg = this.currentChoices[index];
     if (!upg) return;
+    const p = this.player;
+
+    if (upg.isNewWeapon) {
+      this.openWeaponPick();
+      return;
+    }
+    if (upg.isWeaponPick) {
+      acquireWeapon(p, upg.weaponId);
+      const weapon = WEAPON_BY_ID[upg.weaponId];
+      this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
+      this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
+      this.closeUpgradeModal();
+      return;
+    }
 
     const jump = this.applyUpgrade(upg);
-    this.currentChoices = [];
-
-    document.getElementById('upgrade-modal').classList.add('hidden');
-    this.state = 'PLAYING';
-    this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
-    this.processPendingLevelUps();
+    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
+    this.closeUpgradeModal();
+  }
+
+  // --- Weapon loadout (pause-menu panel + HUD strip) --------------------------------------------
+
+  // Pause-menu LOADOUT panel: one card per slot with level, tags and weapon-specific upgrades. DISCARD
+  // asks for confirmation in place (CONFIRM / KEEP), then frees the slot so NEW WEAPON cards return.
+  renderLoadoutPanel() {
+    const panel = document.getElementById('pause-loadout');
+    if (!panel || !this.player) return;
+    const p = this.player;
+    const owned = ownedWeapons(p);
+    const slots = weaponSlots();
+    const count = document.getElementById('pause-loadout-count');
+    if (count) count.textContent = `${owned.length} / ${slots} SLOTS`;
+    const chips = (id) => weaponTags(id).filter((t) => TAG_INFO[t])
+      .map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('');
+    const html = [];
+    for (let i = 0; i < Math.max(slots, owned.length); i++) {
+      const id = owned[i];
+      if (!id) {
+        html.push(`<div class="loadout-slot empty"><div class="loadout-slot-top"><span class="loadout-slot-num">SLOT ${i + 1}</span></div><div class="loadout-empty-text">EMPTY // NEW WEAPON cards show up in level-ups while a slot is free</div></div>`);
+        continue;
+      }
+      const w = WEAPON_BY_ID[id];
+      const level = weaponLevel(p, id);
+      const lineList = weaponUpgradeLines(p, id);
+      // Pew Pews has no level of its own: it grows through its upgrade lines.
+      const lineLevels = lineList.reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
+      const lvText = w.levelId
+        ? `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${UPGRADE_BY_ID[w.levelId].maxLevel}</span>`
+        : lineLevels ? `${lineLevels} UPGRADE${lineLevels === 1 ? '' : 'S'}` : 'BASE';
+      const lines = lineList
+        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `LV ${l.level}`}</span>`).join('');
+      const pending = this.discardPending === id;
+      // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
+      const removes = lineList.filter((l) => !(UPGRADE_BY_ID[l.id].owners || []).some((o) => o !== id && owned.includes(o)));
+      const removeText = removes.length ? ` and ${removes.map((l) => l.name.replace('SYNERGY: ', '')).join(', ')}` : '';
+      const actions = pending
+        ? `<div class="loadout-confirm">Discard ${w.name}${w.levelId ? ` LV ${level}` : ''}${removeText}? The slot opens for a NEW WEAPON.</div>
+          <div class="loadout-actions"><button class="neon-btn loadout-btn danger" data-discard-confirm="${id}">✕ CONFIRM DISCARD</button><button class="neon-btn loadout-btn" data-discard-cancel="${id}">KEEP</button></div>`
+        : `<div class="loadout-actions"><button class="neon-btn loadout-btn" data-discard="${id}"${owned.length <= 1 ? ' disabled title="Your last weapon cannot be discarded"' : ''}>DISCARD</button></div>`;
+      html.push(`<div class="loadout-slot${pending ? ' confirming' : ''}" style="--wc:${w.color}">
+        <div class="loadout-slot-top"><span class="loadout-slot-num">SLOT ${i + 1}</span><span class="loadout-lv">${lvText}</span></div>
+        <div class="loadout-name">${w.name}</div>
+        <div class="upg-tags">${chips(id)}</div>
+        ${lines ? `<div class="loadout-lines">${lines}</div>` : ''}
+        ${actions}
+      </div>`);
+    }
+    panel.innerHTML = html.join('');
+    panel.querySelectorAll?.('[data-discard]').forEach((b) => b.addEventListener('click', () => {
+      this.discardPending = b.getAttribute('data-discard');
+      this.renderLoadoutPanel();
+      this.focusLoadoutButton(`[data-discard-cancel="${this.discardPending}"]`);
+    }));
+    panel.querySelectorAll?.('[data-discard-cancel]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.getAttribute('data-discard-cancel');
+      this.discardPending = null;
+      this.renderLoadoutPanel();
+      this.focusLoadoutButton(`[data-discard="${id}"]`);
+    }));
+    panel.querySelectorAll?.('[data-discard-confirm]').forEach((b) => b.addEventListener('click', () => {
+      this.confirmDiscard(b.getAttribute('data-discard-confirm'));
+    }));
+  }
+
+  // Keep keyboard and controller focus on the slot whose buttons were just re-rendered.
+  focusLoadoutButton(selector) {
+    const el = document.querySelector?.(`#pause-loadout ${selector}`);
+    if (!el) return;
+    if (this.gpActive && this.menuNav) this.menuNav.setFocus(el);
+    else el.focus?.();
+  }
+
+  confirmDiscard(id) {
+    const removed = discardWeapon(this.player, id);
+    this.discardPending = null;
+    if (removed) {
+      const w = WEAPON_BY_ID[id];
+      this.particles.spawnFloatText(this.player.x, this.player.y - 24, `${w.name.toUpperCase()} DISCARDED // SLOT FREE`, '#ff77b7', 15);
+    }
+    this.renderLoadoutPanel();
+    this.focusLoadoutButton('[data-discard]:not([disabled])');
     this.updateHUD();
   }
 
@@ -2532,17 +2689,19 @@ export class Game {
 
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
-    if (shouldFire) {
+    if (shouldFire && ownsWeapon(p, 'blaster')) {
       this.fireAccumulator += dt * p.stats.fireRate;
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
       }
     }
-    this.rocketTimer -= dt;
-    if (shouldFire && this.rocketTimer <= 0) {
-      this.fireWingRockets();
-      this.rocketTimer = W.wingRocketCooldown;
+    if (p.weapons.rockets > 0) {
+      this.rocketTimer -= dt;
+      if (shouldFire && this.rocketTimer <= 0) {
+        this.fireWingRockets(p.weapons.rockets);
+        this.rocketTimer = W.wingRocketCooldown(p.weapons.rockets);
+      }
     }
 
     // 4. Autonomous Weapons
@@ -2805,17 +2964,32 @@ export class Game {
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
 
-    const weaponsBar = document.getElementById('active-weapons-bar');
+    // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed),
+    // then every other installed upgrade. Same level wording as the cards ("LV 3"); synergies are
+    // one-shot evolutions. Rarity belongs to a roll, not a weapon, so chips stay rarity-neutral.
     const tags = [];
+    const owned = ownedWeapons(p);
+    for (let i = 0; i < Math.max(weaponSlots(), owned.length); i++) {
+      const w = WEAPON_BY_ID[owned[i]];
+      if (!w) {
+        tags.push('<span class="weapon-slot-chip empty" title="Free weapon slot">+</span>');
+        continue;
+      }
+      const lv = w.levelId ? ` LV ${weaponLevel(p, w.id)}${bonusText(bonusLevels(p, w.levelId))}` : '';
+      tags.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${w.name}">${w.hudName}${lv}</span>`);
+    }
+    tags.push('<span class="weapon-bar-break"></span>');
     for (const upg of UPGRADE_POOL) {
       const lv = p.upgradeLevels[upg.id];
-      if (lv) {
-        // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
-        // Rarity belongs to a roll, not a weapon, so tags stay neutral; evolutions keep their own color.
-        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}${bonusText(bonusLevels(p, upg.id))}`}</span>`);
+      if (lv && upgradeKind(upg) !== 'weapon') {
+        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
       }
     }
-    weaponsBar.innerHTML = tags.join('');
+    const barHtml = tags.join('');
+    if (barHtml !== this.weaponBarHtml) {
+      this.weaponBarHtml = barHtml;
+      document.getElementById('active-weapons-bar').innerHTML = barHtml;
+    }
 
     this.updateBossHUD(this.getBossHudModel());
     this.updateLieutenantHUD();

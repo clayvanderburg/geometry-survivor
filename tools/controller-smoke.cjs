@@ -1,8 +1,9 @@
-// Controller-only browser check: a simulated standard gamepad drives title, level-up, pause, chest and game over.
+// Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. a NEW WEAPON pick),
+// pause (sliders, damage-number toggle, loadout discard with confirm), chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
-const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
+const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
@@ -43,7 +44,15 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await page.evaluate(() => { __game.player.invuln = 1e9; });
     await page.waitForTimeout(400);
 
-    await page.evaluate(() => __game.triggerLevelUp());
+    // A plain hand (no NEW WEAPON card this time) so A applies an upgrade straight away.
+    await page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      const chance = TUNING.newWeaponChance;
+      TUNING.newWeaponChance = 0;
+      __game.player.newWeaponDrought = 0;
+      __game.triggerLevelUp();
+      TUNING.newWeaponChance = chance;
+    });
     await page.waitForTimeout(450);
     await press(RIGHT);
     const focusedCard = await page.evaluate(() => [...document.querySelectorAll('#upgrade-choices .upgrade-option')].findIndex(el => el.classList.contains('gp-focus')));
@@ -53,6 +62,23 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await press(A);
     await expect('PLAYING', 'A on a card selects it');
     if (!(await page.evaluate(id => (__game.player.upgradeLevels[id] || 0) > 0, picked))) throw Error('Selected card was not applied');
+
+    // NEW WEAPON: walk to the card, A opens the weapon pick, A on the focused weapon equips it.
+    await page.evaluate(() => { __game.player.newWeaponDrought = 99; __game.triggerLevelUp(); });
+    await page.waitForTimeout(450);
+    const nwIndex = await page.evaluate(() => __game.currentChoices.findIndex(c => c.isNewWeapon));
+    if (nwIndex < 0) throw Error('pity should put a NEW WEAPON card in the hand');
+    for (let i = 0; i < nwIndex; i++) await press(RIGHT);
+    await press(A);
+    await expect('UPGRADE', 'NEW WEAPON opens the weapon pick');
+    if (!(await page.evaluate(() => __game.currentChoices.length === 3 && __game.currentChoices.every(c => c.isWeaponPick)))) throw Error('weapon pick should offer 3 weapons');
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: 'controller-weapon-pick.png' });
+    const slotsBefore = await page.evaluate(() => __game.player.loadout.length);
+    await press(RIGHT);
+    await press(A);
+    await expect('PLAYING', 'A equips the focused weapon');
+    if ((await page.evaluate(() => __game.player.loadout.length)) !== slotsBefore + 1) throw Error("weapon was not equipped");
 
     await press(START);
     await expect('PAUSED', 'Start pauses');
@@ -82,6 +108,24 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await press(B);
     await expect('PLAYING', 'B resumes after toggling');
 
+    // Loadout: left from Resume reaches a DISCARD button; A asks to confirm (focus on KEEP), confirm discards.
+    await press(START);
+    await expect('PAUSED', 'Start pauses for the loadout');
+    await page.waitForTimeout(400);
+    await press(LEFT);
+    const discardBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.getAttribute('data-discard'));
+    if (!discardBtn) throw Error('Left from Resume should reach a loadout DISCARD button');
+    await press(A);
+    const keep = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.getAttribute('data-discard-cancel'));
+    if (keep !== discardBtn) throw Error(`DISCARD should move focus to KEEP for ${discardBtn}, got ${keep}`);
+    await page.screenshot({ path: 'controller-discard-confirm.png' });
+    await press(LEFT);
+    await press(A);
+    const loadoutAfter = await page.evaluate(() => __game.player.loadout);
+    if (loadoutAfter.includes(discardBtn)) throw Error(`CONFIRM should discard ${discardBtn}: ${loadoutAfter}`);
+    await press(B);
+    await expect('PLAYING', 'B resumes after discarding');
+
     await page.evaluate(() => { const g = __game; g.openRelicChest({ x: g.player.x, y: g.player.y, isSuper: false }); });
     await expect('CHEST', 'chest opens');
     await page.waitForTimeout(400);
@@ -97,6 +141,6 @@ const A = 0, B = 1, START = 9, UP = 12, DOWN = 13, RIGHT = 15;
     await page.screenshot({ path: 'controller-gameplay.png' });
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, pause + slider + damage-number toggle + resume, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
