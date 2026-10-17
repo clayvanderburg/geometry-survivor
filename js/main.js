@@ -25,6 +25,7 @@ import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -51,6 +52,8 @@ import {
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
 const RADAR_STORAGE_KEY = 'vexolith_radar';
 const RADAR_BASE_SIZE = 152;
+const RADAR_ROCK_STRIDE = { rock: 3, gold_vein: 1, shield_vein: 1, core_vein: 0 }; // bitmask: draw when (index & mask) === 0
+const RADAR_ROCK_COLORS = [['rgba(0, 195, 255, 0.38)', ['rock', 'shield_vein']], ['#ffcc00', ['gold_vein']], ['#d68fff', ['core_vein']]];
 const RADAR_SCALE = 2.5; // on-screen size vs the original 152 px radar
 function loadRadarVisible() {
   try { return globalThis.localStorage?.getItem(RADAR_STORAGE_KEY) !== '0'; } catch { return true; }
@@ -208,6 +211,15 @@ export class Game {
     this.kills = 0;
     this.rocksMined = 0;
     this.sessionCores = 0;
+    // Gold (per run, gold veins): spent on level-up rerolls and card locks (js/gold.js).
+    this.gold = 0;
+    this.goldEarned = 0;
+    this.goldSpent = 0;
+    this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
+    this.handLock = null; // { card, slot }: the locked card in the hand on screen
+    this.carriedLock = null; // locked card passed over: guaranteed in the next level-up hand
+    this.handPhase = null; // 'hand' (rerolls and locks allowed) or 'weapon' (the NEW WEAPON pick)
+    this.lockNote = '';
     this.coresDroppedThisWave = 0;
     this.elapsedTime = 0;
     this.wave = 1;
@@ -450,9 +462,7 @@ export class Game {
       }
 
       if (this.state === 'UPGRADE') {
-        if (code === 'Digit1' || code === 'Numpad1') this.selectUpgrade(0);
-        if (code === 'Digit2' || code === 'Numpad2') this.selectUpgrade(1);
-        if (code === 'Digit3' || code === 'Numpad3') this.selectUpgrade(2);
+        this.handleUpgradeKey(code, e.shiftKey);
         return;
       }
 
@@ -588,6 +598,7 @@ export class Game {
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
+    document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
     }
@@ -1196,20 +1207,25 @@ export class Game {
     this.grid.applyImpulse(rock.x, rock.y, 22, 110, rock.hue);
 
     if (rock.oreType === 'gold_vein') {
-      this.particles.spawnFloatText(rock.x, rock.y - 12, '★ GOLD GEOM VEIN!', '#ffcc00', 14);
-      for (let g = 0; g < 5; g++) {
+      // Gold coins (currency, no XP): magnetized and collected like geoms, whoever broke the rock.
+      const coins = goldCoins(goldPerVein());
+      const total = coins.reduce((a, b) => a + b, 0);
+      this.particles.spawnFloatText(rock.x, rock.y - 12, `★ GOLD VEIN! +${total} ${GOLD_ICON}`, '#ffcc00', 14);
+      for (const value of coins) {
         const ga = Math.random() * Math.PI * 2;
-        const spd = 2 + Math.random() * 4;
+        const spd = 2 + Math.random() * 3.5;
         this.geoms.push({
           isCore: false,
+          isGold: true,
+          gold: value,
           x: rock.x,
           y: rock.y,
           vx: Math.cos(ga) * spd,
           vy: Math.sin(ga) * spd,
-          xp: 3,
+          xp: 0,
           rotation: Math.random() * Math.PI * 2,
           hue: 48,
-          life: 18,
+          life: 30,
           magnetized: false
         });
       }
@@ -2017,7 +2033,8 @@ export class Game {
 
   updateBullets(dt) {
     const manager = this.asteroidManager;
-    const maxRockRadius = manager.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
+    // Cached by rebuildSpatialHash (rocks only change through it); a scan over ~1000 rocks per tick is not free.
+    const maxRockRadius = manager.maxRockRadius ?? manager.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
     this.projectileEnemyIndex ||= new SpatialIndex();
     this.projectileEnemyIndex.rebuild(this.enemyManager.enemies);
     const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.shieldArc ? enemy.shieldRadius : enemy.radius), 0);
@@ -2513,8 +2530,10 @@ export class Game {
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
 
     // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
-    // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons.
-    this.currentChoices = rollLevelUpHand(this.player, 3);
+    // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
+    // an earlier hand comes back in its slot (if still valid) in place of one random card.
+    this.beginHand();
+    this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2525,8 +2544,184 @@ export class Game {
     }
 
     this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve');
-    this.renderChoiceCards(this.currentChoices.map((upg) => (upg.isNewWeapon ? describeNewWeapon(this.player) : describeUpgrade(this.player, upg))));
+    this.renderHand();
     document.getElementById('upgrade-modal').classList.remove('hidden');
+  }
+
+  // --- Gold: rerolls and card locks on the level-up hand (rules and costs in js/gold.js) -----------
+
+  // New level-up hand: reroll cost back to the base, and a lock carried from the last hand re-checked.
+  beginHand() {
+    this.handPhase = 'hand';
+    this.handRerolls = 0;
+    this.handLock = null;
+    this.lockNote = '';
+    // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
+    this.handDrought = this.player.newWeaponDrought || 0;
+    const carried = this.carriedLock;
+    this.carriedLock = null;
+    if (!carried) return;
+    const card = refreshLockedCard(this.player, carried.card);
+    if (card) this.handLock = { card, slot: carried.slot ?? 0 };
+    else this.lockNote = `🔒 ${carried.card.name.replace('SYNERGY: ', '')} lock dropped: no longer available`;
+  }
+
+  renderHand() {
+    this.renderChoiceCards(this.currentChoices.map((upg) => (upg.isNewWeapon ? describeNewWeapon(this.player) : describeUpgrade(this.player, upg))));
+    this.renderHandControls();
+  }
+
+  addGold(amount) {
+    if (!(amount > 0)) return;
+    this.gold += amount;
+    this.goldEarned += amount;
+    const p = this.player;
+    if (p) this.particles.spawnFloatText(p.x, p.y - 22, `+${amount} ${GOLD_ICON} GOLD`, '#ffcc00', 12);
+    this.flashGold('gain');
+    this.updateHUD();
+  }
+
+  // Spend gold (never below 0); flashes the counters either way.
+  spendGold(amount) {
+    if (!trySpend(this, amount)) {
+      this.flashGold('short');
+      return false;
+    }
+    this.goldSpent += amount;
+    this.flashGold('spend');
+    this.updateHUD();
+    return true;
+  }
+
+  // Re-trigger the flash animation on the HUD and level-up gold counters.
+  flashGold(kind) {
+    for (const id of ['gold-hud-display', 'hand-gold-count']) {
+      const el = globalThis.document?.getElementById(id);
+      if (!el?.classList) continue;
+      el.classList.remove('gold-flash-gain', 'gold-flash-spend', 'gold-flash-short');
+      void el.offsetWidth; // restart the CSS animation
+      el.classList.add(`gold-flash-${kind}`);
+    }
+  }
+
+  // Level-up modal keys: [1]-[3] pick, Shift+[1]-[3] lock/unlock that card, [R] rerolls (R is the
+  // radar toggle only during play).
+  handleUpgradeKey(code, shift = false) {
+    if (this.state !== 'UPGRADE') return false;
+    const digit = /^(?:Digit|Numpad)([1-3])$/.exec(code);
+    if (digit) {
+      const idx = Number(digit[1]) - 1;
+      return shift ? this.toggleCardLock(idx) : (this.selectUpgrade(idx), true);
+    }
+    if (code === 'KeyR') return this.rerollHand();
+    return false;
+  }
+
+  // Level-up modal controller extras (A still picks the focused card): X rerolls, Y locks or unlocks
+  // the focused card. Neither button does anything else in this modal.
+  handleUpgradePad(gp) {
+    if (this.state !== 'UPGRADE' || !gp) return false;
+    if (gp.pressed(PAD.X)) return this.rerollHand();
+    if (gp.pressed(PAD.Y)) {
+      const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
+      return idx >= 0 ? this.toggleCardLock(idx) : false;
+    }
+    return false;
+  }
+
+  canEditHand() {
+    return this.state === 'UPGRADE' && this.handPhase === 'hand' && this.currentChoices.length > 0;
+  }
+
+  // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
+  // rolls as a new hand); the locked card stays in its slot. 20, 40, 80... gold within one hand.
+  rerollHand() {
+    if (!this.canEditHand()) return false;
+    if (!this.spendGold(rerollCost(this.handRerolls))) return false;
+    this.handRerolls++;
+    this.player.newWeaponDrought = this.handDrought;
+    this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
+    const focusedIndex = this.focusedChoiceIndex();
+    this.renderHand();
+    if (focusedIndex >= 0) this.focusChoice(focusedIndex);
+    this.sound.playLevelUp();
+    return true;
+  }
+
+  // LOCK toggle on card `index`: locking costs gold (moving the lock to another card costs it again,
+  // since only one card can be locked); unlocking is free and refunds nothing.
+  toggleCardLock(index) {
+    if (!this.canEditHand()) return false;
+    const card = this.currentChoices[index];
+    if (!card) return false;
+    if (this.handLock?.card === card) {
+      this.handLock = null;
+    } else {
+      if (!this.spendGold(lockCost())) return false;
+      this.handLock = { card, slot: index };
+    }
+    this.lockNote = '';
+    this.renderHandControls();
+    return true;
+  }
+
+  focusedChoiceIndex() {
+    const els = this.choiceCardEls || [];
+    return this.gpActive && this.menuNav?.focused ? els.indexOf(this.menuNav.focused) : -1;
+  }
+
+  focusChoice(index) {
+    const el = (this.choiceCardEls || [])[index];
+    if (el && this.gpActive && this.menuNav) this.menuNav.setFocus(el);
+  }
+
+  // Gold bar (counter, REROLL button, lock note) and each card's LOCK toggle / LOCKED badge, updated
+  // in place so a lock toggle keeps controller focus on its card.
+  renderHandControls() {
+    const doc = globalThis.document;
+    const inHand = this.handPhase === 'hand';
+    doc?.getElementById('hand-goldbar')?.classList?.[inHand ? 'remove' : 'add']('hidden');
+    const count = doc?.getElementById('hand-gold-count');
+    if (count) count.textContent = `${GOLD_ICON} ${this.gold} GOLD`;
+    const cost = rerollCost(this.handRerolls);
+    const lc = lockCost();
+    const reroll = doc?.getElementById('btn-reroll-hand');
+    if (reroll) {
+      const affordable = this.gold >= cost;
+      reroll.disabled = !inHand || !affordable;
+      reroll.innerHTML = `↻ REROLL · ${cost} ${GOLD_ICON} <span class="hand-key">[R] / X</span>`;
+      reroll.title = affordable ? `Reroll the unlocked cards for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
+    }
+    const note = doc?.getElementById('hand-lock-note');
+    if (note) {
+      const lockedName = this.handLock?.card.name.replace('SYNERGY: ', '');
+      note.textContent = this.lockNote
+        || (lockedName ? `🔒 ${lockedName} is locked: pick another card and it comes back next level-up`
+          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y`);
+      note.classList?.[this.lockNote ? 'add' : 'remove']('dropped');
+    }
+    (this.choiceCardEls || []).forEach((el, idx) => {
+      const locked = !!this.handLock && this.currentChoices[idx] === this.handLock.card;
+      el.classList?.[locked ? 'add' : 'remove']('card-locked');
+      let badge = el.querySelector?.('.card-lock-badge');
+      if (locked && !badge && doc?.createElement) {
+        badge = doc.createElement('div');
+        badge.className = 'card-lock-badge';
+        badge.textContent = '🔒 LOCKED';
+        el.appendChild(badge);
+      } else if (!locked && badge) badge.remove?.();
+      const toggle = el.querySelector?.('.card-lock-toggle');
+      if (!toggle) return;
+      const affordable = locked || this.gold >= lc;
+      toggle.textContent = locked ? '🔓 UNLOCK' : `🔒 ${lc} ${GOLD_ICON}`;
+      toggle.classList?.[affordable ? 'remove' : 'add']('unaffordable');
+      toggle.classList?.[locked ? 'add' : 'remove']('on');
+      toggle.setAttribute?.('aria-pressed', String(locked));
+      toggle.title = locked ? 'Unlock (no refund)'
+        : affordable ? `Lock for ${lc} gold: it stays through rerolls and comes back next level-up if you pick another card`
+        : `Need ${lc} gold to lock`;
+    });
   }
 
   setUpgradeHeader(subtitle, title, hint) {
@@ -2545,6 +2740,7 @@ export class Game {
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
     const shownAt = performance.now();
+    this.choiceCardEls = [];
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
@@ -2554,12 +2750,27 @@ export class Game {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.selectUpgrade(idx);
       });
+      // Gold LOCK toggle (level-up hands only; renderHandControls labels it). Not a <button>, so the
+      // controller's focus stays on whole cards: it locks the focused card with Y.
+      if (this.handPhase === 'hand') {
+        const lock = document.createElement('div');
+        lock.className = 'card-lock-toggle';
+        lock.setAttribute?.('role', 'button');
+        lock.addEventListener('click', (e) => {
+          e.stopPropagation?.();
+          this.toggleCardLock(idx);
+        });
+        card.appendChild(lock);
+      }
       container.appendChild(card);
+      this.choiceCardEls.push(card);
     });
   }
 
   // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
   openWeaponPick() {
+    this.handPhase = 'weapon';
+    this.renderHandControls();
     this.currentChoices = rollWeaponPicks(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.closeUpgradeModal();
@@ -2579,6 +2790,8 @@ export class Game {
 
   closeUpgradeModal() {
     this.currentChoices = [];
+    this.handPhase = null;
+    this.handLock = null;
     document.getElementById('upgrade-modal').classList.add('hidden');
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
@@ -2591,6 +2804,12 @@ export class Game {
     const upg = this.currentChoices[index];
     if (!upg) return;
     const p = this.player;
+
+    // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
+    if (this.handPhase === 'hand' && this.handLock) {
+      this.carriedLock = upg === this.handLock.card ? null : { card: this.handLock.card, slot: this.handLock.slot };
+      this.handLock = null;
+    }
 
     if (upg.isNewWeapon) {
       this.openWeaponPick();
@@ -2839,10 +3058,14 @@ export class Game {
     const root = document.getElementById(menu[0]);
     if (!root) return;
     const primary = menu[1] ? document.getElementById(menu[1]) : null;
-    this.menuNav.update(root, gp, dt, primary);
+    // Level-up focus starts on the first card, never on the REROLL button (A must not spend gold).
+    const fallback = this.state === 'UPGRADE' ? root.querySelector?.('.upgrade-option') || null : primary;
+    this.menuNav.update(root, gp, dt, fallback);
     if (this.menuGrace > 0) return;
 
-    if (gp.pressed(PAD.A)) {
+    if (this.handleUpgradePad(gp)) {
+      this.sound.init();
+    } else if (gp.pressed(PAD.A)) {
       this.sound.init();
       this.menuNav.activate();
     } else if (gp.pressed(PAD.START)) {
@@ -2918,7 +3141,7 @@ export class Game {
       this.progression.addCores(1);
       this.showBanner(`WAVE ${this.wave} // +1 ❖ VOID CORE`);
 
-      if (this.asteroidManager.asteroids.length < 360) {
+      if (this.asteroidManager.needsReplenish?.()) {
         const repPt = this.spawnAroundPlayer(850, 1400);
         this.asteroidManager.spawnCluster(repPt.x, repPt.y, { x: this.player.x, y: this.player.y, radius: 250 });
         this.asteroidManager.rebuildSpatialHash();
@@ -3239,13 +3462,13 @@ export class Game {
     // 10. Update Geoms & Void Cores
     for (let i = this.geoms.length - 1; i >= 0; i--) {
       const g = this.geoms[i];
-      g.rotation += g.isCore ? 0.12 : 0.08;
+      g.rotation += g.isCore ? 0.12 : g.isGold ? 0.05 : 0.08;
       g.life -= dt;
 
       const dx = p.x - g.x;
       const dy = p.y - g.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const attractR = g.isCore ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
+      const attractR = g.isCore || g.isGold ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
 
       if (dist < attractR || g.magnetized) {
         g.magnetized = true;
@@ -3274,6 +3497,14 @@ export class Game {
       g.y += g.vy;
 
       if (dist < p.radius * 1.85) {
+        if (g.isGold) {
+          // Currency only: no XP, no multiplier.
+          this.sound.playGeomPickup(true);
+          this.addGold(g.gold || 1);
+          this.score += Math.round(10 * this.multiplier);
+          this.geoms.splice(i, 1);
+          continue;
+        }
         this.sound.playGeomPickup(g.isCore);
 
         if (g.isCore) {
@@ -3309,6 +3540,8 @@ export class Game {
     document.getElementById('multiplier-display').textContent = `x${this.multiplier.toFixed(1)}`;
     document.getElementById('luck-hud-display').textContent = `🍀 ${Math.round((p.stats.luck || 1) * 100)}% LUCK`;
     document.getElementById('cores-hud-display').textContent = `❖ ${this.sessionCores} CORES (${this.progression.data.cores} BANKED)`;
+    const goldHud = document.getElementById('gold-hud-display');
+    if (goldHud) goldHud.textContent = `${GOLD_ICON} ${this.gold ?? 0} GOLD`;
     document.getElementById('wave-display').textContent = `WAVE ${this.wave}`;
 
     const mins = Math.floor(this.elapsedTime / 60);
@@ -3764,17 +3997,19 @@ export class Game {
     ctx.fillRect(mx, my, mapSize, mapSize);
     ctx.strokeRect(mx, my, mapSize, mapSize);
 
-    // 1. Asteroid Clusters & Rich Veins
+    // 1. Asteroid Clusters & Rich Veins. The field has ~940 small rocks (about twice the old count), so
+    // blips are thinned to about the old density: every 4th plain rock, every 2nd gold or shield vein
+    // (as before), and every deep core vein (rare and worth a Void Core).
+    // One pass per color, so the fill style is set three times a frame instead of once per blip.
     const rocks = this.asteroidManager.asteroids;
-    for (let i = 0; i < rocks.length; i += 2) {
-      const r = rocks[i];
-      ctx.fillStyle = r.oreType === 'core_vein'
-        ? '#d68fff'
-        : r.oreType === 'gold_vein'
-        ? '#ffcc00'
-        : 'rgba(0, 195, 255, 0.38)';
-      const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
-      ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
+    for (const [color, ores] of RADAR_ROCK_COLORS) {
+      ctx.fillStyle = color;
+      for (let i = 0; i < rocks.length; i++) {
+        const r = rocks[i];
+        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0) continue;
+        const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
+        ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
+      }
     }
 
     // 2. Relic Supply Caches on Radar (Bright Pulsing Gold Squares)
@@ -4016,6 +4251,32 @@ export class Game {
         ctx.rotate(Math.PI / 4);
         ctx.strokeStyle = `hsla(290, 100%, 75%, ${alpha})`;
         ctx.strokeRect(-pulseR * 0.55, -pulseR * 0.55, pulseR * 1.1, pulseR * 1.1);
+      } else if (g.isGold) {
+        // Gold coin: a solid, glowing hexagon with a dark diamond stamped in (XP geoms are hollow outlines).
+        const r = 8 + Math.sin(performance.now() * 0.008 + i) * 0.8;
+        ctx.fillStyle = `hsla(46, 100%, 52%, ${alpha})`;
+        ctx.strokeStyle = `rgba(255, 246, 200, ${alpha})`;
+        ctx.lineWidth = 1.6;
+        ctx.shadowColor = '#ffcc00';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        for (let s = 0; s < 6; s++) {
+          const a = (s * Math.PI) / 3;
+          if (s === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.stroke();
+        ctx.fillStyle = `rgba(70, 40, 0, ${alpha * 0.85})`;
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.5);
+        ctx.lineTo(r * 0.36, 0);
+        ctx.lineTo(0, r * 0.5);
+        ctx.lineTo(-r * 0.36, 0);
+        ctx.closePath();
+        ctx.fill();
       } else {
         ctx.strokeStyle = `hsla(${g.hue}, 100%, 62%, ${alpha})`;
         ctx.lineWidth = 2;

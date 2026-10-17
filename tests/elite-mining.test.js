@@ -151,7 +151,11 @@ test('a rock an elite breaks goes through the normal break path and drops its no
   resetTuning();
   for (const [ore, check] of [
     ['core_vein', (g) => assert.equal(g.geoms.filter(x => x.isCore).length, 1, 'core dropped')],
-    ['gold_vein', (g) => assert.equal(g.geoms.filter(x => x.hue === 48).length, 5, 'five gold geoms')],
+    ['gold_vein', (g) => {
+      const gold = g.geoms.filter(x => x.isGold);
+      assert.equal(gold.reduce((a, x) => a + x.gold, 0), TUNING.goldPerVein, 'a vein of gold pickups for the ship');
+      assert.ok(gold.every(x => x.xp === 0), 'gold is currency, not XP');
+    }],
     ['shield_vein', (g) => assert.equal(g.player.hp, 50, 'a crushed shield crystal heals no one')]
   ]) {
     const { g, calls } = shatterGame();

@@ -28,6 +28,7 @@ const { ProgressionManager, META_UPGRADES } = await import('../../js/progression
 const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../../js/upgrades.js');
 const { TUNING, DEFAULT_TUNING } = await import('../../js/config.js');
 const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
+const { rerollCost } = await import('../../js/gold.js');
 
 export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, W as WEAPON_SCALING };
 
@@ -248,6 +249,8 @@ export function createMetrics() {
     perWave: [],      // index wave -> { taken, kills, hpEnd, enemies, levelEnd }
     levels: [],       // elapsed time of each level-up
     cores: 0,
+    goldVeins: 0,     // gold veins broken (by the ship or by elites)
+    rerolls: 0,       // level-up rerolls bought by the bot's gold policy
     killer: null,
     damage(src, eff, raw) {
       m.dealt[src] = (m.dealt[src] || 0) + eff;
@@ -342,7 +345,9 @@ export function botControls(game, pilot, state) {
     const dx = p.x - r.x, dy = p.y - r.y;
     const d = Math.hypot(dx, dy) || 1;
     const gap = d - r.radius - p.radius;
-    if (pilot.mineBias > 0 && gap < mineDist) { mineDist = gap; mineTarget = r; }
+    // goldPull: a pilot that goes after gold veins treats them as this many px closer than plain rock.
+    const pull = r.oreType === 'gold_vein' ? (pilot.goldPull || 0) : 0;
+    if (pilot.mineBias > 0 && gap - pull < mineDist) { mineDist = gap - pull; mineTarget = r; }
     if (gap < 55) {
       const w = (55 - gap) / 55 * (pilot.mineBias > 0 && threat < 0.6 ? 0.2 : 1.4);
       fx += (dx / d) * w;
@@ -431,11 +436,18 @@ export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 
 // --- One simulated run ------------------------------------------------------------------------
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
+// Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
+// cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
 export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank });
     const metrics = createMetrics();
     installInstrumentation(game, metrics);
+    const shatter = game.onRockShattered;
+    game.onRockShattered = function (rock) {
+      if (rock.oreType === 'gold_vein') metrics.goldVeins++;
+      return shatter.call(this, rock);
+    };
     const pilot = { mineBias: 0, ...(strategy.pilot || {}) };
     const botState = { orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTimer: 0 };
     const latency = PILOT_SKILLS[skill] ?? (Math.max(1, Math.round(Number(skill))) || 1);
@@ -458,11 +470,13 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     let ticks = 0;
     const levelAt = []; // level at each whole minute
     const xpAt = [];    // cumulative XP collected at each whole minute
+    const goldAt = [];  // cumulative gold collected at each whole minute
     for (; ticks < maxTicks && game.state !== 'GAMEOVER'; ticks++) {
       if (god) game.player.hp = game.player.maxHp;
       if (ticks % 3600 === 0) {
         levelAt.push(game.player.level);
         xpAt.push(Math.round(totalXpForLevel(game.player.level) + game.player.xp));
+        goldAt.push(game.goldEarned);
       }
       pipeline.push(botControls(game, pilot, botState));
       if (pipeline.length >= latency) controls = pipeline.shift();
@@ -475,7 +489,10 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
 
       // Menus: pick a card, claim a cache. Each may chain into another level-up.
       for (let guard = 0; guard < 20 && (game.state === 'UPGRADE' || game.state === 'CHEST'); guard++) {
-        if (game.state === 'UPGRADE') game.selectUpgrade(pickCard(game.currentChoices, strategy));
+        if (game.state === 'UPGRADE') {
+          if (game.handPhase === 'hand' && game.handRerolls === 0 && game.gold >= rerollCost(0) && game.rerollHand()) metrics.rerolls++;
+          game.selectUpgrade(pickCard(game.currentChoices, strategy));
+        }
         else game.closeChestModal();
       }
       if (game.player.level !== lastLevel) {
@@ -507,6 +524,11 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       score: game.score,
       cores: metrics.cores,
       rocksMined: game.rocksMined,
+      goldVeins: metrics.goldVeins,
+      goldEarned: game.goldEarned,
+      goldSpent: game.goldSpent,
+      rerolls: metrics.rerolls,
+      goldAt,
       build: { ...game.player.upgradeLevels },
       loadout: [...(game.player.loadout || [])],
       levelAt,

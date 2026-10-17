@@ -11,6 +11,7 @@ export const NAMED_STRATEGIES = [
   { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
   { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters'], weapons: ['singularity', 'mines'] },
   { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters'], pilot: { mineBias: 1.0 } },
+  { name: 'prospector', desc: 'Random card picks; the pilot drills toward nearby gold veins when calm: a regular gold miner without a mining build', priorities: [], pilot: { mineBias: 0.6, goldPull: 200 } },
   { name: 'random', desc: 'Uniformly random card picks (NEW WEAPON included)', priorities: [] }
 ];
 

@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.12.0',
+    date: '2026-10-17',
+    title: 'Gold, Rerolls & Locks',
+    notes: [
+      { type: 'new', text: 'Gold veins now drop gold coins instead of XP: a run currency that starts at 0 each run, shown next to your Void Cores.' },
+      { type: 'new', text: 'REROLL a level-up hand with gold ([R] or X): 20 gold, then 40, 80 and so on in the same level-up, back to 20 on the next one.' },
+      { type: 'new', text: 'LOCK a card for 5 gold (Shift+1-3 or Y): it stays through rerolls, and if you pick another card it comes back in your next level-up.' },
+      { type: 'balance', text: 'Asteroid fields are made of about twice as many smaller rocks, covering about the same space. More gold veins to find, and each rock drills faster.' },
+      { type: 'balance', text: 'Each gold vein holds 2 gold. Mine gold veins regularly and you can reroll about every 4 level-ups and lock cards often.' }
+    ]
+  },
+  {
     version: '0.11.2',
     date: '2026-10-17',
     title: 'Vortex Nerf & Clearer Evolutions',
