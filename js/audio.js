@@ -687,6 +687,57 @@ export class SoundEngine {
     });
   }
 
+  // Lieutenant arrival: a short rising two-tone brass sweep over a sub thump (smaller than the boss sting).
+  playLieutenantArrival() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [0, 0.12].forEach((offset, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(i ? 293.66 : 220, t + offset);
+      osc.frequency.exponentialRampToValueAtTime(i ? 440 : 329.63, t + offset + 0.18);
+      gain.gain.setValueAtTime(0.001, t + offset);
+      gain.gain.linearRampToValueAtTime(0.08, t + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.32);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.34);
+    });
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(70, t);
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.4);
+    subGain.gain.setValueAtTime(0.22, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.46);
+  }
+
+  // Gunner plasma orb: a soft low "thoomp" so incoming fire is audible without masking the blaster.
+  playEnemyShot() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastEnemyShotSound || 0) < 90) return;
+    this.lastEnemyShotSound = now;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(240, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    gain.gain.setValueAtTime(0.05, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  }
+
   playLevelUp() {
     if (!this.enabled || !this.ctx) return;
     const t = this.ctx.currentTime;

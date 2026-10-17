@@ -62,6 +62,7 @@
 - Different movement, durability, silhouettes, and attack mechanics—not merely more health.
 - **Continuous spawns.** Waves advance on a timer even if earlier enemies survive. Wave interval may shorten as difficulty increases.
 - Proposed structure: lieutenant each wave, major boss **every five waves** (supersedes current README's every-three-wave boss behavior, if adopted).
+  - **Implemented (first pass, for playtest):** Bruiser, Gunner (pooled enemy orbs), Aegis Shielder, Blinker and Conduit (support) archetypes, unlocked one per wave from wave 2; one lieutenant per non-boss wave with generated name/epithet and 1–2 modifiers. Bosses stay every 3 waves until the five-wave proposal is decided. Burrowers and mini-spawners are still open.
 - Bosses should be quirky and strange as well as dangerous: mechanical crab, huge jellyfish, cosmic eye, multi-part geometry, terrain-dwelling monstrosity.
 - Boss introductions need warning, title/name, audiovisual impact, special attack patterns, recognizable silhouette and distinctive rewards.
 

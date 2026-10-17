@@ -14,6 +14,10 @@ import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonu
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
+  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
+} from './archetypes.js';
+import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
+import {
   TUNING,
   TUNING_SCHEMA,
   updateTuningKey,
@@ -45,19 +49,24 @@ const setHidden = (el, hidden) => {
 };
 
 // Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
-// Unknown archetypes fall back to tier 1; anything flagged isBoss is tier 4.
+// New archetypes take their tier from ARCHETYPE_DEATH_TIER; unknown types fall back to tier 1.
+// Lieutenants always die as tier 3 (elite); anything flagged isBoss is tier 4.
 const DEATH_TIER = { swarmer: 0, mini_splitter: 0, weaver: 1, pinwheel: 1, splitter: 2, blackhole: 3, boss: 4 };
 const DEATH_FX = [
   { intensity: 0.8, shake: 0, hitStop: 0 },   // 0: swarm fodder — quick pop, no shake
   { intensity: 1.15, shake: 0, hitStop: 0 },  // 1: pinwheel/weaver — adds a white-hot core flash
   { intensity: 1.5, shake: 4, hitStop: 0 },   // 2: splitter — inner debris shatter + embers
-  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: black hole (elite) — wide second ring
+  { intensity: 2.2, shake: 7, hitStop: 1 },   // 3: lieutenant (elite) — wide second ring
   { intensity: 3.0, shake: 18, hitStop: 3 }   // 4: boss — everything, plus a chroma flash
 ];
 // Knockback impulses (px/tick for a 10px-radius hull; mass scales with radius²). Bosses are immune.
 const KNOCKBACK = { blaster: 1.3, shrapnel: 0.8, lightning: 0.6, missile: 1.8, area: 1.6 };
 const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
+// Sandbox buttons that drop one of each new archetype next to the ship.
+const SANDBOX_ARCHETYPES = {
+  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
+};
 
 export class Game {
   constructor() {
@@ -82,6 +91,7 @@ export class Game {
     this.enemyManager = new EnemyManager();
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
+    this.enemyManager.terrain = this.asteroidManager;
 
     this.state = 'TITLE'; // TITLE, PLAYING, UPGRADE, CHEST, GAMEOVER
     this.autoFire = true;
@@ -136,6 +146,10 @@ export class Game {
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
+    this.lieutenantWave = 0;
+    this.ltCard = null;
+    this.ltCardTimer = 0;
+    this.seenArchetypes = new Set();
 
     const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
@@ -639,6 +653,14 @@ export class Game {
         if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
           this.showBanner('⚠ ENEMY CAP REACHED — VORTEX NOT SPAWNED ⚠');
         }
+      } else if (sandboxAction === 'SPAWN_LIEUTENANT') {
+        if (!this.spawnLieutenant(420, 560)) this.showBanner('⚠ ENEMY CAP REACHED — LIEUTENANT NOT SPAWNED ⚠');
+      } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
+        const type = SANDBOX_ARCHETYPES[sandboxAction];
+        const bp = this.spawnAroundPlayer(320, 420);
+        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale())) {
+          this.showBanner(`⚠ ENEMY CAP REACHED — ${ARCHETYPE_INFO[type].label} NOT SPAWNED ⚠`);
+        }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
         this.particles.spawnFloatText(p.x, p.y - 24, '☄ ASTEROID SECTOR REGENERATED!', '#00ffaa', 15);
@@ -1046,14 +1068,19 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, maxR * 0.55, 325, 6, 0.5);
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
 
+    // The blast also wipes every hostile plasma orb in flight.
+    this.enemyManager.enemyBullets?.clear();
+
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
-      if (e.isBoss) {
+      // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
+      if (e.isBoss || e.isLieutenant) {
         const dmg = e.maxHp * 0.4;
         e.hp -= dmg;
         e.hitFlash = 1;
+        e.sinceHit = 0; // counts as a hit, so a REGENERATING lieutenant's regen pauses too
         this.damageNumbers?.add(e, dmg, 'supernova');
         if (e.hp <= 0) this.killEnemy(e, true);
       } else {
@@ -1087,12 +1114,15 @@ export class Game {
 
   // Single entry point for weapon damage: HP, hit flash, damage number, knockback and kill.
   // (kx, ky) is a knockback impulse in px/tick for a 10px-radius hull; heavier hulls move less.
+  // Armor (lieutenants) and Conduit links reduce the damage; the number shows what actually landed.
   hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+    dmg *= damageTakenMult(e);
     e.hp -= dmg;
+    e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, flash);
     this.damageNumbers?.add(e, dmg, source);
     if ((kx || ky) && !e.isBoss) {
-      const k = (TUNING.knockbackMult ?? 1.0) * 100 / (e.radius * e.radius);
+      const k = (TUNING.knockbackMult ?? 1.0) * (e.knockMult ?? 1) * 100 / (e.radius * e.radius);
       let nx = (e.knockX || 0) + kx * k;
       let ny = (e.knockY || 0) + ky * k;
       const mag = Math.hypot(nx, ny);
@@ -1127,7 +1157,7 @@ export class Game {
     enemies.splice(enemyIndex, 1);
     this.kills++;
 
-    const tier = e.isBoss ? 4 : DEATH_TIER[e.type] ?? 1;
+    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
     const intensity = fx.intensity;
     this.sound.playExplosion(intensity);
@@ -1165,6 +1195,15 @@ export class Game {
       }
     }
 
+    // A SPLITTING lieutenant bursts into regular copies of its archetype.
+    if (e.splits > 0) {
+      const waveScale = this.getWaveScale();
+      for (let k = 0; k < e.splits; k++) {
+        const a = e.rotation + (k * Math.PI * 2) / e.splits;
+        this.enemyManager.queueSpawn(e.type, e.x + Math.cos(a) * e.radius, e.y + Math.sin(a) * e.radius, waveScale, { instant: true });
+      }
+    }
+
     if (e.type === 'blackhole') {
       this.particles.spawnShockwave(e.x, e.y, 190, 348, 6, 0.5);
       this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348);
@@ -1180,6 +1219,7 @@ export class Game {
       this.spawnRelicChest(e.x, e.y, true);
     } else if (!fromBomb && this.chests.length < 3) {
       const chestChance = (
+        e.isLieutenant ? 0.02 :
         e.type === 'blackhole' ? 0.008 :
         e.type === 'splitter' ? 0.0012 :
         e.type === 'weaver' ? 0.0004 :
@@ -1214,8 +1254,9 @@ export class Game {
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
     if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
+    if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
-    const geomCount = e.isBoss ? 14 : e.type === 'blackhole' ? 4 : e.type === 'splitter' ? 2 : 1;
+    const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
     for (let g = 0; g < geomCount; g++) {
       const ga = Math.random() * Math.PI * 2;
       const gSpd = 1.5 + Math.random() * 4.5;
@@ -1227,7 +1268,7 @@ export class Game {
         vy: Math.sin(ga) * gSpd,
         xp: Math.max(1, Math.round(e.xp / geomCount)),
         rotation: Math.random() * Math.PI * 2,
-        hue: e.isBoss ? 48 : 145,
+        hue: e.isBoss || e.isLieutenant ? 48 : 145,
         life: 16,
         magnetized: fromBomb
       });
@@ -1310,7 +1351,125 @@ export class Game {
   }
 
   contactDamage(e) {
-    return (e.isBoss ? 38 : 18) * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  // Gunner orbs scale with the wave exactly like contact damage.
+  enemyBulletDamage(b) {
+    return b.damage * (1 + Math.max(0, this.wave - 5) * 0.08);
+  }
+
+  // Shared by contact and plasma-orb hits. Returns true when the hit was fatal (caller ends the run).
+  damagePlayer(dmg, shake = 16) {
+    const p = this.player;
+    p.shieldFlash = 1;
+    p.hp -= dmg;
+    p.invuln = 0.65;
+    this.multiplier = Math.max(1.0, this.multiplier * 0.75);
+    this.addShake(shake);
+    this.chromaFlash = 0.5;
+    this.sound.playExplosion(1.8);
+    this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
+    this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
+    return p.hp <= 0;
+  }
+
+  endRunIfDead() {
+    const p = this.player;
+    if (p.hp > 0) return false;
+    p.hp = 0;
+    this.updateHUD();
+    this.triggerGameOver();
+    return true;
+  }
+
+  // Plasma orbs: blocked by rock, pass through a dash's invulnerability, absorbed by the shield.
+  updateEnemyBullets(dt) {
+    this.enemyBulletHit ||= (b) => {
+      if (this.player.invuln > 0 || this.player.hp <= 0) return false;
+      this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
+      this.damagePlayer(this.enemyBulletDamage(b), 10);
+      return true;
+    };
+    this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
+    return this.endRunIfDead();
+  }
+
+  // One lieutenant per non-boss wave, `lieutenantDelay` seconds in. A pending boss keeps priority on
+  // free enemy slots, and a lieutenant blocked by the cap simply retries on later ticks of the wave.
+  updateLieutenantSchedule() {
+    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || this.wave % 3 === 0) return;
+    if (this.lieutenantWave === this.wave || this.waveTimer < (TUNING.lieutenantDelay ?? 6)) return;
+    if (this.pendingBossSpawns.length > 0) return;
+    if (this.spawnLieutenant()) this.lieutenantWave = this.wave;
+  }
+
+  spawnLieutenant(minDist = 480, maxDist = 700, type = null) {
+    const lt = rollLieutenant(this.wave, lieutenantTypes(this.wave), Math.random, type);
+    const pos = this.spawnAroundPlayer(minDist, maxDist);
+    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), { warmup: LIEUTENANT_WARMUP, lieutenant: lt });
+  }
+
+  showLieutenantCard(kind, kicker, name, epithet, detail) {
+    this.ltCardSerial = (this.ltCardSerial || 0) + 1;
+    this.ltCard = { id: this.ltCardSerial, kind, kicker, name, epithet, detail };
+    this.ltCardTimer = LIEUTENANT_CARD_TIME;
+  }
+
+  onLieutenantArrived(e) {
+    this.particles.spawnShockwave(e.x, e.y, 240, e.hue, 4, 0.5);
+    this.particles.spawnShockwave(e.x, e.y, 150, 220, 3, 0.35);
+    this.grid.applyImpulse(e.x, e.y, 60, 260, e.hue);
+    this.addShake(6);
+    this.sound.playLieutenantArrival?.();
+    const mods = lieutenantModLabels(e).join(' · ');
+    this.showLieutenantCard('arrival', '▲ LIEUTENANT ▲', e.name, e.epithet, `${mods} · ${Math.round(e.maxHp).toLocaleString()} HP`);
+  }
+
+  // Modest guaranteed reward: Void Cores (outside the per-wave cap), gold XP geoms and the kill score.
+  onLieutenantDefeated(e, pts, fromBomb) {
+    const cores = Math.max(0, Math.round(TUNING.lieutenantCoreReward ?? 1));
+    for (let c = 0; c < cores; c++) {
+      const ca = Math.random() * Math.PI * 2;
+      this.geoms.push({
+        isCore: true, coreAmount: 1, x: e.x, y: e.y,
+        vx: Math.cos(ca) * 3, vy: Math.sin(ca) * 3,
+        xp: 2, rotation: 0, hue: 280, life: 24, magnetized: true
+      });
+    }
+    this.coresDroppedThisWave += cores;
+    this.particles.spawnShockwave(e.x, e.y, 260, 48, 5, 0.55);
+    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp)} XP`];
+    if (cores > 0) rewards.push(`+${cores} ❖ VOID CORE${cores > 1 ? 'S' : ''}`);
+    this.showLieutenantCard('defeat', fromBomb ? '▲ LIEUTENANT VAPORIZED ▲' : '▲ LIEUTENANT DOWN ▲', e.name, e.epithet, rewards.join(' · '));
+  }
+
+  // First appearance of a new archetype this run: a one-line intel card on what it does.
+  announceArchetype(type) {
+    const info = ARCHETYPE_INFO[type];
+    if (!info || this.seenArchetypes.has(type)) return;
+    if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
+    this.seenArchetypes.add(type);
+    this.showLieutenantCard('intel', '◆ NEW HOSTILE SIGNATURE ◆', info.label, '', info.intro);
+  }
+
+  updateLieutenantHUD() {
+    const card = this.ltCardTimer > 0 ? this.ltCard : null;
+    const cardEl = document.getElementById('lt-card');
+    if (!cardEl) return;
+    if (card && card.id !== this.ltCardShownId) {
+      this.ltCardShownId = card.id;
+      document.getElementById('lt-card-kicker').textContent = card.kicker;
+      document.getElementById('lt-card-name').textContent = card.name;
+      document.getElementById('lt-card-epithet').textContent = card.epithet;
+      document.getElementById('lt-card-detail').textContent = card.detail;
+      cardEl.className = `lt-card lt-card-${card.kind}`;
+      cardEl.style.animation = 'none';
+      void cardEl.offsetWidth;
+      cardEl.style.animation = '';
+    }
+    setHidden(cardEl, !card);
+    if (card) cardEl.classList[this.ltCardTimer < 0.4 ? 'add' : 'remove']('lt-card-out');
   }
 
   showBossCard(kind, kicker, e, detail) {
@@ -1456,24 +1615,74 @@ export class Game {
     const waveScale = this.getWaveScale();
     const pt = this.spawnAroundPlayer(440, 740);
 
-    const roll = Math.random();
-    if (roll < 0.44) {
+    // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
+    const pack = pickWavePack(this.wave);
+    const em = this.enemyManager;
+    const queuedBefore = em.spawnIndicators.length;
+    const spread = (type, count, minD = 420, maxD = 720) => {
+      for (let i = 0; i < count; i++) {
+        const p2 = this.spawnAroundPlayer(minD, maxD);
+        em.queueSpawn(type, p2.x, p2.y, waveScale);
+      }
+    };
+    const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
+    if (pack === 'swarm') {
       const count = Math.min(34, 12 + this.wave * 2);
-      this.enemyManager.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
-    } else if (roll < 0.66) {
+      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight);
+    } else if (pack === 'skirmish') {
       for (let i = 0; i < 3 + Math.floor(this.wave * 0.6); i++) {
         const p2 = this.spawnAroundPlayer(420, 720);
-        this.enemyManager.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
+        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale);
       }
-    } else if (roll < 0.86) {
-      const count = 2 + Math.floor(this.wave * 0.4);
+    } else if (pack === 'splitter') {
+      spread('splitter', 2 + Math.floor(this.wave * 0.4), 450, 750);
+    } else if (pack === 'blackhole') {
+      em.queueSpawn('blackhole', pt.x, pt.y, waveScale);
+    } else if (pack === 'bruiser') {
+      spread('bruiser', Math.min(3, 1 + Math.floor(since('bruiser') / 4)), 460, 720);
+    } else if (pack === 'gunner') {
+      spread('gunner', Math.min(5, 2 + Math.floor(since('gunner') / 4)), 520, 760);
+    } else if (pack === 'shielder') {
+      // Shielders lead a pinwheel escort, so the pack advances behind the plates.
+      const count = Math.min(3, 1 + Math.floor(since('shielder') / 5));
       for (let i = 0; i < count; i++) {
-        const p2 = this.spawnAroundPlayer(450, 750);
-        this.enemyManager.queueSpawn('splitter', p2.x, p2.y, waveScale);
+        const p2 = this.spawnAroundPlayer(460, 720);
+        em.queueSpawn('shielder', p2.x, p2.y, waveScale);
+        for (let k = 0; k < 2; k++) em.queueSpawn('pinwheel', p2.x + (k ? 40 : -40), p2.y + 34, waveScale);
       }
-    } else {
-      this.enemyManager.queueSpawn('blackhole', pt.x, pt.y, waveScale);
+    } else if (pack === 'blinker') {
+      spread('blinker', Math.min(7, 3 + Math.floor(since('blinker') / 3)), 480, 760);
+    } else if (pack === 'conduit') {
+      // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
+      em.queueSpawn('conduit', pt.x, pt.y, waveScale);
+      for (let k = 0; k < 3; k++) {
+        const a = (k * Math.PI * 2) / 3;
+        em.queueSpawn('pinwheel', pt.x + Math.cos(a) * 60, pt.y + Math.sin(a) * 60, waveScale);
+      }
+      if (this.wave >= 8) em.queueSpawn('bruiser', pt.x + 80, pt.y, waveScale);
     }
+    // Only announce a newcomer that actually made it past the enemy cap.
+    if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+  }
+
+  // Auto-aim: nearest target, but a hull whose shield plates face the ship counts as 260 px further
+  // away, so the turret prefers something it can actually hurt and swings back once you flank.
+  findAutoAimTarget(x, y) {
+    const enemies = this.enemyManager.enemies;
+    let best = null;
+    let bestScore = Infinity;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      const dx = e.x - x;
+      const dy = e.y - y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const score = e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
   }
 
   findNearestEnemy(x, y) {
@@ -1513,7 +1722,7 @@ export class Game {
     const maxRockRadius = manager.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
     this.projectileEnemyIndex ||= new SpatialIndex();
     this.projectileEnemyIndex.rebuild(this.enemyManager.enemies);
-    const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.radius), 0);
+    const maxEnemyRadius = this.enemyManager.enemies.reduce((max, enemy) => Math.max(max, enemy.shieldArc ? enemy.shieldRadius : enemy.radius), 0);
     // Death effects may append shrapnel; those projectiles start moving next tick.
     const pending = this.bullets;
     this.bullets = [];
@@ -1528,6 +1737,14 @@ export class Game {
       const midX = (x0 + b.x) / 2, midY = (y0 + b.y) / 2;
       for (const e of this.projectileEnemyIndex.query(midX, midY, segmentRadius + maxEnemyRadius + b.radius)) {
         if (e.dead || b.hitEnemies.has(e)) continue;
+        // Shield plates (Shielders, SHIELDED lieutenants) stop shots arriving from the front.
+        if (e.shieldArc) {
+          const ts = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.shieldRadius + b.radius);
+          if (ts !== null && shieldBlocks(e, x0 + (b.x - x0) * ts, y0 + (b.y - y0) * ts, b.vx, b.vy)) {
+            hits.push({ t: ts, shield: e });
+            continue;
+          }
+        }
         const t = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.radius + b.radius);
         if (t !== null) hits.push({ t, enemy: e });
       }
@@ -1546,6 +1763,15 @@ export class Game {
           const hx = x0 + (b.x - x0) * hit.t;
           const hy = y0 + (b.y - y0) * hit.t;
           this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          break;
+        }
+        if (hit.shield) {
+          if (hit.shield.dead) continue; // killed earlier in this segment: its plates are gone
+          blocked = true;
+          const hx = x0 + (b.x - x0) * hit.t;
+          const hy = y0 + (b.y - y0) * hit.t;
+          hit.shield.shieldFlash = 1;
+          this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(hy - hit.shield.y, hx - hit.shield.x), 1.1, 4, 195, 6);
           break;
         }
         const e = hit.enemy;
@@ -2059,6 +2285,7 @@ export class Game {
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
+    if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
     if (held) {
       this.updateHUD();
       return;
@@ -2098,6 +2325,7 @@ export class Game {
 
     // Scheduled encounters retain their wave scaling and get the first free slots.
     this.processPendingBossSpawns();
+    this.updateLieutenantSchedule();
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnWavePack();
@@ -2183,7 +2411,7 @@ export class Game {
     if (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)) {
       p.angle = Math.atan2(gp.aimY, gp.aimX);
     } else if (this.autoAim) {
-      const nearest = this.findNearestEnemy(p.x, p.y);
+      const nearest = this.findAutoAimTarget(p.x, p.y);
       if (nearest) {
         p.angle = Math.atan2(nearest.y - p.y, nearest.x - p.x);
       } else {
@@ -2336,33 +2564,29 @@ export class Game {
       for (const boss of arrivals) this.onBossArrived(boss);
       arrivals.length = 0;
     }
+    if (this.enemyManager.shotsFired !== this.enemyShotsHeard) {
+      this.enemyShotsHeard = this.enemyManager.shotsFired;
+      this.sound.playEnemyShot?.();
+    }
+    const ltArrivals = this.enemyManager.lieutenantArrivals;
+    if (ltArrivals?.length) {
+      for (const lt of ltArrivals) this.onLieutenantArrived(lt);
+      ltArrivals.length = 0;
+    }
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
+    if (this.updateEnemyBullets(dt)) return;
 
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
-          p.shieldFlash = 1;
-          const hitDmg = this.contactDamage(e);
-          p.hp -= hitDmg;
-          p.invuln = 0.65;
-          this.multiplier = Math.max(1.0, this.multiplier * 0.75);
-          this.addShake(16);
-          this.chromaFlash = 0.5;
-          this.sound.playExplosion(1.8);
-          this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
-          this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
+          this.damagePlayer(this.contactDamage(e));
 
-          if (!e.isBoss) {
-            this.killEnemy(e);
-          }
-          if (p.hp <= 0) {
-            p.hp = 0;
-            this.updateHUD();
-            this.triggerGameOver();
-            return;
-          }
+          // Sturdy hulls (Bruisers, Lieutenants) bounce off; everything else but bosses pops on impact.
+          if (e.sturdy) bounceFromShip(e, p.x, p.y);
+          else if (!e.isBoss) this.killEnemy(e);
+          if (this.endRunIfDead()) return;
         }
       }
     }
@@ -2490,6 +2714,7 @@ export class Game {
     weaponsBar.innerHTML = tags.join('');
 
     this.updateBossHUD(this.getBossHudModel());
+    this.updateLieutenantHUD();
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -2539,8 +2764,8 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      ctx.fillStyle = e.isBoss ? '#ff2a55' : 'rgba(255, 0, 127, 0.75)';
-      const sz = e.isBoss ? 4 : 1.8;
+      ctx.fillStyle = e.isBoss ? '#ff2a55' : e.isLieutenant ? '#eef2ff' : 'rgba(255, 0, 127, 0.75)';
+      const sz = e.isBoss ? 4 : e.isLieutenant ? 3.2 : 1.8;
       ctx.fillRect(mx + e.x * scaleX - sz * 0.5, my + e.y * scaleY - sz * 0.5, sz, sz);
     }
 
@@ -2598,6 +2823,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
+      else if (enemies[i].isLieutenant) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#dfe6ff', 'LT');
     }
     if (soonest < Infinity) {
       const pulse = 0.5 + 0.5 * Math.cos(soonest * Math.PI * 5);
