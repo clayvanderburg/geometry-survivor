@@ -65,7 +65,6 @@
               <input id="hud-volume-slider" type="range" min="0" max="200" step="5" value="100" />
               <span id="hud-volume-label">100%</span>
             </div>
-            <button id="btn-tuner-toggle" class="hud-btn" style="border-color:var(--gold); color:var(--gold);" title="Toggle Live Parameter Tuner [T]">⚙ TUNER [T]</button>
           </div>
         </div>
 
@@ -174,7 +173,6 @@
           <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
-          <button id="btn-pause-tuner" class="neon-btn" style="border-color:var(--gold); color:var(--gold); padding:12px 18px; font-size:13px;">⚙ TOGGLE LIVE TUNING DRAWER [T]</button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
         </div>
@@ -210,7 +208,7 @@
           <div style="font-size:13px; font-weight:800; color:var(--cyan); letter-spacing:1.5px;">⚙ LIVE TUNING STUDIO</div>
           <div style="font-size:10px; color:#8ba3c7;">Changes apply live! Copy &amp; paste to Agent when happy.</div>
         </div>
-        <button id="btn-close-tuner" class="hud-btn">✕ [T]</button>
+        <button id="btn-close-tuner" class="hud-btn">✕</button>
       </div>
       <div class="tuner-drawer-actions">
         <button id="btn-drawer-copy" class="hud-btn active" style="border-color:var(--gold); color:var(--gold);">📋 COPY TUNING FOR AGENT</button>
@@ -280,7 +278,7 @@
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
-              <span><b>[T] Key:</b> Live Tuning Studio · <b>[G]:</b> Field Guide</span>
+              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
@@ -288,7 +286,6 @@
 
         <div class="title-actions" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
           <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
-          <a href="tuner.html" target="_blank" class="neon-btn" style="text-decoration:none; border-color:var(--gold); color:var(--gold); padding:14px 20px; font-size:13px;">⚙ OPEN TUNING STUDIO</a>
         </div>
       </div>
     </div>

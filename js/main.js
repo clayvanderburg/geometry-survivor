@@ -439,7 +439,8 @@ export class Game {
         }
       }
 
-      if (code === 'KeyT') {
+      // Dev tuner: hidden from players, opened only with Shift+Alt+T (Shift+Option+T on Mac).
+      if (code === 'KeyT' && e.shiftKey && e.altKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         this.toggleTunerDrawer();
       }
@@ -516,13 +517,11 @@ export class Game {
 
     const pauseBtn = document.getElementById('btn-pause');
     const resumeBtn = document.getElementById('btn-resume-game');
-    const pauseTunerBtn = document.getElementById('btn-pause-tuner');
     const pauseRestartBtn = document.getElementById('btn-pause-restart');
     const pauseDmgNumsBtn = document.getElementById('btn-pause-dmgnums');
 
     if (pauseBtn) pauseBtn.addEventListener('click', () => this.togglePause());
     if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
-    if (pauseTunerBtn) pauseTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
@@ -576,9 +575,7 @@ export class Game {
       });
     }
 
-    const tunerBtn = document.getElementById('btn-tuner-toggle');
     const closeTunerBtn = document.getElementById('btn-close-tuner');
-    if (tunerBtn) tunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
     if (closeTunerBtn) closeTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
   }
 
