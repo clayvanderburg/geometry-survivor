@@ -67,8 +67,9 @@ npm start
    - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.
    - **Hull-Hugging Shield Barrier** (`drawPlayerShield` in `js/ship-renderer.js`) wraps the crab's silhouette and is also the contact hitbox (`shieldTouches`). Its charged arc shows current shield %, thickness grows with max shield, color shifts blue → amber → critical red, and hits flash with a ripple. Hue, padding and thickness are tunable.
 
-6. **Persistent Highscore Board & Void Armory Meta-Progression (`js/progression.js`)**
+6. **Global + Local Highscore Board & Void Armory Meta-Progression (`js/progression.js`, `js/leaderboard.js`)**
    - Custom **Pilot Callsign / Name Entry** on Title and Game Over screens.
+   - **GLOBAL** tab (default): the shared top 50 of everyone who plays, from `/api/scores` (see [Global leaderboard](#global-leaderboard)). Every finished run is submitted automatically under the callsign, your own runs are highlighted, and the game-over screen shows **GLOBAL RANK #n**. **MY RUNS** tab: this device's top 8 (`localStorage`), which is also what GLOBAL falls back to, with an OFFLINE note, when the API can't be reached.
    - Spend **Void Cores (❖)** harvested during runs on 6 permanent Armory upgrades persisted in `localStorage` (`vectra_survivor_save_v2`).
 
 7. **Live Tuning & Dev Sandbox Studio (`tuner.html` + `js/config.js` + hidden `Shift+Alt+T` Drawer)**
@@ -96,6 +97,39 @@ npm start
 
 ---
 
+## Global leaderboard
+
+The title and game-over boards share scores between all players through a **Netlify Function** backed by **Netlify Blobs**. Both are built into the Netlify site this game already deploys to: no extra account, API key or Netlify UI setup is needed. The browser game itself still loads no third-party code.
+
+**How it works**
+
+- `netlify/functions/scores.mjs` is served at **`/api/scores`** (functions v2, `config.path`). `netlify.toml` points `[functions]` at `netlify/functions`; Netlify installs `@netlify/blobs` from `package.json` and bundles the function with esbuild alongside the static `dist` publish.
+  - `GET /api/scores` → `{ entries, total, boardSize }`: the top 50 runs, each `{ id, name, score, wave, level, kills, multiplier, time, date }` (`time` = seconds survived, `date` = server time, ISO).
+  - `POST /api/scores` with a JSON run `{ name, score, wave, level, kills, multiplier, time }` → `201 { accepted, onBoard, rank, id, name, censored, entries, ... }`; `400` malformed, `413` too big, `415` not JSON, `422` implausible, `429` cooldown (with `Retry-After`), `503` too much write contention, `405` anything else. Responses are `no-store`; there are no CORS headers (the game calls its own origin).
+- The board is **one JSON blob** (`board-v1` in the `leaderboard` store) holding the top **100** runs, with at most **5 per callsign**. Each submission re-reads the blob and writes it back with `onlyIfMatch: <etag>` (or `onlyIfNew` for the first run); on a conflict it re-reads and retries with jittered backoff (up to 8 tries), so simultaneous submissions all land.
+- The logic lives in `netlify/lib/leaderboard.mjs` (storage-agnostic, unit-tested with an in-memory store); `js/leaderboard-rules.js` holds the callsign alphabet shared by browser and server, so the game never sends a name the server rejects.
+- In the browser, `js/leaderboard.js` fetches with a 4.5 s timeout (6 s for submits). Offline, on the local `npm start` server (no function: `/api/scores` is a 404), or on a slow network, GLOBAL falls back to MY RUNS with an OFFLINE note; nothing blocks play or throws. Runs flown with the dev tuner/sandbox (or saved non-default tuning) are not submitted.
+
+**Abuse protection (casual, not bulletproof)**
+
+- Every field is type-checked and range-checked; integers are floored, multiplier/time rounded; unknown fields are dropped; bodies over 2 KB are refused.
+- Plausibility envelope, fitted to the headless balance sim's best god-mode run (wave 41, level 78, 19.8k kills, 2.05 billion points in 894 s) and widened 3-10x: wave must match time survived (one wave per 22 s, ±1); kills ≤ 60/s + 100; level ≤ 10 + time/4; multiplier ≤ 1 + 8 × kills; score ≤ min(600 × t^2.5, 60 × (kills + 20)²) + 50,000. Bounds are `PLAUSIBILITY` in `netlify/lib/leaderboard.mjs`; widen them there if balance changes push real runs past them.
+- Callsigns: trimmed, upper-cased, 1-18 of `A-Z 0-9 space _ - . / ! ? # * + : '`. A small profanity filter (whole words, plus substrings after stripping punctuation and leetspeak) replaces offensive names with `CENSORED PILOT`.
+- Rate limit: one submission per client IP every 20 s, stored as `ratelimit/<sha256(salt:ip)>` with a conditional write (so a burst of parallel requests can't all pass). Raw IPs are never stored. Set an optional `LEADERBOARD_SALT` environment variable in the Netlify UI to make the hashes unguessable from this public repo.
+- **Scores are reported by the browser, so they can still be faked.** Anyone can read the bounds above and POST a believable run, or edit the game in dev tools. The checks only stop obviously impossible numbers, malformed data, junk names and spam.
+
+**Running it locally**: `npm start` has no function, so the board shows OFFLINE (by design). To exercise the real API, run `npx netlify dev`, which serves the site plus `/api/scores` with a local Blobs sandbox.
+
+**Moderating / resetting the board** (there is deliberately no delete endpoint):
+
+- *Netlify UI*: open the project, go to **Blobs**, pick the `leaderboard` store, and delete the `board-v1` entry to wipe the board (it is recreated by the next run). `ratelimit/…` entries are disposable and can be deleted at any time.
+- *Netlify CLI* (`npx netlify link` first):
+  - reset: `npx netlify blobs:delete leaderboard board-v1`
+  - remove one cheater: `npx netlify blobs:get leaderboard board-v1 > board.json`, delete their entries from `entries`, then `npx netlify blobs:set leaderboard board-v1 --input board.json`
+  - inspect: `npx netlify blobs:list leaderboard`
+
+---
+
 ## File Map (For Multi-Agent Handoffs)
 
 - `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, Field Guide (`#guide-modal`), and slide-over `#tuner-drawer`.
@@ -115,7 +149,11 @@ npm start
 - `js/weapon-scaling.js` — Every weapon/crit/tag/status formula (`weaponDamage`, AREA radii, crit multipliers, burn/chill/corrode numbers) plus `WEAPON_TAGS` and `TAG_INFO` chip colors; firing code and card previews both read it.
 - `js/upgrade-cards.js` — Card headline + exact before → after rows (`STAT_ROWS`), tag chips and card HTML.
 - `js/status-effects.js` — BURN / CHILL / CORRODE application, fixed-tick timers and burn DoT, corrosion damage multiplier, batched status overlays.
-- `js/progression.js` — Persistent Highscore Leaderboard (with editable Pilot Callsign), Void Armory meta-upgrades and Field Guide unlocks (`guide.seen` / `guide.fresh`).
+- `js/progression.js` — Persistent local Highscore Leaderboard (with editable Pilot Callsign), Void Armory meta-upgrades and Field Guide unlocks (`guide.seen` / `guide.fresh`).
+- `js/leaderboard.js` — Global leaderboard client: `/api/scores` fetch/submit with timeouts, OFFLINE fallback, board view model (`buildBoardView`), GLOBAL / MY RUNS tabs, game-over rank line.
+- `js/leaderboard-rules.js` — Callsign alphabet (`sanitizeCallsign`) shared by the game and the function.
+- `netlify/functions/scores.mjs` — The `/api/scores` Netlify Function (wires `@netlify/blobs` `getStore` into the handler).
+- `netlify/lib/leaderboard.mjs` — Leaderboard handler: validation, plausibility envelope, profanity filter, IP rate limit, ETag compare-and-swap writes.
 - `js/field-guide.js` — Field Guide data: hostile entries (text, tips, exact stats from the real config), mechanics, the weapons adapter over `UPGRADE_POOL`, and encounter detection (`detectEncounters`).
 - `js/field-guide-scenes.js` — Animated hostile previews (`GuidePreview`) built on the real enemy AI/draw code, plus locked silhouettes.
 - `js/field-guide-ui.js` — Field Guide screen: tab HTML builders, NEW badges, visible-only preview loop.
@@ -127,11 +165,11 @@ npm start
 
 ## Engineering checks
 
-Requires Node.js 20 or newer; runtime and tests have no package dependencies. Run `npm test` for regression checks. GitHub Actions runs the same checks on pushes and pull requests.
+Requires Node.js 20 or newer; the game and the tests have no package dependencies (only the Netlify Function uses `@netlify/blobs`, installed by Netlify at deploy time). Run `npm test` for regression checks. GitHub Actions runs the same checks on pushes and pull requests.
 
 The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy neighbors, projectile avoidance, and primary projectile collisions use spatial queries. Enemy capacity includes active and pending spawns (default 200). Game and Studio share `js/ship-renderer.js`. Saved tuning and progression are normalized on load.
 
-Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → NEW WEAPON pick → pause (sliders, damage numbers, loadout discard + confirm) → Field Guide → chest → game over with a simulated gamepad only.
+Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → NEW WEAPON pick → pause (sliders, damage numbers, loadout discard + confirm) → Field Guide → chest → game over with a simulated gamepad only. `node tools/leaderboard-smoke.cjs <playwright-module-path>` checks the global board offline (aborted API), with a slow API (timeout fallback) and against a faked `/api/scores` (tabs by mouse and controller, auto-submit, GLOBAL RANK line), saving `leaderboard-*-smoke.png` screenshots.
 
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
 
