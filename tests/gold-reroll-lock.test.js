@@ -349,3 +349,20 @@ test('the level-up modal shows the gold counter, reroll cost and lock toggles', 
     globalThis.document.getElementById = saved;
   }
 });
+
+test('a carried-over lock is still the only lock: locking another card in the new hand moves it', () => {
+  const g = freshGame(100);
+  plainHand(g);
+  g.toggleCardLock(2);
+  const first = g.currentChoices[2];
+  g.selectUpgrade(0); // pass it over: it carries into the next hand, still locked
+  plainHand(g);
+  assert.equal(g.handLock.card.id, first.id);
+  const other = g.currentChoices.findIndex((c) => c !== g.handLock.card);
+  g.toggleCardLock(other);
+  assert.equal(g.handLock.card, g.currentChoices[other], 'the lock moved to the new card');
+  assert.equal(g.currentChoices.filter((c) => g.handLock?.card === c).length, 1, 'exactly one locked card');
+  const moved = g.currentChoices[other];
+  g.selectUpgrade((other + 1) % g.currentChoices.length); // pass over the newly locked card
+  assert.equal(g.carriedLock.card, moved, 'only the new lock carries over; the old one is gone');
+});
