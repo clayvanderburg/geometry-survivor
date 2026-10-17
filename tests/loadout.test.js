@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   UPGRADE_POOL, UPGRADE_BY_ID, rollUpgrades, rollLevelUpHand, rollWeaponPicks, acquireWeapon, discardWeapon, eligibleUpgrades,
-  canOfferNewWeapon, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID
+  canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID
 } = await import('../js/upgrades.js');
 const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons } = await import('../js/loadout.js');
 const { STAT_ROWS, describeWeaponPick, describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
@@ -88,25 +88,66 @@ test('equipped weapon level-ups are weighted so a typical hand is mostly about y
   assert.equal(upgradeKind(UPGRADE_BY_ID.evo_pulsar), 'evolution');
 });
 
-test('NEW WEAPON shows up by chance and is guaranteed after the pity count', () => {
-  const p = freshGame().player;
-  withTuning({ newWeaponChance: 0, newWeaponPity: 3 }, () => {
-    const hands = [];
-    for (let i = 0; i < 9; i++) hands.push(rollLevelUpHand(p, 3).some((c) => c.id === NEW_WEAPON_ID));
-    assert.deepEqual(hands, [false, false, true, false, false, true, false, false, true]);
+const NO_NEW_WEAPON = { newWeaponChanceBy1: 0, newWeaponChanceBy2: 0, newWeaponChanceBy3: 0, newWeaponChanceBy4: 0, newWeaponChanceBy5: 0 };
+const ALWAYS_NEW_WEAPON = { newWeaponChanceBy1: 1, newWeaponChanceBy2: 1, newWeaponChanceBy3: 1, newWeaponChanceBy4: 1, newWeaponChanceBy5: 1 };
+
+test('NEW WEAPON chance depends on weapons owned: 80/70/60/40/30%, none with no free slot', () => {
+  assert.deepEqual([1, 2, 3, 4, 5].map((n) => DEFAULT_TUNING[`newWeaponChanceBy${n}`]), [0.8, 0.7, 0.6, 0.4, 0.3]);
+  assert.deepEqual([1, 2, 3, 4, 5].map(newWeaponChanceFor), [0.8, 0.7, 0.6, 0.4, 0.3]);
+  withTuning({ newWeaponChanceBy3: 0.15 }, () => assert.equal(newWeaponChanceFor(3), 0.15, 'read live from TUNING'));
+  const keys = TUNING_SCHEMA.flatMap((grp) => grp.items).map((i) => i.key);
+  for (const k of ['newWeaponChanceBy1', 'newWeaponChanceBy2', 'newWeaponChanceBy3', 'newWeaponChanceBy4', 'newWeaponChanceBy5', 'newWeaponPityOne', 'newWeaponPity']) {
+    assert.ok(keys.includes(k) && k in DEFAULT_TUNING, `${k} has a tuner slider`);
+  }
+  assert.ok(!('newWeaponChance' in DEFAULT_TUNING), 'the flat chance is gone');
+  // Sampled rate per owned count (pity off), and 0 with every slot full.
+  const loadouts = [[], ['rockets'], ['rockets', 'missiles'], ['rockets', 'missiles', 'lightning'], ['rockets', 'missiles', 'lightning', 'orbitals']];
+  loadouts.forEach((extra, i) => {
+    const p = freshGame().player;
+    fill(p, extra);
+    let offered = 0;
+    withTuning({ newWeaponPityOne: 99, newWeaponPity: 99 }, () => withRandom(() => {
+      for (let k = 0; k < 2000; k++) if (rollLevelUpHand(p, 3).some((c) => c.isNewWeapon)) offered++;
+    }, lcg(40 + i)));
+    const want = newWeaponChanceFor(i + 1);
+    assert.ok(Math.abs(offered / 2000 - want) < 0.04, `${i + 1} owned: ${offered / 20}% vs ${want * 100}%`);
   });
-  withTuning({ newWeaponChance: 1, newWeaponPity: 99 }, () => {
-    const hand = rollLevelUpHand(p, 3);
+  const full = freshGame().player;
+  fill(full, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
+  withTuning(ALWAYS_NEW_WEAPON, () => { for (let k = 0; k < 50; k++) assert.ok(!rollLevelUpHand(full, 3).some((c) => c.isNewWeapon)); });
+});
+
+test('with one weapon NEW WEAPON is guaranteed on the 2nd hand in a row; with two or more after 4', () => {
+  assert.equal(DEFAULT_TUNING.newWeaponPityOne, 2);
+  assert.equal(DEFAULT_TUNING.newWeaponPity, 4);
+  const one = freshGame().player;
+  assert.equal(ownedWeapons(one).length, 1);
+  withTuning(NO_NEW_WEAPON, () => {
+    const hands = [];
+    for (let i = 0; i < 6; i++) hands.push(rollLevelUpHand(one, 3).some((c) => c.id === NEW_WEAPON_ID));
+    assert.deepEqual(hands, [false, true, false, true, false, true], 'never two hands in a row without one');
+  });
+  // Discarding down to one weapon (e.g. dropping Wing Rockets) brings the 1-weapon pity back.
+  const dropped = freshGame().player;
+  fill(dropped, ['rockets']);
+  discardWeapon(dropped, 'rockets');
+  withTuning(NO_NEW_WEAPON, () => {
+    assert.ok(!rollLevelUpHand(dropped, 3).some((c) => c.isNewWeapon));
+    assert.ok(rollLevelUpHand(dropped, 3).some((c) => c.isNewWeapon));
+  });
+  const two = freshGame().player;
+  fill(two, ['rockets']);
+  withTuning(NO_NEW_WEAPON, () => {
+    const hands = [];
+    for (let i = 0; i < 8; i++) hands.push(rollLevelUpHand(two, 3).some((c) => c.id === NEW_WEAPON_ID));
+    assert.deepEqual(hands, [false, false, false, true, false, false, false, true]);
+  });
+  withTuning({ ...ALWAYS_NEW_WEAPON, newWeaponPity: 99 }, () => {
+    const hand = rollLevelUpHand(two, 3);
     assert.equal(hand.length, 3);
     assert.equal(hand.filter((c) => c.isNewWeapon).length, 1, 'one NEW WEAPON card in a 3-card hand');
     assert.equal(new Set(hand.map((c) => c.id)).size, 3);
   });
-  // With the default tuning (20% chance, guaranteed every 6th hand) NEW WEAPON is in ~27% of hands
-  // while slots are free: 1 / E[hands per offer] = 0.2 / (1 - 0.8^6).
-  let offered = 0;
-  const q = freshGame().player;
-  withRandom(() => { for (let i = 0; i < 600; i++) if (rollLevelUpHand(q, 3).some((c) => c.isNewWeapon)) offered++; }, lcg(3));
-  assert.ok(offered / 600 > 0.22 && offered / 600 < 0.33, `NEW WEAPON in ${offered} of 600 hands`);
 });
 
 test('six weapons fill the loadout: no more NEW WEAPON cards and no seventh weapon', () => {
@@ -117,7 +158,7 @@ test('six weapons fill the loadout: no more NEW WEAPON cards and no seventh weap
   assert.equal(canOfferNewWeapon(p), false);
   assert.equal(acquireWeapon(p, 'drones'), false);
   assert.equal(p.weapons.drones, 0);
-  withTuning({ newWeaponChance: 1, newWeaponPity: 1 }, () => {
+  withTuning({ ...ALWAYS_NEW_WEAPON, newWeaponPityOne: 1, newWeaponPity: 1 }, () => {
     for (let i = 0; i < 50; i++) assert.ok(!rollLevelUpHand(p, 3).some((c) => c.isNewWeapon));
   });
 });
@@ -125,7 +166,7 @@ test('six weapons fill the loadout: no more NEW WEAPON cards and no seventh weap
 test('picking NEW WEAPON opens a choice of 3 unequipped weapons; picking one equips it at LV 1', () => {
   const g = freshGame();
   const p = g.player;
-  withTuning({ newWeaponChance: 1 }, () => g.triggerLevelUp());
+  withTuning(ALWAYS_NEW_WEAPON, () => g.triggerLevelUp());
   assert.equal(g.state, 'UPGRADE');
   const idx = g.currentChoices.findIndex((c) => c.isNewWeapon);
   assert.ok(idx >= 0);
@@ -310,7 +351,7 @@ test('the XP curve is a stepped line, driven by TUNING', () => {
   assert.ok(xpToNextLevel(1) <= 40 && xpToNextLevel(10) < 250, 'early levels come quickly');
   withTuning({ xpCurveBase: 20 }, () => assert.equal(xpToNextLevel(1), 20));
   const keys = TUNING_SCHEMA.flatMap((grp) => grp.items).map((i) => i.key);
-  for (const k of ['xpCurveBase', 'xpCurveStep', 'xpCurveStepMid', 'xpCurveStepLate', 'weaponSlots', 'newWeaponChance', 'newWeaponPity', 'weaponLevelWeight']) {
+  for (const k of ['xpCurveBase', 'xpCurveStep', 'xpCurveStepMid', 'xpCurveStepLate', 'weaponSlots', 'newWeaponChanceBy1', 'newWeaponPity', 'weaponLevelWeight']) {
     assert.ok(keys.includes(k) && k in DEFAULT_TUNING, k);
   }
 });
@@ -327,7 +368,7 @@ test('when everything is maxed and the loadout is full, level-ups fall back to a
   // A free slot still offers NEW WEAPON even when every other card is maxed.
   discardWeapon(p, 'mines');
   for (const u of UPGRADE_POOL) if (!p.upgradeLevels[u.id] && !['mines', 'evo_siege'].includes(u.id)) p.upgradeLevels[u.id] = u.maxLevel;
-  const hand = withTuning({ newWeaponChance: 0, newWeaponPity: 99 }, () => rollLevelUpHand(p, 3));
+  const hand = withTuning({ ...NO_NEW_WEAPON, newWeaponPityOne: 99, newWeaponPity: 99 }, () => rollLevelUpHand(p, 3));
   assert.deepEqual(hand.map((c) => c.id), [NEW_WEAPON_ID], 'nothing else left: NEW WEAPON regardless of chance');
 });
 

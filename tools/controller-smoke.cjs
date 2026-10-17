@@ -49,11 +49,12 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     // A plain hand (no NEW WEAPON card this time) so A applies an upgrade straight away.
     await page.evaluate(async () => {
       const { TUNING } = await import('/js/config.js');
-      const chance = TUNING.newWeaponChance;
-      TUNING.newWeaponChance = 0;
+      const keys = Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance'));
+      const saved = keys.map(k => TUNING[k]);
+      keys.forEach(k => { TUNING[k] = 0; });
       __game.player.newWeaponDrought = 0;
       __game.triggerLevelUp();
-      TUNING.newWeaponChance = chance;
+      keys.forEach((k, i) => { TUNING[k] = saved[i]; });
     });
     await page.waitForTimeout(450);
     await press(RIGHT);
