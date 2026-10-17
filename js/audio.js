@@ -1,6 +1,9 @@
 // Procedural WebAudio Arcade Synth, Sub-Bass FX & High-Gain Interactive Music Sequencer
 import { TUNING } from './config.js';
 
+// Sixteenth steps of the boss-fight riff inside each bar.
+const BOSS_RIFF_STEPS = [0, 3, 6, 8, 11, 14];
+
 export class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -32,6 +35,7 @@ export class SoundEngine {
     this.nextNoteTime = 0;
     this.intensity = 0.35; // 0.0 (calm) -> 1.0 (full swarm overdrive)
     this.isMuffled = false;
+    this.bossStage = 0; // 0 none, 1 boss warning (music drops out), 2 boss fight (full + boss riff)
     this.lastBeatTime = -Infinity;
     this.pendingBeats = [];
     this.schedulerId = null;
@@ -134,14 +138,18 @@ export class SoundEngine {
     return this.enabled;
   }
 
-  setMusicState({ intensity = 0.35, muffled = false }) {
+  setMusicState({ intensity = 0.35, muffled = false, boss = this.bossStage }) {
     this.intensity = Math.max(0.15, Math.min(1.0, intensity));
     this.isMuffled = muffled;
+    this.bossStage = boss;
     if (this.musicFilter && this.ctx) {
+      // A boss warning sweeps the mix down into a tense drop; the arrival snaps it wide open.
       const targetFreq = muffled
         ? 900
-        : 1800 + this.intensity * 4800;
-      this.musicFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
+        : boss === 1
+        ? 1000
+        : 1800 + this.intensity * 4800 + (boss === 2 ? 1200 : 0);
+      this.musicFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, boss === 1 && !muffled ? 0.35 : 0.1);
     }
   }
 
@@ -237,8 +245,11 @@ export class SoundEngine {
       this.playSnare(time, this.isMuffled ? 0.22 : 0.42 + this.intensity * 0.18);
     }
 
+    // Boss warning drop: only kick and bass keep driving under the klaxon.
+    const warningDrop = this.bossStage === 1 && !this.isMuffled;
+
     // 4. Crisp 16th Hi-Hats
-    if (!this.isMuffled) {
+    if (!this.isMuffled && !warningDrop) {
       if (stepInBar % 2 === 1 || (this.intensity > 0.45 && stepInBar % 2 === 0)) {
         const isOpen = stepInBar % 4 === 2;
         this.playHiHat(time, isOpen ? 0.1 : 0.04, isOpen ? 0.24 : 0.13);
@@ -248,14 +259,32 @@ export class SoundEngine {
     // 5. Bright Cybernetic Lead Arpeggiator (active right from the start, intensifies with swarms!)
     const arpOffsets = [24, 27, 31, 36, 39, 36, 31, 27];
     const arpNote = rootMidi + arpOffsets[stepInBar % arpOffsets.length];
-    if (this.intensity > 0.4 || stepInBar % 2 === 0) {
+    if (!warningDrop && (this.intensity > 0.4 || stepInBar % 2 === 0)) {
       this.playArpNote(time, this.midiToFreq(arpNote), stepDur * 0.8);
     }
 
     // 6. Warm Synth Pad Chord Stab on Bar Downbeat (stepInBar === 0)
-    if (stepInBar === 0) {
+    if (stepInBar === 0 && !warningDrop) {
       this.playChordPad(time, rootMidi + 24, stepDur * 14);
     }
+
+    // 7. Boss fight riff: syncopated square stabs (3-3-2 feel) an octave over the bass root.
+    if (this.bossStage === 2 && !this.isMuffled && BOSS_RIFF_STEPS.includes(stepInBar)) {
+      this.playBossStab(time, this.midiToFreq(rootMidi + 24 + (stepInBar === 14 ? 7 : 0)), stepDur * 1.6);
+    }
+  }
+
+  playBossStab(t, freq, dur) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.11, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain);
+    gain.connect(this.musicFilter);
+    osc.start(t);
+    osc.stop(t + dur + 0.01);
   }
 
   playKick(t) {
@@ -568,6 +597,94 @@ export class SoundEngine {
     osc.start(t);
     osc.stop(t + 0.25);
     this.playExplosion(1.7);
+  }
+
+  // Boss warning klaxon: three falling two-tone siren sweeps over a swelling sub drone.
+  playBossWarning() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (let k = 0; k < 3; k++) {
+      const start = t + k * 0.5;
+      [0, 1.007].forEach((detune) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(587.33 * (detune || 1), start);
+        osc.frequency.exponentialRampToValueAtTime(293.66 * (detune || 1), start + 0.42);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(0.085, start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(start);
+        osc.stop(start + 0.46);
+      });
+    }
+
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(36.71, t);
+    subGain.gain.setValueAtTime(0.001, t);
+    subGain.gain.linearRampToValueAtTime(0.26, t + 1.2);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 1.95);
+  }
+
+  // Boss arrival impact: sub boom, filtered noise blast and a D-minor power-chord stab.
+  playBossArrival() {
+    if (!this.enabled || !this.ctx) return;
+    this.playExplosion(2.6);
+    const t = this.ctx.currentTime;
+
+    const boom = this.ctx.createOscillator();
+    const boomGain = this.ctx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(96, t);
+    boom.frequency.exponentialRampToValueAtTime(30, t + 0.9);
+    boomGain.gain.setValueAtTime(0.42, t);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
+    boom.connect(boomGain);
+    boomGain.connect(this.sfxGain);
+    boom.start(t);
+    boom.stop(t + 1);
+
+    [73.42, 110, 146.83].forEach((f) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.1, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 1.32);
+    });
+  }
+
+  // Boss defeat payoff: a rising D-major fanfare arpeggio over the kill's own detonation.
+  playBossDefeat() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const notes = [587.33, 739.99, 880, 1174.66, 1479.98];
+    notes.forEach((f, i) => {
+      const start = t + 0.12 + i * 0.07;
+      const dur = i === notes.length - 1 ? 1.1 : 0.4;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, start);
+      gain.gain.setValueAtTime(0.16, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(start);
+      osc.stop(start + dur + 0.02);
+    });
   }
 
   playLevelUp() {

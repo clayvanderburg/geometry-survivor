@@ -3,6 +3,9 @@ import { TUNING } from './config.js';
 import { SpatialIndex } from './spatial-index.js';
 import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
 
+export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
+const BOSS_TELEGRAPH_RADIUS = 150;
+
 export class EnemyManager {
   constructor({ maxEnemies = 200 } = {}) {
     const budget = Number(maxEnemies);
@@ -11,6 +14,8 @@ export class EnemyManager {
     this.bulletIndex = new SpatialIndex(128);
     this.enemies = [];
     this.spawnIndicators = [];
+    // Bosses that materialized this tick; the game drains this to stage their entrance.
+    this.bossArrivals = [];
   }
 
   clear() {
@@ -18,9 +23,11 @@ export class EnemyManager {
     this.bulletIndex.rebuild([]);
     this.enemies = [];
     this.spawnIndicators = [];
+    this.bossArrivals = [];
   }
 
-  // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style)
+  // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
+  // `extra.warmup` lengthens the ring into a telegraph; the slot is reserved for its whole duration.
   queueSpawn(type, x, y, waveScale = 1, extra = {}) {
     if (this.enemies.length + this.spawnIndicators.length >= this.maxEnemies) return false;
     const config = this.getArchetype(type, waveScale, extra);
@@ -34,8 +41,8 @@ export class EnemyManager {
       x,
       y,
       config,
-      timer: extra.instant ? 0.02 : 0.55,
-      maxTimer: 0.55
+      timer: extra.instant ? 0.02 : (extra.warmup ?? 0.55),
+      maxTimer: extra.warmup ?? 0.55
     });
     return true;
   }
@@ -138,7 +145,9 @@ export class EnemyManager {
           score: 1500,
           xp: 30,
           vRot: 0.03,
-          isBoss: true
+          isBoss: true,
+          name: extra.name || BOSS_NAME,
+          epithet: extra.epithet || ''
         };
       default:
         return {
@@ -163,7 +172,7 @@ export class EnemyManager {
       if (sp.timer <= 0) {
         const c = sp.config;
         const angle = Math.random() * Math.PI * 2;
-        this.enemies.push({
+        const spawned = {
           type: sp.type,
           x: sp.x,
           y: sp.y,
@@ -184,8 +193,12 @@ export class EnemyManager {
           hitFlash: 0,
           trail: [],
           isBoss: !!c.isBoss,
+          name: c.name || null,
+          epithet: c.epithet || null,
           pulsePhase: Math.random() * Math.PI * 2
-        });
+        };
+        this.enemies.push(spawned);
+        if (spawned.isBoss) this.bossArrivals.push(spawned);
         grid.applyImpulse(sp.x, sp.y, 12, 65, c.hue);
         this.spawnIndicators.splice(i, 1);
       }
@@ -368,6 +381,10 @@ export class EnemyManager {
     // 1. Draw Materializing Spawn Rings
     for (let i = 0; i < this.spawnIndicators.length; i++) {
       const sp = this.spawnIndicators[i];
+      if (sp.config.isBoss) {
+        if (visible(sp.x, sp.y, BOSS_TELEGRAPH_RADIUS + 10)) this.drawBossTelegraph(ctx, sp);
+        continue;
+      }
       if (!visible(sp.x, sp.y, sp.config.radius * 2.6 + 4)) continue;
       const t = 1 - sp.timer / sp.maxTimer;
       const r = sp.config.radius * (2.6 - t * 1.6);
@@ -381,7 +398,7 @@ export class EnemyManager {
     // 2. Draw Enemies
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
-      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4 : e.radius * 1.4 + 24;
+      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4 : e.radius * (e.isBoss ? 2.2 : 1.4) + 24;
       if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
       const pulse = 1 + Math.sin(e.pulsePhase) * 0.08;
       const r = e.radius * pulse;
@@ -469,6 +486,8 @@ export class EnemyManager {
 
       ctx.restore();
 
+      if (e.isBoss) this.drawBossAura(ctx, e, r);
+
       // Boss HP bar floating above polyhedron
       if (e.isBoss) {
         const bw = 56;
@@ -518,5 +537,75 @@ export class EnemyManager {
     ctx.arc(0, 0, r * 0.74, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  // Warning telegraph at a reserved boss spawn: a hazard ring that closes in on the point while
+  // a gold core swells, flashing faster as arrival nears. Driven by the sim timer, not wall time.
+  drawBossTelegraph(ctx, sp) {
+    const t = Math.max(0, Math.min(1, 1 - sp.timer / sp.maxTimer));
+    const flash = 0.5 + 0.5 * Math.cos(sp.timer * Math.PI * (5 + t * 7));
+    const ringR = BOSS_TELEGRAPH_RADIUS * (1 - t * 0.62);
+    const spin = sp.timer * 1.6;
+
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = `hsla(${flash > 0.5 ? 348 : 48}, 100%, 60%, ${0.45 + flash * 0.45})`;
+    for (let s = 0; s < 10; s++) {
+      const a = spin + (s * Math.PI * 2) / 10;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, ringR, a, a + 0.36);
+      ctx.stroke();
+    }
+
+    // Crosshair ticks lock onto the arrival point.
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(255, 42, 85, ${0.35 + flash * 0.4})`;
+    ctx.beginPath();
+    for (let s = 0; s < 4; s++) {
+      const a = -spin * 0.5 + (s * Math.PI) / 2;
+      const c = Math.cos(a), d = Math.sin(a);
+      ctx.moveTo(sp.x + c * (ringR + 10), sp.y + d * (ringR + 10));
+      ctx.lineTo(sp.x + c * (ringR * 0.45), sp.y + d * (ringR * 0.45));
+    }
+    ctx.stroke();
+
+    const coreR = sp.config.radius * (0.25 + t * 0.85);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `hsla(48, 100%, 65%, ${0.35 + t * 0.6})`;
+    ctx.beginPath();
+    for (let s = 0; s < 8; s++) {
+      const a = spin * 2 + (s * Math.PI) / 4;
+      if (s === 0) ctx.moveTo(sp.x + Math.cos(a) * coreR, sp.y + Math.sin(a) * coreR);
+      else ctx.lineTo(sp.x + Math.cos(a) * coreR, sp.y + Math.sin(a) * coreR);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // Boss silhouette: a counter-rotating gold spike crown and a broken magenta halo around the
+  // cyan octagon, so a boss reads instantly against the regular polygons.
+  drawBossAura(ctx, e, r) {
+    const crown = -e.rotation * 1.5;
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = 'hsla(48, 100%, 62%, 0.9)';
+    ctx.beginPath();
+    for (let s = 0; s < 8; s++) {
+      const a = crown + (s * Math.PI * 2) / 8;
+      const a0 = a - 0.16, a1 = a + 0.16;
+      ctx.moveTo(e.x + Math.cos(a0) * r * 1.16, e.y + Math.sin(a0) * r * 1.16);
+      ctx.lineTo(e.x + Math.cos(a) * r * 1.62, e.y + Math.sin(a) * r * 1.62);
+      ctx.lineTo(e.x + Math.cos(a1) * r * 1.16, e.y + Math.sin(a1) * r * 1.16);
+    }
+    ctx.stroke();
+
+    const halo = e.rotation * 0.6;
+    const haloR = r * (1.95 + Math.sin(e.pulsePhase * 0.5) * 0.06);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `hsla(325, 100%, 62%, ${0.45 + Math.sin(e.pulsePhase) * 0.15})`;
+    for (let s = 0; s < 6; s++) {
+      const a = halo + (s * Math.PI * 2) / 6;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, haloR, a, a + 0.62);
+      ctx.stroke();
+    }
   }
 }

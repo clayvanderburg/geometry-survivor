@@ -31,7 +31,7 @@ npm start
    - **Weavers** (Emerald Darts): Sense incoming player fire and dodge perpendicular to bullet trajectories.
    - **Pinwheels** (Violet Rotating Squares) & **Splitters** (Golden Hexagons that fracture into 3 fast mini-triangles).
    - **Black Holes** (Crimson Singularities): Funnel the grid, swirl enemies, pickups and sparks inward, bend passing shots, and tug your ship. The tug is capped below your thrust (`js/gravity.js`), so holding away always escapes. Strengths live in the tuner's *Gravity Wells & Singularities* group.
-   - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache.
+   - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache. Each one is a staged event: a `bossWarningTime` (default 3 s) warning with a hazard strip countdown, klaxon, music drop, red screen frame, radar ring and off-screen arrow to the reserved spawn point; then an arrival shockwave and title card (e.g. `PRISMATIC DREADNOUGHT — WAVE 3 WARDEN`), a gold-crowned silhouette, and top-of-HUD health bars (up to 3 stacked, `+N MORE` beyond). A kill triggers a fixed-tick hit-stop + half-speed slow-mo, gold flash and a reward banner. Sandbox `+Boss` runs the same event.
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**
    - **Multi-Level Upgrades**: Level-up cards have a rare, Luck-scaled chance (`10% * luck` for `+2 Levels`, `3.5% * luck` for `+3 Levels`, before caps) to jump multiple levels at once.

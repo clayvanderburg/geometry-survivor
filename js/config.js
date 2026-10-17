@@ -62,7 +62,12 @@ export const DEFAULT_TUNING = {
   blackholeBulletBend: 0.22,
   blackholePickupPull: 0.3,
   singularityPull: 0.75,
-  singularityCollapseMult: 1.0
+  singularityCollapseMult: 1.0,
+
+  // 7. Boss Encounters (presentation only; boss stats and rewards are unchanged)
+  bossWarningTime: 3.0,
+  bossHitStop: 0.1,
+  bossSlowMo: 0.5
 };
 
 export const TUNING_SCHEMA = [
@@ -144,6 +149,14 @@ export const TUNING_SCHEMA = [
       { key: 'blackholePickupPull', label: 'Black Hole Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'singularityPull', label: 'Vortex Singularity Pull', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'px/t²' },
       { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' }
+    ]
+  },
+  {
+    group: '⚠ Boss Encounters',
+    items: [
+      { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
+      { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
+      { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' }
     ]
   }
 ];
