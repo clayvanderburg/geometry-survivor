@@ -10,7 +10,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import { UPGRADE_POOL, RARITY, rollUpgrades, applyUpgradeLevels } from './upgrades.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
-import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS } from './upgrade-cards.js';
+import { describeUpgrade, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText } from './upgrade-cards.js';
 import { META_UPGRADES, ProgressionManager } from './progression.js';
 import { wellFalloff, wellPullScale, playerPullCap } from './gravity.js';
 import {
@@ -637,7 +637,7 @@ export class Game {
       } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
         const bp = this.spawnAroundPlayer(300, 380);
         if (!this.enemyManager.queueSpawn('blackhole', bp.x, bp.y, this.getWaveScale())) {
-          this.showBanner('⚠ ENEMY CAP REACHED — BLACK HOLE NOT SPAWNED ⚠');
+          this.showBanner('⚠ ENEMY CAP REACHED — VORTEX NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -2483,7 +2483,7 @@ export class Game {
       const lv = p.upgradeLevels[upg.id];
       if (lv) {
         // Same level wording as the cards ("LV 3"); synergies are one-shot evolutions.
-        tags.push(`<span class="weapon-tag rarity-${upg.rarity}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
+        tags.push(`<span class="weapon-tag rarity-${upg.rarity}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}${bonusText(bonusLevels(p, upg.id))}`}</span>`);
       }
     }
     weaponsBar.innerHTML = tags.join('');

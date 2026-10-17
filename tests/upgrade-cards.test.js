@@ -23,7 +23,7 @@ globalThis.document = {
 const { Game } = await import('../js/main.js');
 const { TUNING } = await import('../js/config.js');
 const { UPGRADE_POOL, RARITY, applyUpgradeLevels } = await import('../js/upgrades.js');
-const { STAT_ROWS, describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
+const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
@@ -196,4 +196,15 @@ test('5x jackpot caches use compact cards so both rows of rewards fit one screen
   assert.ok(cards.some((card) => /\+1 more stat improved/.test(card.innerHTML)), 'trimmed rows are still counted');
   // Normal-size caches and level-up cards keep the full row list.
   assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic')).rows.length, 4);
+});
+
+test('Storm Protocol shows its extra missile launcher as +1 STORM on missile cards', () => {
+  const p = makePlayer();
+  p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
+  const missiles = UPGRADE_POOL.find((u) => u.id === 'missiles');
+  assert.equal(describeUpgrade(p, { ...missiles, levelJump: 1 }).bonus, null);
+  UPGRADE_POOL.find((u) => u.id === 'evo_tempest').apply(p);
+  const d = describeUpgrade(p, { ...missiles, levelJump: 1 });
+  assert.deepEqual(d.bonus, { amount: 1, label: 'STORM' });
+  assert.match(levelText(d), /LV 1 → LV 2 <span class="lv-bonus">\+1 STORM<\/span>/);
 });

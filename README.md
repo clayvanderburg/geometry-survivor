@@ -30,7 +30,7 @@ npm start
    - **Boid Swarmers** (Magenta Diamonds): Flock using separation, alignment, cohesion, and swirl.
    - **Weavers** (Emerald Darts): Sense incoming player fire and dodge perpendicular to bullet trajectories.
    - **Pinwheels** (Violet Rotating Squares) & **Splitters** (Golden Hexagons that fracture into 3 fast mini-triangles).
-   - **Black Holes** (Crimson Singularities): Funnel the grid, swirl enemies, pickups and sparks inward, bend passing shots, and tug your ship. The tug is capped below your thrust (`js/gravity.js`), so holding away always escapes. Strengths live in the tuner's *Gravity Wells & Singularities* group.
+   - **Vortexes** (Crimson Singularities, internal type `blackhole`): Funnel the grid, swirl enemies, pickups and sparks inward, bend passing shots, and tug your ship. The tug is capped below your thrust (`js/gravity.js`), so holding away always escapes. Strengths live in the tuner's *Gravity Wells & Singularities* group.
    - **Prismatic Dreadnought Bosses**: Spawn every 3 waves and drop a guaranteed Super Relic Supply Cache. Each one is a staged event: a `bossWarningTime` (default 3 s) warning with a hazard strip countdown, klaxon, music drop, red screen frame, radar ring and off-screen arrow to the reserved spawn point; then an arrival shockwave and title card (e.g. `PRISMATIC DREADNOUGHT — WAVE 3 WARDEN`), a gold-crowned silhouette, and top-of-HUD health bars (up to 3 stacked, `+N MORE` beyond). A kill triggers a fixed-tick hit-stop + half-speed slow-mo, gold flash and a reward banner. Sandbox `+Boss` runs the same event.
 
 4. **Luck Stat, Rare `+2`/`+3` Multi-Level Rolls & Relic Supply Cache Jackpots (`js/upgrades.js`, `js/main.js`)**
@@ -53,7 +53,7 @@ npm start
 8. **Damage & Hit Feedback (`js/damage-numbers.js`, `hitEnemy` in `js/main.js`)**
    - **Floating damage numbers** (on by default; toggle in the pause menu or with `[N]`, saved in `localStorage` as `vexolith_damage_numbers`). Rapid hits on one enemy from one weapon merge into a single rising total (new number after a 0.3 s gap or 1 s burst), live numbers are capped (`damageNumberCap`, default 48) and stacked at most three deep per spot, size grows gently with damage, and colour shows the source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, supernova gold, other (shrapnel, dash nova, bore, black-hole burst) white.
    - **Impacts**: white-hot hit flash + hull pop, a pooled cross-flare at each projectile hit, and mass-scaled knockback (decaying displacement; bosses immune, orbitals/singularities never push).
-   - **Kills by durability tier**: swarmers pop, pinwheels/weavers add a core flash, splitters shed debris + embers and shake lightly, black holes add a wide ring + 1-tick hit-stop, bosses add a chroma flash + 3-tick hit-stop. Supernova uses a 2-tick hit-stop. All shake goes through `screenShakeMult`; hit-stop is capped at 3 fixed ticks (`hitStopMult`).
+   - **Kills by durability tier**: swarmers pop, pinwheels/weavers add a core flash, splitters shed debris + embers and shake lightly, vortexes add a wide ring + 1-tick hit-stop, bosses add a chroma flash + 3-tick hit-stop. Supernova uses a 2-tick hit-stop. All shake goes through `screenShakeMult`; hit-stop is capped at 3 fixed ticks (`hitStopMult`).
 
 ---
 

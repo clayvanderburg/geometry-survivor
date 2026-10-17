@@ -43,8 +43,8 @@ export const STAT_ROWS = [
   { id: 'lightningDamage', label: 'Arc damage / jump', get: (p) => owned(p, 'lightning', (l) => p.stats.damage * W.lightningDamageMult(l)), fmt: dec1 },
 
   // Vortex Singularity
-  { id: 'singularityPull', label: 'Pull radius', get: (p) => owned(p, 'singularity', W.singularityPullRadius), fmt: int, headline: 'count', unit: 'PULL RADIUS', newText: (a) => `BLACK HOLES // ${a} PULL RADIUS` },
-  { id: 'singularityCooldown', label: 'Black hole cooldown', get: (p) => owned(p, 'singularity', W.singularityCooldown), fmt: secs },
+  { id: 'singularityPull', label: 'Pull radius', get: (p) => owned(p, 'singularity', W.singularityPullRadius), fmt: int, headline: 'count', unit: 'PULL RADIUS', newText: (a) => `SINGULARITIES // ${a} PULL RADIUS` },
+  { id: 'singularityCooldown', label: 'Singularity cooldown', get: (p) => owned(p, 'singularity', W.singularityCooldown), fmt: secs },
   { id: 'singularityCore', label: 'Core radius', get: (p) => owned(p, 'singularity', W.singularityCoreRadius), fmt: int },
   { id: 'singularityCollapse', label: 'Collapse damage', get: (p) => owned(p, 'singularity', (l) => p.stats.damage * W.singularityCollapseDamageMult(l) * (TUNING.singularityCollapseMult ?? 1)), fmt: dec1 },
 
@@ -153,17 +153,28 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     fromLevel,
     toLevel: fromLevel + jump,
     maxLevel: upg.maxLevel,
+    bonus: bonusLevels(copy, upg.id),
     headline,
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, changed.length - maxRows)
   };
 }
 
+// Levels an evolution adds on top of a weapon's own level (Storm Protocol adds a missile launcher).
+export function bonusLevels(player, id) {
+  if (id === 'missiles' && player.weapons?.stormProtocol) return { amount: 1, label: 'STORM' };
+  return null;
+}
+
+export function bonusText(bonus) {
+  return bonus ? ` <span class="lv-bonus">+${bonus.amount} ${bonus.label}</span>` : '';
+}
+
 // Same wording everywhere: level cards "LV 2 → LV 3", caches "INSTALLED // LV 2 → LV 3", HUD "LV 3".
 export function levelText(d, installed = false) {
   if (d.isSynergy) return installed ? '★ EVOLUTION INSTALLED ★' : '★ EVOLUTION // UNLOCK ★';
   const from = d.fromLevel === 0 ? 'NEW' : `LV ${d.fromLevel}`;
-  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}<span class="upg-max"> / ${d.maxLevel}</span>`;
+  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}<span class="upg-max"> / ${d.maxLevel}</span>`;
 }
 
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).

@@ -122,7 +122,7 @@ export const UPGRADE_POOL = [
     rarity: 'epic',
     maxLevel: 5,
     headline: 'singularityPull',
-    summary: 'Gravitational black holes warp the grid, suck swarms inward, and implode.',
+    summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.',
     apply(player) {
       player.weapons.singularity = (player.weapons.singularity || 0) + 1;
     }
