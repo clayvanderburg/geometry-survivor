@@ -29,6 +29,7 @@ const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../.
 const { TUNING, DEFAULT_TUNING } = await import('../../js/config.js');
 const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
 const { weaponSlots } = await import('../../js/loadout.js');
+const { canOfferNewWeapon } = await import('../../js/upgrades.js');
 
 export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, W as WEAPON_SCALING };
 
@@ -214,7 +215,12 @@ function installInstrumentation(game, metrics) {
   // Upgrade exhaustion: hands with fewer than 3 cards, and empty hands (the ALL SYSTEMS MAXED full
   // shield repair fallback), with the time and level each first happened.
   game.triggerLevelUp = function () {
+    const freeSlot = canOfferNewWeapon(game.player);
     const r = proto.triggerLevelUp.call(this);
+    if (freeSlot) {
+      metrics.handsWithFreeSlot++;
+      if (game.state === 'UPGRADE' && game.currentChoices.some((c) => c.isNewWeapon)) metrics.newWeaponHands++;
+    }
     const n = game.currentChoices.length;
     const stamp = { time: game.elapsedTime, level: game.player.level };
     if (game.state !== 'UPGRADE') {
@@ -270,6 +276,8 @@ export function createMetrics() {
     levels: [],       // elapsed time of each level-up
     cores: 0,
     killer: null,
+    handsWithFreeSlot: 0, // level-up hands rolled while a weapon slot was free
+    newWeaponHands: 0,    // ...and how many of them carried the NEW WEAPON card
     maxedCount: 0,    // level-ups that found nothing to offer (full shield repair instead)
     maxedAt: null,    // { time, level } of the first such level-up
     thinHandAt: null, // { time, level } of the first hand with fewer than 3 cards
@@ -578,6 +586,8 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       levelAt,
       xpAt,
       maxedCount: metrics.maxedCount,
+      handsWithFreeSlot: metrics.handsWithFreeSlot,
+      newWeaponHands: metrics.newWeaponHands,
       maxedAt: metrics.maxedAt,
       thinHandAt: metrics.thinHandAt,
       slotsFullAt: metrics.slotsFullAt,

@@ -216,9 +216,10 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       return hits.length === rs.length ? label : `${label} (${hits.length}/${rs.length})`;
     };
     out.push('\n## Upgrade exhaustion (median time · level, among runs that got there)');
-    out.push(table(['strategy', 'all slots filled', 'first hand < 3 cards', 'first empty hand (MAXED)', 'MAXED level-ups / run'], strategies.map(s => {
+    out.push(table(['strategy', 'NEW WEAPON in hands (slot free)', 'all slots filled', 'first hand < 3 cards', 'first empty hand (MAXED)', 'MAXED level-ups / run'], strategies.map(s => {
       const rs = byStrat.get(s.name);
-      return [s.name, stamp(rs, 'slotsFullAt'), stamp(rs, 'thinHandAt'), stamp(rs, 'maxedAt'), mean(rs.map(r => r.maxedCount || 0)).toFixed(1)];
+      const hands = sumBy(rs, r => r.handsWithFreeSlot || 0);
+      return [s.name, hands ? `${pct(sumBy(rs, r => r.newWeaponHands || 0) / hands)} of ${hands}` : '—', stamp(rs, 'slotsFullAt'), stamp(rs, 'thinHandAt'), stamp(rs, 'maxedAt'), mean(rs.map(r => r.maxedCount || 0)).toFixed(1)];
     })));
 
     // Difficulty curve per wave, pooled across strategies.
