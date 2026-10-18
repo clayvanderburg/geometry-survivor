@@ -104,3 +104,7 @@ test('Escort Drones fire four times as fast for a quarter of the damage per bolt
     assert.ok(Math.abs(POTENTIAL_DPS.drones(lv) / DPS_TARGET(lv) - 1) < 1e-9, `LV ${lv} DPS parity`);
   }
 });
+
+test('Proximity Mines blast twice as wide as before (160 + 20/LV), since they are hard to use', () => {
+  for (let lv = 1; lv <= 8; lv++) assert.equal(W.mineBlastRadius(lv), 2 * (80 + lv * 10));
+});
