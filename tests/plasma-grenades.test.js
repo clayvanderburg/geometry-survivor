@@ -65,8 +65,8 @@ test('LV 1 Plasma Grenades sit on DPS_TARGET(1); damage, rate and count ranks sc
 
 test('each grenade transform is worth exactly x BT_TRANSFORM_DPS, alone and stacked, at any stat mix', () => {
   const mixes = [{}, { damage: 3 }, { count: 2, rate: 3 }, { radius: 2, range: 3, damage: 1 }];
-  const combos = [{ 4: 'transform' }, { 8: 'transform' }, { 12: 'transform' }, { 4: 'transform', 8: 'transform' },
-    { 4: 'transform', 12: 'transform' }, { 8: 'transform', 12: 'transform' }, { 4: 'transform', 8: 'transform', 12: 'transform' }];
+  const combos = [{ 6: 'transform' }, { 12: 'transform' }, { 18: 'transform' }, { 6: 'transform', 12: 'transform' },
+    { 6: 'transform', 18: 'transform' }, { 12: 'transform', 18: 'transform' }, { 6: 'transform', 12: 'transform', 18: 'transform' }];
   for (const ranks of mixes) {
     const plain = dps(makeBuild('grenades', 12, ranks));
     for (const bt of combos) {
@@ -90,7 +90,7 @@ test('grenade cards preview their own stat; the NEW WEAPON pick and Breakthrough
   const range = describeUpgrade(p, { ...UPGRADE_BY_ID.grenades_range, levelJump: 1 });
   assert.deepEqual(range.rows.map((r) => r.id), ['grenadeRange']);
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.grenades_rate, levelJump: 3 });
-  const t = describeBreakthrough(p, 'grenades', 4, 'transform');
+  const t = describeBreakthrough(p, 'grenades', 6, 'transform');
   assert.equal(t.name, 'Cluster Grenades');
   assert.equal(t.category, 'PLASMA GRENADES');
   assert.match(t.headline, /\+22% DPS/);
@@ -171,23 +171,23 @@ test('live fight: Plasma Grenades arc, arm, then blast for damage on their own',
 });
 
 test('live fight: each grenade transform runs and deals damage', () => {
-  const cluster = grenadeFight({ bt: { 4: 'transform' } });
+  const cluster = grenadeFight({ bt: { 6: 'transform' } });
   assert.ok(cluster.seen.bomblets > 0, 'Cluster Grenades scatter bomblets');
   assert.ok(cluster.bySource.grenade > 0);
-  const cloud = grenadeFight({ bt: { 8: 'transform' } });
+  const cloud = grenadeFight({ bt: { 12: 'transform' } });
   assert.ok(cloud.seen.pools > 0, 'Lingering Cloud leaves clouds');
   assert.equal(cloud.g.weaponFx.pools.find((x) => x.source === 'grenade')?.look ?? 'plasma', 'plasma', 'a plain plasma cloud without damage-type cards');
   assert.ok(cloud.bySource.grenade > 0);
-  const gravity = grenadeFight({ bt: { 12: 'transform' } });
+  const gravity = grenadeFight({ bt: { 18: 'transform' } });
   assert.ok(gravity.seen.pulled > 0, 'Gravity Grenades pull enemies in');
   assert.ok(gravity.bySource.grenade > 0);
-  const all = grenadeFight({ bt: { 4: 'transform', 8: 'transform', 12: 'transform' }, cards: [['grenades_count', 5], ['grenades_rate', 6]], ticks: 60 * 10 });
+  const all = grenadeFight({ bt: { 6: 'transform', 12: 'transform', 18: 'transform' }, cards: [['grenades_count', 5], ['grenades_rate', 6]], ticks: 60 * 10 });
   assert.ok(all.bySource.grenade > 0);
   assert.ok(all.seen.maxActive <= all.g.grenades.items.length, 'the pool never overflows');
 });
 
 test('Thermite + Plasma Grenades burns; Cryo chills; Nanite corrodes; clouds take the element', () => {
-  const fire = grenadeFight({ cards: [['thermite', 1]], bt: { 8: 'transform' } });
+  const fire = grenadeFight({ cards: [['thermite', 1]], bt: { 12: 'transform' } });
   assert.ok(fire.g.enemyManager.enemies.some((e) => e.st?.burn > 0), 'grenade hits ignite');
   assert.ok(fire.bySource.burn > 0, 'burn ticks deal damage');
   assert.ok(fire.g.weaponFx.pools.some((x) => x.source === 'grenade' && x.look === 'fire' && x.hue === GRENADE_ELEMENTS.fire.hue), 'a fire cloud');

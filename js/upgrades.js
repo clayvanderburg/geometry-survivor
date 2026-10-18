@@ -17,7 +17,7 @@ export const RARITY = {
   evolution: { label: 'EVOLUTION', color: '#ff4fd8' },
   // Loadout cards (NEW WEAPON and the weapon it opens) are not level rolls, so they get their own tier.
   weapon: { label: 'NEW WEAPON', color: '#00f3ff' },
-  // Breakthrough choices at weapon LV 4 / 8 / 12 (not level rolls either).
+  // Breakthrough choices at weapon LV 6 / 12 / 18 (not level rolls either).
   transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
   boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }
 };
@@ -64,7 +64,7 @@ function weaponGroup(id) {
 // the weapon families it belongs to or boosts). Exact numbers always come from the card preview.
 //
 // Loadout gating (rollUpgrades): a weapon's stat cards are offered only while that weapon is equipped
-// and below LV 12 (its equip line is never offered; NEW WEAPON installs it). `owners` lists the weapons a weapon-specific line belongs to (offered
+// and below LV 18 (its equip line is never offered; NEW WEAPON installs it). `owners` lists the weapons a weapon-specific line belongs to (offered
 // while any of them is equipped, removed when the last one is discarded); evolutions also name
 // `ownersAll`. Lines without owners are general upgrades (passives such as Volatile Shatter included).
 // Tag cards need an equipped weapon or an owned passive with the tag.
@@ -461,7 +461,7 @@ export function levelJumpChances(luck) {
 }
 
 // Levels a card can still add: its own cap, and for a stat card also the room left under the weapon's
-// LV 12 cap (so a +5 roll on a LV 10 weapon installs +2).
+// LV 18 cap (so a +5 roll on a LV 16 weapon installs +2).
 export function levelRoom(player, u) {
   const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
   const sc = STAT_CARD_BY_ID[u.id];
@@ -494,7 +494,7 @@ export function applyUpgradeLevels(player, upg) {
   return jump;
 }
 
-// Cards the player can be offered right now: with room under their level caps (a weapon's LV 12
+// Cards the player can be offered right now: with room under their level caps (a weapon's LV 18
 // included), allowed by the loadout and by their own requirements.
 export function eligibleUpgrades(player) {
   return UPGRADE_POOL.filter((u) => {
@@ -723,16 +723,26 @@ export function discardWeapon(player, id) {
   if (!player.base && weapon.levelKey) player.weapons[weapon.levelKey] = 0;
   // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds).
   if (player.breakthroughs) delete player.breakthroughs[id];
+  if (player.breakthroughsOffered) delete player.breakthroughsOffered[id];
   return removed;
 }
 
-// --- Breakthroughs (weapon LV 4 / 8 / 12) --------------------------------------------------------
+// --- Breakthroughs (weapon LV 6 / 12 / 18) --------------------------------------------------------
 
 // Milestones a weapon has reached but not yet chosen a Breakthrough for, lowest first.
+// A milestone already offered this run is never offered again (until the weapon is discarded), even if
+// its choice somehow failed to record: a weapon gets each Breakthrough exactly once.
 export function pendingBreakthroughs(player, id) {
   const lv = weaponLevel(player, id);
   const taken = player.breakthroughs?.[id] || {};
-  return BREAKTHROUGH_LEVELS.filter((m) => lv >= m && !taken[m]);
+  const offered = player.breakthroughsOffered?.[id] || {};
+  return BREAKTHROUGH_LEVELS.filter((m) => lv >= m && !taken[m] && !offered[m]);
+}
+
+// Mark a milestone as offered (the Breakthrough screen opened for it).
+export function markBreakthroughOffered(player, id, level) {
+  const all = player.breakthroughsOffered || (player.breakthroughsOffered = {});
+  (all[id] || (all[id] = {}))[level] = true;
 }
 
 // Record a Breakthrough choice ('transform' or 'boost') for a weapon at a milestone. Weapon formulas

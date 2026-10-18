@@ -222,7 +222,7 @@ function diffRows(before, after) {
   return changed;
 }
 
-// A stat card's level line is its weapon's level (LV 3 -> LV 4 / 12), not the card's own rank.
+// A stat card's level line is its weapon's level (LV 3 -> LV 4 / 18), not the card's own rank.
 export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const sc = STAT_CARD_BY_ID[upg.id];
   const fromLevel = sc ? weaponLevel(player, sc.weapon) : (player.upgradeLevels[upg.id] || 0);
