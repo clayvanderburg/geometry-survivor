@@ -80,7 +80,7 @@ export const UPGRADE_POOL = [
     tags: ['projectile', 'kinetic'],
     maxLevel: 7,
     headline: 'fireRate',
-    summary: 'Faster primary volleys with quicker bolts.',
+    summary: 'Your Pew Pews fire faster, with quicker bolts.',
     apply(player) {
       player.stats.fireRate *= 1.26;
       player.stats.bulletSpeed *= 1.15;
@@ -381,7 +381,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_tectonic',
     name: 'SYNERGY: Tectonic Claw Bore',
-    category: 'EVOLUTION',
+    category: 'DRILL CLAWS',
     tags: ['explosive', 'area'],
     isSynergy: true,
     maxLevel: 1,
@@ -389,7 +389,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.mining_speed >= 2);
     },
     headline: 'tectonicBlast',
-    summary: 'EVOLUTION: supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
+    summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
       player.stats.miningSpeed *= 1.9;
@@ -400,7 +400,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_pulsar',
     name: 'SYNERGY: Pulsar Helix',
-    category: 'EVOLUTION',
+    category: 'PEW PEWS',
     ownersAll: ['blaster'],
     tags: ['projectile', 'kinetic'],
     isSynergy: true,
@@ -409,7 +409,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
     headline: 'helixBolts',
-    summary: 'EVOLUTION: every volley also fires a rotating twin-arm spiral of plasma bolts.',
+    summary: 'EVOLUTION: Upgrades your Pew Pews (not a new weapon): every Pew Pews shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
       player.stats.fireRate *= 1.15;
@@ -418,7 +418,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_tempest',
     name: 'SYNERGY: Storm Protocol',
-    category: 'EVOLUTION',
+    category: 'MISSILES + TESLA ARC',
     ownersAll: ['missiles', 'lightning'],
     tags: ['explosive', 'electric'],
     isSynergy: true,
@@ -427,7 +427,7 @@ export const UPGRADE_POOL = [
       return (player.weapons.missiles >= 1 && player.weapons.lightning >= 1);
     },
     headline: 'stormChain',
-    summary: 'EVOLUTION: homing missiles carry Tesla charge and chain lightning on every detonation.',
+    summary: 'EVOLUTION: Upgrades your Swarm Missiles and Tesla Arc: homing missiles carry Tesla charge and chain lightning on every detonation.',
     apply(player) {
       player.weapons.stormProtocol = 1;
       player.weapons.missiles += 1;
@@ -436,7 +436,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_siege',
     name: 'SYNERGY: Siege Battery',
-    category: 'EVOLUTION',
+    category: 'MINES + TURRET',
     ownersAll: ['mines', 'turret'],
     tags: ['deployable', 'explosive'],
     isSynergy: true,
@@ -445,7 +445,7 @@ export const UPGRADE_POOL = [
       return (player.weapons.mines >= 1 && player.weapons.turret >= 1);
     },
     headline: 'siegeShell',
-    summary: 'EVOLUTION: sentry turrets load mine charges, so every bolt that hits bursts into nearby enemies.',
+    summary: 'EVOLUTION: Upgrades your Proximity Mines and Sentry Turret: sentry turrets load mine charges, so every bolt that hits bursts into nearby enemies.',
     apply(player) {
       player.weapons.siegeBattery = 1;
     }
@@ -453,7 +453,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_supercrit',
     name: 'SYNERGY: Supercritical',
-    category: 'EVOLUTION',
+    category: 'CRITS',
     tags: ['crit'],
     isSynergy: true,
     maxLevel: 1,
@@ -462,7 +462,7 @@ export const UPGRADE_POOL = [
       return lv.crit_chance >= 2 && (lv.thermite >= 1 || lv.cryo >= 1 || lv.nanite >= 1);
     },
     headline: 'critAfflicted',
-    summary: 'EVOLUTION: more crits, and crits against burning, chilled or corroded targets get a far bigger bonus.',
+    summary: 'EVOLUTION: Upgrades your critical hits: more crits, and crits against burning, chilled or corroded targets get a far bigger bonus.',
     apply(player) {
       player.weapons.supercritical = 1;
       player.stats.critChance = (player.stats.critChance ?? 0) + W.supercritChance;

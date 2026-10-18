@@ -26,7 +26,7 @@ export const WEAPONS = [
   },
   {
     id: 'missiles', name: 'Swarm Micro-Missiles', hudName: 'Missiles', levelId: 'missiles', levelKey: 'missiles', category: 'AUTONOMOUS', tagSources: ['missile'],
-    color: '#ff4fd8',
+    color: '#ffe14d',
     summary: 'Curving homing missiles that detonate on impact.'
   },
   {

@@ -1,5 +1,52 @@
 // Destructible Geometric Asteroid Clusters & Dedicated Crab-Claw Rotary Drilling
 import { TUNING } from './config.js';
+import { isElite, eliteMiningDps } from './pursuit.js';
+
+// Elite mining: a lieutenant/boss grinds the rock(s) it is pressed against on its way to the ship.
+export const ELITE_GRIND_CONTACT = 6; // px of surface gap that still counts as pressed against the rock
+export const ELITE_GRIND_MAX_ROCKS = 2; // rocks one elite grinds at once (the two most squarely in its way)
+
+// Sector layout. Rocks are small and many (TUNING.rockSizeMult 0.8, ~2x the old 1.15x count at a
+// similar share of the map); a cluster keeps the old footprint and packs more rocks into it.
+export const CLUSTER_SPREAD = 224; // px from a cluster's centre along its main axis (before elongation)
+export const CLUSTER_ROCKS_MIN = 28; // placement attempts per cluster (overlapping rocks are skipped)
+export const CLUSTER_ROCKS_RANGE = 26;
+export const ROCK_HP_BASE = 22; // plain rock HP = (base + radius x 1.05) x rockHpMult
+export const CORE_VEIN_RADIUS = 85; // deep cores only within this distance of the cluster centre
+export const CORE_VEIN_CHANCE = 0.08;
+export const SHIELD_VEIN_CHANCE = 0.07;
+export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer rocks than this share remain
+
+// Numeric spatial-hash key (no string building per query: ~1000 rocks are probed many times a tick).
+// Unique for cell coordinates in [-1024, 3071], far beyond the arena.
+const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
+
+// Per-rock render cache: the outline as a Path2D (browser only) and the rock's resting colors.
+function rockLook(a) {
+  if (a.look) return a.look;
+  const isRich = a.oreType !== 'rock';
+  let path = null;
+  if (typeof Path2D !== 'undefined') {
+    path = new Path2D();
+    for (let v = 0; v < a.verts.length; v++) {
+      const pt = a.verts[v];
+      if (v === 0) path.moveTo(pt.x, pt.y);
+      else path.lineTo(pt.x, pt.y);
+    }
+    path.closePath();
+  }
+  a.look = {
+    isRich,
+    path,
+    cos: Math.cos(a.rotation),
+    sin: Math.sin(a.rotation),
+    fill: isRich ? `hsla(${a.hue}, 75%, 14%, 0.92)` : 'rgba(7, 13, 28, 0.92)',
+    flashFill: `hsla(${a.hue}, 80%, 32%, 0.9)`,
+    stroke: `hsla(${a.hue}, 100%, ${isRich ? 64 : 52}%, ${isRich ? 0.92 : 0.68})`,
+    core: `hsla(${a.hue}, 100%, 78%, 0.85)`
+  };
+  return a.look;
+}
 
 export class AsteroidManager {
   constructor(worldWidth, worldHeight) {
@@ -8,6 +55,10 @@ export class AsteroidManager {
     this.asteroids = [];
     this.isDrilling = false;
     this.drillingRocks = [];
+    // Elite grinding this tick: count of rock contacts and the one nearest the ship (for the sound).
+    this.eliteGrinds = 0;
+    this.eliteGrindX = 0;
+    this.eliteGrindY = 0;
     this.cellSize = 140;
     this.spatialGrid = new Map();
   }
@@ -30,21 +81,33 @@ export class AsteroidManager {
       this.spawnCluster(cx, cy, { x: centerX, y: centerY, radius: 250 });
     }
 
+    this.sectorRockCount = this.asteroids.length;
     this.rebuildSpatialHash();
   }
 
+  // Mined-out sectors get a fresh cluster each wave while the rock count is below REPLENISH_SHARE of
+  // the sector's starting count.
+  needsReplenish() {
+    return this.asteroids.length < (this.sectorRockCount || 0) * REPLENISH_SHARE;
+  }
+
   // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
+  // A cluster's footprint is fixed (CLUSTER_SPREAD); rock size only sets how many rocks fit in it, so
+  // smaller rocks (TUNING.rockSizeMult) give a denser field of more, smaller rocks rather than a smaller one.
   spawnCluster(cx, cy, avoid = null) {
-    const numRocks = 18 + Math.floor(Math.random() * 18);
+    const numRocks = CLUSTER_ROCKS_MIN + Math.floor(Math.random() * CLUSTER_ROCKS_RANGE);
     const mainAngle = Math.random() * Math.PI * 2;
     const elongation = 1.2 + Math.random() * 1.4;
-    const sizeMult = TUNING.rockSizeMult ?? 1.15;
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
     const hpMult = TUNING.rockHpMult ?? 1.6;
+    // Vein HP was set for the old 1.15x rocks: it shrinks with rock size so drilling time per area holds.
+    const veinHp = hpMult * Math.min(1, sizeMult / 1.15);
+    const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
 
     const placed = [];
     for (let i = 0; i < numRocks; i++) {
       const spreadA = mainAngle + (Math.random() - 0.5) * 2.2;
-      const dist = Math.pow(Math.random(), 0.65) * 195 * sizeMult;
+      const dist = Math.pow(Math.random(), 0.65) * CLUSTER_SPREAD;
       const rx = cx + Math.cos(spreadA) * dist * elongation + (Math.random() - 0.5) * 45;
       const ry = cy + Math.sin(spreadA) * dist + (Math.random() - 0.5) * 45;
 
@@ -69,20 +132,22 @@ export class AsteroidManager {
       const distFromCore = Math.hypot(x - cx, y - cy);
       const roll = Math.random();
       let oreType = 'rock';
-      let maxHp = (40 + radius * 1.05) * hpMult;
+      let maxHp = (ROCK_HP_BASE + radius * 1.05) * hpMult;
       let hue = 205;
 
-      if (distFromCore < 85 && roll < 0.14) {
+      // Deep cores sit near the cluster's heart; the rest roll gold, then shield, then plain rock.
+      const coreBand = distFromCore < CORE_VEIN_RADIUS ? CORE_VEIN_CHANCE : 0;
+      if (roll < coreBand) {
         oreType = 'core_vein';
-        maxHp = 80 * hpMult;
+        maxHp = 80 * veinHp;
         hue = 285;
-      } else if (roll < 0.18) {
+      } else if (roll < coreBand + goldChance) {
         oreType = 'gold_vein';
-        maxHp = 58 * hpMult;
+        maxHp = 58 * veinHp;
         hue = 46;
-      } else if (roll < 0.25) {
+      } else if (roll < coreBand + goldChance + SHIELD_VEIN_CHANCE) {
         oreType = 'shield_vein';
-        maxHp = 48 * hpMult;
+        maxHp = 48 * veinHp;
         hue = 155;
       }
 
@@ -123,9 +188,10 @@ export class AsteroidManager {
       const a = this.asteroids[i];
       const gx = Math.floor(a.x / this.cellSize);
       const gy = Math.floor(a.y / this.cellSize);
-      const key = `${gx},${gy}`;
-      if (!this.spatialGrid.has(key)) this.spatialGrid.set(key, []);
-      this.spatialGrid.get(key).push(a);
+      const key = cellKey(gx, gy);
+      let cell = this.spatialGrid.get(key);
+      if (!cell) this.spatialGrid.set(key, (cell = []));
+      cell.push(a);
     }
   }
 
@@ -140,7 +206,7 @@ export class AsteroidManager {
     const result = [];
     for (let dx = -rangeCells; dx <= rangeCells; dx++) {
       for (let dy = -rangeCells; dy <= rangeCells; dy++) {
-        const cell = this.spatialGrid.get(`${gx + dx},${gy + dy}`);
+        const cell = this.spatialGrid.get(cellKey(gx + dx, gy + dy));
         if (cell) {
           for (let i = 0; i < cell.length; i++) {
             result.push(cell[i]);
@@ -258,9 +324,19 @@ export class AsteroidManager {
     }
 
     // 3. Enemies vs Asteroids (Enemies are blocked and funneled through your carved tunnels!)
+    // Elites (lieutenants, bosses) are blocked too, but grind the rock they press into at the ship's
+    // BASE drill DPS (eliteMiningDps: TUNING.miningSpeed × eliteMiningMult, no player upgrades).
+    const eliteDps = eliteMiningDps();
+    this.eliteGrinds = 0;
+    let grindBest = Infinity;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius));
+      const grinds = eliteDps > 0 && isElite(e);
+      const contact = grinds ? ELITE_GRIND_CONTACT : 0;
+      // Up to two touched rocks, ranked by how squarely they sit on the line to the ship.
+      let g0 = null, g1 = null, s0 = 0, s1 = 0;
+      const toShip = grinds ? Math.hypot(player.x - e.x, player.y - e.y) || 1 : 1;
+      const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius + contact));
       for (let j = 0; j < nearEnemy.length; j++) {
         const rock = nearEnemy[j];
         if (rock.hp <= 0) continue;
@@ -268,6 +344,15 @@ export class AsteroidManager {
         const dy = e.y - rock.y;
         const dSq = dx * dx + dy * dy;
         const minDist = e.radius + rock.radius;
+        if (grinds) {
+          const touch = minDist + contact;
+          // Pressed against it, and the rock is on the ship's side of the elite (it is in the way).
+          if (dSq < touch * touch && dSq > 0.01) {
+            const ahead = ((player.x - e.x) * -dx + (player.y - e.y) * -dy) / (toShip * Math.sqrt(dSq));
+            if (ahead > s0) { g1 = g0; s1 = s0; g0 = rock; s0 = ahead; }
+            else if (ahead > s1) { g1 = rock; s1 = ahead; }
+          }
+        }
         if (dSq < minDist * minDist && dSq > 0.01) {
           const dist = Math.sqrt(dSq);
           const nx = dx / dist;
@@ -280,6 +365,20 @@ export class AsteroidManager {
           if (dot < 0) {
             e.vx -= nx * dot * 1.1;
             e.vy -= ny * dot * 1.1;
+          }
+        }
+      }
+      if (g0) {
+        const grind = g1 && ELITE_GRIND_MAX_ROCKS > 1 ? 2 : 1;
+        for (let k = 0; k < grind; k++) {
+          const rock = k === 0 ? g0 : g1;
+          if (this.grindRock(rock, e, eliteDps, dt, particles)) destroyedAny = true;
+          const d = (rock.x - player.x) ** 2 + (rock.y - player.y) ** 2;
+          this.eliteGrinds++;
+          if (d < grindBest) {
+            grindBest = d;
+            this.eliteGrindX = rock.lastGrindX;
+            this.eliteGrindY = rock.lastGrindY;
           }
         }
       }
@@ -302,31 +401,89 @@ export class AsteroidManager {
     }
   }
 
+  // One elite's grind on one rock for this tick: the same hp drain + hit flash (and so the same crack
+  // and flash rendering) as the ship's drill, sparks/debris at the contact point scaled by the live
+  // vfxIntensity (the flash also follows vfxLinger). Returns true when this grind broke the rock;
+  // it is tagged `brokenBy = 'elite'` so the shatter handler can tell it from the player's drill.
+  grindRock(rock, e, dps, dt, particles) {
+    let nx = e.x - rock.x;
+    let ny = e.y - rock.y;
+    const d = Math.hypot(nx, ny) || 1;
+    nx /= d;
+    ny /= d;
+    const cx = rock.x + nx * rock.radius;
+    const cy = rock.y + ny * rock.radius;
+    rock.lastGrindX = cx;
+    rock.lastGrindY = cy;
+    rock.hp -= dps * dt;
+    rock.hitFlash = 0.85;
+    const hue = rock.oreType && rock.oreType !== 'rock' ? rock.hue : 32;
+    const vfx = typeof particles?.intensity === 'number' ? particles.intensity : 1;
+    if (particles && Math.random() < 0.55) {
+      // Sparks spray back off the face along the rock's normal, either side of the elite's hull.
+      const count = Math.max(1, Math.round((1 + Math.random() * 2) * vfx));
+      const out = Math.atan2(ny, nx);
+      particles.spawnDirectionalSparks(cx, cy, out + (Math.random() < 0.5 ? 1 : -1) * 0.9, 1.1, count, hue, 7);
+      if (Math.random() < 0.18) particles.spawnExplosionSparks(cx, cy, 1, hue, 0.6, 2.2, 3.2); // slow rock chips
+      if (Math.random() < 0.12) particles.spawnFlash?.(cx, cy, 9 + e.radius * 0.15, hue, 0.12);
+    }
+    if (rock.hp <= 0) {
+      rock.brokenBy = 'elite';
+      return true;
+    }
+    return false;
+  }
+
+  // Rocks in view only (via the spatial grid), each drawn with one setTransform from the camera
+  // transform instead of save/translate/rotate/restore, and a cached outline path and colors.
   draw(ctx, camX, camY, viewW, viewH) {
-    ctx.save();
+    const pad = 70;
+    const minX = camX - pad;
+    const maxX = camX + viewW + pad;
+    const minY = camY - pad;
+    const maxY = camY + viewH + pad;
+    const base = ctx.getTransform ? ctx.getTransform() : null;
+    const cs = this.cellSize;
+    const gx0 = Math.floor(minX / cs) - 1, gx1 = Math.floor(maxX / cs) + 1;
+    const gy0 = Math.floor(minY / cs) - 1, gy1 = Math.floor(maxY / cs) + 1;
 
-    const minX = camX - 70;
-    const maxX = camX + viewW + 70;
-    const minY = camY - 70;
-    const maxY = camY + viewH + 70;
+    for (let gx = gx0; gx <= gx1; gx++) {
+      for (let gy = gy0; gy <= gy1; gy++) {
+        const cell = this.spatialGrid.get(cellKey(gx, gy));
+        if (!cell) continue;
+        for (let i = 0; i < cell.length; i++) {
+          const a = cell[i];
+          if (a.hp <= 0 || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
+          this.drawRock(ctx, a, base);
+        }
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    if (base) ctx.setTransform(base);
+  }
 
-    for (let i = 0; i < this.asteroids.length; i++) {
-      const a = this.asteroids[i];
-      if (a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
-
-      const hpRatio = Math.max(0, a.hp / a.maxHp);
-      const isRich = a.oreType !== 'rock';
-
+  drawRock(ctx, a, base) {
+    const look = rockLook(a);
+    const { cos, sin } = look;
+    if (base) {
+      ctx.setTransform(
+        base.a * cos + base.c * sin, base.b * cos + base.d * sin,
+        base.c * cos - base.a * sin, base.d * cos - base.b * sin,
+        base.a * a.x + base.c * a.y + base.e, base.b * a.x + base.d * a.y + base.f
+      );
+    } else {
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.rotation);
+    }
+    const hpRatio = Math.max(0, a.hp / a.maxHp);
+    const isRich = look.isRich;
+    const flashing = a.hitFlash > 0;
 
-      ctx.fillStyle = a.hitFlash > 0
-        ? `hsla(${a.hue}, 80%, 32%, 0.9)`
-        : isRich
-        ? `hsla(${a.hue}, 75%, 14%, 0.92)`
-        : 'rgba(7, 13, 28, 0.92)';
-
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = flashing ? look.flashFill : look.fill;
+    let path = look.path;
+    if (!path) {
       ctx.beginPath();
       for (let v = 0; v < a.verts.length; v++) {
         const pt = a.verts[v];
@@ -334,48 +491,40 @@ export class AsteroidManager {
         else ctx.lineTo(pt.x, pt.y);
       }
       ctx.closePath();
-      ctx.fill();
+    }
+    if (path) ctx.fill(path); else ctx.fill();
 
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = a.hitFlash > 0
-        ? '#ffffff'
-        : `hsla(${a.hue}, 100%, ${isRich ? 64 : 52}%, ${isRich ? 0.92 : 0.68})`;
-      ctx.lineWidth = isRich ? 2.6 : 1.9;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = flashing ? '#ffffff' : look.stroke;
+    ctx.lineWidth = isRich ? 2.6 : 1.9;
+    if (path) ctx.stroke(path); else ctx.stroke();
+
+    if (isRich) {
+      const rCore = a.radius * 0.42;
+      ctx.strokeStyle = look.core;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(rCore, 0);
+      ctx.lineTo(0, rCore);
+      ctx.lineTo(-rCore, 0);
+      ctx.lineTo(0, -rCore);
+      ctx.closePath();
       ctx.stroke();
-
-      if (isRich) {
-        const rCore = a.radius * 0.42;
-        ctx.strokeStyle = `hsla(${a.hue}, 100%, 78%, 0.85)`;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        for (let s = 0; s < 4; s++) {
-          const sa = (s * Math.PI) / 2;
-          const vx = Math.cos(sa) * rCore;
-          const vy = Math.sin(sa) * rCore;
-          if (s === 0) ctx.moveTo(vx, vy);
-          else ctx.lineTo(vx, vy);
-        }
-        ctx.closePath();
-        ctx.stroke();
-      }
-
-      if (hpRatio < 0.9) {
-        const crackAlpha = Math.min(1, (1 - hpRatio) * 1.25);
-        ctx.strokeStyle = `hsla(${isRich ? a.hue : 42}, 100%, 82%, ${crackAlpha})`;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        const crackCount = hpRatio < 0.45 ? 4 : 2;
-        for (let c = 0; c < crackCount; c++) {
-          const pt = a.verts[(c * 2) % a.verts.length];
-          ctx.moveTo(0, 0);
-          ctx.lineTo(pt.x * (1 - hpRatio * 0.45), pt.y * (1 - hpRatio * 0.45));
-        }
-        ctx.stroke();
-      }
-
-      ctx.restore();
     }
 
-    ctx.restore();
+    if (hpRatio < 0.9) {
+      const crackAlpha = Math.min(1, (1 - hpRatio) * 1.25);
+      ctx.strokeStyle = `hsla(${isRich ? a.hue : 42}, 100%, 82%, ${crackAlpha})`;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      const crackCount = hpRatio < 0.45 ? 4 : 2;
+      for (let c = 0; c < crackCount; c++) {
+        const pt = a.verts[(c * 2) % a.verts.length];
+        ctx.moveTo(0, 0);
+        ctx.lineTo(pt.x * (1 - hpRatio * 0.45), pt.y * (1 - hpRatio * 0.45));
+      }
+      ctx.stroke();
+    }
+    if (!base) ctx.restore();
   }
 }

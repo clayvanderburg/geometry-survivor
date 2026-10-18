@@ -1,7 +1,7 @@
 // Global leaderboard browser check. Three runs of the game against /api/scores:
 //   1. offline  - the request is aborted (like the other smokes): GLOBAL falls back to local runs + OFFLINE note
 //   2. slow     - the API never answers in time: the client times out and falls back, nothing blocks
-//   3. online   - /api/scores is fulfilled with fake per-version boards: title board, tabs and the VERSION
+//   3. online   - /api/scores is fulfilled with fake boards (ALL-TIME default + a version filter): title board, tabs and the VERSION
 //                 selector (mouse + controller), ALL-TIME rows tagged with their version (pre-0.9 for legacy
 //                 runs), versioned auto-submit on game over and the "GLOBAL RANK #12 · v0.X.Y" line
 // Screenshots: leaderboard-offline-smoke.png, leaderboard-title-smoke.png, leaderboard-local-smoke.png,
@@ -114,27 +114,28 @@ const text = (page, sel) => page.locator(sel).innerText();
         return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank: 12, allTimeRank: 12, version: posted.version, id: 'run-new', name: posted.name, censored: false, entries: boards[posted.version], total: 100, boardSize: 100, versions: [GAME_VERSION] }) });
       };
       const { page, errors } = await openGame(browser, api);
-      await page.waitForFunction(() => document.querySelectorAll('#highscore-list .hs-row').length === 50);
-      if (gets[0] !== GAME_VERSION) throw Error(`GLOBAL should open on the current version's board, asked for ${gets[0]}`);
-      if (await text(page, '#highscore-note') !== `TOP 50 // v${GAME_VERSION}`) throw Error('Global note should name the version');
+      // GLOBAL opens on the one shared board that never resets: ALL-TIME, every row tagged with its version.
+      await page.waitForFunction(() => document.querySelectorAll('#highscore-list .hs-ver').length === 50);
+      if (gets[0] !== 'all') throw Error(`GLOBAL should open on the shared ALL-TIME board, asked for ${gets[0]}`);
+      if (await text(page, '#highscore-note') !== 'TOP 50 // ALL-TIME') throw Error('Global note should read ALL-TIME');
       if (await page.locator('#title-modal .board-tab.active').innerText() !== '◎ GLOBAL') throw Error('GLOBAL should be the default tab');
       const chips = () => page.locator('#title-board-versions [data-board-version]').evaluateAll(els => els.map(b => [b.dataset.boardVersion, b.classList.contains('active')]));
-      if (JSON.stringify(await chips()) !== JSON.stringify([[GAME_VERSION, true], ['all', false]])) throw Error('Version selector should offer the current version (active) and ALL-TIME: ' + JSON.stringify(await chips()));
-      if (await page.locator('#highscore-list .hs-ver').count()) throw Error('A single-version board needs no per-row version tags');
+      if (JSON.stringify(await chips()) !== JSON.stringify([['all', true], [GAME_VERSION, false]])) throw Error('Version selector should offer ALL-TIME (active) then the current version: ' + JSON.stringify(await chips()));
+      const tags = await page.locator('#highscore-list .hs-ver').allInnerTexts();
+      if (tags[0] !== `v${GAME_VERSION}` || tags[1] !== 'pre-0.9') throw Error('Rows should be tagged with their version: ' + tags.slice(0, 3));
       if (!/v\d+\.\d+\.\d+/.test(await text(page, '#title-modal .version-tag'))) throw Error('Title needs the version tag');
-      if (await page.locator('#highscore-list .hs-mine').count() !== 1) throw Error('The player\'s own callsign should be highlighted');
+      if (await page.locator('#highscore-list .hs-mine').count() < 1) throw Error('The player\'s own callsign should be highlighted');
+      await page.waitForTimeout(250);
       await page.screenshot({ path: 'leaderboard-title-smoke.png' });
 
-      // Mouse: ALL-TIME shows every run with its version; legacy runs read pre-0.9.
-      await page.locator('#title-board-versions [data-board-version="all"]').click();
-      await page.waitForFunction(() => document.querySelectorAll('#highscore-list .hs-ver').length === 50);
-      if (gets.at(-1) !== 'all') throw Error('ALL-TIME should fetch ?version=all');
-      if (await text(page, '#highscore-note') !== 'TOP 50 // ALL-TIME') throw Error('ALL-TIME note missing');
-      const tags = await page.locator('#highscore-list .hs-ver').allInnerTexts();
-      if (tags[0] !== `v${GAME_VERSION}` || tags[1] !== 'pre-0.9') throw Error('ALL-TIME rows should be tagged with their version: ' + tags.slice(0, 3));
-      if (await page.locator('#go-board-versions [data-board-version="all"].active').count() !== 1) throw Error('Both board panels share the selection');
-      await page.waitForTimeout(250);
-      await page.screenshot({ path: 'leaderboard-alltime-smoke.png' });
+      // Mouse: a version button filters the board to that version (no per-row tags needed there).
+      await page.locator(`#title-board-versions [data-board-version="${GAME_VERSION}"]`).click();
+      await page.waitForFunction(v => __game.globalBoard.version === v && document.querySelectorAll('#highscore-list .hs-row').length === 50, GAME_VERSION);
+      if (gets.at(-1) !== GAME_VERSION) throw Error('A version filter should fetch ?version=<v>');
+      if (await text(page, '#highscore-note') !== `TOP 50 // v${GAME_VERSION}`) throw Error('Filtered note should name the version');
+      if (await page.locator('#highscore-list .hs-ver').count()) throw Error('A single-version board needs no per-row version tags');
+      if (await page.locator(`#go-board-versions [data-board-version="${GAME_VERSION}"].active`).count() !== 1) throw Error('Both board panels share the selection');
+      await page.screenshot({ path: 'leaderboard-version-filter-smoke.png' });
 
       await page.locator('#title-modal [data-board-tab="local"]').click();
       if (!/THIS DEVICE/.test(await text(page, '#highscore-note'))) throw Error('MY RUNS should show the local board');
@@ -167,21 +168,20 @@ const text = (page, sel) => page.locator(sel).innerText();
       await press(A);
       if (await page.evaluate(() => __game.boardTab) !== 'global') throw Error('A on the GLOBAL tab should switch to it');
 
-      // Controller: the version buttons are focus stops too; LEFT from ALL-TIME reaches the current version, A picks it.
+      // Controller: the version buttons are focus stops too; LEFT from the version filter reaches ALL-TIME, A picks it.
       await page.waitForFunction(() => !document.getElementById('title-board-versions').classList.contains('hidden'));
-      await page.evaluate(() => {
+      await page.evaluate(v => {
         const root = document.getElementById('title-modal');
         const vers = [...root.querySelectorAll('[data-board-version]')];
         if (vers.length < 2 || !vers.every(b => __game.menuNav.items(root).includes(b))) throw Error('Version buttons must be controller focus stops');
-        __game.menuNav.setFocus(root.querySelector('[data-board-version="all"]'));
-      });
+        __game.menuNav.setFocus(root.querySelector(`[data-board-version="${v}"]`));
+      }, GAME_VERSION);
       await press(LEFT);
       const verFocus = await page.evaluate(() => __game.menuNav.focused?.dataset?.boardVersion || null);
-      if (verFocus !== GAME_VERSION) throw Error(`LEFT from ALL-TIME should focus v${GAME_VERSION}, got ${verFocus}`);
+      if (verFocus !== 'all') throw Error(`LEFT from v${GAME_VERSION} should focus ALL-TIME, got ${verFocus}`);
       await press(A);
-      await page.waitForFunction(v => __game.globalBoard.version === v && document.querySelectorAll('#highscore-list .hs-row').length === 50, GAME_VERSION);
-      if (await page.locator('#highscore-list .hs-ver').count()) throw Error('Back on the version board, rows lose their version tags');
-      if (await page.evaluate(() => __game.menuNav.focused?.dataset?.boardVersion) !== GAME_VERSION) throw Error('Focus should stay on the version button after switching');
+      await page.waitForFunction(() => __game.globalBoard.version === 'all' && document.querySelectorAll('#highscore-list .hs-ver').length === 50);
+      if (await page.evaluate(() => __game.menuNav.focused?.dataset?.boardVersion) !== 'all') throw Error('Focus should stay on the version button after switching');
 
       await endRun(page);
       await page.waitForFunction(() => /GLOBAL RANK #12/.test(document.getElementById('go-global-rank').textContent));
@@ -198,11 +198,10 @@ const text = (page, sel) => page.locator(sel).innerText();
       if (!inView) throw Error('The new run should be scrolled into view in the game-over board');
       await page.screenshot({ path: 'leaderboard-gameover-smoke.png' });
 
-      // Switching the game-over board to ALL-TIME still finds the new run (same id on both boards).
-      await page.locator('#go-board-versions [data-board-version="all"]').click();
+      // The game-over board is the shared ALL-TIME one: the new run sits there with its version tag.
       await page.waitForFunction(() => document.querySelector('#go-highscore-list .hs-current .hs-ver'));
       if (errors.length) throw Error(errors.join('\n'));
     }
-    console.log('Leaderboard smoke PASS: offline fallback, slow-API timeout fallback, per-version boards + VERSION selector (mouse + controller), ALL-TIME version tags incl. pre-0.9, tabs, versioned auto-submit + GLOBAL RANK #12 · version; no page errors.');
+    console.log('Leaderboard smoke PASS: offline fallback, slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

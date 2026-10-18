@@ -56,7 +56,7 @@ export const STAT_ROWS = [
   { id: 'rocketDamage', label: 'Rocket hit', get: (p) => owned(p, 'rockets', (l) => weaponDamage(p, 'rocket', l)), fmt: dec1, headline: 'pct', unit: 'ROCKET DAMAGE' },
   { id: 'rocketCooldown', label: 'Rocket volley interval', get: (p) => owned(p, 'rockets', W.wingRocketCooldown), fmt: secs },
   { id: 'rocketBlast', label: 'Rocket blast radius', get: (p) => owned(p, 'rockets', (l) => wingRocketBlastRadius(p, l)), fmt: int },
-  { id: 'helixBolts', label: 'Helix bolts / volley', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'HELIX BOLTS / VOLLEY', newText: (a) => `+${a} HELIX BOLTS` },
+  { id: 'helixBolts', label: 'Spiral bolts per Pew Pews shot', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'SPIRAL BOLTS PER PEW PEWS SHOT', newText: (a) => `+${a} SPIRAL BOLTS` },
   { id: 'helixDamage', label: 'Helix bolt damage', get: (p) => (p.weapons.pulsarHelix ? weaponDamage(p, 'helix') : null), fmt: dec1 },
 
   // Swarm Micro-Missiles + Storm Protocol

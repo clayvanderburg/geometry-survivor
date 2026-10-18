@@ -12,17 +12,76 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.11.0',
-    date: '2026-10-17',
+    version: '0.13.0',
+    date: '2026-10-18',
     title: 'The Long Run',
     notes: [
       { type: 'balance', text: 'Runs are paced for the long haul: a strong run now lasts around 30 minutes and climbs past level 50, instead of hitting a wall around wave 30.' },
       { type: 'balance', text: 'Enemies are about 2.5× tougher from the start but come in fewer, smaller packs, so burn, chill and corrosion have time to work.' },
       { type: 'balance', text: 'Contact and plasma orb hits start at half damage and only ramp up from wave 15, more gently than before.' },
       { type: 'balance', text: 'Late waves still get much tougher, so every run ends eventually. Bosses grow more slowly than before.' },
-      { type: 'balance', text: 'You start with Pew Pews only. Wing Rockets are now a NEW WEAPON pick like every other weapon.' },
       { type: 'balance', text: 'NEW WEAPON cards depend on how many weapons you carry: 80% of hands with one (and never two hands in a row without), then 70%, 60%, 40% and 30%.' },
       { type: 'balance', text: 'Levels after 20 need more XP, and much more after 40, so upgrades keep coming through a long run.' }
+    ]
+  },
+  {
+    version: '0.12.1',
+    date: '2026-10-18',
+    title: 'Bigger Mine Blasts',
+    notes: [
+      { type: 'balance', text: 'Proximity Mines blast twice as wide. They are hard to place, so each one now catches a much bigger crowd.' }
+    ]
+  },
+  {
+    version: '0.12.0',
+    date: '2026-10-17',
+    title: 'Gold, Rerolls & Locks',
+    notes: [
+      { type: 'new', text: 'Gold veins now drop gold coins instead of XP: a run currency that starts at 0 each run, shown next to your Void Cores.' },
+      { type: 'new', text: 'REROLL a level-up hand with gold ([R] or X): 20 gold, then 40, 80 and so on in the same level-up, back to 20 on the next one.' },
+      { type: 'new', text: 'LOCK a card for 5 gold (Shift+1-3 or Y): it stays through rerolls, and if you pick another card it comes back in your next level-up.' },
+      { type: 'balance', text: 'Asteroid fields are made of about twice as many smaller rocks, covering about the same space. More gold veins to find, and each rock drills faster.' },
+      { type: 'balance', text: 'Each gold vein holds 2 gold. Mine gold veins regularly and you can reroll about every 4 level-ups and lock cards often.' }
+    ]
+  },
+  {
+    version: '0.11.2',
+    date: '2026-10-17',
+    title: 'Vortex Nerf & Clearer Evolutions',
+    notes: [
+      { type: 'balance', text: 'Vortex Singularity is still brutal at its core, but its pull fades hard toward the rim and its collapse deals only a quarter damage at the edge.' },
+      { type: 'fix', text: 'Evolution cards now say exactly which weapon they upgrade (EVOLUTION · PEW PEWS) and that they are not a new weapon.' },
+      { type: 'fix', text: 'Pulsar Helix (a Pew Pews evolution) is now easy to see: big magenta bolts spin out of your ship with every Pew Pews shot.' },
+      { type: 'fix', text: 'Swarm Missiles got a new yellow color so their cards no longer look like evolutions.' },
+      { type: 'new', text: 'The Field Guide splits WEAPONS (your starting kit and every weapon you can equip) from UPGRADES (all other cards, evolutions and tags).' }
+    ]
+  },
+  {
+    version: '0.11.1',
+    date: '2026-10-17',
+    title: 'Pew Pews Only',
+    notes: [
+      { type: 'balance', text: 'You now launch with just the Pew Pews. Wing Rockets moved into the NEW WEAPON pool with every other weapon.' }
+    ]
+  },
+  {
+    version: '0.11.0',
+    date: '2026-10-17',
+    title: 'Elites Grind Through Asteroids',
+    notes: [
+      { type: 'new', text: 'Lieutenants and bosses no longer get stuck on asteroids: they plow straight at you and grind through any rock in their way, with sparks and a low scrape.' },
+      { type: 'balance', text: 'Elites mine at your base drill speed (75 per second), never boosted by your drill upgrades, so a big rock still holds them for a moment.' },
+      { type: 'new', text: 'Rock an elite breaks drops its normal ore for you to grab: geoms, gold and deep cores. A shield crystal it crushes heals no one.' }
+    ]
+  },
+  {
+    version: '0.10.1',
+    date: '2026-10-17',
+    title: 'One Board For Everyone',
+    notes: [
+      { type: 'fix', text: 'The GLOBAL leaderboard no longer starts over with each update. It is one shared board, and every score shows the version it was set on.' },
+      { type: 'new', text: 'The VERSION buttons under the board still let you filter it to a single version.' },
+      { type: 'fix', text: 'Game over shows your rank on the shared board, next to the version you flew.' }
     ]
   },
   {

@@ -1,9 +1,9 @@
-// Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. a NEW WEAPON pick),
+// Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. gold reroll / lock and a NEW WEAPON pick),
 // pause (sliders, damage-number toggle, loadout discard with confirm), Field Guide, Patch Notes, chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
-const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
+const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
@@ -65,6 +65,62 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     await press(A);
     await expect('PLAYING', 'A on a card selects it');
     if (!(await page.evaluate(id => (__game.player.upgradeLevels[id] || 0) > 0, picked))) throw Error('Selected card was not applied');
+
+    // Gold: Y locks the focused card (5), X rerolls the rest (20), the focusable REROLL button rerolls
+    // again (40); picking another card carries the locked one into the next hand, where A takes it.
+    // NEW WEAPON cards stay off for this whole section (rerolls roll real hands, and A on a NEW WEAPON
+    // card opens the weapon pick); the odds are restored before the NEW WEAPON section below.
+    const oddsOff = () => page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      window.__savedOdds = Object.fromEntries(Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance')).map(k => [k, TUNING[k]]));
+      for (const k of Object.keys(window.__savedOdds)) TUNING[k] = 0;
+    });
+    const oddsBack = () => page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      Object.assign(TUNING, window.__savedOdds || {});
+    });
+    await oddsOff();
+    const plainHand = () => page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      const keys = Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance'));
+      const saved = keys.map(k => TUNING[k]);
+      keys.forEach(k => { TUNING[k] = 0; });
+      __game.player.newWeaponDrought = 0;
+      __game.triggerLevelUp();
+      keys.forEach((k, i) => { TUNING[k] = saved[i]; });
+    });
+    await page.evaluate(() => { __game.gold = 100; __game.updateHUD(); });
+    await plainHand();
+    await page.waitForTimeout(450);
+    await press(RIGHT);
+    await press(Y);
+    const lockState = await page.evaluate(() => ({ slot: __game.handLock?.slot, gold: __game.gold, badge: !!document.querySelectorAll('#upgrade-choices .upgrade-option')[1]?.querySelector('.card-lock-badge') }));
+    if (lockState.slot !== 1 || lockState.gold !== 95 || !lockState.badge) throw Error(`Y should lock the focused card 2 for 5 gold: ${JSON.stringify(lockState)}`);
+    const lockedId = await page.evaluate(() => __game.handLock.card.id);
+    await press(X);
+    const afterX = await page.evaluate(() => ({ gold: __game.gold, id: __game.currentChoices[1].id, rerolls: __game.handRerolls, label: document.getElementById('btn-reroll-hand').textContent }));
+    if (afterX.gold !== 75 || afterX.id !== lockedId || afterX.rerolls !== 1 || !afterX.label.includes('40')) throw Error(`X should reroll for 20 and keep the lock: ${JSON.stringify(afterX)}`);
+    await press(DOWN);
+    const rerollFocus = await page.evaluate(() => document.querySelector('#upgrade-modal .gp-focus')?.id);
+    if (rerollFocus !== 'btn-reroll-hand') throw Error(`Down from the cards should reach the REROLL button, got ${rerollFocus}`);
+    await press(A);
+    if ((await page.evaluate(() => __game.gold)) !== 35) throw Error('A on REROLL should reroll for 40');
+    await page.screenshot({ path: 'controller-reroll-lock.png' });
+    await press(UP);
+    const carriedPick = await page.evaluate(() => [...document.querySelectorAll('#upgrade-choices .upgrade-option')].findIndex(el => el.classList.contains('gp-focus')));
+    if (carriedPick < 0) throw Error('Up from REROLL should return to a card');
+    if (carriedPick === 1) await press(LEFT);
+    await press(A);
+    await expect('PLAYING', 'A picks a card other than the locked one');
+    await plainHand();
+    await page.waitForTimeout(450);
+    const carried = await page.evaluate(() => ({ id: __game.currentChoices[1]?.id, locked: __game.handLock?.slot, badge: !!document.querySelectorAll('#upgrade-choices .upgrade-option')[1]?.querySelector('.card-lock-badge'), label: document.getElementById('btn-reroll-hand').textContent }));
+    if (carried.id !== lockedId || carried.locked !== 1 || !carried.badge || !carried.label.includes('20')) throw Error(`The locked card should return in the next hand, locked, with rerolls back at 20: ${JSON.stringify(carried)}`);
+    await press(RIGHT);
+    await press(A);
+    await expect('PLAYING', 'A takes the carried locked card');
+    if (await page.evaluate(() => __game.carriedLock)) throw Error('Taking the locked card should use up the lock');
+    await oddsBack();
 
     // NEW WEAPON: walk to the card, A opens the weapon pick, A on the focused weapon equips it.
     await page.evaluate(() => { __game.player.newWeaponDrought = 99; __game.triggerLevelUp(); });
@@ -218,6 +274,6 @@ const A = 0, B = 1, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15
     await page.screenshot({ path: 'controller-gameplay.png' });
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

@@ -82,7 +82,7 @@ export const WEAPON_SCALING = {
   mineMaxActive: (lv) => 2 + lv,
   mineLifetime: (lv) => 9 + lv * 1.5,
   mineTriggerRadius: (lv) => 44 + lv * 4,
-  mineBlastRadius: (lv) => 80 + lv * 10,
+  mineBlastRadius: (lv) => 160 + lv * 20, // 2x (was 80 + 10/LV): mines are hard to place, so they hit a wide area
   mineDamageMult: (lv) => DPS_TARGET(lv) * W.mineCooldown(lv),
 
   // Sentry Turret (deployable): planted at the ship, shoots the nearest enemy it can see past cover.

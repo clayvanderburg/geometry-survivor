@@ -13,7 +13,7 @@ const { WarpGrid } = await import('../js/grid.js');
 const { ParticleSystem } = await import('../js/particles.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
-const { wellFalloff, wellPullScale, playerPullCap, playerPullShare, playerPullCapShare, MAX_PLAYER_PULL_SHARE, SHIP_THRUST_PER_TICK } = await import('../js/gravity.js');
+const { wellFalloff, wellPullScale, singularityPullScale, playerPullCap, playerPullShare, playerPullCapShare, MAX_PLAYER_PULL_SHARE, SHIP_THRUST_PER_TICK } = await import('../js/gravity.js');
 const silent = new Proxy({}, { get: () => () => {} });
 const stubGrid = { applyImpulse() {}, applyImplosion() {} };
 const stubSparks = { applyGravityWell() {} };
@@ -200,14 +200,14 @@ test('loose geoms sink into a black hole while magnetized geoms still fly to the
   assert.ok(Math.hypot(magnet.x - 1000, magnet.y - 1000) < startMagnetDist - 300, 'magnet pull wins over the well');
 });
 
-test('a Vortex Singularity drags a scattered pack into a tight clump before it collapses', () => {
+test('a Vortex Singularity clumps the pack near its core, while the rim only nudges (pull falloff nerf)', () => {
   const clumped = (withSingularity) => {
     const { game, manager } = arena();
     game.player.x = 1500; game.player.weapons.singularity = 1;
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
       const r = 50 + (k % 4) * 30; // all start inside the L1 pull radius (175px)
-      addEnemy(manager, 'swarmer', 2000 + Math.cos(a) * r, 2000 + Math.sin(a) * r);
+      addEnemy(manager, 'swarmer', 2000 + Math.cos(a) * r, 2000 + Math.sin(a) * r).ring = k % 4;
     }
     for (const e of manager.enemies) e.hp = e.maxHp = 1e9;
     let life = 2.6;
@@ -217,16 +217,32 @@ test('a Vortex Singularity drags a scattered pack into a tight clump before it c
       life = game.singularities[0].life;
     }
     for (let t = 0; t < Math.round(life * 60) - 2; t++) game.update(1 / 60);
-    return manager.enemies.filter(e => Math.hypot(e.x - 2000, e.y - 2000) < 60).length;
+    const near = (e) => Math.hypot(e.x - 2000, e.y - 2000) < 60;
+    return { inner: manager.enemies.filter(e => e.ring < 2 && near(e)).length, outer: manager.enemies.filter(e => e.ring >= 2 && near(e)).length };
   };
-  assert.ok(clumped(true) >= 20, 'at least 20 of 24 swarmers should be within 60px of the core');
-  assert.equal(clumped(false), 0);
+  // Nerfed curve: the inner rings still get dragged into the core; the outer rings mostly slip away.
+  const pulled = clumped(true);
+  assert.ok(pulled.inner >= 6, `inner rings still clump at the core, got ${pulled.inner} of 12`);
+  assert.ok(pulled.inner + pulled.outer <= 16, `the rim no longer vacuums the whole pack, got ${pulled.inner + pulled.outer} of 24`);
+  // Exponent 1 (the pre-nerf curve) still drags the whole pack in.
+  const saved = TUNING.singularityPullFalloff;
+  TUNING.singularityPullFalloff = 1;
+  try {
+    const old = clumped(true);
+    assert.ok(old.inner + old.outer >= 20, 'pre-nerf curve: at least 20 of 24 swarmers end within 60px of the core');
+  } finally {
+    TUNING.singularityPullFalloff = saved;
+  }
+  const none = clumped(false);
+  assert.equal(none.inner + none.outer, 0);
 });
 
 test('singularity collapse is an implosion damage pulse over 85% of its pull radius', () => {
   // Exact full-damage checks; blast edge falloff has its own test.
   const savedFalloff = TUNING.splashEdgeFalloff;
+  const savedCollapse = TUNING.singularityCollapseEdgeFalloff;
   TUNING.splashEdgeFalloff = 0;
+  TUNING.singularityCollapseEdgeFalloff = 0;
   try {
     const { game, manager } = arena();
     game.player.weapons.singularity = 2;
@@ -246,6 +262,41 @@ test('singularity collapse is an implosion damage pulse over 85% of its pull rad
     assert.equal(outside.hp, 1e6);
   } finally {
     TUNING.splashEdgeFalloff = savedFalloff;
+    TUNING.singularityCollapseEdgeFalloff = savedCollapse;
+  }
+});
+
+test('Vortex Singularity nerf: full pull and collapse damage at the core, fading hard toward the rim', () => {
+  const R = 300, strength = 0.75;
+  const pullAt = (frac, fn) => fn(R * frac, 0, R, strength, 20) * R * frac; // inward accel in px/tick²
+  // Near the core it pulls like the old curve; toward the rim it fades much faster.
+  assert.ok(pullAt(0.1, singularityPullScale) / pullAt(0.1, wellPullScale) > 0.8, 'near-core pull is kept');
+  const half = pullAt(0.5, singularityPullScale) / pullAt(0.5, wellPullScale);
+  const outer = pullAt(0.75, singularityPullScale) / pullAt(0.75, wellPullScale);
+  assert.ok(half > 0.33 && half < 0.45, `half radius keeps ~39%, got ${half.toFixed(2)}`);
+  assert.ok(outer > 0.08 && outer < 0.16, `three-quarters keeps ~12%, got ${outer.toFixed(2)}`);
+  assert.equal(singularityPullScale(R + 1, 0, R, strength, 20), 0, 'nothing outside the radius');
+  // Exponent 1 is the old curve exactly (the tuner can roll the nerf back).
+  assert.equal(singularityPullScale(150, 40, R, strength, 20, { singularityPullFalloff: 1 }), wellPullScale(150, 40, R, strength, 20));
+
+  // Collapse: full damage at the core, 25% at the rim by default.
+  const savedSplash = TUNING.splashEdgeFalloff;
+  try {
+    const { game, manager } = arena();
+    game.player.weapons.singularity = 2;
+    const core = addEnemy(manager, 'pinwheel', 2000, 2000);
+    const rim = addEnemy(manager, 'pinwheel', 2000, 2000);
+    game.fireSingularity(2);
+    const sg = game.singularities[0];
+    Object.assign(sg, { x: 2000, y: 2000, vx: 0, vy: 0, life: 1 / 60 });
+    Object.assign(core, { x: 2000, y: 2000 + core.radius, hp: 1e6, maxHp: 1e6 });
+    Object.assign(rim, { x: 2000 + sg.collapseRadius + rim.radius, y: 2000, hp: 1e6, maxHp: 1e6 });
+    game.updateSingularities(1 / 60);
+    const coreHit = 1e6 - core.hp, rimHit = 1e6 - rim.hp;
+    assert.ok(Math.abs(coreHit - sg.collapseDamage) / sg.collapseDamage < 0.02, 'the core takes the full collapse');
+    assert.ok(Math.abs(rimHit - sg.collapseDamage * 0.25) / sg.collapseDamage < 0.02, `the rim takes 25%, got ${(rimHit / sg.collapseDamage).toFixed(2)}`);
+  } finally {
+    TUNING.splashEdgeFalloff = savedSplash;
   }
 });
 

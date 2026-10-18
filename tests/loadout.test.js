@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   UPGRADE_POOL, UPGRADE_BY_ID, rollUpgrades, rollLevelUpHand, rollWeaponPicks, acquireWeapon, discardWeapon, eligibleUpgrades,
-  canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID
+  canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID, upgradeWeapons
 } = await import('../js/upgrades.js');
 const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons } = await import('../js/loadout.js');
 const { STAT_ROWS, describeWeaponPick, describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
@@ -449,7 +449,7 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
 
 test('owning Volatile Shatter unlocks the KINETIC tag card', () => {
   const p = freshGame().player;
-  fill(p, ['rockets']);
+  acquireWeapon(p, 'rockets');
   discardWeapon(p, 'blaster'); // Wing Rockets alone carry no KINETIC tag
   assert.deepEqual(p.loadout, ['rockets']);
   assert.ok(!ownedTags(p).has('kinetic'));
@@ -486,4 +486,33 @@ test('the loadout panel lists Shatter as a passive outside the slots, and the Fi
   const arsenal = body.find((line) => line.startsWith('Arsenal: '));
   assert.ok(!arsenal.includes('Volatile Shatter'), 'not listed as a weapon');
   assert.ok(body.some((line) => /Volatile Shatter is a PASSIVE/.test(line) && /no slot/.test(line) && /Tungsten Penetrators/.test(line)));
+});
+
+test('stress: no hand or cache ever offers a card for a weapon you do not own (incl. evolutions, after discards)', () => {
+  const rand = lcg(42);
+  withRandom(() => {
+    for (let run = 0; run < 150; run++) {
+      const p = freshGame().player;
+      // Random loadout, random upgrades taken from real hands, sometimes a discard mid-run.
+      const extra = unownedWeapons(p).sort(() => rand() - 0.5).slice(0, Math.floor(rand() * 5));
+      fill(p, extra);
+      for (let pick = 0; pick < 25; pick++) {
+        const hand = rollLevelUpHand(p, 3).filter((c) => !c.isNewWeapon);
+        if (hand.length) applyUpgradeLevels(p, UPGRADE_BY_ID[hand[Math.floor(rand() * hand.length)].id]);
+        if (rand() < 0.08 && ownedWeapons(p).length > 1) discardWeapon(p, ownedWeapons(p)[Math.floor(rand() * ownedWeapons(p).length)]);
+      }
+      const owned = new Set(ownedWeapons(p));
+      for (let roll = 0; roll < 12; roll++) {
+        for (const c of [...rollLevelUpHand(p, 3), ...rollUpgrades(p, 3)]) {
+          if (c.isNewWeapon) continue;
+          const u = UPGRADE_BY_ID[c.id];
+          const needs = upgradeWeapons(u);
+          if (!needs.length) continue;
+          const ok = u.ownersAll ? u.ownersAll.every((id) => owned.has(id)) : needs.some((id) => owned.has(id));
+          assert.ok(ok, `${u.id} offered with loadout [${[...owned]}] (needs ${needs.join(' + ')})`);
+          if (u.isSynergy) assert.ok(u.req(p), `${u.id} offered before its recipe was met`);
+        }
+      }
+    }
+  }, rand);
 });

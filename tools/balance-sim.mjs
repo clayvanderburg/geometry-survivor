@@ -196,6 +196,20 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       })];
     })));
 
+    // Gold economy: gold veins broken and gold collected, per minute and per level-up. The bot buys one
+    // reroll per hand whenever it can afford the base cost, so "level-ups per reroll" is the reroll pace.
+    out.push('\n## Gold economy (gold veins and gold per minute; gold per level-up; bot rerolls once per hand when it can afford it)');
+    out.push(table(['strategy', 'rocks mined/min', 'gold veins/min', 'gold/min', 'gold/level-up', 'rerolls/run', 'level-ups per reroll', 'gold at 5:00'], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      const mins = sumBy(rs, r => r.time) / 60;
+      const levelUps = sumBy(rs, r => r.level - 1);
+      const gold = sumBy(rs, r => r.goldEarned || 0);
+      const rerolls = sumBy(rs, r => r.rerolls || 0);
+      const at5 = rs.filter(r => r.goldAt && r.goldAt.length > 5).map(r => r.goldAt[5]);
+      return [s.name, (sumBy(rs, r => r.rocksMined || 0) / mins).toFixed(1), (sumBy(rs, r => r.goldVeins || 0) / mins).toFixed(1), (gold / mins).toFixed(1),
+        levelUps ? (gold / levelUps).toFixed(1) : '—', (rerolls / rs.length).toFixed(1), rerolls ? (levelUps / rerolls).toFixed(1) : '—', at5.length ? median(at5).toFixed(0) : '—'];
+    })));
+
     // Loadout: weapons equipped at the end of the run (NEW WEAPON picks).
     out.push('\n## Loadout at end of run (weapons equipped, most common first; mean weapon levels gained)');
     out.push(table(['strategy', 'weapons (mean)', 'equipped (count across runs)', 'weapon levels (mean)'], strategies.map(s => {

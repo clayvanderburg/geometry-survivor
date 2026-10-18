@@ -20,6 +20,7 @@
             <div id="multiplier-display" class="multiplier-badge">x1.0</div>
             <div id="luck-hud-display" class="luck-badge" title="Luck boosts +2/+3 Multi-Level Upgrades & Relic Chest Drops">🍀 100% LUCK</div>
             <div id="cores-hud-display" class="cores-badge" title="Void Cores harvested for permanent Armory upgrades">❖ 0 CORES</div>
+            <div id="gold-hud-display" class="gold-badge" title="Gold mined from gold veins this run: spend it to reroll or lock level-up cards">◆ 0 GOLD</div>
           </div>
         </div>
 
@@ -174,6 +175,7 @@
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
           <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
+          <button id="btn-pause-radar" class="neon-btn pause-toggle-btn active" aria-pressed="true">🛰 SECTOR RADAR: ON [R]</button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
         </div>
@@ -196,6 +198,7 @@
           <button class="guide-tab active" data-guide-tab="hostiles" role="tab" aria-selected="true">HOSTILES <span id="guide-tab-new" class="guide-tab-new"></span></button>
           <button class="guide-tab" data-guide-tab="mechanics" role="tab" aria-selected="false">MECHANICS</button>
           <button class="guide-tab" data-guide-tab="weapons" role="tab" aria-selected="false">WEAPONS</button>
+          <button class="guide-tab" data-guide-tab="upgrades" role="tab" aria-selected="false">UPGRADES</button>
         </div>
         <div id="guide-body" class="guide-body" tabindex="-1"></div>
         <div class="guide-foot"><span><b>← →</b> / <b>LB RB</b> tabs</span><span><b>↑ ↓</b> / <b>D-pad</b> browse</span><span><b>ESC</b> / <b>B</b> back</span></div>
@@ -209,7 +212,7 @@
           <div>
             <div class="glitch-subtitle">SHIP LOG // WHAT CHANGED</div>
             <h2 id="notes-title" class="guide-title">📜 PATCH NOTES</h2>
-            <div class="guide-progress notes-sub"><span>YOU ARE FLYING <span class="version-tag" data-game-version></span></span><span>GLOBAL SCORES ARE RANKED PER VERSION</span></div>
+            <div class="guide-progress notes-sub"><span>YOU ARE FLYING <span class="version-tag" data-game-version></span></span><span>EVERY GLOBAL SCORE SHOWS THE VERSION IT WAS SET ON</span></div>
           </div>
           <button id="btn-notes-close" class="neon-btn guide-close-btn">◀ BACK [ESC]</button>
         </div>
@@ -258,7 +261,7 @@
             <h1 class="neon-title">VEXOLITH<span>//</span><wbr>SURVIVOR</h1>
             <!-- Version tag + patch notes, right under the logo (version text comes from js/version.js) -->
             <div class="title-meta">
-              <span class="version-tag" data-game-version title="Game version: leaderboards are ranked per version"></span>
+              <span class="version-tag" data-game-version title="Game version: every global score shows the version it was set on"></span>
               <button id="btn-title-notes" class="neon-btn notes-open-btn notes-hub-btn" title="What changed in each version">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
             </div>
           </div>
@@ -307,8 +310,9 @@
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
-              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio</span>
-              <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Start Pause · D-Pad + A in Menus</span>
+              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar</span>
+              <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock a card (costs ◆ gold from gold veins)</span>
+              <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Back Radar · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
         </div>
@@ -328,6 +332,11 @@
           <p class="upgrade-hint">Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve</p>
         </div>
         <div id="upgrade-choices" class="upgrade-choices-grid"></div>
+        <div id="hand-goldbar" class="hand-goldbar">
+          <div id="hand-gold-count" class="hand-gold-count">◆ 0 GOLD</div>
+          <button id="btn-reroll-hand" class="neon-btn hand-reroll-btn" disabled>↻ REROLL · 20 ◆</button>
+          <div id="hand-lock-note" class="hand-lock-note"></div>
+        </div>
       </div>
     </div>
 

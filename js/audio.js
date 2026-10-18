@@ -956,6 +956,26 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.8, 0.05);
   }
 
+  // Elite grinding through rock: a low, gritty scrape tick, heavily throttled (one voice, ~9/s) and
+  // well under the blade grind. `vol` (0-1) falls off with the grind point's distance from the ship.
+  playEliteGrind(vol = 1) {
+    if (!(vol > 0.02) || !this.claimVoice('eliteGrind', 110, 1, 0.1)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(520 + Math.random() * 220, t);
+    band.frequency.exponentialRampToValueAtTime(300, t + 0.09);
+    band.Q.value = 3;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.045 * Math.min(1, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.1);
+  }
+
   // Volatile Shatter burst: a glassy three-partial tinkle.
   playShatter() {
     if (!this.claimVoice('shatter', 90, 2, 0.16)) return;

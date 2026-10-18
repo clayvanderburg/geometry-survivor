@@ -39,10 +39,11 @@ export const DEFAULT_TUNING = {
   chestTripleChance: 0.018,
   chestPentaChance: 0.003,
 
-  // 4. World, Asteroids & Economy
-  clusterCount: 38,
+  // 4. World, Asteroids & Economy (many small rocks: ~2x the old count at ~70% the size, similar coverage)
+  clusterCount: 44,
   rockHpMult: 1.6,
-  rockSizeMult: 1.15,
+  rockSizeMult: 0.8,
+  goldVeinChance: 0.15,
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -71,6 +72,8 @@ export const DEFAULT_TUNING = {
   blackholePickupPull: 0.3,
   singularityPull: 0.75,
   singularityCollapseMult: 1.0,
+  singularityPullFalloff: 3,
+  singularityCollapseEdgeFalloff: 0.75,
 
   // 6b. Spawn Placement & Pursuit (where enemies appear and how they close in; not how many or how tough)
   spawnRingMarginMin: 40,
@@ -110,6 +113,10 @@ export const DEFAULT_TUNING = {
   lieutenantFirstWave: 2,
   lieutenantDelay: 6,
   lieutenantCoreReward: 1,
+  // Elites (lieutenants + bosses) grind through rock at TUNING.miningSpeed (the ship's base drill DPS,
+  // no upgrades) × eliteMiningMult; eliteMining 0 turns it off (they steer round rock like the rest).
+  eliteMining: 1,
+  eliteMiningMult: 1.0,
 
   // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
   pierceFalloff: 0.7,
@@ -166,7 +173,13 @@ export const DEFAULT_TUNING = {
   damageRampBase: 0.5,
   damageRampFrom: 15,
   damageRampPerWave: 0.04,
-  xpPerWave: 0
+  xpPerWave: 0,
+
+  // 14. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
+  goldPerVein: 2,
+  goldRerollCost: 20,
+  goldRerollGrowth: 2,
+  goldLockCost: 5
 };
 
 export const TUNING_SCHEMA = [
@@ -221,7 +234,8 @@ export const TUNING_SCHEMA = [
     items: [
       { key: 'clusterCount', label: 'Asteroid Clusters (Respawn)', type: 'range', min: 5, max: 85, step: 1, unit: '' },
       { key: 'rockHpMult', label: 'Asteroid Rock HP Mult', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
-      { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.5, max: 2.2, step: 0.05, unit: 'x' },
+      { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.4, max: 2.2, step: 0.05, unit: 'x' },
+      { key: 'goldVeinChance', label: 'Gold Vein Share of Rocks', type: 'range', min: 0, max: 0.6, step: 0.01, unit: 'prob' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
@@ -253,7 +267,9 @@ export const TUNING_SCHEMA = [
       { key: 'blackholeBulletBend', label: 'Vortex Bullet Bending', type: 'range', min: 0, max: 1.0, step: 0.02, unit: 'px/t²' },
       { key: 'blackholePickupPull', label: 'Vortex Pull on Geoms', type: 'range', min: 0, max: 1.5, step: 0.02, unit: 'px/t²' },
       { key: 'singularityPull', label: 'Vortex Singularity Pull', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'px/t²' },
-      { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' }
+      { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'singularityPullFalloff', label: 'Singularity Pull Falloff (1 = old curve, higher = weaker rim)', type: 'range', min: 1, max: 4, step: 0.1, unit: '^' },
+      { key: 'singularityCollapseEdgeFalloff', label: 'Singularity Collapse Damage Lost at Rim', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'x' }
     ]
   },
   {
@@ -304,7 +320,9 @@ export const TUNING_SCHEMA = [
       { key: 'lieutenantMaxMods', label: 'Lieutenant Max Modifiers', type: 'range', min: 1, max: 2, step: 1, unit: '' },
       { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
       { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
-      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' }
+      { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' },
+      { key: 'eliteMining', label: 'Elites Grind Through Asteroids', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' }
     ]
   },
   {
@@ -372,6 +390,15 @@ export const TUNING_SCHEMA = [
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
       { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
+    ]
+  },
+  {
+    group: '◆ Gold, Rerolls & Locks',
+    items: [
+      { key: 'goldPerVein', label: 'Gold per Gold Vein', type: 'range', min: 0, max: 30, step: 1, unit: '' },
+      { key: 'goldRerollCost', label: 'First Reroll Cost (per hand)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
+      { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
+      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' }
     ]
   }
 ];
