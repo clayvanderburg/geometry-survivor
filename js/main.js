@@ -45,6 +45,7 @@ import {
   TUNING,
   DEFAULT_TUNING,
   TUNING_SCHEMA,
+  PLAYER_SETTING_KEYS,
   updateTuningKey,
   resetTuningToDefaults,
   onTuningChange,
@@ -68,8 +69,8 @@ export function radarSize(width, height) {
 }
 
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
-const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
-const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
+const PLAYER_SETTINGS = new Set(PLAYER_SETTING_KEYS);
+const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTINGS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
 
 // Run stats: damage stat ids -> weapon (by each weapon's tagSources) or another damage group.
 const STAT_GROUPS = buildSourceGroups(WEAPONS);
