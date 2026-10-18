@@ -16,8 +16,9 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-18',
     title: 'Tougher Still',
     notes: [
-      { type: 'balance', text: 'Enemies again: +20% health (was +10%), +8% speed, bigger and faster packs, harder hits, and the late waves toughen up and hit harder much faster.' },
+      { type: 'balance', text: 'Enemies again: +20% health, +8% speed, bigger and faster packs and harder hits. Their health now snowballs from wave 12 and climbs much faster.' },
       { type: 'balance', text: 'Your ship again: base shield 85, base damage 9.5, damage cards +42% per rank.' },
+      { type: 'balance', text: 'Void Armory trimmed (your ranks are kept): Plasma Overcharge +1% damage per rank, Aegis Shield Matrix +2 shield, Ablative Plating -0.4% damage taken.' },
       { type: 'new', text: 'Fresh leaderboards: every board in every mode was wiped. Version tabs start at this version.' }
     ]
   },

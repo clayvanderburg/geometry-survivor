@@ -49,12 +49,12 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   const p = g.player;
   let r = rowsById(p);
   assert.equal(r.damage.base, String(TUNING.baseDamage));
-  assert.equal(r.damage.permanent, '+15%');
-  assert.equal(r.maxHp.permanent, '+20');
+  assert.equal(r.damage.permanent, '+10%');
+  assert.equal(r.maxHp.permanent, '+10');
   assert.equal(r.critChance.base, '5%');
   assert.equal(r.critChance.permanent, '+2%');
   assert.equal(r.moveSpeed.permanent, '+4%');
-  assert.equal(r.damageTaken.permanent, '−5%');
+  assert.equal(r.damageTaken.permanent, '−4%');
   assert.equal(r.damageTaken.up.permanent, true, 'less damage taken is good');
   assert.equal(r.dash.permanent, '−0.15 s');
   for (const id of ['damage', 'maxHp', 'critChance', 'moveSpeed']) assert.equal(r[id].run, '—', `${id}: no cards yet`);
@@ -66,10 +66,10 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   install(p, 'firerate', 3);    // Autocannon Hyper-Capacitor: lives on the weapon build, not the base stat
   r = rowsById(p);
   assert.equal(r.damage.run, '+25%');
-  assert.equal(r.damage.permanent, '+15%', 'the armory share is unchanged by cards');
+  assert.equal(r.damage.permanent, '+10%', 'the armory share is unchanged by cards');
   assert.equal(r.moveSpeed.run, '+16%');
   assert.equal(r.maxHp.run, '+25');
-  assert.equal(r.maxHp.total, String(BASE_SHIELD + 20 + 25));
+  assert.equal(r.maxHp.total, String(BASE_SHIELD + 10 + 25));
   assert.equal(r.critChance.run, '+10%');
   assert.equal(r.critChance.total, '17%');
   assert.equal(r.tag_explosive.run, '+30%');
@@ -79,7 +79,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.fireRate.up.run, true);
   assert.equal(r.regen.run, '—', 'nothing changes shield regen');
   // TOTAL = BASE with both changes applied.
-  assert.ok(Math.abs(r.damage.values.total - TUNING.baseDamage * 1.15 * 1.12 * 1.12) < 1e-9);
+  assert.ok(Math.abs(r.damage.values.total - TUNING.baseDamage * 1.1 * 1.12 * 1.12) < 1e-9);
   assert.match(statsHtml(p), /PERMANENT[\s\S]*THIS RUN[\s\S]*TOTAL/);
 });
 

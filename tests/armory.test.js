@@ -42,16 +42,16 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   assert.equal(none.damageMult, 1);
   assert.equal(none.extraBombs, 0);
   const b = armoryBonuses({ damage: 10, armor: 30, dash: 25, maxHp: 5, critChance: 5, startGold: 3, bombs: 2 });
-  assert.ok(Math.abs(b.damageMult - 1.15) < 1e-9);
-  assert.ok(Math.abs(b.damageTakenMult - 0.85) < 1e-9, '30 ranks of plating: -15% damage taken');
+  assert.ok(Math.abs(b.damageMult - 1.1) < 1e-9);
+  assert.ok(Math.abs(b.damageTakenMult - 0.88) < 1e-9, '30 ranks of plating: -12% damage taken');
   assert.ok(Math.abs(b.dashCooldownMult - 0.75) < 1e-9);
-  assert.equal(b.bonusHp, 20);
+  assert.equal(b.bonusHp, 10);
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
-  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+15%');
-  assert.equal(formatArmoryValue(META_BY_ID.armor, 10), '-5.0%');
-  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+12');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+10%');
+  assert.equal(formatArmoryValue(META_BY_ID.armor, 10), '-4.0%');
+  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+6');
 });
 
 test('an old save is reset once (ranks + cores), keeping callsign, high scores and the Field Guide', () => {
@@ -107,11 +107,11 @@ test('every armory stat reaches the run', () => {
     moveSpeed: 10, dash: 20, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
   const p = g.player, b = base.player;
   const near = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} vs ${e}`);
-  near(p.stats.damage, b.stats.damage * 1.15, 'damage');
+  near(p.stats.damage, b.stats.damage * 1.1, 'damage');
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance');
   near(p.stats.critDamage, b.stats.critDamage + 0.2, 'crit damage');
   near(p.stats.areaMult, 1.1, 'area');
-  near(p.maxHp, b.maxHp + 40, 'max shield');
+  near(p.maxHp, b.maxHp + 20, 'max shield');
   near(p.stats.moveSpeed, b.stats.moveSpeed * 1.08, 'move speed');
   near(p.stats.coreDropMult, b.stats.coreDropMult * 1.2, 'core gain');
   near(p.stats.xpMultiplier, b.stats.xpMultiplier * 1.1, 'xp');
@@ -126,7 +126,7 @@ test('every armory stat reaches the run', () => {
   // Damage taken and post-hit invulnerability.
   p.hp = p.maxHp = 100; b.hp = b.maxHp = 100;
   g.damagePlayer(20); base.damagePlayer(20);
-  near(100 - p.hp, 18, 'plating: -10% damage taken');
+  near(100 - p.hp, 18.4, 'plating: -8% damage taken');
   near(p.invuln, b.invuln + 0.1, 'phase buffer');
   // Dash cooldown.
   g.triggerDash(); base.triggerDash();
