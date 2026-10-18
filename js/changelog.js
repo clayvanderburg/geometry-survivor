@@ -25,6 +25,15 @@ export const CHANGELOG = Object.freeze([
     ]
   },
   {
+    version: '0.12.2',
+    date: '2026-10-18',
+    title: 'Scores Fixed',
+    notes: [
+      { type: 'fix', text: 'Fixed runs not reaching the GLOBAL board after you had moved a volume slider. Your volume is kept; everything else resets to the current balance.' },
+      { type: 'fix', text: 'Balance updates now reach every player. Before, an old saved copy of the settings could keep you on outdated numbers.' }
+    ]
+  },
+  {
     version: '0.12.1',
     date: '2026-10-18',
     title: 'Bigger Mine Blasts',
