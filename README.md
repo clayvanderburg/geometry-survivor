@@ -282,6 +282,8 @@ The simulation runs at a fixed 60 Hz; rendering follows display refresh. Enemy n
 
 Optional browser check: install Playwright separately, then run `node tools/browser-smoke.cjs` (or supply an existing Playwright module path as its first argument). It uses an isolated headless Chrome profile; set `BROWSER_EXECUTABLE` to choose another Chromium executable. Local assets are supplied through request interception, so the test needs no running server or network. Screenshots are written to the current folder. `node tools/controller-smoke.cjs <playwright-module-path>` plays title → level-up → NEW WEAPON pick → pause (sliders, damage numbers, loadout discard + confirm) → Field Guide → Patch Notes → chest → game over with a simulated gamepad only. `node tools/leaderboard-smoke.cjs <playwright-module-path>` checks the global board offline (aborted API), with a slow API (timeout fallback) and against a faked `/api/scores` (tabs and VERSION selector by mouse and controller, versioned submit, GLOBAL RANK · version line), saving `leaderboard-*-smoke.png` screenshots.
 
+Animation review: `node tools/frame-capture.cjs <playwright-module-path> --scene fly|blast|supernova|vortex|range --frames 30 --every 2` steps the real game a fixed number of ticks per frame (seeded, so a command always captures the same frames) and writes `frame-NNN.png`, a contact sheet `sheet.png` and `anim.gif` (ffmpeg) to `captures/<scene>/` (git-ignored). `--crop N` frames the ship, `--setup "JS"` runs extra code with `g` (Game) and `p` (player), `--range '{json}'` configures the Weapon Range scene, and `--hud` keeps the HUD. See the file header for every option.
+
 See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits.
 
 ### Balance simulator

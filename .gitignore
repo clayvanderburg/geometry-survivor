@@ -8,3 +8,4 @@ audio-validation.json
 # Netlify local state and build output
 .netlify
 dist/
+captures/
