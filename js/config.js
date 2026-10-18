@@ -30,7 +30,7 @@ export const DEFAULT_TUNING = {
   drillJawColor: '#ffcc00',
 
   // 2. Weapons & Shield
-  baseDamage: 10, // 11 before v0.29 (harder pass)
+  baseDamage: 9.5, // 11 before v0.29, 10 before v0.31 (harder passes)
   fireRate: 6.5,
   bulletSpeed: 14.0,
   bulletRadius: 3.8,
@@ -76,8 +76,8 @@ export const DEFAULT_TUNING = {
   gridShipLight: 1.0,
   vfxIntensity: 1.0,
   vfxLinger: 1.0,
-  enemySpeedMult: 1.05, // 1.0 before v0.29 (harder pass)
-  enemyHpMult: 1.1, // 1.0 before v0.29
+  enemySpeedMult: 1.08, // 1.0 before v0.29, 1.05 before v0.31 (harder passes)
+  enemyHpMult: 1.2, // 1.0 before v0.29, 1.1 before v0.31
 
   // 6. Gravity Wells & Singularities (pulls are px/tick² at the core, eased to 0 at the rim)
   blackholePullRadius: 200,
@@ -187,15 +187,15 @@ export const DEFAULT_TUNING = {
   waveHpStart: 2.5,
   waveHpStartLight: 1,
   waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
-  waveHpGrowth: 1.06,
+  waveHpGrowth: 1.065, // 1.06 before v0.31
   waveHpGrowthFrom: 18,
   waveHpGrowthRamp: 14,
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
   spawnIntervalStart: 2.6,
   spawnIntervalTau: 7,
-  spawnIntervalMin: 0.7, // 0.75 before v0.29
-  packSizeMult: 1.1, // 1.0 before v0.29
+  spawnIntervalMin: 0.65, // 0.75 before v0.29, 0.7 before v0.31
+  packSizeMult: 1.2, // 1.0 before v0.29, 1.1 before v0.31
   swarmPackPerWave: 2,
   swarmPackMax: 40,
   skirmishPackPerWave: 0.6,
@@ -203,9 +203,9 @@ export const DEFAULT_TUNING = {
   splitterPackPerWave: 0.4,
   splitterPackMax: 10,
   bossHpMult: 0.5,
-  damageRampBase: 0.55, // 0.5 before v0.29
+  damageRampBase: 0.6, // 0.5 before v0.29, 0.55 before v0.31
   damageRampFrom: 10,
-  damageRampPerWave: 0.044, // 0.04 before v0.29
+  damageRampPerWave: 0.048, // 0.04 before v0.29, 0.044 before v0.31
   damageRampSmooth: 10, // waves over which the ramp eases in to its full per-wave rate
   xpPerWave: 0,
 
@@ -237,7 +237,7 @@ export const TUNING_SCHEMA = [
   {
     group: '🔫 Weapons & Shield Barrier',
     items: [
-      { key: 'baseDamage', label: 'Base Blaster Damage', type: 'range', min: 2, max: 60, step: 1, unit: '' },
+      { key: 'baseDamage', label: 'Base Blaster Damage', type: 'range', min: 2, max: 60, step: 0.5, unit: '' },
       { key: 'fireRate', label: 'Base Fire Rate', type: 'range', min: 1.5, max: 25, step: 0.5, unit: '/s' },
       { key: 'bulletSpeed', label: 'Projectile Velocity', type: 'range', min: 5, max: 32, step: 0.5, unit: '' },
       { key: 'bulletRadius', label: 'Projectile Thickness', type: 'range', min: 2.0, max: 12.0, step: 0.2, unit: 'px' },

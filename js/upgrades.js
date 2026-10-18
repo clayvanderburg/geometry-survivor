@@ -673,8 +673,8 @@ export const HIT_INVULN_BASE = 0.65;
 // The ship at run start, before any card: TUNING's base values with the Void Armory bonuses
 // (progression.js armoryBonuses; {} gives the bare base). resetRun builds the player from it, and the pause
 // menu builds it with no bonuses to split each stat into BASE / PERMANENT / THIS RUN (js/run-overview.js).
-// Shield a run starts with, before Void Armory bonuses (100 before v0.29's harder pass).
-export const BASE_SHIELD = 90;
+// Shield a run starts with, before Void Armory bonuses (100 before v0.29, 90 before v0.31: harder passes).
+export const BASE_SHIELD = 85;
 
 export function runStartPlayer(bonuses = {}, t = TUNING) {
   const maxHp = BASE_SHIELD + (bonuses.bonusHp || 0);

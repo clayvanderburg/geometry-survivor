@@ -30,13 +30,16 @@ export const MIGRATION_PREFIX = 'migrations/';
 
 // One-time board cleanups. Each runs once per store: the first /api/scores request after it deploys
 // removes every matching entry from every board (all-time and per version), then writes a marker blob
-// so it never runs again. A purge matches by callsign (`names`) and/or by one run's fingerprint
-// (`version`, `wave`, `minScore`..`maxScore`); every field given must match. Later runs are kept.
+// so it never runs again. A purge matches by callsign (`names`), by one run's fingerprint (`version`,
+// `wave`, `minScore`..`maxScore`) and/or by every run flown before a version (`beforeVersion`, including
+// runs with no version); every field given must match. Later runs are kept.
 export const PURGES = Object.freeze([
   // The developer's test runs, cleared for a fresh start with the rebuilt Void Armory.
   { id: 'purge-madking-nox-v1', names: ['MADKING', 'NOX'] },
   // The developer's ~87M wave-36 run on 0.16.0 (from before the v0.17 weapon rework), removed on request.
-  { id: 'purge-dev-87m-v0160-v1', version: '0.16.0', wave: 36, minScore: 80e6, maxScore: 95e6 }
+  { id: 'purge-dev-87m-v0160-v1', version: '0.16.0', wave: 36, minScore: 80e6, maxScore: 95e6 },
+  // Fresh start for v0.31.0 (second harder pass): every board of every mode, all-time included.
+  { id: 'wipe-before-v0310', beforeVersion: '0.31.0' }
 ]);
 
 // Does a board entry match a purge rule?
@@ -46,6 +49,7 @@ export function purgeMatches(purge, e) {
   if (purge.wave !== undefined && e.wave !== purge.wave) return false;
   if (purge.minScore !== undefined && !(e.score >= purge.minScore)) return false;
   if (purge.maxScore !== undefined && !(e.score <= purge.maxScore)) return false;
+  if (purge.beforeVersion !== undefined && typeof e.version === 'string' && compareVersions(e.version, purge.beforeVersion) >= 0) return false;
   return true;
 }
 

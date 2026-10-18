@@ -155,10 +155,10 @@ test('headlines are computed from the rolled level jump', () => {
   assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
   assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 AUTOCANNON PIERCE');
-  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+45% AUTOCANNON DAMAGE');
-  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+110% AUTOCANNON DAMAGE');
-  // From 3x up a compounding gain reads as a multiplier (+4 ranks: 1.45^4 = 4.42x, not "+342%").
-  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 4 }).headline, '4.4× AUTOCANNON DAMAGE');
+  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+42% AUTOCANNON DAMAGE');
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+102% AUTOCANNON DAMAGE');
+  // From 3x up a compounding gain reads as a multiplier (+4 ranks: 1.42^4 = 4.07x, not "+307%").
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 4 }).headline, '4.1× AUTOCANNON DAMAGE');
   assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(levelBuild('missiles', 1))} MISSILES / SALVO`);
 });
 

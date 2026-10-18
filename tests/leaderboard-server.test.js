@@ -508,6 +508,29 @@ test('one-time purge of a single run: matches its version, wave and score, nothi
   assert.deepEqual(store.board(VERSION_BOARD_PREFIX + '0.16.0').map((r) => r.id), ['w']);
 });
 
+test('v0.31.0 wipe: every run from before 0.31.0 (and with no version) leaves every board of every mode', async () => {
+  const rule = PURGES.find((p) => p.id === 'wipe-before-v0310');
+  assert.equal(rule?.beforeVersion, '0.31.0');
+  const { store, handler } = setup({ purges: [rule] });
+  const e = (id, version) => ({ id, name: 'PILOT', score: 1000, wave: 10, level: 15, kills: 900, multiplier: 10, time: 200, date: '2026-10-17T00:00:00.000Z', version });
+  store.put(BOARD_KEY, { version: 1, entries: [e('a', '0.30.0'), e('b', null), e('c', '0.31.0'), e('d', '0.9.0')] });
+  store.put(VERSION_BOARD_PREFIX + '0.29.0', { version: 1, entries: [e('x', '0.29.0')] });
+  store.put('board-v1-hc', { version: 1, entries: [e('h', '0.28.0')] });
+  store.put('board-v1-blitz@0.28.0', { version: 1, entries: [e('z', '0.28.0')] });
+  await get(handler, 'all');
+  assert.deepEqual(store.board().map((r) => r.id), ['c']);
+  assert.deepEqual(store.board(VERSION_BOARD_PREFIX + '0.29.0'), []);
+  assert.deepEqual(store.board('board-v1-hc'), []);
+  assert.deepEqual(store.board('board-v1-blitz@0.28.0'), []);
+});
+
+test('version tabs start at 0.31.0: older versions have no board and their runs are refused', () => {
+  assert.ok(BOARD_VERSIONS.length && BOARD_VERSIONS.every((v) => v.split('.').map(Number).reduce((a, n) => a * 1000 + n) >= 31000));
+  assert.ok(checkVersion('0.30.0').error);
+  assert.ok(checkVersion('0.16.0').error);
+  assert.equal(checkVersion(GAME_VERSION).version, GAME_VERSION);
+});
+
 test('a failing purge never blocks the board', async () => {
   const { store, handler } = setup({ purges: [{ id: 'boom', names: ['ACE'] }] });
   store.put(BOARD_KEY, { version: 1, entries: [] });
