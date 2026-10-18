@@ -15,6 +15,7 @@ const {
 } = await import('../js/tutorial.js');
 const { GAME_VERSION } = await import('../js/version.js');
 const { DEFAULT_TUNING } = await import('../js/config.js');
+const { Game } = await import('../js/main.js');
 
 const root = new URL('../', import.meta.url);
 const memoryStorage = () => {
@@ -86,7 +87,7 @@ test('the seen flag: first visit opens it, closing remembers it, blocked storage
   assert.equal(new TutorialUI({ storage: { getItem: () => '1', setItem() {} } }).shouldAutoOpen(), false);
 });
 
-test('TutorialUI: NEXT / BACK / skip, LET\'S FLY on the last slide, the Field Guide hand-off', () => {
+function installDom() {
   const els = new Map();
   const el = (id) => {
     if (!els.has(id)) {
@@ -99,10 +100,16 @@ test('TutorialUI: NEXT / BACK / skip, LET\'S FLY on the last slide, the Field Gu
     }
     return els.get(id);
   };
-  globalThis.document = { getElementById: el };
+  globalThis.document = { getElementById: el, querySelectorAll: () => [], activeElement: null };
+  return el;
+}
+
+test('TutorialUI: NEXT / BACK / skip, LET\'S FLY on the last slide, the Field Guide hand-off', () => {
+  const el = installDom();
   const storage = memoryStorage();
+  const reasons = [];
   let closed = 0, guide = 0;
-  const ui = new TutorialUI({ storage, slides: tutorialSlides(DEFAULT_TUNING), getInput: () => 'touch', onClose: () => closed++, onGuide: () => guide++ });
+  const ui = new TutorialUI({ storage, slides: tutorialSlides(DEFAULT_TUNING), getInput: () => 'touch', onClose: (r) => { closed++; reasons.push(r); }, onGuide: () => guide++ });
   const count = ui.slides.length;
 
   assert.equal(ui.open(), true);
@@ -132,6 +139,71 @@ test('TutorialUI: NEXT / BACK / skip, LET\'S FLY on the last slide, the Field Gu
   el('tutorial-body').listeners.click({ target: { closest: (sel) => (sel === '[data-tutorial-guide]' ? {} : null) } });
   assert.equal(closed, 3);
   assert.equal(guide, 1);
+  assert.deepEqual(reasons, ['done', 'skip', 'guide']);
+});
+
+// A Game with just what the tutorial wiring touches.
+function tutorialGame(storage) {
+  const game = Object.assign(Object.create(Game.prototype), {
+    state: 'TITLE', guideOpen: false, notesOpen: false, tutorialOpen: false, tutorialOnLaunch: false,
+    sound: { init() {} }, menuNav: { clear() {} }, resetInput() {}, range: { active: false }
+  });
+  game.tutorial = new TutorialUI({ storage, slides: tutorialSlides(DEFAULT_TUNING), onClose: (r) => game.onTutorialClosed(r), onGuide: () => { game.guideOpened = true; } });
+  return game;
+}
+
+test('the first LAUNCH on a device shows the tutorial first; closing it starts the run; never again once seen', () => {
+  const el = installDom();
+  const storage = memoryStorage();
+  const game = tutorialGame(storage).enableFirstLaunchTutorial();
+  assert.equal(el('tutorial-modal').classList.contains('hidden'), true, 'nothing opens before LAUNCH');
+
+  Game.prototype.startGame.call(game);
+  assert.equal(game.tutorialOpen, true, 'LAUNCH opens the tutorial');
+  assert.equal(game.state, 'TITLE', 'the run waits for the tutorial');
+  let launches = 0;
+  game.startGame = () => { launches++; };
+  game.tutorial.next();
+  assert.equal(launches, 0);
+  el('btn-tutorial-skip').listeners.click();
+  assert.equal(game.tutorialOpen, false);
+  assert.equal(launches, 1, 'SKIP carries on into the run');
+  assert.equal(storage.map.get(TUTORIAL_SEEN_KEY), '1');
+
+  // Seen: the next LAUNCH (also after a reload) goes straight into the run.
+  const again = tutorialGame(storage).enableFirstLaunchTutorial();
+  assert.equal(again.tutorial.shouldAutoOpen(), false);
+  assert.equal(again.openTutorial({ launchAfter: true }) && again.tutorialLaunchAfter, true, 'TUTORIAL buttons still open it');
+  again.closeTutorial();
+});
+
+test('first-launch tutorial: LET\'S FLY launches, Esc / B skip into the run, the Field Guide button stays on the title', () => {
+  const el = installDom();
+  for (const [how, close] of [
+    ['done', (g) => { g.tutorial.go(g.tutorial.slides.length - 1); g.tutorial.next(); }],
+    ['esc', (g) => g.handleTutorialKey({ code: 'Escape', preventDefault() {} }, false)],
+    ['pad', (g) => { Object.assign(g, { gpActive: true, menuGrace: 0, menuState: 'TUTORIAL', menuNav: { clear() {}, update() {}, activate() {} } }); g.updateTutorialController({ pressed: (b) => b === 1, aimY: 0 }, 0.016); }],
+    ['guide', (g) => el('tutorial-body').listeners.click({ target: { closest: (sel) => (sel === '[data-tutorial-guide]' ? {} : null) } })]
+  ]) {
+    const game = tutorialGame(memoryStorage()).enableFirstLaunchTutorial();
+    Game.prototype.startGame.call(game);
+    let launches = 0;
+    game.startGame = () => { launches++; };
+    close(game);
+    assert.equal(game.tutorialOpen, false, how);
+    assert.equal(launches, how === 'guide' ? 0 : 1, how);
+    if (how === 'guide') assert.equal(game.guideOpened, true);
+  }
+
+  // Off unless the browser boot switches it on (headless tests and tools launch straight in), and a
+  // tutorial replayed from a TUTORIAL button never launches a run.
+  const plain = tutorialGame(memoryStorage());
+  plain.state = 'PAUSED';
+  let launches = 0;
+  plain.startGame = () => { launches++; };
+  assert.equal(plain.openTutorial(), true);
+  plain.closeTutorial();
+  assert.equal(launches, 0);
 });
 
 test('the page has the tutorial, a SKIP button, the replay hint and TUTORIAL buttons on the title (desktop + touch) and pause menu', () => {
@@ -142,5 +214,5 @@ test('the page has the tutorial, a SKIP button, the replay hint and TUTORIAL but
   assert.match(html, /data-m-proxy="btn-title-tutorial"/);
   assert.match(html, /class="tutorial-replay"[^>]*>[^<]*<b>🎓 TUTORIAL<\/b> on the title screen or in the pause menu/);
   const main = readFileSync(new URL('js/main.js', root), 'utf8');
-  assert.match(main, /new Game\(\)\.maybeShowTutorial\(\)/);
+  assert.match(main, /new Game\(\)\.enableFirstLaunchTutorial\(\)/);
 });

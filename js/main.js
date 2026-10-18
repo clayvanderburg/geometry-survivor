@@ -177,7 +177,7 @@ const GUIDE_SCAN_TICKS = 6;
 const GUIDE_STATES = ['TITLE', 'PAUSED', 'GAMEOVER'];
 // Screens with a PATCH NOTES button (the notes overlay closes itself if the state moves on).
 const NOTES_STATES = ['TITLE', 'PAUSED'];
-// Screens with a TUTORIAL button; the tutorial also opens by itself over the title on a first visit.
+// Screens with a TUTORIAL button; the tutorial also opens by itself on the first LAUNCH on a device.
 const TUTORIAL_STATES = ['TITLE', 'PAUSED'];
 
 // Crits shove a little harder and flash a gold star flare sized to the target.
@@ -267,12 +267,15 @@ export class Game {
     // when there are notes for a version the player hasn't read.
     this.notesOpen = false;
     this.patchNotes = new PatchNotesUI({ onClose: () => this.onNotesClosed() });
-    // First-run tutorial (js/tutorial.js): opens over the title on a first visit (maybeShowTutorial),
-    // skippable on every slide, replayed from the TUTORIAL buttons.
+    // First-run tutorial (js/tutorial.js): opens on the first LAUNCH on a device (the run starts when it
+    // closes; switched on by the browser boot, enableFirstLaunchTutorial), skippable on every slide,
+    // replayed from the TUTORIAL buttons.
     this.tutorialOpen = false;
+    this.tutorialOnLaunch = false;
+    this.tutorialLaunchAfter = false;
     this.tutorial = new TutorialUI({
       getInput: () => (this.gpActive ? 'pad' : this.touchMode ? 'touch' : 'keyboard'),
-      onClose: () => this.onTutorialClosed(),
+      onClose: (reason) => this.onTutorialClosed(reason),
       onGuide: () => this.openGuide()
     });
     this.renderVersionTags();
@@ -1586,6 +1589,9 @@ export class Game {
 
   startGame() {
     this.sound.init();
+    // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
+    if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
+      && this.openTutorial({ launchAfter: true })) return;
     if (this.guideOpen) this.closeGuide();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
@@ -5202,17 +5208,20 @@ export class Game {
 
   // --- Tutorial ------------------------------------------------------------------------------------
 
-  // A first visit (the tutorial was never skipped or finished on this device) opens it over the title.
-  maybeShowTutorial() {
-    if (this.tutorial?.shouldAutoOpen() && this.state === 'TITLE') this.openTutorial();
+  // The browser boot switches this on: the first LAUNCH on a device (the tutorial was never skipped or
+  // finished here) shows the tutorial before the run. Headless tests and tools leave it off.
+  enableFirstLaunchTutorial() {
+    this.tutorialOnLaunch = true;
+    return this;
   }
 
-  openTutorial() {
+  openTutorial({ launchAfter = false } = {}) {
     if (this.tutorialOpen || this.guideOpen || this.notesOpen || !TUTORIAL_STATES.includes(this.state) || !this.tutorial) return false;
     this.tutorialReturnFocus = document.activeElement;
     this.closeMobileWindows();
     if (!this.tutorial.open()) return false;
     this.tutorialOpen = true;
+    this.tutorialLaunchAfter = launchAfter;
     this.resetInput();
     this.menuNav?.clear();
     // Focus moves into the tutorial so Enter/Space can't click the (now covered) button that opened it.
@@ -5224,11 +5233,16 @@ export class Game {
     this.tutorial?.close();
   }
 
-  onTutorialClosed() {
+  // Opened by the first LAUNCH: SKIP or LET'S FLY carries on into the run (the Field Guide button
+  // stays on the title instead).
+  onTutorialClosed(reason) {
+    const launch = this.tutorialLaunchAfter && (reason === 'skip' || reason === 'done') && this.state === 'TITLE';
     this.tutorialOpen = false;
+    this.tutorialLaunchAfter = false;
     this.menuNav?.clear();
     this.menuState = null;
     this.tutorialReturnFocus?.focus?.();
+    if (launch) this.startGame();
   }
 
   // Keyboard in the tutorial: ←/→ change slides, Enter/Space go on (or press the focused button),
@@ -5248,8 +5262,8 @@ export class Game {
     }
     if (onControl && inTutorial && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
     const actions = {
-      Escape: () => tut.close(),
-      Backspace: () => tut.close(),
+      Escape: () => tut.close('skip'),
+      Backspace: () => tut.close('skip'),
       ArrowRight: () => tut.go(tut.index + 1),
       ArrowLeft: () => tut.go(tut.index - 1),
       KeyD: () => tut.go(tut.index + 1),
@@ -5280,7 +5294,7 @@ export class Game {
     this.menuNav.update(tut.root, gp, dt, tut.nextBtn);
     if (this.menuGrace > 0) return;
     if (gp.pressed(PAD.B)) {
-      tut.close();
+      tut.close('skip');
     } else if (gp.pressed(PAD.RB)) {
       tut.go(tut.index + 1);
     } else if (gp.pressed(PAD.LB)) {
@@ -5930,5 +5944,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().maybeShowTutorial());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial());
 }

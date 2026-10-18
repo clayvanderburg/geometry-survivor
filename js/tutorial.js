@@ -1,6 +1,6 @@
-// TUTORIAL: a short slide show for new pilots (#tutorial-modal). It opens by itself the first time the
-// game loads, can be skipped from every slide, and is replayed from the 🎓 TUTORIAL buttons (title
-// screen and pause menu). Each slide is a clip of the real game (assets/tutorial/*.webp, captured by
+// TUTORIAL: a short slide show for new pilots (#tutorial-modal). It opens by itself on the first LAUNCH
+// on a device (the run starts when it closes), never again once seen, can be skipped from every slide,
+// and is replayed from the 🎓 TUTORIAL buttons (title screen and pause menu). Each slide is a clip of the real game (assets/tutorial/*.webp, captured by
 // tools/tutorial-media.cjs) and one or two short lines. The last slide points to the Field Guide.
 //
 // KEEP IT ACCURATE. When a change alters something a slide says or shows (controls, the shield, mining
@@ -123,6 +123,8 @@ export function tutorialDotsHTML(index, count) {
 
 // DOM controller for #tutorial-modal. `getInput` names the active input (keyboard / touch / pad) so the
 // controls slide speaks the player's language; `onGuide` opens the Field Guide from the last slide.
+// `onClose(reason)` says how it closed: 'skip' (SKIP / Esc / B), 'done' (LET'S FLY), 'guide' (the Field
+// Guide button) or 'closed' (anything else, e.g. the screen behind it went away).
 export class TutorialUI {
   constructor({ storage = defaultTutorialStorage(), slides = tutorialSlides(), getInput = () => 'keyboard', onClose = null, onGuide = null } = {}) {
     this.storage = storage;
@@ -136,7 +138,7 @@ export class TutorialUI {
     this.root = null;
   }
 
-  // First visit: the slides have never been closed (skipped or finished) on this device.
+  // Not seen yet: the slides have never been closed (skipped or finished) on this device.
   shouldAutoOpen() {
     return !this.seen;
   }
@@ -150,7 +152,7 @@ export class TutorialUI {
     this.prevBtn = doc?.getElementById('btn-tutorial-prev');
     this.nextBtn = doc?.getElementById('btn-tutorial-next');
     if (!this.root || !this.body) return false;
-    doc.getElementById('btn-tutorial-skip')?.addEventListener('click', () => this.close());
+    doc.getElementById('btn-tutorial-skip')?.addEventListener('click', () => this.close('skip'));
     this.prevBtn?.addEventListener('click', () => this.go(this.index - 1));
     this.nextBtn?.addEventListener('click', () => this.next());
     this.body.addEventListener('click', (e) => {
@@ -178,22 +180,22 @@ export class TutorialUI {
   }
 
   // Closing (SKIP or the last slide) marks the tutorial seen, in memory even when storage is blocked.
-  close() {
+  close(reason = 'closed') {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.root.classList.add('hidden');
     this.seen = true;
     writeTutorialSeen(this.storage);
-    this.onClose?.();
+    this.onClose?.(reason);
   }
 
   openGuide() {
-    this.close();
+    this.close('guide');
     this.onGuide?.();
   }
 
   next() {
-    if (this.index >= this.slides.length - 1) this.close();
+    if (this.index >= this.slides.length - 1) this.close('done');
     else this.go(this.index + 1);
   }
 

@@ -52,16 +52,15 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
       if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`);
     };
 
-    // First visit: the tutorial is open over the title. RB moves a slide, B skips it.
-    if (!await page.locator('#tutorial-modal').isVisible()) throw Error('The tutorial should open on a first visit');
+    // First LAUNCH: A on the title opens the tutorial; RB moves a slide, B skips it into the run.
+    await press(A);
+    if (!await page.locator('#tutorial-modal').isVisible()) throw Error('The first launch should show the tutorial');
+    await page.waitForTimeout(300);
     await press(RB);
     if (await page.evaluate(() => __game.tutorial.index) !== 1) throw Error('RB should show tutorial slide 2');
     await press(B);
     if (await page.locator('#tutorial-modal').isVisible()) throw Error('B should skip the tutorial');
-    await page.waitForTimeout(300);
-
-    await press(A);
-    await expect('PLAYING', 'A on title launches the run');
+    await expect('PLAYING', 'B skips the first-launch tutorial into the run');
     await page.evaluate(() => { __game.player.invuln = 1e9; });
     await page.waitForTimeout(400);
 
@@ -368,6 +367,6 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     if (await page.evaluate(() => __game.mode) !== 'blitz') throw Error('The run should fly BLITZ');
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: first-run tutorial (RB next, B skip), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
+    console.log('Controller smoke PASS: first-launch tutorial (A launch, RB next, B skip into the run), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
