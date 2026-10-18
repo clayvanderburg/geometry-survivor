@@ -12,7 +12,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, xpToNextLevel, hudUpgradeLines, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
+  discardWeapon, snapshotBase, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
@@ -46,6 +46,8 @@ import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
+import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
+import { ShipPreview } from './ship-preview.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -222,6 +224,11 @@ export class Game {
     // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
     this.range = new WeaponRange(this);
     this.range.view = new RangePanel(this.range);
+    // Pause menu run overview (big ship, stats, upgrades) and the same ship idling on the title screen.
+    this.overview = new RunOverview(this);
+    this.titleShip = new ShipPreview(document.getElementById('title-ship-canvas'), { tuning: TUNING });
+    this.hudHidden = false; // [H]: hide every HUD overlay for this session (not saved)
+    this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
@@ -279,7 +286,6 @@ export class Game {
     this.guideToastTimer = 0;
     this.guideScanTick = 0;
 
-    const startMaxHp = 100 + bonuses.bonusHp;
     const centerX = this.worldWidth * 0.5;
     const centerY = this.worldHeight * 0.5;
 
@@ -293,19 +299,11 @@ export class Game {
       drillSpin: 0,
       walkCycle: 0,
       radius: TUNING.shipRadius,
-      hp: startMaxHp,
-      maxHp: startMaxHp,
       invuln: 0,
       dashTimer: 0,
       dashCooldown: 0,
-      bombs: 2 + bonuses.extraBombs,
-      // Void Armory multipliers that live outside `stats` (damage taken, post-hit invulnerability, dash
-      // cooldown, gold per vein, reroll cost).
-      damageTakenMult: bonuses.damageTakenMult ?? 1,
-      hitInvulnBonus: bonuses.hitInvulnBonus || 0,
-      dashCooldownMult: bonuses.dashCooldownMult ?? 1,
-      goldMult: bonuses.goldMult ?? 1,
-      rerollCostMult: bonuses.rerollCostMult ?? 1,
+      // Shield, bombs, Void Armory multipliers and stats: TUNING plus the armory (upgrades.js runStartPlayer).
+      ...runStartPlayer(bonuses),
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -317,25 +315,6 @@ export class Game {
       loadout: [],
       newWeaponDrought: 0,
       banished: {}, // card ids banished with gold this run (never offered again)
-      stats: {
-        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult,
-        fireRate: TUNING.fireRate * bonuses.fireRateMult,
-        bulletSpeed: TUNING.bulletSpeed,
-        bulletCount: 2,
-        pierce: 1,
-        damage: TUNING.baseDamage * bonuses.damageMult,
-        magnetRadius: TUNING.magnetRadius * bonuses.magnetMult,
-        xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult,
-        luck: TUNING.baseLuck + (bonuses.luckBonus || 0),
-        coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
-        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1),
-        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1),
-        drillScale: TUNING.drillScale,
-        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
-        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
-        tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
-        areaMult: bonuses.areaMult || 1
-      },
       weapons: {
         rockets: 0,
         missiles: 0,
@@ -500,6 +479,16 @@ export class Game {
       // Held movement is stateful; abilities and toggles fire only on the initial press.
       if (e.repeat) return;
 
+      // [V] toggles fullscreen on every screen; [H] hides the HUD during a run (also from pause and level-ups).
+      if (code === 'KeyV' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        this.toggleFullscreen();
+        return;
+      }
+      if (code === 'KeyH' && ['PLAYING', 'PAUSED', 'UPGRADE', 'CHEST'].includes(this.state)) {
+        this.toggleHud();
+        return;
+      }
+
       // [G] opens the Field Guide from the title, pause and game-over screens (and pauses a live run).
       if (code === 'KeyG' && (this.state === 'PLAYING' || GUIDE_STATES.includes(this.state))) {
         e.preventDefault();
@@ -533,9 +522,20 @@ export class Game {
       }
 
       if (this.state === 'PAUSED') {
+        // The ABANDON RUN? confirm: Esc / P / Space back out of it (they don't resume yet).
+        if (this.quitConfirm && (code === 'KeyP' || code === 'Escape' || (code === 'Space' && !onControl))) {
+          e.preventDefault();
+          this.cancelAbandonRun();
+          return;
+        }
         if (code === 'KeyP' || code === 'Escape' || (code === 'Space' && !onControl)) {
           e.preventDefault();
           this.togglePause();
+          return;
+        }
+        const tab = /^(?:Digit|Numpad)([1-4])$/.exec(code);
+        if (tab && this.overview) {
+          this.overview.setTab(this.overview.tabs()[Number(tab[1]) - 1] || this.overview.tab);
           return;
         }
         if (code === 'KeyN') {
@@ -669,6 +669,20 @@ export class Game {
     if (pauseBtn) pauseBtn.addEventListener('click', () => this.togglePause());
     if (resumeBtn) resumeBtn.addEventListener('click', () => this.togglePause());
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
+    // MAIN MENU: from pause it abandons the run (after a confirm); after a game over the run is already recorded.
+    document.getElementById('btn-pause-menu')?.addEventListener('click', () => this.askAbandonRun());
+    document.getElementById('btn-quit-confirm')?.addEventListener('click', () => this.abandonRun());
+    document.getElementById('btn-quit-cancel')?.addEventListener('click', () => this.cancelAbandonRun());
+    document.getElementById('btn-go-menu')?.addEventListener('click', () => {
+      commitGameOverName();
+      this.returnToTitle();
+    });
+    for (const id of ['btn-hud', 'btn-pause-hud', 'hud-hidden-hint']) document.getElementById(id)?.addEventListener('click', () => this.toggleHud());
+    for (const id of ['btn-fullscreen', 'btn-pause-fullscreen']) document.getElementById(id)?.addEventListener('click', () => this.toggleFullscreen());
+    document.addEventListener('fullscreenchange', () => this.syncFullscreenButtons());
+    document.addEventListener('webkitfullscreenchange', () => this.syncFullscreenButtons());
+    this.syncHudButtons();
+    this.syncFullscreenButtons();
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
     document.getElementById('btn-pause-stats')?.addEventListener('click', () => this.toggleShareStats());
@@ -1233,6 +1247,93 @@ export class Game {
     btn.setAttribute?.('aria-pressed', String(on));
   }
 
+  // [H]: hide every HUD overlay (bars, weapon slots, radar, buttons) to leave just the game view. A faint
+  // "[H] SHOW HUD" hint stays so nobody gets stuck. Session only.
+  toggleHud() {
+    this.hudHidden = !this.hudHidden;
+    this.syncHudButtons();
+  }
+
+  syncHudButtons() {
+    const doc = globalThis.document;
+    doc?.body?.classList.toggle('hud-hidden', !!this.hudHidden);
+    const hint = doc?.getElementById('hud-hidden-hint');
+    if (hint) {
+      hint.classList.toggle('hidden', !this.hudHidden);
+      // Restart the fade: fully visible for a moment, then it settles faint.
+      hint.classList.remove('settled');
+      clearTimeout(this.hudHintTimer);
+      if (this.hudHidden) this.hudHintTimer = setTimeout(() => hint.classList.add('settled'), 2500);
+    }
+    const btn = doc?.getElementById('btn-pause-hud');
+    if (btn) {
+      btn.textContent = `▣ HUD: ${this.hudHidden ? 'HIDDEN' : 'SHOWN'} [H]`;
+      btn.classList.toggle('active', !this.hudHidden);
+      btn.setAttribute?.('aria-pressed', String(!this.hudHidden));
+    }
+  }
+
+  // [V]: Fullscreen API on the whole page (vendor-prefixed fallback for older Safari).
+  toggleFullscreen() {
+    const doc = globalThis.document;
+    if (!doc) return;
+    const active = doc.fullscreenElement || doc.webkitFullscreenElement;
+    try {
+      const done = active
+        ? (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
+        : (doc.documentElement?.requestFullscreen || doc.documentElement?.webkitRequestFullscreen)?.call(doc.documentElement);
+      done?.catch?.(() => {}); // refused (no user gesture, iframe policy): nothing to do
+    } catch { /* not supported */ }
+  }
+
+  syncFullscreenButtons() {
+    const doc = globalThis.document;
+    if (!doc) return;
+    const on = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+    const supported = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
+    for (const [id, label] of [['btn-fullscreen', on ? '⛶ EXIT FULLSCREEN [V]' : '⛶ FULLSCREEN [V]'], ['btn-pause-fullscreen', `⛶ FULLSCREEN: ${on ? 'ON' : 'OFF'} [V]`]]) {
+      const btn = doc.getElementById(id);
+      if (!btn) continue;
+      btn.textContent = label;
+      btn.classList.toggle('active', on);
+      btn.classList.toggle('hidden', !supported); // e.g. iPhone Safari has no element fullscreen
+    }
+  }
+
+  // Pause menu MAIN MENU: the run in progress is abandoned (never recorded: no score, no leaderboard, no
+  // run stats), so it asks first. The confirm swaps in for the action buttons, with focus on CANCEL.
+  setQuitConfirm(on) {
+    this.quitConfirm = !!on;
+    const doc = globalThis.document;
+    doc?.getElementById('pause-quit-confirm')?.classList.toggle('hidden', !this.quitConfirm);
+    doc?.getElementById('pause-actions')?.classList.toggle('hidden', this.quitConfirm);
+  }
+
+  focusPauseButton(id) {
+    const el = globalThis.document?.getElementById(id);
+    if (!el) return;
+    if (this.gpActive && this.menuNav) this.menuNav.setFocus(el);
+    else el.focus?.();
+  }
+
+  askAbandonRun() {
+    if (this.state !== 'PAUSED') return;
+    this.setQuitConfirm(true);
+    this.focusPauseButton('btn-quit-cancel');
+  }
+
+  cancelAbandonRun() {
+    this.setQuitConfirm(false);
+    this.focusPauseButton('btn-pause-menu');
+  }
+
+  abandonRun() {
+    if (this.state !== 'PAUSED') return;
+    this.setQuitConfirm(false);
+    if (this.range?.active) this.range.exit();
+    else this.returnToTitle();
+  }
+
   resetInput() {
     this.keys = {};
     this.mouse.down = false;
@@ -1253,7 +1354,9 @@ export class Game {
       this.discardPending = null;
       this.discardBlocked = null;
       this.renderLoadoutPanel();
+      this.setQuitConfirm(false);
       if (pauseModal) pauseModal.classList.remove('hidden');
+      this.overview?.open();
       if (pauseBtn) {
         pauseBtn.textContent = '▶ RESUME [P]';
         pauseBtn.classList.add('active');
@@ -1299,9 +1402,12 @@ export class Game {
     else this.spawnWavePack();
   }
 
-  // Back to the title screen without a game over (leaving the Weapon Range).
+  // Back to the title screen: leaving the Weapon Range, abandoning a paused run (nothing is recorded or
+  // submitted: only triggerGameOver does that) or MAIN MENU after a game over (already recorded).
   returnToTitle() {
     this.state = 'TITLE';
+    this.setQuitConfirm(false);
+    globalThis.document?.activeElement?.blur?.();
     for (const id of ['pause-modal', 'upgrade-modal', 'chest-modal', 'gameover-modal']) document.getElementById(id)?.classList.add('hidden');
     const pauseBtn = document.getElementById('btn-pause');
     if (pauseBtn) {
@@ -1927,7 +2033,7 @@ export class Game {
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = 0.65 + (p.hitInvulnBonus || 0);
+    p.invuln = HIT_INVULN_BASE + (p.hitInvulnBonus || 0);
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -3568,6 +3674,9 @@ export class Game {
   // Clicks (mouse, or controller A via MenuNavigator) on cards that appeared a moment ago are ignored:
   // the second click of a double-click on NEW WEAPON would otherwise equip a weapon the player never saw.
   renderChoiceCards(descs) {
+    // Level-up hands, weapon picks and Breakthroughs all show the current build under the cards.
+    const strip = document.getElementById('upgrade-loadout-strip');
+    if (strip && this.player) strip.innerHTML = loadoutStripHtml(this.player);
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
     container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
@@ -3764,6 +3873,7 @@ export class Game {
         <div class="loadout-name">${w.name}</div>
         <div class="upg-tags">${chips(id)}</div>
         ${lines ? `<div class="loadout-lines">${lines}</div>` : ''}
+        ${weaponReadoutHtml(weaponReadout(p, id, this.runStats))}
         ${actions}
       </div>`);
     }
@@ -3773,6 +3883,7 @@ export class Game {
         <div class="loadout-slot-top"><span class="loadout-slot-num">PASSIVE // NO SLOT</span><span class="loadout-lv">LV ${passiveLevel(p, id)}<span class="upg-max"> / ${UPGRADE_BY_ID[x.upgradeId].maxLevel}</span></span></div>
         <div class="loadout-name">${x.name}</div>
         <div class="upg-tags">${chips(id)}</div>
+        ${weaponReadoutHtml(weaponReadout(p, id, this.runStats))}
       </div>`);
     }
     panel.innerHTML = html.join('');
@@ -3954,12 +4065,21 @@ export class Game {
     if (!root) return;
     const primary = menu[1] ? document.getElementById(menu[1]) : null;
     // Level-up focus starts on the first card, never on the REROLL button (A must not spend gold).
-    const fallback = this.state === 'UPGRADE' ? root.querySelector?.('.upgrade-option') || null : primary;
+    const fallback = this.state === 'UPGRADE' ? root.querySelector?.('.upgrade-option') || null
+      : this.quitConfirm ? document.getElementById('btn-quit-cancel') : primary;
     this.menuNav.update(root, gp, dt, fallback);
     if (this.menuGrace > 0) return;
 
     if (this.state === 'RANGE_EDIT' && (gp.pressed(PAD.B) || gp.pressed(PAD.BACK) || gp.pressed(PAD.START))) {
       this.range.view?.endPadEdit();
+    } else if (this.state === 'PAUSED' && this.quitConfirm && (gp.pressed(PAD.B) || gp.pressed(PAD.START))) {
+      this.cancelAbandonRun(); // B / Start back out of ABANDON RUN? before they resume
+    } else if (this.state === 'PAUSED' && (gp.pressed(PAD.LB) || gp.pressed(PAD.RB)) && this.overview) {
+      // LB / RB switch the pause menu tabs; focus follows to the new tab.
+      this.overview.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
+      this.sound.playUiSelect?.();
+      const tab = root.querySelector?.(`[data-pause-tab="${this.overview.tab}"]`);
+      if (tab) this.menuNav.setFocus(tab);
     } else if (this.handleUpgradePad(gp)) {
       this.sound.init();
     } else if (gp.pressed(PAD.A)) {
@@ -4479,25 +4599,10 @@ export class Game {
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
 
-    // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed),
-    // then every other installed upgrade. Same level wording as the cards ("LV 3"); synergies are
-    // one-shot evolutions. Rarity belongs to a roll, not a weapon, so chips stay rarity-neutral.
-    const tags = [];
-    const owned = ownedWeapons(p);
-    for (let i = 0; i < Math.max(weaponSlots(), owned.length); i++) {
-      const w = WEAPON_BY_ID[owned[i]];
-      if (!w) {
-        tags.push('<span class="weapon-slot-chip empty" title="Free weapon slot">+</span>');
-        continue;
-      }
-      const lv = w.levelId ? ` LV ${weaponLevel(p, w.id)}${bonusText(bonusLevels(p, w.levelId))}` : '';
-      tags.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${w.name}">${w.hudName}${lv}</span>`);
-    }
-    tags.push('<span class="weapon-bar-break"></span>');
-    for (const u of hudUpgradeLines(p)) {
-      tags.push(`<span class="weapon-tag${u.isSynergy ? ' rarity-evolution' : ''}">${u.name} ${u.isSynergy ? '★' : `LV ${u.level}`}</span>`);
-    }
-    const barHtml = tags.join('');
+    // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
+    // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
+    // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
+    const barHtml = weaponChipsHtml(p);
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
@@ -5266,8 +5371,8 @@ export class Game {
     // Close Camera Transform
     ctx.restore();
 
-    // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues
-    if (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST') {
+    // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues (hidden with the HUD, [H])
+    if (!this.hudHidden && (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST')) {
       if (this.radarVisible) this.drawMinimap(ctx);
       this.drawBossIndicators(ctx);
     }
@@ -5393,6 +5498,8 @@ export class Game {
     this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
+    this.overview?.frame(now);
+    if (this.state === 'TITLE') this.titleShip?.frame(now);
     requestAnimationFrame((t) => this.loop(t));
   }
 }

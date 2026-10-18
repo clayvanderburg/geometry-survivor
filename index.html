@@ -61,6 +61,8 @@
             <button id="btn-autofire" class="hud-btn active" title="Toggle Auto-Fire [F]">AUTO-FIRE: ON [F]</button>
             <button id="btn-autoaim" class="hud-btn" title="Toggle Auto-Aim [C]">AUTO-AIM: OFF [C]</button>
             <button id="btn-sound" class="hud-btn active" title="Toggle Synth Audio & Music [M]">AUDIO: ON [M]</button>
+            <button id="btn-hud" class="hud-btn" title="Hide the HUD for a clean view [H]">▣ HUD [H]</button>
+            <button id="btn-fullscreen" class="hud-btn" title="Toggle fullscreen [V]">⛶ FULLSCREEN [V]</button>
             <div class="hud-vol-pill" title="Master Volume">
               <span>🔊</span>
               <input id="hud-volume-slider" type="range" min="0" max="200" step="5" value="100" />
@@ -133,57 +135,107 @@
 
     </div>
 
+    <!-- Shown while the HUD is hidden with [H]: bright for a moment, then faint (click or [H] brings the HUD back) -->
+    <button id="hud-hidden-hint" class="hud-hidden-hint hidden" title="Show the HUD [H]">[H] SHOW HUD</button>
+
     <!-- Weapon Range panel (js/weapon-range-ui.js): loadout, mods, dummies and the live DPS readout -->
     <aside id="range-panel" class="range-panel hidden" aria-label="Weapon Range"></aside>
 
-    <!-- Pause Modal Overlay -->
+    <!-- Pause menu: the run overview (js/run-overview.js). Ship, run summary and actions on one side;
+         LOADOUT / STATS / UPGRADES / SETTINGS tabs on the other; stacked on narrow screens. -->
     <div id="pause-modal" class="modal-overlay hidden">
       <div class="modal-card upgrade-card pause-card">
-        <div class="upgrade-header">
-          <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
-          <h2 class="upgrade-title">SYSTEM PAUSED</h2>
-          <p class="upgrade-hint">Press <span>[P]</span>, <span>[ESC]</span>, or <span>[SPACE]</span> to Resume <span class="version-tag version-tag-inline" data-game-version title="Game version"></span></p>
+        <div class="pause-head">
+          <div>
+            <div class="glitch-subtitle">CHRONOS STASIS ENGAGED</div>
+            <h2 class="upgrade-title">SYSTEM PAUSED</h2>
+          </div>
+          <p class="upgrade-hint pause-hint"><span>[P]</span> <span>[ESC]</span> <span>[SPACE]</span> resume · <span>[1-4]</span> / <span>LB RB</span> tabs <span class="version-tag version-tag-inline" data-game-version title="Game version"></span></p>
         </div>
 
         <div class="pause-layout">
-        <section class="pause-loadout-box" aria-label="Weapon loadout">
-          <div class="pause-loadout-head">
-            <span class="pause-loadout-title">WEAPON LOADOUT</span>
-            <span id="pause-loadout-count" class="pause-loadout-count">2 / 6 SLOTS</span>
-          </div>
-          <div id="pause-loadout" class="pause-loadout-grid"></div>
-        </section>
+          <aside class="pause-side" aria-label="Your ship and this run">
+            <div class="ship-stage pause-ship-stage">
+              <canvas id="pause-ship-canvas" class="ship-preview-canvas" role="img" aria-label="Your ship"></canvas>
+              <div id="pause-ship-caption" class="ship-stage-caption"></div>
+            </div>
+            <div id="pause-run-info" class="run-info-grid"></div>
+            <div id="pause-actions" class="pause-actions">
+              <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME [P / ESC]</button>
+              <button id="btn-pause-exit-range" class="neon-btn range-exit-btn">◀ EXIT WEAPON RANGE</button>
+              <div class="pause-action-row">
+                <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
+                <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
+              </div>
+              <div class="pause-action-row">
+                <button id="btn-pause-restart" class="neon-btn pause-danger-btn">↺ RESTART RUN</button>
+                <button id="btn-pause-menu" class="neon-btn pause-danger-btn">⌂ MAIN MENU</button>
+              </div>
+            </div>
+            <div id="pause-quit-confirm" class="quit-confirm hidden" role="alertdialog" aria-labelledby="quit-confirm-title" aria-describedby="quit-confirm-text">
+              <div id="quit-confirm-title" class="quit-confirm-title">⚠ ABANDON RUN?</div>
+              <p id="quit-confirm-text" class="quit-confirm-text">It won't be recorded: no score, no leaderboard entry, no run stats. Void Cores you already looted stay banked.</p>
+              <div class="quit-confirm-actions">
+                <button id="btn-quit-confirm" class="neon-btn loadout-btn danger">✕ CONFIRM</button>
+                <button id="btn-quit-cancel" class="neon-btn loadout-btn">CANCEL [ESC]</button>
+              </div>
+            </div>
+          </aside>
 
-        <div class="pause-controls">
-        <div class="pause-audio-box">
-          <div class="pause-slider-row">
-            <span>🔊 MASTER VOLUME</span>
-            <input id="pause-volume-slider" type="range" min="0" max="200" step="5" value="100" />
-            <span id="pause-volume-label" class="drawer-val">100%</span>
-          </div>
-          <div class="pause-slider-row">
-            <span>🎵 MUSIC LEVEL</span>
-            <input id="pause-music-slider" type="range" min="0" max="3" step="0.05" value="1.35" />
-            <span id="pause-music-label" class="drawer-val">1.35x</span>
-          </div>
-          <div class="pause-slider-row">
-            <span>💥 SFX LEVEL</span>
-            <input id="pause-sfx-slider" type="range" min="0" max="2" step="0.02" value="0.38" />
-            <span id="pause-sfx-label" class="drawer-val">0.38x</span>
-          </div>
-        </div>
+          <section class="pause-main">
+            <div class="board-tabs pause-tabs" role="tablist" aria-label="Run overview">
+              <button class="board-tab active" data-pause-tab="loadout" role="tab" aria-selected="true">⚔ LOADOUT</button>
+              <button class="board-tab" data-pause-tab="stats" role="tab" aria-selected="false">▤ STATS</button>
+              <button class="board-tab" data-pause-tab="upgrades" role="tab" aria-selected="false">★ UPGRADES</button>
+              <button class="board-tab" data-pause-tab="settings" role="tab" aria-selected="false">⚙ SETTINGS</button>
+            </div>
 
-        <div class="title-actions" style="display:flex; flex-direction:column; gap:12px; margin-top:18px;">
-          <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
-          <button id="btn-pause-exit-range" class="neon-btn range-exit-btn">◀ EXIT WEAPON RANGE</button>
-          <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
-          <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
-          <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
-          <button id="btn-pause-radar" class="neon-btn pause-toggle-btn active" aria-pressed="true">🛰 SECTOR RADAR: ON [R]</button>
-          <button id="btn-pause-stats" class="neon-btn pause-toggle-btn active" aria-pressed="true" title="Anonymous run stats (weapons, enemies, cards; no name, no IP) help balance the game">📡 SHARE ANONYMOUS STATS: ON</button>
-          <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
-        </div>
-        </div>
+            <div class="pause-pane" data-pause-pane="loadout" role="tabpanel">
+              <section class="pause-loadout-box" aria-label="Weapon loadout">
+                <div class="pause-loadout-head">
+                  <span class="pause-loadout-title">WEAPON LOADOUT</span>
+                  <span id="pause-loadout-count" class="pause-loadout-count">2 / 6 SLOTS</span>
+                </div>
+                <div id="pause-loadout" class="pause-loadout-grid"></div>
+              </section>
+              <section id="pause-damage" class="pause-loadout-box pause-damage" aria-label="Damage this run"></section>
+            </div>
+
+            <div class="pause-pane hidden" data-pause-pane="stats" role="tabpanel">
+              <div id="pause-stats" class="pause-loadout-box"></div>
+            </div>
+
+            <div class="pause-pane hidden" data-pause-pane="upgrades" role="tabpanel">
+              <div id="pause-upgrades" class="pause-loadout-box"></div>
+            </div>
+
+            <div class="pause-pane hidden" data-pause-pane="settings" role="tabpanel">
+              <div class="pause-audio-box">
+                <div class="pause-slider-row">
+                  <span>🔊 MASTER VOLUME</span>
+                  <input id="pause-volume-slider" type="range" min="0" max="200" step="5" value="100" />
+                  <span id="pause-volume-label" class="drawer-val">100%</span>
+                </div>
+                <div class="pause-slider-row">
+                  <span>🎵 MUSIC LEVEL</span>
+                  <input id="pause-music-slider" type="range" min="0" max="3" step="0.05" value="1.35" />
+                  <span id="pause-music-label" class="drawer-val">1.35x</span>
+                </div>
+                <div class="pause-slider-row">
+                  <span>💥 SFX LEVEL</span>
+                  <input id="pause-sfx-slider" type="range" min="0" max="2" step="0.02" value="0.38" />
+                  <span id="pause-sfx-label" class="drawer-val">0.38x</span>
+                </div>
+              </div>
+              <div class="pause-toggles">
+                <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
+                <button id="btn-pause-radar" class="neon-btn pause-toggle-btn active" aria-pressed="true">🛰 SECTOR RADAR: ON [R]</button>
+                <button id="btn-pause-hud" class="neon-btn pause-toggle-btn active" aria-pressed="true">▣ HUD: SHOWN [H]</button>
+                <button id="btn-pause-fullscreen" class="neon-btn pause-toggle-btn">⛶ FULLSCREEN: OFF [V]</button>
+                <button id="btn-pause-stats" class="neon-btn pause-toggle-btn active" aria-pressed="true" title="Anonymous run stats (weapons, enemies, cards; no name, no IP) help balance the game">📡 SHARE ANONYMOUS STATS: ON</button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -271,6 +323,8 @@
               <button id="btn-title-notes" class="neon-btn notes-open-btn notes-hub-btn" title="What changed in each version">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
             </div>
           </div>
+          <!-- Your ship, idling on the launch pad (js/ship-preview.js) -->
+          <div class="ship-stage title-ship-stage" aria-hidden="true"><canvas id="title-ship-canvas" class="ship-preview-canvas"></canvas></div>
           <div class="hub-header-side">
             <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
             <div class="wallet-pill">
@@ -320,7 +374,7 @@
               <span><b>WASD / Stick:</b> Move &amp; Drill Rocks with Claws</span>
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
-              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar</span>
+              <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar · <b>[H]:</b> Hide HUD · <b>[V]:</b> Fullscreen</span>
               <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock · [B]+[1-3] / RB×2 Banish (costs ◆ gold from gold veins)</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Back Radar · Start Pause · D-Pad + A in Menus</span>
             </div>
@@ -348,6 +402,8 @@
           <button id="btn-reroll-hand" class="neon-btn hand-reroll-btn" disabled>↻ REROLL · 20 ◆</button>
           <div id="hand-lock-note" class="hand-lock-note"></div>
         </div>
+        <!-- Your build so far: weapon slots and picked upgrades (js/run-overview.js loadoutStripHtml) -->
+        <div id="upgrade-loadout-strip" class="loadout-strip" aria-label="Your weapons and upgrades"></div>
       </div>
     </div>
 
@@ -427,6 +483,7 @@
 
         <div class="title-actions">
           <button id="btn-restart-game" class="neon-btn primary-btn">RELAUNCH SHIP [SPACE / CLICK]</button>
+          <button id="btn-go-menu" class="neon-btn go-menu-btn">⌂ MAIN MENU</button>
           <button id="btn-go-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-go" class="guide-btn-badge"></span></button>
         </div>
       </div>

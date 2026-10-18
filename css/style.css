@@ -193,27 +193,6 @@ html, body {
   margin-top: 7px;
 }
 
-.weapon-tag {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(15, 22, 42, 0.8);
-  border: 1px solid rgba(0, 243, 255, 0.35);
-  color: var(--cyan);
-}
-
-/* HUD tags share the card rarity colors (see .rarity-* below). */
-.weapon-tag[class*="rarity-"] {
-  border-color: var(--rarity-soft);
-  color: var(--rarity);
-}
-
-.weapon-tag.rarity-evolution {
-  background: rgba(255, 79, 216, 0.14);
-}
-
 .hud-right {
   display: flex;
   flex-direction: column;
@@ -302,6 +281,8 @@ html, body {
 
 .quick-toggles {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   pointer-events: auto;
 }
@@ -1819,33 +1800,526 @@ html, body {
   text-align: center;
 }
 
-.weapon-bar-break {
-  flex-basis: 100%;
-  height: 0;
+/* Pause menu (js/run-overview.js): ship, run summary and actions on the left; LOADOUT / STATS / UPGRADES /
+   SETTINGS tabs on the right, scrolling inside themselves so the ship stays in view. Stacked (one page
+   scroll) on narrow screens. */
+.modal-card.pause-card {
+  max-width: 1240px;
+  padding: 16px 22px 18px;
+  text-align: center;
 }
 
-/* Pause menu: loadout on the left, audio and actions on the right; stacked on narrow screens. */
-.modal-card.pause-card {
-  max-width: 1000px;
-  text-align: center;
+.pause-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  text-align: left;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 243, 255, 0.18);
+}
+
+.pause-head .upgrade-title {
+  font-size: 28px;
+  margin-bottom: 0;
+}
+
+.pause-head .pause-hint {
+  margin-bottom: 2px;
+  font-size: 12px;
 }
 
 .pause-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.6fr);
+  gap: 18px;
   align-items: start;
   text-align: left;
 }
 
-.pause-controls .pause-audio-box {
+.pause-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pause-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pause-tabs {
+  flex-wrap: wrap;
+}
+
+.pause-tabs .board-tab {
+  font-size: 11px;
+  padding: 7px 12px;
+}
+
+.pause-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Desktop: the tab body scrolls on its own below the tabs. */
+@media (min-width: 861px) {
+  .pause-pane {
+    max-height: calc(94vh - 150px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+}
+
+/* SETTINGS: one column, so the d-pad walks straight down from the sliders through every toggle. */
+.pause-pane .pause-audio-box,
+.pause-toggles {
+  width: 100%;
+  max-width: 560px;
+}
+
+.pause-pane .pause-audio-box {
   margin-top: 0;
 }
 
-.pause-controls .title-actions .neon-btn {
-  padding: 12px 18px;
-  font-size: 13px;
+.pause-toggles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pause-toggles .neon-btn {
+  letter-spacing: 1.5px;
+}
+
+/* The big ship (title screen and pause menu): its own canvas on a dark launch pad. */
+.ship-stage {
+  position: relative;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 45%, rgba(0, 243, 255, 0.08), rgba(3, 4, 11, 0.9) 70%);
+  border: 1px solid rgba(0, 243, 255, 0.22);
+  overflow: hidden;
+}
+
+.ship-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pause-ship-stage {
+  height: clamp(170px, 34vh, 330px);
+}
+
+.ship-stage-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
   letter-spacing: 2px;
+  color: rgba(214, 232, 255, 0.7);
+  pointer-events: none;
+}
+
+.title-ship-stage {
+  flex: 0 1 260px;
+  height: 140px;
+  margin: 0 16px;
+  min-width: 150px;
+  border-color: rgba(0, 243, 255, 0.14);
+}
+
+.run-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ro-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgba(16, 22, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ro-info-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+
+.ro-info-value {
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ro-info-detail {
+  font-size: 9.5px;
+  color: #8ba3c7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pause-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pause-actions .neon-btn {
+  padding: 10px 14px;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.pause-actions .primary-btn {
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
+.pause-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pause-action-row .neon-btn {
+  padding: 9px 8px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.neon-btn.pause-danger-btn {
+  border-color: var(--magenta);
+  color: #ff77b7;
+  background: rgba(40, 6, 24, 0.55);
+  box-shadow: 0 0 14px rgba(255, 0, 127, 0.2);
+  text-shadow: none;
+}
+
+.quit-confirm {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 42, 85, 0.75);
+  background: rgba(40, 6, 18, 0.85);
+  box-shadow: 0 0 22px rgba(255, 42, 85, 0.3);
+}
+
+.quit-confirm-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 2.5px;
+  color: #ff7a93;
+  text-shadow: 0 0 10px rgba(255, 42, 85, 0.7);
+}
+
+.quit-confirm-text {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ffd0da;
+}
+
+.quit-confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quit-confirm-actions .neon-btn.loadout-btn {
+  padding: 9px 8px;
+  font-size: 12px;
+}
+
+/* Weapon readout under each loadout slot: potential DPS and damage dealt this run. */
+.loadout-readout {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  font-size: 10px;
+  color: #8ba3c7;
+}
+
+.loadout-readout b {
+  color: #fff;
+}
+
+.pause-damage .pause-loadout-head {
+  margin-bottom: 6px;
+}
+
+.ro-dmg-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.9fr) minmax(40px, 1.4fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.ro-dmg-name {
+  color: #fff;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ro-dmg-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.ro-dmg-bar span {
+  display: block;
+  height: 100%;
+  background: var(--wc, var(--cyan));
+  box-shadow: 0 0 6px var(--wc, var(--cyan));
+}
+
+.ro-dmg-num {
+  color: #c9d4e4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ro-empty {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  padding: 4px 2px;
+}
+
+/* STATS tab: BASE / PERMANENT / THIS RUN / TOTAL per stat. */
+.ro-stats {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ro-stats th,
+.ro-stats td {
+  padding: 4px 6px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-wrap: anywhere;
+}
+
+.ro-stats thead th {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+
+.ro-stats th[scope="row"],
+.ro-stats thead th:first-child {
+  text-align: left;
+  width: 34%;
+  font-weight: 700;
+  color: #d6e8ff;
+}
+
+.ro-stats tr.ro-group th {
+  padding-top: 10px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  border-bottom-color: rgba(0, 243, 255, 0.25);
+}
+
+.ro-stats td.ro-none { color: rgba(122, 139, 168, 0.6); }
+.ro-stats td.ro-up { color: var(--emerald); }
+.ro-stats td.ro-down { color: #ff7a93; }
+.ro-stats td.ro-total { color: #fff; font-weight: 900; }
+
+.ro-note {
+  margin-top: 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.ro-note b { color: #c9d4e4; }
+
+/* UPGRADES tab */
+.ro-section + .ro-section {
+  margin-top: 10px;
+}
+
+.ro-section-title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: var(--cyan);
+}
+
+.ro-upgrades {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+}
+
+.ro-upgrade {
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(14, 20, 38, 0.92);
+  border: 1px solid rgba(201, 212, 228, 0.18);
+}
+
+.ro-upgrade.evo {
+  border-color: rgba(255, 79, 216, 0.55);
+  background: rgba(40, 8, 36, 0.6);
+}
+
+.ro-upgrade-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ro-upgrade-name {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.ro-upgrade.evo .ro-upgrade-name { color: #ff9be9; }
+
+.ro-upgrade-lv {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.ro-upgrade-text {
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.38;
+  color: #9fb4d8;
+}
+
+/* Level-up screen: the build so far under the cards (weapon slots, then picked upgrades). Small, and it
+   scrolls inside itself rather than pushing the cards off a short screen. */
+.loadout-strip {
+  margin-top: 12px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(5, 10, 24, 0.7);
+  border: 1px solid rgba(0, 243, 255, 0.18);
+  max-height: 84px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.strip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 5px;
+}
+
+.strip-row + .strip-row {
+  margin-top: 5px;
+}
+
+.strip-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  min-width: 64px;
+}
+
+.strip-row .weapon-slot-chip {
+  font-size: 10px;
+  padding: 1px 7px;
+}
+
+.strip-upgrade {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(15, 22, 42, 0.8);
+  border: 1px solid var(--wc, rgba(0, 243, 255, 0.35));
+  color: #c9f6ff;
+  white-space: nowrap;
+}
+
+.strip-upgrade.evo {
+  border-color: rgba(255, 79, 216, 0.6);
+  color: #ff9be9;
+  background: rgba(255, 79, 216, 0.12);
+}
+
+.strip-none {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* [H] hides the HUD: every overlay goes, leaving the game view (and a faint way back). */
+.hud-hidden #hud { display: none; }
+
+.hud-hidden-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 5px 12px;
+  border-radius: 99px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  background: rgba(5, 10, 24, 0.7);
+  border: 1px solid rgba(0, 243, 255, 0.45);
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 1.2s ease;
+}
+
+.hud-hidden-hint.settled { opacity: 0.3; }
+.hud-hidden-hint:hover,
+.hud-hidden-hint:focus-visible { opacity: 1; }
+
+.neon-btn.go-menu-btn {
+  border-color: var(--magenta);
+  background: rgba(40, 6, 24, 0.55);
+  text-shadow: 0 0 10px var(--magenta);
 }
 
 .pause-loadout-box {
@@ -2011,12 +2485,34 @@ html, body {
 
 @media (max-width: 860px) {
   .pause-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .pause-loadout-box {
-    order: 2;
+  .pause-ship-stage {
+    height: 200px;
   }
+}
+
+/* Phones: a slimmer pause card, two-column run summary, smaller stat table. */
+@media (max-width: 520px) {
+  .modal-card.pause-card { padding: 14px 12px 16px; }
+  .pause-head .upgrade-title { font-size: 22px; letter-spacing: 2px; }
+  .run-info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pause-action-row { grid-template-columns: minmax(0, 1fr); }
+  .pause-tabs .board-tab { padding: 6px 8px; font-size: 10px; letter-spacing: 1px; }
+  .ro-stats { font-size: 10.5px; }
+  .ro-stats th, .ro-stats td { padding: 4px 3px; }
+  .ro-stats thead th { font-size: 8px; letter-spacing: 0.5px; }
+  .ro-stats th[scope="row"], .ro-stats thead th:first-child { width: 31%; }
+  .pause-slider-row { grid-template-columns: 96px minmax(0, 1fr) 44px; }
+  .ro-upgrades { grid-template-columns: minmax(0, 1fr); }
+  .strip-label { min-width: 0; width: 100%; }
+  .loadout-strip { max-height: none; } /* the card already scrolls on phones */
+}
+
+/* Title hub on narrow screens: the ship gets its own row under the logo. */
+@media (max-width: 600px) {
+  .title-ship-stage { order: 3; flex: 1 1 100%; margin: 0; height: 150px; }
 }
 
 @media (max-width: 520px) {
@@ -2029,26 +2525,14 @@ html, body {
   }
 }
 
-/* Other installed upgrades sit under the loadout chips, a step quieter. Narrow screens keep only the
-   loadout (the pause menu lists everything). */
+/* The HUD shows only the weapon slots; every other upgrade is listed in the pause menu. */
 .weapons-bar {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
 }
 
-.weapons-bar .weapon-tag {
-  font-size: 9px;
-  padding: 1px 5px;
-  opacity: 0.85;
-}
-
 @media (max-width: 600px) {
-  .weapons-bar .weapon-tag,
-  .weapon-bar-break {
-    display: none;
-  }
-
   .weapon-slot-chip {
     font-size: 9.5px;
     padding: 1px 6px;
@@ -3107,10 +3591,12 @@ html, body {
 /* Pause menu: EXIT only in the range; no restart, stats toggle or loadout discards there. */
 #btn-pause-exit-range { display: none; border-color: #ffb347; color: #ffd39a; }
 .range-mode #btn-pause-exit-range { display: block; }
+/* MAIN MENU is EXIT there, and the range panel owns the loadout, so no LOADOUT tab or run summary. */
 .range-mode #btn-pause-restart,
+.range-mode #btn-pause-menu,
 .range-mode #btn-pause-stats,
-.range-mode .pause-loadout-box { display: none; }
-.range-mode .pause-layout { grid-template-columns: minmax(0, 1fr); max-width: 520px; margin: 0 auto; }
+.range-mode #pause-run-info,
+.range-mode [data-pause-tab="loadout"] { display: none; }
 
 /* The run HUD's score, multipliers, XP and wave mean nothing in the range: the panel takes that corner. */
 .range-mode .hud-left,

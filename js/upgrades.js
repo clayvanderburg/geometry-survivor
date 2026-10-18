@@ -419,15 +419,17 @@ export function upgradeKind(u) {
   return 'general';
 }
 
-// Installed upgrades for the HUD row under the weapon slots. A weapon's equip line ('core', always rank 1)
-// and its stat cards ('weapon') are left out: the slot chip already shows them as the weapon's level, so
-// listing the equip line again would show the weapon twice with a stale LV 1.
-export function hudUpgradeLines(player) {
+// Installed upgrades other than weapon levels, for the pause menu's UPGRADES list. A weapon's equip line
+// ('core', always rank 1) and its stat cards ('weapon') are left out: the loadout already shows them as the
+// weapon's level, so listing the equip line again would show the weapon twice with a stale LV 1.
+export function runUpgradeLines(player) {
   const out = [];
   for (const u of UPGRADE_POOL) {
     const level = player.upgradeLevels?.[u.id] || 0;
     const kind = upgradeKind(u);
-    if (level > 0 && kind !== 'core' && kind !== 'weapon') out.push({ id: u.id, name: u.name, level, isSynergy: !!u.isSynergy });
+    if (level > 0 && kind !== 'core' && kind !== 'weapon') {
+      out.push({ id: u.id, name: u.name, level, maxLevel: u.maxLevel, kind, category: u.category, summary: u.summary, isSynergy: !!u.isSynergy });
+    }
   }
   return out;
 }
@@ -659,6 +661,47 @@ export function acquireWeapon(player, id) {
     applyUpgradeLevels(player, { ...UPGRADE_BY_ID[weapon.levelId], levelJump: 1 });
   }
   return true;
+}
+
+// Seconds of invulnerability after a shield hit, before the Void Armory's Phase Buffer.
+export const HIT_INVULN_BASE = 0.65;
+
+// The ship at run start, before any card: TUNING's base values with the Void Armory bonuses
+// (progression.js armoryBonuses; {} gives the bare base). resetRun builds the player from it, and the pause
+// menu builds it with no bonuses to split each stat into BASE / PERMANENT / THIS RUN (js/run-overview.js).
+export function runStartPlayer(bonuses = {}, t = TUNING) {
+  const maxHp = 100 + (bonuses.bonusHp || 0);
+  return {
+    hp: maxHp,
+    maxHp,
+    bombs: 2 + (bonuses.extraBombs || 0),
+    // Void Armory multipliers that live outside `stats` (damage taken, post-hit invulnerability, dash
+    // cooldown, gold per vein, reroll cost).
+    damageTakenMult: bonuses.damageTakenMult ?? 1,
+    hitInvulnBonus: bonuses.hitInvulnBonus || 0,
+    dashCooldownMult: bonuses.dashCooldownMult ?? 1,
+    goldMult: bonuses.goldMult ?? 1,
+    rerollCostMult: bonuses.rerollCostMult ?? 1,
+    stats: {
+      moveSpeed: t.moveSpeed * (bonuses.moveSpeedMult ?? 1),
+      fireRate: t.fireRate * (bonuses.fireRateMult ?? 1),
+      bulletSpeed: t.bulletSpeed,
+      bulletCount: 2,
+      pierce: 1,
+      damage: t.baseDamage * (bonuses.damageMult ?? 1),
+      magnetRadius: t.magnetRadius * (bonuses.magnetMult ?? 1),
+      xpMultiplier: t.xpMultiplier * (bonuses.xpMult ?? 1),
+      luck: t.baseLuck + (bonuses.luckBonus || 0),
+      coreDropMult: t.coreDropMult * (bonuses.coreMult ?? 1),
+      miningSpeed: t.miningSpeed * (bonuses.miningMult || 1),
+      miningRange: t.miningRange * (bonuses.miningRangeMult || 1),
+      drillScale: t.drillScale,
+      critChance: (t.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
+      critDamage: (t.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
+      tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
+      areaMult: bonuses.areaMult || 1
+    }
+  };
 }
 
 // Run-start stats and weapons (before any upgrade). Discards rebuild the player from this plus the
