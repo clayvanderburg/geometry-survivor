@@ -18,7 +18,6 @@ export const SFX_BASE = 'assets/sfx/';
 // Every sample: the play methods that use it, its level into the SFX bus, random playbackRate spread
 // (+/- fraction), and its voice limits (concurrent copies, minimum ms between starts).
 export const SFX_SAMPLES = Object.freeze({
-  autocannon_shot: { methods: ['playLaser'], volume: 0.2, pitchVar: 0.05, maxVoices: 4, gapMs: 45 },
   rocket_launch: { methods: ['playRocketLaunch'], volume: 0.3, pitchVar: 0.05, maxVoices: 2, gapMs: 70 },
   missile_launch: { methods: ['playMissileLaunch'], volume: 0.3, pitchVar: 0.05, maxVoices: 2, gapMs: 90 },
   explosion_small: { methods: ['playExplosion', 'playEnemyDeath'], volume: 0.45, pitchVar: 0.06, maxVoices: 4, gapMs: 35 },
@@ -26,7 +25,6 @@ export const SFX_SAMPLES = Object.freeze({
   missile_impact: { methods: ['playMissileImpact'], volume: 0.28, pitchVar: 0.06, maxVoices: 4, gapMs: 40 },
   arc_zap: { methods: ['playArcZap'], volume: 0.32, pitchVar: 0.06, maxVoices: 3, gapMs: 70 },
   blade_hit: { methods: ['playBladeHit'], volume: 0.14, pitchVar: 0.06, maxVoices: 2, gapMs: 85 },
-  drone_shot: { methods: ['playDroneShot'], volume: 0.11, pitchVar: 0.06, maxVoices: 2, gapMs: 70 },
   turret_shot: { methods: ['playTurretShot'], volume: 0.22, pitchVar: 0.05, maxVoices: 3, gapMs: 60 },
   mine_drop: { methods: ['playMineDrop'], volume: 0.22, pitchVar: 0.04, maxVoices: 2, gapMs: 120 },
   grenade_throw: { methods: ['playGrenadeThrow'], volume: 0.22, pitchVar: 0.05, maxVoices: 2, gapMs: 80 },
@@ -972,7 +970,7 @@ export class SoundEngine {
 
   playLaser(pitchMod = 1) {
     if (!this.enabled || !this.ctx) return;
-    if (this.playSample('autocannon_shot', { rate: Math.max(0.5, Math.min(1.5, pitchMod)) })) return;
+    // Procedural on purpose: the generated autocannon sample was rolled back (it sounded wrong).
     const now = performance.now();
     if (now - this.lastShotSound < 50) return;
     this.lastShotSound = now;
@@ -1511,7 +1509,7 @@ export class SoundEngine {
   // Escort drone bolt: a tiny high blip, quieter than the blaster.
   playDroneShot() {
     if (!this.enabled || !this.ctx) return;
-    if (this.playSample('drone_shot')) return;
+    // Procedural on purpose: the generated drone sample was rolled back.
     if (!this.claimVoice('drone', 70, 2, 0.05)) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();

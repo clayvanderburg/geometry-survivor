@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.1',
+    date: '2026-10-18',
+    title: 'Classic Pew',
+    notes: [
+      { type: 'fix', text: 'The Autocannon and Escort Drones are back to their original shot sounds.' }
+    ]
+  },
+  {
     version: '0.19.0',
     date: '2026-10-18',
     title: 'Sound Overhaul',
