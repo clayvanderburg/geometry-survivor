@@ -680,8 +680,7 @@ export class SoundEngine {
 
   // One 16th step. calm: pads + bass; mid (drums layer): kick, gated snare, hats, rolling 16th bass;
   // high: lead arpeggio, 16th hats, claps, crash + tom fills; boss warning: kick + bass only;
-  // boss fight: the dark boss section with the square-stab riff. A menu (muffled) changes nothing here
-  // as it is; setMusicState only glides the bus low-pass down.
+  // boss fight: the dark boss section with the square-stab riff. A menu (muffled) changes nothing here.
   triggerStep(step, time, stepDur) {
     if (!this.enabled) return;
     const s = step % 16;
