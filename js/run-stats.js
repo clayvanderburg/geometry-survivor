@@ -202,6 +202,7 @@ export class RunStats {
   }
 
   reroll() { this.rerolls++; }
+  banish() { this.banishes = (this.banishes || 0) + 1; }
   lock() { this.locks++; }
 
   // --- Levels --------------------------------------------------------------------------------------
@@ -295,7 +296,7 @@ export class RunStats {
       died: !!died,
       cause: died ? this.cause || 'unknown' : null,
       levelTimes: [...this.levelTimes],
-      gold: { earned: r0(gold.earned || 0), spent: r0(gold.spent || 0), rerolls: this.rerolls, locks: this.locks },
+      gold: { earned: r0(gold.earned || 0), spent: r0(gold.spent || 0), rerolls: this.rerolls, locks: this.locks, banishes: this.banishes || 0 },
       loadout: (loadout || []).map(({ id, lv }) => ({ id, lv })),
       weapons,
       sources: Object.fromEntries([...this.sources].map(([k, v]) => [k, r0(v)])),

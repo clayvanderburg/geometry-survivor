@@ -371,3 +371,75 @@ test('a carried-over lock is still the only lock: locking another card in the ne
   g.selectUpgrade((other + 1) % g.currentChoices.length); // pass over the newly locked card
   assert.equal(g.carriedLock.card, moved, 'only the new lock carries over; the old one is gone');
 });
+
+test('BANISH: 30 gold, two steps, the card never comes back this run and a fresh card takes its slot', async () => {
+  const { eligibleUpgrades, rollLevelUpHand } = await import('../js/upgrades.js');
+  const { banishCost } = await import('../js/gold.js');
+  assert.equal(banishCost(), 30);
+  const g = freshGame(100);
+  plainHand(g);
+  const target = g.currentChoices[1];
+  assert.equal(g.banishCard(1), true, 'first press arms');
+  assert.equal(g.gold, 100, 'arming is free');
+  assert.equal(g.banishArmed, 1);
+  assert.equal(g.banishCard(1), true, 'second press on the same card banishes');
+  assert.equal(g.gold, 70);
+  assert.equal(g.player.banished[target.id], true);
+  assert.notEqual(g.currentChoices[1]?.id, target.id, 'a fresh card took the slot');
+  assert.equal(new Set(g.currentChoices.map((c) => c.id)).size, g.currentChoices.length, 'no duplicates');
+  assert.ok(!eligibleUpgrades(g.player).some((u) => u.id === target.id), 'gone from the pool');
+  for (let i = 0; i < 200; i++) assert.ok(!rollLevelUpHand(g.player, 3).some((c) => c.id === target.id));
+
+  // Arming one card then pressing another only re-arms; nothing is spent.
+  g.banishCard(0);
+  g.banishCard(2);
+  assert.equal(g.banishArmed, 2);
+  assert.equal(g.gold, 70);
+  // Not enough gold: nothing happens.
+  g.gold = 10;
+  const before = g.currentChoices.map((c) => c.id);
+  g.banishCard(2);
+  assert.equal(g.gold, 10);
+  assert.deepEqual(g.currentChoices.map((c) => c.id), before);
+});
+
+test('BANISH: a locked card loses its lock, NEW WEAPON cannot be banished, keyboard and controller work', () => {
+  const g = freshGame(200);
+  plainHand(g);
+  g.toggleCardLock(0);
+  const locked = g.currentChoices[0];
+  g.banishCard(0); g.banishCard(0);
+  assert.equal(g.handLock, null, 'the lock goes with the banished card');
+  assert.equal(g.player.banished[locked.id], true);
+
+  // Keyboard: [B] then a digit banishes at once; [B] again cancels.
+  const goldBefore = g.gold;
+  const id2 = g.currentChoices[2].id;
+  assert.equal(g.handleUpgradeKey('KeyB'), true);
+  assert.equal(g.banishMode, true);
+  assert.equal(g.handleUpgradeKey('Digit3'), true);
+  assert.equal(g.gold, goldBefore - 30);
+  assert.equal(g.player.banished[id2], true);
+  assert.equal(g.banishMode, false);
+  g.handleUpgradeKey('KeyB'); g.handleUpgradeKey('KeyB');
+  assert.equal(g.banishMode, false, '[B] twice cancels');
+
+  // Controller: RB on the focused card, twice.
+  const pad = (button) => ({ pressed: (b) => b === button, buttons: [] });
+  g.gpActive = true;
+  g.menuNav = { focused: g.choiceCardEls[1], update() {}, activate() {}, setFocus(el) { this.focused = el; }, clear() {} };
+  const id1 = g.currentChoices[1].id;
+  g.handleUpgradePad(pad(PAD.RB));
+  assert.equal(g.banishArmed, 1);
+  g.handleUpgradePad(pad(PAD.RB));
+  assert.equal(g.player.banished[id1], true);
+
+  // NEW WEAPON is not banishable.
+  const h2 = freshGame(200);
+  withTuning(odds(1), () => h2.triggerLevelUp());
+  const nwIdx = h2.currentChoices.findIndex((c) => c.isNewWeapon);
+  assert.ok(nwIdx >= 0);
+  assert.equal(h2.banishCard(nwIdx), false);
+  assert.equal(h2.banishCard(nwIdx, true), false);
+  assert.equal(h2.gold, 200);
+});

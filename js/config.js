@@ -189,7 +189,8 @@ export const DEFAULT_TUNING = {
   goldPerVein: 2,
   goldRerollCost: 20,
   goldRerollGrowth: 2,
-  goldLockCost: 5
+  goldLockCost: 5,
+  goldBanishCost: 30
 };
 
 export const TUNING_SCHEMA = [
@@ -409,7 +410,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldPerVein', label: 'Gold per Gold Vein', type: 'range', min: 0, max: 30, step: 1, unit: '' },
       { key: 'goldRerollCost', label: 'First Reroll Cost (per hand)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
-      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' }
+      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
     ]
   }
 ];

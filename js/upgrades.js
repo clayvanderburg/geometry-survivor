@@ -550,6 +550,7 @@ export function applyUpgradeLevels(player, upg) {
 // their own requirements.
 export function eligibleUpgrades(player) {
   return UPGRADE_POOL.filter((u) => {
+    if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
     if ((player.upgradeLevels[u.id] || 0) >= u.maxLevel) return false;
     if (!loadoutAllows(player, u)) return false;
     if (u.req && !u.req(player)) return false;
