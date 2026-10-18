@@ -10,14 +10,14 @@ import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
-  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
+  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
   discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   wingRocketBlastRadius, critChance, critMultiplier, DPS_TARGET, POTENTIAL_DPS
 } from './weapon-scaling.js';
-import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
+import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
@@ -2722,6 +2722,7 @@ export class Game {
     this.beginHand();
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
     this.runStats?.offered(this.currentChoices);
+    this.recordHandOdds();
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2823,6 +2824,16 @@ export class Game {
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
   // rolls as a new hand); the locked card stays in its slot. 20, 40, 80... gold within one hand.
+  // Card fairness stats: every eligible card's exact chance of being drawn into this hand's random slots
+  // (not the NEW WEAPON card or a locked card), and which cards were drawn.
+  recordHandOdds() {
+    if (!this.runStats) return;
+    const lock = this.handLock?.card;
+    const drawn = this.currentChoices.filter((c) => !c.isNewWeapon && c !== lock);
+    if (!drawn.length) return;
+    this.runStats.handOdds(cardInclusionOdds(this.player, drawn.length, lock?.id), drawn);
+  }
+
   // Gold price of the next reroll in this hand (Void Armory: Probability Engine discounts it).
   rerollPrice() {
     return Math.round(rerollCost(this.handRerolls) * (this.player?.rerollCostMult ?? 1));
@@ -2836,6 +2847,7 @@ export class Game {
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
     this.runStats?.reroll();
     this.runStats?.offered(this.currentChoices, this.handLock?.card);
+    this.recordHandOdds();
     if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
     const focusedIndex = this.focusedChoiceIndex();
     this.renderHand();
@@ -2969,6 +2981,7 @@ export class Game {
     this.renderHandControls();
     this.currentChoices = rollWeaponPicks(this.player, 3);
     this.runStats?.offered(this.currentChoices);
+    this.runStats?.weaponPickOdds(unownedWeapons(this.player), this.currentChoices);
     if (this.currentChoices.length === 0) {
       this.closeUpgradeModal();
       return;

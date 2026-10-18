@@ -16,6 +16,11 @@ export const SUMMARY_SCHEMA = 'vexolith-stats-summary/1';
 export const OUTLIER_BAND = 0.2;
 // A weapon level needs this much data before it is compared (fewer runs/seconds -> "low sample").
 export const MIN_SAMPLE = Object.freeze({ runs: 3, seconds: 60 });
+// Card fairness: flag a card drawn more than ±25% off its expected count when that gap is also beyond
+// random noise (|z| >= 3, z = (drawn - expected) / sqrt(expected)), once ~20 draws were expected.
+export const FAIRNESS_BAND = 0.25;
+export const FAIRNESS_MIN_EXPECTED = 20;
+export const FAIRNESS_Z = 3;
 export const TARGET_LEVEL = 50;       // the user's targets: reach LV 50 ...
 export const TARGET_SECONDS = 30 * 60; // ... and survive 30 minutes
 const TIME_BUCKETS = [[0, 120], [120, 300], [300, 600], [600, 900], [900, 1200], [1200, 1800], [1800, Infinity]];
@@ -179,12 +184,24 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
   const tally = (key) => {
     const t = new Map();
     for (const r of list) for (const [id, v] of Object.entries(r[key] || {})) {
-      const row = t.get(id) || { id, offered: 0, picked: 0 };
+      const row = t.get(id) || { id, offered: 0, picked: 0, eligible: 0, expected: 0, drawn: 0 };
       t.set(id, row);
       row.offered += v[0] || 0;
       row.picked += v[1] || 0;
+      row.eligible += v[2] || 0;
+      row.expected += v[3] || 0;
+      row.drawn += v[4] || 0;
     }
-    return [...t.values()].map((c) => ({ ...c, pickRate: round(ratio(c.picked, c.offered), 4) })).sort((a, b) => b.offered - a.offered);
+    return [...t.values()].map((c) => {
+      // Fairness: random draws / the draws its weight predicts, over the hands where it was eligible
+      // (weapon cards only count hands where that weapon was owned). 1.00 = exactly as often as expected.
+      const fairness = c.expected > 0 ? c.drawn / c.expected : null;
+      const enough = c.expected >= FAIRNESS_MIN_EXPECTED;
+      const z = c.expected > 0 ? (c.drawn - c.expected) / Math.sqrt(c.expected) : 0;
+      const significant = Math.abs(z) >= FAIRNESS_Z;
+      const flag = !enough || fairness === null || !significant ? null : fairness > 1 + FAIRNESS_BAND ? 'over' : fairness < 1 - FAIRNESS_BAND ? 'under' : null;
+      return { ...c, expected: round(c.expected, 2), pickRate: round(ratio(c.picked, c.offered), 4), offerRate: round(ratio(c.drawn, c.eligible), 4), fairness: round(fairness, 3), z: round(z, 2), lowSample: !enough, flag };
+    }).sort((a, b) => b.offered - a.offered);
   };
   const cards = tally('cards');
   const weaponPicks = tally('weaponPicks');

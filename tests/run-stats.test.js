@@ -120,10 +120,11 @@ test('cards: offers vs picks, the locked card is not re-counted on a reroll, NEW
   rs.offered([{ id: 'weapon:drones', weaponId: 'drones', isWeaponPick: true }, { id: 'weapon:mines', weaponId: 'mines', isWeaponPick: true }]);
   rs.picked({ id: 'weapon:mines', weaponId: 'mines', isWeaponPick: true });
   const s = rs.finish({ time: 30, gold: { earned: 40, spent: 25 } });
-  assert.deepEqual(s.cards.firerate, [1, 0]);
-  assert.deepEqual(s.cards.new_weapon, [1, 1]);
-  assert.deepEqual(s.cards.magnet, [1, 0]);
-  assert.deepEqual(s.weaponPicks, { drones: [1, 0], mines: [1, 1] });
+  // [offered, picked, eligible hands, expected draws, draws]: no odds recorded in this test.
+  assert.deepEqual(s.cards.firerate, [1, 0, 0, 0, 0]);
+  assert.deepEqual(s.cards.new_weapon, [1, 1, 0, 0, 0]);
+  assert.deepEqual(s.cards.magnet, [1, 0, 0, 0, 0]);
+  assert.deepEqual(s.weaponPicks, { drones: [1, 0, 0, 0, 0], mines: [1, 1, 0, 0, 0] });
   assert.deepEqual(s.gold, { earned: 40, spent: 25, rerolls: 1, locks: 1 });
 });
 
@@ -191,7 +192,7 @@ test('sanitize: a real summary passes unchanged; versions, schema, short runs an
   assert.equal(junk.weapons.missiles.lv[1][0], run.time, 'seconds at a level never exceed the run');
   assert.deepEqual(junk.weapons.missiles.tl, [[1, 2]]);
   assert.equal(junk.enemies.swarmer[3], 2, 'timed deaths never exceed kills');
-  assert.deepEqual(junk.cards.firerate, [2, 2], 'picks never exceed offers');
+  assert.deepEqual(junk.cards.firerate, [2, 2, 0, 0, 0], 'picks never exceed offers; old 2-number rows read as no fairness data');
   assert.equal(junk.levelTimes.length, STATS_LIMITS.MAX_LEVEL_TIMES);
 });
 
@@ -356,4 +357,30 @@ test('a simulated run fills the same stats the browser uploads, matching the bal
   assert.ok(spawned >= s.kills * 0.9, 'spawns are counted');
   assert.equal(s.levelTimes.length, s.level - 1);
   assert.ok(Object.values(s.cards).reduce((a, c) => a + c[1], 0) >= s.level - 1 - 2, 'every level-up pick is recorded');
+});
+
+test('card fairness: eligible hands, expected and actual random draws, weapon picks uniform', () => {
+  const rs = tracker();
+  rs.handOdds(new Map([['firerate', 0.5], ['pierce', 0.25], ['magnet', 0.25]]), [{ id: 'firerate' }]);
+  rs.handOdds(new Map([['firerate', 0.5], ['pierce', 0.5]]), [{ id: 'pierce' }]);
+  rs.weaponPickOdds(['drones', 'mines', 'turret', 'orbitals'], [{ id: 'weapon:drones', weaponId: 'drones', isWeaponPick: true }]);
+  const s = rs.finish({ time: 30 });
+  assert.deepEqual(s.cards.firerate, [0, 0, 2, 1, 1]);
+  assert.deepEqual(s.cards.pierce, [0, 0, 2, 0.75, 1]);
+  assert.deepEqual(s.cards.magnet, [0, 0, 1, 0.25, 0]);
+  assert.deepEqual(s.weaponPicks.drones, [0, 0, 1, 0.25, 1]);
+  assert.deepEqual(s.weaponPicks.mines, [0, 0, 1, 0.25, 0]);
+});
+
+test('card fairness flags need a real gap: >25% off and beyond noise (|z| >= 3)', async () => {
+  const { aggregateRuns } = await import('../js/stats-aggregate.js');
+  const run = (cards) => ({ ...sampleRun(), cards });
+  const agg = aggregateRuns([run({ fair: [0, 0, 100, 40, 41], noisy: [0, 0, 100, 22, 32], rigged: [0, 0, 300, 100, 160], starved: [0, 0, 300, 100, 50], rare: [0, 0, 50, 4, 9] })]);
+  const by = Object.fromEntries(agg.cards.map((c) => [c.id, c]));
+  assert.equal(by.fair.flag, null);
+  assert.equal(by.noisy.flag, null, '+45% but only ~2 sigma: noise, not flagged');
+  assert.equal(by.rigged.flag, 'over');
+  assert.equal(by.starved.flag, 'under');
+  assert.equal(by.rare.lowSample, true);
+  assert.equal(by.rare.flag, null);
 });

@@ -62,8 +62,10 @@ export class RunStats {
     this.groups = new Map();  // group -> record
     this.sources = new Map(); // stat -> damage
     this.enemies = new Map(); // kind -> [spawned, killed, ttkSum, ttkN, dmgToPlayer, hitsOnPlayer]
-    this.cards = new Map();   // card id -> [offered, picked]
-    this.weaponPicks = new Map(); // weapon id -> [offered, picked]
+    // card id -> [offered, picked, eligible hands, expected random draws, random draws]: the last three
+    // measure fairness (drawn vs expected, given only the hands where the card could appear).
+    this.cards = new Map();
+    this.weaponPicks = new Map(); // weapon id -> same row, for the NEW WEAPON pick
     this.totalDmg = 0;
     this.totalKills = 0;
     this.baseDamage = 1;
@@ -155,21 +157,48 @@ export class RunStats {
     }
   }
 
+  // One random draw: `odds` (Map id -> chance, every eligible card) and the cards it actually drew.
+  handOdds(odds, drawn = [], map = this.cards) {
+    for (const [id, p] of odds || []) {
+      const row = this.row(map, id);
+      if (!row) continue;
+      row[2]++;
+      row[3] += p;
+    }
+    for (const c of drawn) {
+      const row = this.row(map, c.isWeaponPick ? c.weaponId : c.id);
+      if (row) row[4]++;
+    }
+  }
+
+  // The NEW WEAPON pick shows `shown` of the unequipped weapons, uniformly.
+  weaponPickOdds(unowned, shown) {
+    const n = (unowned || []).length;
+    if (!n) return;
+    const p = Math.min(1, (shown || []).length / n);
+    this.handOdds(new Map(unowned.map((id) => [id, p])), shown, this.weaponPicks);
+  }
+
   picked(card) {
     if (!card) return;
     if (card.isWeaponPick) this.bump(this.weaponPicks, card.weaponId, 1);
     else if (typeof card.id === 'string') this.bump(this.cards, card.id, 1);
   }
 
-  bump(map, id, slot) {
-    if (typeof id !== 'string') return;
+  row(map, id) {
+    if (typeof id !== 'string') return null;
     let row = map.get(id);
     if (!row) {
-      if (map.size >= LIMIT.cards) return;
-      row = [0, 0];
+      if (map.size >= LIMIT.cards) return null;
+      row = [0, 0, 0, 0, 0];
       map.set(id, row);
     }
-    row[slot]++;
+    return row;
+  }
+
+  bump(map, id, slot) {
+    const row = this.row(map, id);
+    if (row) row[slot]++;
   }
 
   reroll() { this.rerolls++; }
@@ -254,7 +283,7 @@ export class RunStats {
       }
       weapons[rec.id] = out;
     }
-    const pairs = (map) => Object.fromEntries([...map].map(([k, v]) => [k, [...v]]));
+    const pairs = (map) => Object.fromEntries([...map].map(([k, v]) => [k, [v[0], v[1], v[2], Math.round(v[3] * 1000) / 1000, v[4]]]));
     this.finished = {
       schema: 1,
       version: this.version,
