@@ -23,7 +23,7 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
 ## Core Mechanics & Features
 
 1. **Geometric Crab Ship with Twin Rotary Drill-Claws (`drawCrabShip` in `js/main.js`)**
-   - Wide hexagonal armored crab carapace with 6 scuttling side legs.
+   - Wide hexagonal armored carapace with swept delta wings (the hull faces where you fly; only the drill arms swing round to the rock being mined).
    - **Twin Front Rotary Drill-Claws**: Orient automatically toward your movement direction (or snap onto the asteroid rock face you are boring into), clamping inward, spinning helical drill threads, vibrating, and spraying grinding sparks.
    - **360° Independent Plasma Turret**: Rotates toward your aim cursor (`p.angle`) independently of your crab hull.
    - **Prism Split streams** (`PRISM_STREAMS` in `js/weapon-scaling.js`): the blaster starts as two parallel streams straight at your aim. Each Prism Split level adds a pair in a fixed order (rear → sides → forward diagonals → rear diagonals → flanks) without moving existing streams, so the forward pair always stays aimable.
