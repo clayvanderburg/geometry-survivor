@@ -160,8 +160,8 @@ test('headlines are computed from the rolled level jump', () => {
   assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
   assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 PEW PEWS PIERCE');
-  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+40% PEW PEWS DAMAGE');
-  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+96% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+50% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+125% PEW PEWS DAMAGE');
   assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(levelBuild('missiles', 1))} MISSILES / SALVO`);
 });
 
