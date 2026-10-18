@@ -12,7 +12,7 @@ function element() {
     contains: value => classes.has(value), toggle() {}
   }};
 }
-globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
+globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
 const channels = [];
 globalThis.BroadcastChannel = class { constructor() { channels.push(this); } addEventListener(type, callback) { this.callback = callback; } postMessage() {} };
 globalThis.window = { addEventListener: (type, callback) => windowEvents.set(type, callback) };
@@ -68,10 +68,36 @@ test('tuning rejects poison values and clamps persisted schema bounds', () => {
   assert.equal(config.normalizeTuningValue('musicBpm', Infinity), config.DEFAULT_TUNING.musicBpm);
   assert.equal(config.normalizeTuningValue('moveSpeed', -100), 2);
   assert.equal(config.normalizeTuningValue('carapaceColor', '<bad>'), config.DEFAULT_TUNING.carapaceColor);
-  storage.set('vectra_survivor_tuning_v3', JSON.stringify({ moveSpeed: 999, baseDamage: 'oops', evil: true }));
+  storage.set('vexolith_tuning_overrides_v4', JSON.stringify({ moveSpeed: 999, baseDamage: 'oops', evil: true }));
   config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 14); assert.equal(config.TUNING.baseDamage, 11);
   assert.equal(config.TUNING.evil, undefined);
-  storage.delete('vectra_survivor_tuning_v3'); config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 5);
+  storage.delete('vexolith_tuning_overrides_v4'); config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 5);
+});
+
+test('saved tuning holds only changed values, so new balance defaults reach every player', () => {
+  storage.delete('vexolith_tuning_overrides_v4');
+  config.resetTuningToDefaults();
+  assert.equal(storage.get('vexolith_tuning_overrides_v4'), '{}', 'nothing changed, nothing saved');
+  config.updateTuningKey('musicVolume', 0.9); // the pause-menu volume slider
+  assert.deepEqual(JSON.parse(storage.get('vexolith_tuning_overrides_v4')), { musicVolume: 0.9 }, 'a volume change saves only the volume');
+  config.resetTuningToDefaults();
+});
+
+test('an old full-snapshot save keeps only the volume, so stale balance values stop blocking global scores', () => {
+  storage.delete('vexolith_tuning_overrides_v4');
+  // Pre-0.12.2 saves were full snapshots: every value as it was back then (here two stale balance values).
+  const stale = { ...config.DEFAULT_TUNING, moveSpeed: 7, singularityPullFalloff: 1, musicVolume: 0.25, sfxVolume: 0.6 };
+  storage.set('vectra_survivor_tuning_v3', JSON.stringify(stale));
+  config.loadTuning();
+  assert.equal(config.TUNING.musicVolume, 0.25);
+  assert.equal(config.TUNING.sfxVolume, 0.6);
+  assert.equal(config.TUNING.moveSpeed, config.DEFAULT_TUNING.moveSpeed, 'stale balance values are dropped');
+  assert.equal(config.TUNING.singularityPullFalloff, config.DEFAULT_TUNING.singularityPullFalloff);
+  const modified = Object.keys(config.DEFAULT_TUNING).filter(k => !config.PLAYER_SETTING_KEYS.includes(k) && config.TUNING[k] !== config.DEFAULT_TUNING[k]);
+  assert.deepEqual(modified, [], 'no balance key differs, so runs are not flagged as dev-tuned');
+  assert.equal(storage.has('vectra_survivor_tuning_v3'), false, 'the old snapshot is removed');
+  assert.deepEqual(JSON.parse(storage.get('vexolith_tuning_overrides_v4')), { musicVolume: 0.25, sfxVolume: 0.6 });
+  config.resetTuningToDefaults();
 });
 
 test('save normalization tolerates malformed entries and bounds permanent ranks', () => {
