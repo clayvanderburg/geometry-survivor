@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.25.0',
+    date: '2026-10-18',
+    title: 'Soundtrack',
+    notes: [
+      { type: 'new', text: 'A real soundtrack: Vexolith Drift on the title screen, a shuffled four-track playlist in runs and a boss theme for boss fights.' },
+      { type: 'new', text: 'The grid still pulses to the beat of whatever track is playing.' }
+    ]
+  },
+  {
     version: '0.24.1',
     date: '2026-10-18',
     title: 'Smooth Menus',
