@@ -50,7 +50,7 @@ export function isDeployableTarget(e) {
 export class Deployables {
   constructor() {
     this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0, cluster: false, seeker: false }));
-    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, shots: 0, mortarT: 0 }));
+    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, mortarT: 0 }));
     this.drones = Array.from({ length: DRONE_POOL }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0,
       trailX: new Float32Array(TRAIL_LEN), trailY: new Float32Array(TRAIL_LEN), trailHead: 0, trailCount: 0
@@ -231,6 +231,8 @@ export class Deployables {
         game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
         continue;
       }
+      // Mobile Sentries: drift after the ship into a ring around it, each turret at its own spot on the ring.
+      if (lv.t8) this.followShip(t, i, p, dt);
       t.target = this.trackTarget(game, t, t.x, t.y, range, TURRET_BOLT_RADIUS, dt);
       const tgt = t.target;
       if (!tgt) {
@@ -264,6 +266,20 @@ export class Deployables {
     }
   }
 
+  // Moves turret `t` (live index `i`) toward its spot on a ring around the ship, at turretFollowSpeed.
+  followShip(t, i, p, dt) {
+    const n = Math.max(1, this.turretCount);
+    const a = (i / n) * Math.PI * 2 + (p.hullAngle ?? p.angle ?? 0) + Math.PI; // the ring trails behind
+    const tx = p.x + Math.cos(a) * W.turretFollowRadius;
+    const ty = p.y + Math.sin(a) * W.turretFollowRadius;
+    const dx = tx - t.x, dy = ty - t.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1) return;
+    const step = Math.min(d, W.turretFollowSpeed * dt);
+    t.x += (dx / d) * step;
+    t.y += (dy / d) * step;
+  }
+
   deployTurret(game, level) {
     const p = game.player;
     const t = this.turrets[this.turretCount++];
@@ -287,7 +303,6 @@ export class Deployables {
     t.life = t.maxLife = W.turretDuration(level);
     t.aim = p.angle;
     t.fireAcc = 1;
-    t.shots = 0;
     t.mortarT = W.mortarEvery;
     t.target = null;
     t.retarget = 0;
@@ -318,19 +333,15 @@ export class Deployables {
   fireTurretBolt(game, t, level) {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
-    // Piercing Rail: every railEvery-th shot is a fast rail slug that punches through railPierce enemies in a line.
-    t.shots = (t.shots || 0) + 1;
-    const rail = level.t8 && t.shots % W.railEvery === 0;
     // Twin Barrels: two bolts side by side.
     const barrels = W.turretBarrels(level);
     for (let k = 0; k < barrels; k++) {
       const lateral = barrels > 1 ? (k === 0 ? -5 : 5) * TURRET_SCALE : 0;
       const ox = -Math.sin(t.aim) * lateral, oy = Math.cos(t.aim) * lateral;
-      const b = this.fireBolt(game, t.x + ox, t.y + oy, t.aim, TURRET_MUZZLE, rail ? W.railSpeed : W.turretBoltSpeed, rail ? damage * W.railUnits : damage,
-        rail ? 190 : DEPLOYABLE_HUES.turret, rail ? TURRET_BOLT_RADIUS * 1.5 : TURRET_BOLT_RADIUS, 'turret', W.turretRange(level) * (rail ? 1.6 : 1));
+      const b = this.fireBolt(game, t.x + ox, t.y + oy, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage,
+        DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
       b.sweepX = t.x + ox; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
       b.sweepY = t.y + oy;
-      if (rail) b.pierce = W.railPierce;
       if (p.weapons.siegeBattery) {
         b.blastRadius = siegeShellRadius(p);
         b.blastDamage = weaponDamage(p, 'siege', level);

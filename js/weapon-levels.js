@@ -81,7 +81,7 @@ export const STAT_CARDS = {
   turret: [
     card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
     card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.', cap(8)),
-    card('turret', 'turret_count', 'count', 'Sentry Turret Count', 'turretMaxActive', 'Sentry Turret: carry one more turret.', cap(3)),
+    card('turret', 'turret_count', 'count', 'Sentry Turret Count', 'turretMaxActive', 'Sentry Turret: carry one more turret.', cap(6)),
     card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
     card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Recharge', 'turretCooldown', 'Sentry Turret: an expired turret is ready to plant again sooner. Only recharge.')
   ],
@@ -151,7 +151,7 @@ export const TRANSFORMS = {
   },
   turret: {
     6: tf('twin', 'Twin Barrels', 'Sentry Turrets fire two bolts per shot, side by side.'),
-    12: tf('rail', 'Piercing Rail', 'Every fifth Sentry Turret shot is a heavy rail slug that punches through three enemies in a line.'),
+    12: tf('mobile', 'Mobile Sentries', 'Sentry Turrets slowly follow you around instead of staying where they were planted, and their bolts hit harder.'),
     18: tf('mortar', 'Mortar Battery', 'Sentry Turrets also lob mortar shells that crash down on enemies in range.')
   },
   drones: {
