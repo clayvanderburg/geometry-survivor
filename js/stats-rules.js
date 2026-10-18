@@ -3,7 +3,8 @@
 // beyond the shared version/changelog modules.
 //
 // A run summary (built by js/run-stats.js) holds no callsign, no IP and nothing else about the player:
-//   schema 1, version, time (s), wave, level, score, kills, died, cause (enemy kind of the fatal hit)
+//   schema 1, version, mode (js/modes.js id; NORMAL when absent), time (s), wave, level, score, kills,
+//   died, cause (enemy kind of the fatal hit)
 //   levelTimes  [seconds at which LV 2, 3, ... were reached]
 //   gold        { earned, spent, rerolls, locks, banishes }
 //   loadout     [{ id, lv }] at the end of the run
@@ -13,6 +14,7 @@
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
 //   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
 import { KNOWN_VERSIONS } from './changelog.js';
+import { normalizeMode } from './modes.js';
 
 export const STATS_SCHEMA = 1;
 
@@ -67,6 +69,7 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
   const run = {
     schema: STATS_SCHEMA,
     version: body.version,
+    mode: normalizeMode(body.mode), // older clients send none: a NORMAL run
     time: t,
     wave: int(body.wave, 5000, 1),
     level: int(body.level, 5000, 1),

@@ -14,6 +14,7 @@ import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, 
 import { weaponPotentialDps, bonusLevels, bonusText } from './upgrade-cards.js';
 import { formatCompact, OTHER_GROUP_INFO } from './run-report.js';
 import { GAME_VERSION, versionLabel } from './version.js';
+import { modeRules } from './modes.js';
 import { ShipPreview } from './ship-preview.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -43,7 +44,8 @@ export const STAT_GROUPS = [
   {
     id: 'defense', label: 'DEFENSE', rows: [
       { id: 'maxHp', label: 'Max shield', kind: 'add', fmt: 'flat', get: (s) => s.maxHp },
-      { id: 'regen', label: 'Shield regen', kind: 'add', fmt: 'hps', get: (s, t) => t.shieldRegenRate ?? 1.2 },
+      // HARDCORE has none (js/modes.js): every snapshot carries the run's mode, so it reads 0 throughout.
+      { id: 'regen', label: 'Shield regen', kind: 'add', fmt: 'hps', get: (s, t) => (modeRules(s).shieldRegen ? t.shieldRegenRate ?? 1.2 : 0) },
       { id: 'damageTaken', label: 'Damage taken', kind: 'mult', fmt: 'pct', lower: true, get: (s) => s.damageTakenMult ?? 1 },
       { id: 'invuln', label: 'Invulnerable after a hit', kind: 'add', fmt: 'sec', get: (s) => HIT_INVULN_BASE + (s.hitInvulnBonus || 0) }
     ]
@@ -113,8 +115,9 @@ export function formatStatDelta(kind, fmt, from, to) {
 }
 
 // The three snapshots. `bonuses` (Void Armory) is only used when the player has no run-start snapshot.
+// All three fly the player's game mode, so mode rules (HARDCORE's regen) never read as a change.
 export function statSnapshots(player, { bonuses = {}, tuning = TUNING } = {}) {
-  const bare = (src) => ({ ...src, weapons: {}, upgradeLevels: {}, breakthroughs: {} });
+  const bare = (src) => ({ ...src, mode: player.mode, weapons: {}, upgradeLevels: {}, breakthroughs: {} });
   const base = bare(runStartPlayer({}, tuning));
   let start;
   if (player.base) {
@@ -226,7 +229,7 @@ export function runInfo(game) {
     ['SHIELD', `${Math.ceil(p.hp || 0)} / ${p.maxHp || 0}`, `${p.bombs ?? 0} Supernova bomb${p.bombs === 1 ? '' : 's'}`],
     ['GOLD', `◆ ${game.gold ?? 0}`, `${game.goldEarned || 0} mined · ${game.goldSpent || 0} spent`],
     ['VOID CORES', `❖ +${game.sessionCores || 0}`, `${game.progression?.data?.cores ?? 0} banked`],
-    ['VERSION', versionLabel(GAME_VERSION), game.runTainted ? 'dev-tuned run' : `${ownedWeapons(p).length} / ${weaponSlots()} weapon slots`]
+    ['MODE', modeRules(game).label, `${versionLabel(GAME_VERSION)} · ${game.runTainted ? 'dev-tuned run' : `${ownedWeapons(p).length} / ${weaponSlots()} slots`}`]
   ];
 }
 

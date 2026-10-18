@@ -8,6 +8,9 @@
 //                            a fresh race and old high scores can't crowd it out;
 //   board-v1                 the all-time board: every run of every version, each entry tagged with its
 //                            version. Runs from before versioning have no version ("pre-0.9").
+// Those are the NORMAL boards. HARDCORE and BLITZ runs (js/modes.js) race on their own pair of boards,
+// the same keys with the mode's suffix: board-v1-hc / board-v1-hc@<version>, board-v1-blitz /
+// board-v1-blitz@<version>. A run without a `mode` (older clients) is NORMAL.
 // A run is written to its version's board and to the all-time board. Writes are compare-and-swap on the
 // blob's ETag and retried on conflict, so two runs submitted at the same moment both land. Rate limiting
 // keeps one small blob per hashed client IP.
@@ -17,6 +20,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
+import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
 
 export const STORE_NAME = 'leaderboard';
 export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
@@ -45,9 +49,18 @@ export function purgeMatches(purge, e) {
   return true;
 }
 
-// Blob key of a board: 'all' -> the all-time board, '0.9.0' -> board-v1@0.9.0.
-export function boardKey(version) {
-  return version === ALL_TIME ? BOARD_KEY : VERSION_BOARD_PREFIX + version;
+// Board key suffix per game mode. NORMAL has none, so its keys never change.
+export const MODE_BOARD_SUFFIX = Object.freeze({ normal: '', hardcore: '-hc', blitz: '-blitz' });
+
+// Prefix of a mode's per-version boards: board-v1@, board-v1-hc@, board-v1-blitz@.
+export function versionBoardPrefix(mode = DEFAULT_MODE) {
+  return `${BOARD_KEY}${MODE_BOARD_SUFFIX[mode]}@`;
+}
+
+// Blob key of a board: 'all' -> the all-time board, '0.9.0' -> board-v1@0.9.0; in HARDCORE board-v1-hc
+// and board-v1-hc@0.9.0, in BLITZ board-v1-blitz and board-v1-blitz@0.9.0.
+export function boardKey(version, mode = DEFAULT_MODE) {
+  return version === ALL_TIME ? BOARD_KEY + MODE_BOARD_SUFFIX[mode] : versionBoardPrefix(mode) + version;
 }
 
 export const LIMITS = Object.freeze({
@@ -72,8 +85,9 @@ const FIELDS = {
 // Plausibility envelope. Fitted to the headless balance sim (tools/balance-sim.mjs --god --skill expert
 // --meta 8, 15-minute cap): the best run reached wave 41, level 78, 19.8k kills and 2.05 billion points
 // in 894 s (score/t^2.5 ~ 86, score/kills^2 ~ 5.2, ~23 kills/s, ~5 levels/min), then widened 3-10x.
-// Waves tick every 22 s of play (main.js). Score grows faster than linearly because every pickup
-// raises the multiplier that later kills are paid with, so the score bounds are polynomial.
+// Waves tick every 22 s of play (main.js), or every waveLength seconds of the run's mode overlay (BLITZ:
+// js/modes.js). Score grows faster than linearly because every pickup raises the multiplier that later
+// kills are paid with, so the score bounds are polynomial.
 export const PLAUSIBILITY = Object.freeze({
   WAVE_SECONDS: 22,
   WAVE_SLACK: 1,
@@ -93,9 +107,9 @@ export function maxScoreFor(time, kills) {
 }
 
 // Returns null when the run looks like something the game can produce, else a short reason.
-export function checkPlausibility(run) {
+export function checkPlausibility(run, mode = DEFAULT_MODE) {
   const P = PLAUSIBILITY;
-  const expectedWave = 1 + Math.floor(run.time / P.WAVE_SECONDS);
+  const expectedWave = 1 + Math.floor(run.time / modeWaveLength(mode, P.WAVE_SECONDS));
   if (Math.abs(run.wave - expectedWave) > P.WAVE_SLACK) return 'wave does not match time survived';
   if (run.kills > P.KILLS_PER_SECOND * run.time + P.KILLS_SLACK) return 'too many kills for time survived';
   if (run.level > P.LEVEL_BASE + P.LEVELS_PER_SECOND * run.time) return 'level too high for time survived';
@@ -209,6 +223,22 @@ export function checkVersion(value, versions = BOARD_VERSIONS) {
   return { error: 'unknown game version: reload the game to get the latest build' };
 }
 
+// --- Game mode -------------------------------------------------------------------------------------
+// The game sends `mode` with every run; older clients send none, which is a NORMAL run. Anything other
+// than an exact mode id is malformed (a 400). Returns { mode } or { error }.
+export function checkMode(value) {
+  if (value === undefined || value === null) return { mode: DEFAULT_MODE };
+  if (isMode(value)) return { mode: value };
+  return { error: `mode must be one of ${MODE_IDS.join(', ')}` };
+}
+
+// Which mode's boards a GET reads: ?mode=<id>, NORMAL without the parameter. Returns { mode } or { error }.
+export function modeFromQuery(value) {
+  if (value === null || value === '') return { mode: DEFAULT_MODE };
+  if (isMode(value)) return { mode: value };
+  return { error: `unknown mode: use ?mode=${MODE_IDS.join('|')}` };
+}
+
 // Which board a GET reads: ?version=<v> or ?version=all. Without the parameter (older clients) the
 // all-time board, which is what /api/scores returned before boards were split by version.
 // Returns { board } ('all' or a version) or { error }.
@@ -270,13 +300,14 @@ export function createScoresHandler({
     return { entries: readBoard(result?.data), conditions: writeConditions(result) };
   }
 
-  // Versions whose board blob exists (i.e. that have runs), newest first. One list call; a store
-  // without list() or a failing list just reports none, the board itself still loads.
-  async function versionsWithRuns(blobs) {
+  // Versions whose board blob exists in a mode (i.e. that have runs), newest first. One list call; a
+  // store without list() or a failing list just reports none, the board itself still loads.
+  async function versionsWithRuns(blobs, mode) {
     if (typeof blobs.list !== 'function') return [];
+    const prefix = versionBoardPrefix(mode);
     try {
-      const listing = await blobs.list({ prefix: VERSION_BOARD_PREFIX });
-      const found = new Set((listing?.blobs || []).map(b => String(b.key).slice(VERSION_BOARD_PREFIX.length)));
+      const listing = await blobs.list({ prefix });
+      const found = new Set((listing?.blobs || []).map(b => String(b.key).slice(prefix.length)));
       return versions.filter(v => found.has(v)).sort((a, b) => compareVersions(b, a));
     } catch (err) {
       log?.warn?.('[scores] list failed', err);
@@ -285,12 +316,15 @@ export function createScoresHandler({
   }
 
   async function handleGet(req, blobs) {
-    const query = new URL(req.url).searchParams.get('version');
-    const { board, error } = boardFromQuery(query, versions);
+    const params = new URL(req.url).searchParams;
+    const { board, error } = boardFromQuery(params.get('version'), versions);
     if (error) return json(400, { error, current: currentVersion });
-    const [{ entries }, withRuns] = await Promise.all([getBoard(blobs, boardKey(board)), versionsWithRuns(blobs)]);
+    const { mode, error: modeError } = modeFromQuery(params.get('mode'));
+    if (modeError) return json(400, { error: modeError, current: currentVersion });
+    const [{ entries }, withRuns] = await Promise.all([getBoard(blobs, boardKey(board, mode)), versionsWithRuns(blobs, mode)]);
     return json(200, {
       version: board,
+      mode,
       current: currentVersion,
       versions: withRuns,
       entries: entries.slice(0, limits.PUBLIC_SIZE).map(publicEntry),
@@ -339,6 +373,8 @@ export function createScoresHandler({
 
     const { run, censored, error } = validateRun(body);
     if (error) return json(400, { error });
+    const { mode, error: modeError } = checkMode(body.mode);
+    if (modeError) return json(400, { error: modeError });
     // An unknown version is refused before the cooldown: it's a stale or dev build, not a probe.
     const version = checkVersion(body.version, versions);
     if (version.error) return json(422, { error: version.error, current: currentVersion });
@@ -350,27 +386,28 @@ export function createScoresHandler({
       return json(429, { error: 'slow down: one run per pilot every few seconds', retryAfter }, { 'retry-after': String(retryAfter) });
     }
 
-    const implausible = checkPlausibility(run);
+    const implausible = checkPlausibility(run, mode);
     if (implausible) return json(422, { error: `run rejected: ${implausible}` });
 
     const entry = { id: newId(), ...run, date: new Date(t).toISOString() };
-    // The run's own version board first (that's the rank the game shows), then the all-time board.
-    // A pre-versioning client's run only has the all-time board.
+    // The run's own version board first (that's the rank the game shows), then the all-time board, both
+    // of the run's mode. A pre-versioning client's run only has the all-time board.
+    const allTimeKey = boardKey(ALL_TIME, mode);
     const own = run.version
-      ? await insertEntry(blobs, boardKey(run.version), entry, { gameVersion: run.version })
-      : await insertEntry(blobs, BOARD_KEY, entry);
+      ? await insertEntry(blobs, boardKey(run.version, mode), entry, { gameVersion: run.version })
+      : await insertEntry(blobs, allTimeKey, entry);
     if (own.busy) return json(503, { error: 'leaderboard busy, try again' }, { 'retry-after': '2' });
     let allTimeRank = run.version ? null : own.rank;
     if (run.version) {
       // Best effort: the run is already on its version's board, so a contended all-time board doesn't
       // turn the submission into an error.
-      const allTime = await insertEntry(blobs, BOARD_KEY, entry);
+      const allTime = await insertEntry(blobs, allTimeKey, entry);
       if (allTime.busy) log?.warn?.('[scores] all-time board busy, run kept on its version board', entry.id);
       else allTimeRank = allTime.rank;
     }
     return json(201, {
       accepted: true, onBoard: own.rank !== null, rank: own.rank, allTimeRank,
-      version: run.version, board: run.version || ALL_TIME, current: currentVersion,
+      version: run.version, board: run.version || ALL_TIME, mode, current: currentVersion,
       id: entry.id, name: entry.name, censored,
       entries: own.ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: own.ranked.length, boardSize: limits.BOARD_SIZE
     });
@@ -402,10 +439,13 @@ export function createScoresHandler({
       try {
         const marker = MIGRATION_PREFIX + purge.id;
         if (await blobs.getWithMetadata(marker, { type: 'json' })) { purgesDone.add(purge.id); continue; }
-        const keys = [BOARD_KEY];
+        // Every board of every mode: the all-time boards and each mode's version boards.
+        const keys = MODE_IDS.map(mode => boardKey(ALL_TIME, mode));
         if (typeof blobs.list === 'function') {
-          const listing = await blobs.list({ prefix: VERSION_BOARD_PREFIX });
-          for (const b of listing?.blobs || []) keys.push(String(b.key));
+          for (const mode of MODE_IDS) {
+            const listing = await blobs.list({ prefix: versionBoardPrefix(mode) });
+            for (const b of listing?.blobs || []) keys.push(String(b.key));
+          }
         }
         let removed = 0;
         for (const key of keys) removed += await purgeBoard(blobs, key, purge);

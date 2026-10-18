@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createScoresHandler, LIMITS, BOARD_KEY, VERSION_BOARD_PREFIX, RATE_PREFIX, CENSORED_NAME, containsProfanity, checkPlausibility,
-  validateRun, rankEntries, maxScoreFor, boardKey, checkVersion, PURGES, MIGRATION_PREFIX
+  validateRun, rankEntries, maxScoreFor, boardKey, checkVersion, checkMode, PURGES, MIGRATION_PREFIX
 } from '../netlify/lib/leaderboard.mjs';
 import { sanitizeCallsign, BOARD_VERSIONS } from '../js/leaderboard-rules.js';
 import { GAME_VERSION } from '../js/version.js';
@@ -90,7 +90,7 @@ test('GET on an empty store returns an empty board, uncached', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('access-control-allow-origin'), null, 'same origin: no CORS headers');
-  assert.deepEqual(await body(res), { version: GAME_VERSION, current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE });
+  assert.deepEqual(await body(res), { version: GAME_VERSION, mode: 'normal', current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE });
 });
 
 test('POST stores a run and GET returns it with name, score, wave, level, time, date and version', async () => {
@@ -517,4 +517,82 @@ test('a failing purge never blocks the board', async () => {
   assert.equal(res.status, 200);
   assert.equal(store.blobs.has(MIGRATION_PREFIX + 'boom'), false, 'no marker, so it retries later');
   store.list = realList;
+});
+
+// --- Game modes (js/modes.js): HARDCORE and BLITZ race on their own boards ---------------------------
+
+const getMode = (handler, mode, version = GAME_VERSION) =>
+  handler(new Request(`https://game.example/api/scores?version=${encodeURIComponent(version)}${mode === null ? '' : `&mode=${encodeURIComponent(mode)}`}`), { ip: '1.1.1.1' });
+
+test('board keys per mode: NORMAL keeps board-v1 / board-v1@<v>, HARDCORE and BLITZ get their own pair', () => {
+  assert.equal(boardKey('all'), 'board-v1');
+  assert.equal(boardKey(GAME_VERSION), `board-v1@${GAME_VERSION}`);
+  assert.equal(boardKey('all', 'normal'), 'board-v1');
+  assert.equal(boardKey('all', 'hardcore'), 'board-v1-hc');
+  assert.equal(boardKey(GAME_VERSION, 'hardcore'), `board-v1-hc@${GAME_VERSION}`);
+  assert.equal(boardKey('all', 'blitz'), 'board-v1-blitz');
+  assert.equal(boardKey(GAME_VERSION, 'blitz'), `board-v1-blitz@${GAME_VERSION}`);
+  assert.deepEqual(checkMode(undefined), { mode: 'normal' }, 'older clients send no mode');
+  assert.deepEqual(checkMode('hardcore'), { mode: 'hardcore' });
+  for (const bad of ['HARDCORE', 'hc', '', 1, {}, [], 'normal ']) assert.ok(checkMode(bad).error, `${JSON.stringify(bad)} is refused`);
+});
+
+test('a HARDCORE run lands on the HARDCORE boards only; NORMAL boards are untouched', async () => {
+  const { store, handler } = setup();
+  const res = await post(handler, run({ name: 'IRONMAN', mode: 'hardcore' }));
+  assert.equal(res.status, 201);
+  const data = await body(res);
+  assert.deepEqual([data.mode, data.rank, data.allTimeRank], ['hardcore', 1, 1]);
+  assert.deepEqual(store.board(`board-v1-hc@${GAME_VERSION}`).map((e) => e.name), ['IRONMAN']);
+  assert.deepEqual(store.board('board-v1-hc').map((e) => e.name), ['IRONMAN']);
+  assert.equal(store.blobs.has(BOARD_KEY), false, 'nothing written to the NORMAL all-time board');
+  assert.equal(store.blobs.has(CURRENT_KEY), false, 'nor to the NORMAL version board');
+
+  // A NORMAL run (no mode, like an older client) still goes to the NORMAL boards.
+  assert.equal((await post(handler, run({ name: 'CLASSIC' }))).status, 201);
+  assert.deepEqual(store.board().map((e) => e.name), ['CLASSIC']);
+  assert.deepEqual(store.board('board-v1-hc').map((e) => e.name), ['IRONMAN']);
+
+  // GET: ?mode= picks the boards; without it, NORMAL. Each mode lists its own versions.
+  const hc = await body(await getMode(handler, 'hardcore', 'all'));
+  assert.deepEqual([hc.mode, hc.entries.map((e) => e.name), hc.versions], ['hardcore', ['IRONMAN'], [GAME_VERSION]]);
+  const normal = await body(await get(handler, 'all'));
+  assert.deepEqual([normal.mode, normal.entries.map((e) => e.name)], ['normal', ['CLASSIC']]);
+  const blitz = await body(await getMode(handler, 'blitz'));
+  assert.deepEqual([blitz.entries, blitz.versions], [[], []]);
+});
+
+test('mode is validated strictly: a bad POST mode is a 400 that never burns the cooldown, a bad ?mode= a 400', async () => {
+  const { store, handler } = setup();
+  const ip = freshIp();
+  for (const mode of ['HARDCORE', 'god', 7, '']) {
+    const res = await post(handler, run({ mode }), { ip });
+    assert.equal(res.status, 400, `mode ${JSON.stringify(mode)}`);
+    assert.match((await body(res)).error, /mode/);
+  }
+  assert.equal(store.writes, 0);
+  assert.equal((await post(handler, run({ mode: 'blitz', wave: 22 }), { ip })).status, 201, 'the cooldown was not burned');
+  assert.equal((await getMode(handler, 'bogus')).status, 400);
+  assert.equal((await getMode(handler, '')).status, 200, 'an empty ?mode= is NORMAL');
+});
+
+test('plausibility follows the mode\'s wave clock: BLITZ waves are shorter', async () => {
+  // 300 s of BLITZ (14 s waves) reaches wave 22; NORMAL (22 s) wave 14.
+  const blitzRun = { ...run(), wave: 22 };
+  assert.equal(checkPlausibility(blitzRun, 'blitz'), null);
+  assert.match(checkPlausibility(blitzRun), /wave does not match/);
+  assert.match(checkPlausibility(run(), 'blitz'), /wave does not match/);
+  assert.equal(checkPlausibility(run(), 'hardcore'), null, 'HARDCORE keeps NORMAL pacing');
+  const { handler } = setup();
+  assert.equal((await post(handler, run({ wave: 22, mode: 'blitz' }))).status, 201);
+  assert.equal((await post(handler, run({ wave: 22 }))).status, 422);
+});
+
+test('purges apply to every mode\'s boards', async () => {
+  const { store, handler } = setup({ purges: [{ id: 'purge-test', names: ['NOX'] }] });
+  const entry = (id, name) => ({ id, name, score: 900, wave: 10, level: 15, kills: 900, multiplier: 10, time: 200, date: '2026-10-17T00:00:00.000Z', version: GAME_VERSION });
+  const keys = [BOARD_KEY, CURRENT_KEY, 'board-v1-hc', `board-v1-hc@${GAME_VERSION}`, 'board-v1-blitz', 'board-v1-blitz@0.9.0'];
+  for (const key of keys) store.put(key, { version: 1, entries: [entry('a', 'NOX'), entry('b', 'ACE')] });
+  await get(handler, 'all');
+  for (const key of keys) assert.deepEqual(store.board(key).map((e) => e.name), ['ACE'], key);
 });

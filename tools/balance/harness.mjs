@@ -26,13 +26,14 @@ const { EnemyManager } = await import('../../js/enemies.js');
 const { AsteroidManager } = await import('../../js/asteroids.js');
 const { ProgressionManager, META_UPGRADES } = await import('../../js/progression.js');
 const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../../js/upgrades.js');
-const { TUNING, DEFAULT_TUNING } = await import('../../js/config.js');
+const { TUNING, DEFAULT_TUNING, clearTuningOverlay } = await import('../../js/config.js');
+const { MODES, normalizeMode } = await import('../../js/modes.js');
 const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
 const { weaponSlots } = await import('../../js/loadout.js');
 const { canOfferNewWeapon } = await import('../../js/upgrades.js');
 const { rerollCost } = await import('../../js/gold.js');
 
-export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, W as WEAPON_SCALING };
+export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, MODES, W as WEAPON_SCALING };
 
 const DT = 1 / 60;
 const silent = new Proxy({}, { get: () => () => {} });
@@ -93,6 +94,7 @@ function withSeed(seed, { tuning = {}, weapons = {} }, fn) {
     return fn();
   } finally {
     Math.random = original;
+    clearTuningOverlay(); // a run cut off at the time cap still wears its game mode's overlay
     Object.assign(TUNING, savedTuning);
     Object.assign(W, savedWeapons);
   }
@@ -243,7 +245,8 @@ function installInstrumentation(game, metrics) {
 }
 
 // --- Headless game fixture --------------------------------------------------------------------
-export function createHeadlessGame({ metaRank = 0 } = {}) {
+// `mode` (js/modes.js) is the title-screen choice: resetRun(game.selectedMode) flies it, as startGame does.
+export function createHeadlessGame({ metaRank = 0, mode = 'normal' } = {}) {
   const game = Object.create(Game.prototype);
   Object.assign(game, {
     canvas: null, ctx: null, width: 1280, height: 720,
@@ -252,7 +255,7 @@ export function createHeadlessGame({ metaRank = 0 } = {}) {
     progression: new ProgressionManager(),
     enemyManager: new EnemyManager(),
     damageNumbers: null,
-    state: 'TITLE', autoFire: true, autoAim: true,
+    state: 'TITLE', autoFire: true, autoAim: true, selectedMode: normalizeMode(mode), mode: 'normal',
     keys: {}, mouse: { x: 640, y: 360, down: false },
     shake: 0, chromaFlash: 0, hitStopTicks: 0, shieldRotation: 0,
     gpButtons: [], gpActive: false, menuNav: null, menuState: null, menuGrace: 0,
@@ -509,9 +512,9 @@ export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false }) {
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal' }) {
   return withSeed(seed, { tuning, weapons }, () => {
-    const game = createHeadlessGame({ metaRank });
+    const game = createHeadlessGame({ metaRank, mode });
     const metrics = createMetrics();
     installInstrumentation(game, metrics);
     const shatter = game.onRockShattered;
@@ -529,7 +532,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       dash: controls.dash, bomb: controls.bomb, pressed: () => false, buttons: [], active: false
     });
 
-    game.resetRun();
+    game.resetRun(game.selectedMode);
     game.state = 'PLAYING';
     game.spawnWavePack();
     // God mode: hits still land (knockback, multiplier loss) but never take the last point of shield.
@@ -592,6 +595,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       strategy: strategy.name,
       seed,
       skill,
+      mode: game.mode,
       died,
       killer: died ? metrics.killer : null,
       time: game.elapsedTime,

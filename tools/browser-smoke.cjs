@@ -17,8 +17,14 @@ const { chromium } = require(process.argv[2] || 'playwright');
  const page = await context.newPage();
  const errors=[]; page.on('pageerror', e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8096');
+ // Game mode selector next to LAUNCH: three choices, NORMAL by default, [3] picks BLITZ and the run wears its badge.
+ if(await page.locator('#mode-select [data-game-mode]').count() !== 3) throw Error('Title needs the NORMAL / HARDCORE / BLITZ selector');
+ if(await page.locator('#mode-select [aria-checked="true"]').getAttribute('data-game-mode') !== 'normal') throw Error('NORMAL is the default mode');
+ await page.keyboard.press('3');
+ if(await page.locator('#mode-select [aria-checked="true"]').getAttribute('data-game-mode') !== 'blitz') throw Error('[3] should pick BLITZ');
  await page.locator('#btn-start-game').click();
  await page.waitForTimeout(1200);
+ if(await page.locator('#mode-hud-badge').innerText() !== '⚡ BLITZ') throw Error('A BLITZ run needs its HUD badge');
  await page.keyboard.press('p');
  if(!await page.locator('#pause-modal').isVisible()) throw Error('Pause did not open');
  await page.locator('#btn-resume-game').click();
@@ -53,10 +59,11 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await blocked.keyboard.press('Escape');
  if(await blocked.locator('#notes-modal').isVisible()) throw Error('Esc did not close the patch notes');
  if(await blocked.locator('#btn-title-notes [data-notes-badge]').isVisible()) throw Error('Reading the notes should clear the badge');
+ await blocked.locator('#mode-select [data-game-mode="hardcore"]').click();
  await blocked.locator('#btn-start-game').click();
  await blocked.keyboard.press('p');
  if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, blocked-storage boot + patch notes; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, blocked-storage boot + patch notes + mode pick; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
