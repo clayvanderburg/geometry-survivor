@@ -15,9 +15,9 @@ import {
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier
+  wingRocketBlastRadius, critChance, critMultiplier, DPS_TARGET, POTENTIAL_DPS
 } from './weapon-scaling.js';
-import { STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
+import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
@@ -29,6 +29,10 @@ import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refr
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
+import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
+import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, defaultStatsStorage } from './stats-client.js';
+import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
+import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
@@ -66,6 +70,13 @@ export function radarSize(width, height) {
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
 const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
 const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
+
+// Run stats: damage stat ids -> weapon (by each weapon's tagSources) or another damage group.
+const STAT_GROUPS = buildSourceGroups(WEAPONS);
+// A weapon's level for the stats: its own level, or (Pew Pews, which has none) 1 + its upgrade levels.
+function statsWeaponLevel(p, id) {
+  return weaponLevel(p, id) || 1 + weaponUpgradeLines(p, id).reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
+}
 
 // Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
 const SINGULARITY_IMPLODE_TIME = 0.35;
@@ -170,6 +181,11 @@ export class Game {
     this.globalSubmitToken = null;
     this.lastGlobalRunId = null;
     this.runTainted = false; // dev tuner / sandbox touched this run
+    // Anonymous run stats (js/run-stats.js): the RUN REPORT on game over and the opt-out upload.
+    this.shareStats = readShareStats(defaultStatsStorage());
+    this.statsUpload = null;
+    this.statsUploadToken = null;
+    this.goTab = 'report';
 
     // Controller state: previous-tick buttons for press edges, and DOM menu focus.
     this.gpButtons = [];
@@ -310,6 +326,10 @@ export class Game {
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
     snapshotBase(this.player);
     for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    this.runStats = new RunStats({ version: GAME_VERSION, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
+    this.statsTick = 0;
+    if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
+    this.syncRunStats();
     this.discardPending = null;
     this.discardBlocked = null;
     this.weaponBarHtml = null;
@@ -598,6 +618,8 @@ export class Game {
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
+    document.getElementById('btn-pause-stats')?.addEventListener('click', () => this.toggleShareStats());
+    document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
@@ -607,6 +629,7 @@ export class Game {
     }
     this.syncDamageNumbersButton();
     this.syncRadarButton();
+    this.syncShareStatsButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -967,6 +990,89 @@ export class Game {
     });
   }
 
+  // --- Run stats (js/run-stats.js): level sampling, RUN REPORT, anonymous upload -----------------
+
+  // Samples player and weapon levels (a few times a second during play, and at run start/end).
+  syncRunStats() {
+    const p = this.player;
+    const rs = this.runStats;
+    if (!rs || !p) return;
+    rs.levelReached(p.level, this.elapsedTime);
+    const levels = {};
+    for (const id of ownedWeapons(p)) levels[id] = statsWeaponLevel(p, id);
+    rs.sync(levels, this.elapsedTime, p.stats?.damage);
+  }
+
+  finishRunStats() {
+    if (!this.runStats) return null;
+    this.syncRunStats();
+    const p = this.player;
+    return this.runStats.finish({
+      time: this.elapsedTime, wave: this.wave, level: p?.level ?? 1, score: this.score, kills: this.kills,
+      died: !(p?.hp > 0), gold: { earned: this.goldEarned, spent: this.goldSpent },
+      loadout: ownedWeapons(p || {}).map((id) => ({ id, lv: statsWeaponLevel(p, id) }))
+    });
+  }
+
+  // Fire-and-forget like the leaderboard: opted-out, dev-tuner and very short runs are not sent.
+  submitRunStats(summary) {
+    const token = {};
+    this.statsUploadToken = token; // a late answer for an earlier run is ignored
+    const opts = { share: this.shareStats === true, tainted: this.runTainted || isTuningModified() };
+    const skip = statsSkipReason({ ...opts, time: summary.time });
+    this.statsUpload = skip ? { ok: false, reason: skip } : { pending: true };
+    this.renderRunReportPanel();
+    if (skip) return;
+    uploadRunStats(summary, opts).then((result) => {
+      if (this.statsUploadToken !== token) return;
+      this.statsUpload = result;
+      this.renderRunReportPanel();
+    });
+  }
+
+  renderRunReportPanel() {
+    const el = globalThis.document?.getElementById('go-run-report');
+    if (!el || !this.lastRunSummary) return;
+    const view = buildRunReport(this.lastRunSummary, {
+      info: (id) => {
+        const w = WEAPON_BY_ID[id] || PASSIVE_BY_ID[id];
+        return w ? { name: w.hudName || w.name, color: w.color } : OTHER_GROUP_INFO[id] || { name: id, color: '#8ba3c7' };
+      },
+      enemyName: (kind) => hostileEntry(kind)?.name || String(kind).toUpperCase(),
+      upload: describeStatsUpload(this.statsUpload)
+    });
+    renderRunReport(el, view);
+  }
+
+  // Game-over left panel: RUN REPORT (default) or ARMORY.
+  setGameOverTab(tab) {
+    this.goTab = tab === 'armory' ? 'armory' : 'report';
+    const doc = globalThis.document;
+    if (!doc?.querySelectorAll) return;
+    for (const btn of doc.querySelectorAll('[data-go-tab]')) {
+      const on = btn.dataset.goTab === this.goTab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    for (const pane of doc.querySelectorAll('[data-go-pane]')) pane.classList.toggle('hidden', pane.dataset.goPane !== this.goTab);
+    const sub = doc.getElementById('go-left-sub');
+    if (sub) sub.textContent = this.goTab === 'armory' ? 'Upgrade ship for next launch' : 'This run at a glance';
+  }
+
+  toggleShareStats() {
+    this.shareStats = !this.shareStats;
+    writeShareStats(defaultStatsStorage(), this.shareStats);
+    this.syncShareStatsButton();
+  }
+
+  syncShareStatsButton() {
+    const btn = globalThis.document?.getElementById('btn-pause-stats');
+    if (!btn) return;
+    btn.textContent = `📡 SHARE ANONYMOUS STATS: ${this.shareStats ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', this.shareStats);
+    btn.setAttribute?.('aria-pressed', String(this.shareStats));
+  }
+
   toggleAutoFire() {
     this.autoFire = !this.autoFire;
     const btn = document.getElementById('btn-autofire');
@@ -1274,7 +1380,7 @@ export class Game {
     if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48);
+      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48, 'other', undefined, undefined, 'tectonic');
     }
   }
 
@@ -1301,7 +1407,7 @@ export class Game {
     if (p.weapons.dashNova > 0) {
       const radius = novaRadius(p, p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160);
+      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160, 'other', undefined, undefined, 'nova');
     }
   }
 
@@ -1332,6 +1438,7 @@ export class Game {
       // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
       if (e.isBoss || e.isLieutenant) {
         const dmg = e.maxHp * 0.4;
+        this.runStats?.damage('supernova', Math.min(dmg, Math.max(0, e.hp)));
         e.hp -= dmg;
         e.hitFlash = 1;
         e.sinceHit = 0; // counts as a hit, so a REGENERATING lieutenant's regen pauses too
@@ -1355,7 +1462,8 @@ export class Game {
   // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
   // potential while crowds take less per head.
   // edgeFalloff: share of the damage lost at the rim (linear from the centre); defaults to splashEdgeFalloff.
-  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area, edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4) {
+  // stat: the run-stats id when it differs from `source` (e.g. 'collapse', 'nova'; js/run-stats.js).
+  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area, edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4, stat = source) {
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
@@ -1365,7 +1473,7 @@ export class Game {
       if (dSq <= (radius + e.radius) * (radius + e.radius)) {
         const d = Math.sqrt(dSq) || 1;
         const reach = Math.max(0, Math.min(1, (d - e.radius) / radius));
-        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock);
+        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock, 1, stat);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
@@ -1374,8 +1482,9 @@ export class Game {
   // Single entry point for weapon damage: armor/Conduit links and corrosion, crit roll, HP, hit flash,
   // damage number, knockback, on-hit statuses and kill. (kx, ky) is a knockback impulse in px/tick
   // for a 10px-radius hull; heavier hulls move less. DoT ticks (DOT_SOURCES) never crit or re-apply
-  // statuses. The damage number shows what actually landed.
-  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+  // statuses. The damage number shows what actually landed. `stat` attributes the hit in the run
+  // stats (js/run-stats.js) when it differs from `source` (sub-sources: helix, storm, collapse, ...).
+  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const p = this.player;
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
@@ -1387,6 +1496,8 @@ export class Game {
       ky *= CRIT_KNOCKBACK_MULT;
       this.onCriticalHit(e);
     }
+    this.runStats?.damage(stat, Math.min(dmg, Math.max(0, e.hp)));
+    e.lastStat = stat;
     e.hp -= dmg;
     e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
@@ -1433,6 +1544,12 @@ export class Game {
     e.dead = true;
     enemies.splice(enemyIndex, 1);
     this.kills++;
+    if (this.runStats) {
+      // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
+      const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
+      if (e.hp > 0) this.runStats.damage(by, e.hp);
+      this.runStats.kill(by, e, this.elapsedTime);
+    }
 
     const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
@@ -1483,7 +1600,7 @@ export class Game {
 
     if (e.type === 'blackhole') {
       this.particles.spawnShockwave(e.x, e.y, 190, 348, 6, 0.5);
-      this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348);
+      this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348, 'other', undefined, undefined, 'blackhole');
     }
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
@@ -1526,6 +1643,7 @@ export class Game {
           radius: 4,
           life: 0.45,
           source: 'other',
+          stat: 'shrapnel',
           knock: KNOCKBACK.shrapnel
         });
       }
@@ -1659,8 +1777,10 @@ export class Game {
   }
 
   // Shared by contact and plasma-orb hits. Returns true when the hit was fatal (caller ends the run).
-  damagePlayer(dmg, shake = 16) {
+  // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
+  damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
+    this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
     p.invuln = 0.65;
@@ -1687,7 +1807,7 @@ export class Game {
     this.enemyBulletHit ||= (b) => {
       if (this.player.invuln > 0 || this.player.hp <= 0) return false;
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
-      this.damagePlayer(this.enemyBulletDamage(b), 10);
+      this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
@@ -2103,13 +2223,13 @@ export class Game {
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
-        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
           this.particles.spawnFlash?.(hx, hy, b.blastRadius * 0.4, b.hue, 0.16);
           this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 3, 0.32);
           this.sound.playMissileImpact?.(0.75);
-          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5);
+          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
         if (b.pierce <= 0) break;
       }
@@ -2169,6 +2289,7 @@ export class Game {
           damage: weaponDamage(p, 'helix'),
           pierce: p.stats.pierce,
           hue: 305, // evolution magenta: reads apart from cyan Pew Pews shots and gold XP geoms
+          stat: 'helix',
           radius: 6.5,
           life: 1.3
         });
@@ -2267,7 +2388,7 @@ export class Game {
     this.sound.playMissileImpact?.();
   }
 
-  fireChainLightning(level, originX = this.player.x, originY = this.player.y) {
+  fireChainLightning(level, originX = this.player.x, originY = this.player.y, stat = 'lightning') {
     const p = this.player;
     const enemies = this.enemyManager.enemies;
     if (enemies.length === 0) return;
@@ -2305,7 +2426,7 @@ export class Game {
       currX = target.x;
       currY = target.y;
 
-      this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky);
+      this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky, 1, stat);
     }
     if (hits > 0) this.sound.playArcZap?.(hits);
   }
@@ -2519,7 +2640,7 @@ export class Game {
     this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
     this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
     // The collapse hits full force at the core and fades to 25% at its rim (singularityCollapseEdgeFalloff).
-    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75);
+    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75, 'collapse');
   }
 
   triggerLevelUp() {
@@ -2534,6 +2655,7 @@ export class Game {
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
     this.beginHand();
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.runStats?.offered(this.currentChoices);
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2641,6 +2763,8 @@ export class Game {
     this.handRerolls++;
     this.player.newWeaponDrought = this.handDrought;
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.runStats?.reroll();
+    this.runStats?.offered(this.currentChoices, this.handLock?.card);
     if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
     const focusedIndex = this.focusedChoiceIndex();
     this.renderHand();
@@ -2660,6 +2784,7 @@ export class Game {
     } else {
       if (!this.spendGold(lockCost())) return false;
       this.handLock = { card, slot: index };
+      this.runStats?.lock();
     }
     this.lockNote = '';
     this.renderHandControls();
@@ -2772,6 +2897,7 @@ export class Game {
     this.handPhase = 'weapon';
     this.renderHandControls();
     this.currentChoices = rollWeaponPicks(this.player, 3);
+    this.runStats?.offered(this.currentChoices);
     if (this.currentChoices.length === 0) {
       this.closeUpgradeModal();
       return;
@@ -2804,6 +2930,7 @@ export class Game {
     const upg = this.currentChoices[index];
     if (!upg) return;
     const p = this.player;
+    this.runStats?.picked(upg);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
     if (this.handPhase === 'hand' && this.handLock) {
@@ -2979,6 +3106,9 @@ export class Game {
       multiplier: this.multiplier,
       time: this.elapsedTime
     });
+    this.lastRunSummary = this.finishRunStats();
+    if (this.lastRunSummary) this.submitRunStats(this.lastRunSummary);
+    this.setGameOverTab(this.goTab);
 
     const rankBadge = document.getElementById('go-rank-badge');
     if (rankBadge) {
@@ -3122,6 +3252,7 @@ export class Game {
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
+    if ((++this.statsTick & 15) === 0) this.syncRunStats();
 
     const enemyCount = this.enemyManager.enemies.length;
     const dynamicIntensity = Math.min(
@@ -3386,7 +3517,7 @@ export class Game {
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, 'missile', KNOCKBACK.missile);
 
         if (p.weapons.stormProtocol) {
-          this.fireChainLightning(W.stormChainLevel, m.x, m.y);
+          this.fireChainLightning(W.stormChainLevel, m.x, m.y, 'storm');
         }
 
         this.missiles.splice(i, 1);
@@ -3436,7 +3567,7 @@ export class Game {
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
-          this.damagePlayer(this.contactDamage(e));
+          this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
           // Sturdy hulls (Bruisers, Lieutenants) bounce off; everything else but bosses pops on impact.
           if (e.sturdy) bounceFromShip(e, p.x, p.y);
