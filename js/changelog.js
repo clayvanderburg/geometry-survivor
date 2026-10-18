@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.2',
+    date: '2026-10-18',
+    title: 'Sound Rollback',
+    notes: [
+      { type: 'fix', text: 'Back to the original sound effects, except the new level-up and supply-cache jingles. The new soundtrack stays.' }
+    ]
+  },
+  {
     version: '0.19.1',
     date: '2026-10-18',
     title: 'Classic Pew',

@@ -15,9 +15,13 @@ const BOSS_RIFF_STEPS = [0, 3, 6, 8, 11, 14];
 
 export const SFX_BASE = 'assets/sfx/';
 
-// Every sample: the play methods that use it, its level into the SFX bus, random playbackRate spread
-// (+/- fraction), and its voice limits (concurrent copies, minimum ms between starts).
-export const SFX_SAMPLES = Object.freeze({
+// Every generated sample: the play methods that use it, its level into the SFX bus, random playbackRate
+// spread (+/- fraction), and its voice limits (concurrent copies, minimum ms between starts). Only the
+// ones in SFX_IN_GAME play in the game; the rest sound on the before/after page (sounds.html) until
+// the player picks them.
+export const SFX_LIBRARY = Object.freeze({
+  autocannon_shot: { methods: ['playLaser'], volume: 0.2, pitchVar: 0.05, maxVoices: 4, gapMs: 45 },
+  drone_shot: { methods: ['playDroneShot'], volume: 0.11, pitchVar: 0.06, maxVoices: 2, gapMs: 70 },
   rocket_launch: { methods: ['playRocketLaunch'], volume: 0.3, pitchVar: 0.05, maxVoices: 2, gapMs: 70 },
   missile_launch: { methods: ['playMissileLaunch'], volume: 0.3, pitchVar: 0.05, maxVoices: 2, gapMs: 90 },
   explosion_small: { methods: ['playExplosion', 'playEnemyDeath'], volume: 0.45, pitchVar: 0.06, maxVoices: 4, gapMs: 35 },
@@ -49,6 +53,10 @@ export const SFX_SAMPLES = Object.freeze({
   ui_confirm: { methods: ['playUiConfirm'], volume: 0.34, pitchVar: 0.02, maxVoices: 2, gapMs: 80 },
   game_over: { methods: ['playGameOver'], volume: 0.6, pitchVar: 0, maxVoices: 1, gapMs: 500 }
 });
+
+// Samples the player approved for the game. Every other sound uses its original procedural version.
+export const SFX_IN_GAME = Object.freeze(['level_up', 'cache_open']);
+export const SFX_SAMPLES = Object.freeze(Object.fromEntries(SFX_IN_GAME.map((name) => [name, SFX_LIBRARY[name]])));
 
 // Drop-in soundtrack: list audio files here (e.g. 'assets/music/track1.mp3') and they replace the
 // procedural score, streaming one after another with a cross-fade. Empty = procedural synthwave.
@@ -315,11 +323,15 @@ export class SoundEngine {
   // =====================================================================
 
   // Fetch + decode every sample once (after the first gesture created/resumed the context).
-  loadSamples() {
+  // `names` defaults to the in-game samples; the before/after page loads the whole library.
+  loadSamples(names = Object.keys(SFX_SAMPLES)) {
     const ctx = this.ctx;
-    if (this.sampleLoadStarted || !ctx || typeof ctx.decodeAudioData !== 'function' || typeof fetch !== 'function') return;
+    if (!ctx || typeof ctx.decodeAudioData !== 'function' || typeof fetch !== 'function') return;
     this.sampleLoadStarted = true;
-    for (const name of Object.keys(SFX_SAMPLES)) {
+    this.sampleRequested ||= new Set();
+    for (const name of names) {
+      if (this.sampleRequested.has(name)) continue;
+      this.sampleRequested.add(name);
       fetch(`${SFX_BASE}${name}.mp3`)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -342,8 +354,10 @@ export class SoundEngine {
   // Play a decoded sample through the SFX bus. Returns false only when the sample is unavailable (the
   // caller then plays its procedural fallback); a voice-limited (throttled) call still returns true.
   playSample(name, { volume = 1, rate = 1, delay = 0 } = {}) {
+    // forceProcedural: the before/after page plays each sound's original version.
+    if (this.forceProcedural || (!this.previewAll && !SFX_SAMPLES[name])) return false;
     const buffer = this.samples.get(name);
-    const def = SFX_SAMPLES[name];
+    const def = SFX_LIBRARY[name];
     if (!buffer || !def || !this.ctx || !this.sfxGain) return false;
     const spread = def.pitchVar ?? 0.04;
     const playbackRate = Math.max(0.25, Math.min(4, rate * (1 + (Math.random() * 2 - 1) * spread)));
@@ -970,7 +984,7 @@ export class SoundEngine {
 
   playLaser(pitchMod = 1) {
     if (!this.enabled || !this.ctx) return;
-    // Procedural on purpose: the generated autocannon sample was rolled back (it sounded wrong).
+    if (this.playSample('autocannon_shot', { rate: Math.max(0.5, Math.min(1.5, pitchMod)) })) return;
     const now = performance.now();
     if (now - this.lastShotSound < 50) return;
     this.lastShotSound = now;
@@ -1509,7 +1523,7 @@ export class SoundEngine {
   // Escort drone bolt: a tiny high blip, quieter than the blaster.
   playDroneShot() {
     if (!this.enabled || !this.ctx) return;
-    // Procedural on purpose: the generated drone sample was rolled back.
+    if (this.playSample('drone_shot')) return;
     if (!this.claimVoice('drone', 70, 2, 0.05)) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();

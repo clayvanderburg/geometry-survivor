@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VEXOLITH Sound Check</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #070a14; --panel: #0e1424; --line: #23304d; --text: #d8e2f2; --dim: #8496b4;
+    --cyan: #00f3ff; --gold: #ffcc33; --pink: #ff4fd8; --green: #3dff9a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 3px; color: var(--cyan); }
+  p.lead { margin: 0 0 18px; color: var(--dim); }
+  .start { width: 100%; padding: 14px; margin-bottom: 18px; border: 1px solid var(--cyan); border-radius: 8px; background: transparent; color: var(--cyan); font-weight: 800; letter-spacing: 2px; cursor: pointer; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 10px 14px; align-items: center; padding: 12px 14px; margin-bottom: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .row.kept { border-color: rgba(61, 255, 154, 0.45); }
+  .name { font-weight: 800; }
+  .when { color: var(--dim); font-size: 13px; }
+  .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--green); border: 1px solid var(--green); vertical-align: 1px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  button.play { min-width: 74px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: #141c31; color: var(--text); font-weight: 700; cursor: pointer; }
+  button.play.old { border-color: rgba(0, 243, 255, 0.5); }
+  button.play.new { border-color: rgba(255, 79, 216, 0.55); }
+  .pick { display: flex; gap: 4px; }
+  .pick label { padding: 6px 9px; border-radius: 6px; border: 1px solid var(--line); font-size: 13px; cursor: pointer; color: var(--dim); }
+  .pick input { display: none; }
+  .pick input:checked + span { color: var(--gold); }
+  .pick label:has(input:checked) { border-color: var(--gold); }
+  .summary { position: sticky; bottom: 0; margin-top: 18px; padding: 12px 14px; background: #0b1120; border: 1px solid var(--gold); border-radius: 8px; }
+  .summary textarea { width: 100%; height: 70px; margin-top: 6px; background: #060912; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: 13px/1.4 ui-monospace, monospace; }
+  .summary button { margin-top: 6px; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--gold); background: transparent; color: var(--gold); font-weight: 800; cursor: pointer; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } .controls { justify-content: flex-start; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>SOUND CHECK</h1>
+  <p class="lead">Each sound has the <b>OLD</b> version (what plays in the game right now unless marked IN GAME) and the <b>NEW</b> generated one. Pick the one you like, then copy your picks and send them over.</p>
+  <button class="start" id="start">▶ TAP TO ENABLE AUDIO</button>
+  <div id="list"></div>
+  <div class="summary">
+    <b>Your picks</b> (copy and paste this back)
+    <textarea id="out" readonly></textarea>
+    <button id="copy">COPY PICKS</button>
+  </div>
+</main>
+<script type="module">
+  import { SoundEngine, SFX_LIBRARY, SFX_IN_GAME } from './js/audio.js';
+
+  const WHEN = {
+    autocannon_shot: 'Autocannon shot', drone_shot: 'Escort Drone shot', rocket_launch: 'Wing Rocket launch',
+    missile_launch: 'Swarm Missile salvo launch', explosion_small: 'Small explosion (blasts, kills)', explosion_large: 'Big explosion',
+    missile_impact: 'Missile hitting', arc_zap: 'Tesla Arc zap', blade_hit: 'Orbit Blade hitting an enemy', turret_shot: 'Sentry Turret shot',
+    mine_drop: 'Proximity Mine dropped', grenade_throw: 'Plasma Grenade thrown', grenade_blast: 'Plasma Grenade exploding',
+    singularity_launch: 'Vortex Singularity launch', implosion: 'Vortex collapse', enemy_hit: 'Critical hit', enemy_death: 'Enemy destroyed',
+    player_hit: 'Your ship takes damage', xp_pickup: 'Picking up XP geoms', gold_pickup: 'Picking up gold', level_up: 'Level up',
+    cache_open: 'Opening a supply cache', breakthrough: 'Weapon Breakthrough screen', boss_warning: 'Boss incoming siren',
+    boss_arrival: 'Boss arrives', lieutenant_arrival: 'Lieutenant arrives', elite_charge: 'Elite materializing (charge-up)',
+    dash: 'Dash', supernova: 'Supernova bomb', ui_select: 'Menu: moving between options', ui_confirm: 'Menu: confirm', game_over: 'Game over'
+  };
+  const STORE = 'vexolith_sound_picks';
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch { picks = {}; }
+
+  const engine = new SoundEngine();
+  let ready = false;
+  function enable() {
+    if (ready) return;
+    engine.init();
+    engine.stopMusic?.();
+    engine.loadSamples(Object.keys(SFX_LIBRARY));
+    ready = true;
+    document.getElementById('start').textContent = 'AUDIO ON';
+  }
+  document.getElementById('start').addEventListener('click', enable);
+
+  function playOld(name) {
+    enable();
+    const method = SFX_LIBRARY[name].methods[0];
+    engine.weaponVoices = {};
+    engine.forceProcedural = true;
+    try { engine[method]?.(); } finally { engine.forceProcedural = false; }
+  }
+  function playNew(name) {
+    enable();
+    engine.weaponVoices = {};
+    engine.previewAll = true;
+    const ok = engine.playSample(name);
+    engine.previewAll = false;
+    if (!ok) setTimeout(() => { engine.previewAll = true; engine.playSample(name); engine.previewAll = false; }, 400);
+  }
+
+  function summary() {
+    const keepNew = Object.keys(SFX_LIBRARY).filter((n) => picks[n] === 'new');
+    const keepOld = Object.keys(SFX_LIBRARY).filter((n) => picks[n] === 'old');
+    const open = Object.keys(SFX_LIBRARY).filter((n) => !picks[n]);
+    document.getElementById('out').value = `NEW: ${keepNew.join(', ') || '-'}\nOLD: ${keepOld.join(', ') || '-'}\nUNDECIDED: ${open.join(', ') || '-'}`;
+  }
+
+  const list = document.getElementById('list');
+  for (const name of Object.keys(SFX_LIBRARY)) {
+    const inGame = SFX_IN_GAME.includes(name);
+    if (!picks[name] && inGame) picks[name] = 'new';
+    const row = document.createElement('div');
+    row.className = 'row' + (inGame ? ' kept' : '');
+    row.innerHTML = `
+      <div><div class="name">${WHEN[name] || name}${inGame ? '<span class="tag">NEW IN GAME</span>' : ''}</div><div class="when">${name}</div></div>
+      <div class="controls">
+        <button class="play old">▶ OLD</button>
+        <button class="play new">▶ NEW</button>
+        <div class="pick">
+          <label><input type="radio" name="${name}" value="old"><span>keep old</span></label>
+          <label><input type="radio" name="${name}" value="new"><span>use new</span></label>
+        </div>
+      </div>`;
+    row.querySelector('.old').addEventListener('click', () => playOld(name));
+    row.querySelector('.new').addEventListener('click', () => playNew(name));
+    for (const input of row.querySelectorAll('input')) {
+      if (picks[name] === input.value) input.checked = true;
+      input.addEventListener('change', () => {
+        picks[name] = input.value;
+        try { localStorage.setItem(STORE, JSON.stringify(picks)); } catch { /* private mode */ }
+        summary();
+      });
+    }
+    list.appendChild(row);
+  }
+  summary();
+  document.getElementById('copy').addEventListener('click', async () => {
+    const text = document.getElementById('out').value;
+    try { await navigator.clipboard.writeText(text); } catch { document.getElementById('out').select(); document.execCommand?.('copy'); }
+    document.getElementById('copy').textContent = 'COPIED';
+  });
+</script>
+</body>
+</html>

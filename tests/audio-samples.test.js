@@ -8,16 +8,16 @@ import { fileURLToPath } from 'node:url';
 globalThis.window = globalThis.window || { addEventListener() {} };
 globalThis.BroadcastChannel = undefined; // config.js tuning sync would keep the test process alive
 globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {} };
-const { SoundEngine, SFX_SAMPLES, SFX_BASE, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
+const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_BASE, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const playMethods = Object.getOwnPropertyNames(SoundEngine.prototype).filter(name => name.startsWith('play') && name !== 'playSample');
 
 test('every SFX sample maps to existing play methods and ships as a file', () => {
-  const names = Object.keys(SFX_SAMPLES);
+  const names = Object.keys(SFX_LIBRARY);
   assert.ok(names.length >= 30);
   for (const name of names) {
-    const def = SFX_SAMPLES[name];
+    const def = SFX_LIBRARY[name];
     assert.ok(def.methods.length > 0, `${name} has no play method`);
     for (const method of def.methods) assert.equal(typeof SoundEngine.prototype[method], 'function', `${name} -> ${method}`);
     assert.ok(def.volume > 0 && def.volume <= 1, `${name} volume`);
@@ -26,7 +26,7 @@ test('every SFX sample maps to existing play methods and ships as a file', () =>
   }
   // And every sample the engine asks for is declared.
   const source = fs.readFileSync(path.join(root, 'js/audio.js'), 'utf8');
-  for (const [, name] of source.matchAll(/(?:playSample|hasSample|samples\.get)\('([a-z_]+)'/g)) assert.ok(SFX_SAMPLES[name], `undeclared sample ${name}`);
+  for (const [, name] of source.matchAll(/(?:playSample|hasSample|samples\.get)\('([a-z_]+)'/g)) assert.ok(SFX_LIBRARY[name], `undeclared sample ${name}`);
   const total = fs.readdirSync(path.join(root, SFX_BASE)).filter(f => f.endsWith('.mp3'))
     .reduce((sum, f) => sum + fs.statSync(path.join(root, SFX_BASE, f)).size, 0);
   assert.ok(total < 2.5 * 1024 * 1024, `sfx folder is ${total} bytes`);
@@ -75,6 +75,7 @@ function engineWithSamples(names) {
 
 test('rapid samples are voice-capped and throttled instead of stacking', () => {
   const engine = engineWithSamples(['turret_shot', 'enemy_hit']);
+  engine.previewAll = true; // turret_shot is a library sample (the before/after page), not in game
   for (let i = 0; i < 40; i++) engine.playTurretShot();
   assert.equal(engine.ctx.counts.sources, 1, 'a burst inside the min interval plays once');
   assert.equal(engine.ctx.counts.oscillators, 0, 'a throttled sample never falls back to procedural');
@@ -82,17 +83,18 @@ test('rapid samples are voice-capped and throttled instead of stacking', () => {
   // Past the gap but with every voice still ringing: capped at maxVoices.
   const voices = engine.weaponVoices['sample:turret_shot'];
   for (let i = 0; i < 20; i++) { voices.last = -Infinity; engine.playTurretShot(); }
-  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.turret_shot.maxVoices);
+  assert.equal(engine.ctx.counts.sources, SFX_LIBRARY.turret_shot.maxVoices);
 
   // Once the audio clock passes their end, voices free up again.
   engine.ctx.currentTime += 5;
   voices.last = -Infinity;
   engine.playTurretShot();
-  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.turret_shot.maxVoices + 1);
+  assert.equal(engine.ctx.counts.sources, SFX_LIBRARY.turret_shot.maxVoices + 1);
 });
 
-test('the Autocannon and Escort Drone shots stay procedural (their samples were rolled back)', () => {
-  assert.ok(!('autocannon_shot' in SFX_SAMPLES) && !('drone_shot' in SFX_SAMPLES));
+test('only the approved samples play in game; everything else keeps its original procedural sound', () => {
+  assert.deepEqual([...SFX_IN_GAME].sort(), ['cache_open', 'level_up']);
+  assert.deepEqual(Object.keys(SFX_SAMPLES).sort(), ['cache_open', 'level_up']);
 });
 
 test('missing samples fall back to the procedural sounds', () => {
@@ -104,11 +106,22 @@ test('missing samples fall back to the procedural sounds', () => {
   assert.equal(engine.ctx.counts.sources, 0);
   assert.ok(engine.ctx.counts.oscillators >= 8);
 
+  // level_up is approved for the game; dash is loaded but not approved, so it stays procedural.
   const sampled = engineWithSamples(['level_up', 'dash']);
   sampled.playLevelUp();
+  assert.equal(sampled.ctx.counts.sources, 1);
+  assert.equal(sampled.ctx.counts.oscillators, 0);
+  sampled.playDash();
+  assert.equal(sampled.ctx.counts.sources, 1);
+  assert.ok(sampled.ctx.counts.oscillators > 0);
+  // The before/after page: previewAll plays any loaded sample, forceProcedural plays the original.
+  sampled.previewAll = true;
+  sampled.weaponVoices = {};
   sampled.playDash();
   assert.equal(sampled.ctx.counts.sources, 2);
-  assert.equal(sampled.ctx.counts.oscillators, 0);
+  sampled.forceProcedural = true;
+  sampled.playLevelUp();
+  assert.equal(sampled.ctx.counts.sources, 2, 'forced to the original sound');
 });
 
 test('muted engine plays no samples', () => {
