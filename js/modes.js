@@ -70,7 +70,7 @@ export const MODES = Object.freeze({
       // Contact and orb damage: the same gentle start (the first 2+ minutes are unchanged), then a steeper
       // per-wave ramp, so evasive builds that out-dodge the HP wall still wear down.
       damageRampFrom: 10,
-      damageRampPerWave: 0.11,
+      damageRampPerWave: 0.12, // 0.11 before v0.29
       damageRampSmooth: 8
     })
   })

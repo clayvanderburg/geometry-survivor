@@ -399,7 +399,7 @@ test('lieutenants: elite stats, arrival card, sturdy vs contact/supernova, elite
   const plain = manager.getArchetype('bruiser', 1);
   assert.equal(e.isLieutenant, true);
   const boss = manager.getArchetype('boss', 1);
-  assert.equal(e.maxHp, boss.maxHp * TUNING.lieutenantHpShare * 1.5, 'a heavy bruiser lieutenant gets the top heft (x1.5)');
+  assert.equal(e.maxHp, boss.maxHp * TUNING.lieutenantHpShare * 1.5 * TUNING.enemyHpMult, 'a heavy bruiser lieutenant gets the top heft (x1.5)');
   assert.ok(plain.maxHp < e.maxHp && e.maxHp < boss.maxHp, 'tougher than its archetype, short of a boss');
   for (const type of lieutenantTypes(9)) {
     const hp = manager.getArchetype(type, 2, { lieutenant: { type, name: 'X', epithet: 'Y', mods: ['hasted'] } }).maxHp;

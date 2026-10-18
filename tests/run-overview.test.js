@@ -8,7 +8,7 @@ const {
   statBreakdown, formatStatValue, formatStatDelta, STAT_GROUPS, runInfo, damageRows, weaponReadout, upgradeGroups, statsHtml
 } = await import('../js/run-overview.js');
 const { previewShip, shipExtent } = await import('../js/ship-preview.js');
-const { runStartPlayer, applyUpgradeLevels, UPGRADE_BY_ID, acquireWeapon } = await import('../js/upgrades.js');
+const { runStartPlayer, applyUpgradeLevels, UPGRADE_BY_ID, acquireWeapon, BASE_SHIELD } = await import('../js/upgrades.js');
 const { armoryBonuses } = await import('../js/progression.js');
 const { TUNING } = await import('../js/config.js');
 
@@ -69,7 +69,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.damage.permanent, '+15%', 'the armory share is unchanged by cards');
   assert.equal(r.moveSpeed.run, '+16%');
   assert.equal(r.maxHp.run, '+25');
-  assert.equal(r.maxHp.total, String(100 + 20 + 25));
+  assert.equal(r.maxHp.total, String(BASE_SHIELD + 20 + 25));
   assert.equal(r.critChance.run, '+10%');
   assert.equal(r.critChance.total, '17%');
   assert.equal(r.tag_explosive.run, '+30%');

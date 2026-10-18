@@ -30,7 +30,7 @@ export const DEFAULT_TUNING = {
   drillJawColor: '#ffcc00',
 
   // 2. Weapons & Shield
-  baseDamage: 11,
+  baseDamage: 10, // 11 before v0.29 (harder pass)
   fireRate: 6.5,
   bulletSpeed: 14.0,
   bulletRadius: 3.8,
@@ -76,8 +76,8 @@ export const DEFAULT_TUNING = {
   gridShipLight: 1.0,
   vfxIntensity: 1.0,
   vfxLinger: 1.0,
-  enemySpeedMult: 1.0,
-  enemyHpMult: 1.0,
+  enemySpeedMult: 1.05, // 1.0 before v0.29 (harder pass)
+  enemyHpMult: 1.1, // 1.0 before v0.29
 
   // 6. Gravity Wells & Singularities (pulls are px/tick² at the core, eased to 0 at the rim)
   blackholePullRadius: 200,
@@ -194,8 +194,8 @@ export const DEFAULT_TUNING = {
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
   spawnIntervalStart: 2.6,
   spawnIntervalTau: 7,
-  spawnIntervalMin: 0.75,
-  packSizeMult: 1.0,
+  spawnIntervalMin: 0.7, // 0.75 before v0.29
+  packSizeMult: 1.1, // 1.0 before v0.29
   swarmPackPerWave: 2,
   swarmPackMax: 40,
   skirmishPackPerWave: 0.6,
@@ -203,9 +203,9 @@ export const DEFAULT_TUNING = {
   splitterPackPerWave: 0.4,
   splitterPackMax: 10,
   bossHpMult: 0.5,
-  damageRampBase: 0.5,
+  damageRampBase: 0.55, // 0.5 before v0.29
   damageRampFrom: 10,
-  damageRampPerWave: 0.04,
+  damageRampPerWave: 0.044, // 0.04 before v0.29
   damageRampSmooth: 10, // waves over which the ramp eases in to its full per-wave rate
   xpPerWave: 0,
 

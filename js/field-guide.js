@@ -128,7 +128,7 @@ export function hostileStats(id) {
   const type = id === 'lieutenant' ? 'pinwheel' : id;
   const cfg = statsManager.getArchetype(type, waveScaleAt(wave), id === 'boss' ? { name: BOSS_NAME } : {});
   const hp = cfg.maxHp * (TUNING.enemyHpMult ?? 1);
-  const speed = cfg.speed * (TUNING.enemySpeedMult ?? 1) * 60;
+  const speed = cfg.speed * (type === 'blackhole' ? 1 : (TUNING.enemySpeedMult ?? 1)) * 60;
   const ship = (TUNING.moveSpeed ?? 5) * 60;
   const contactMult = id === 'lieutenant' ? Math.max(cfg.contactMult || 1, 1.4) : cfg.contactMult;
   return {
