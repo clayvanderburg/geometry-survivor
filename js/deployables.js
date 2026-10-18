@@ -95,9 +95,10 @@ export class Deployables {
       this.mineTimer -= dt;
       // At the active cap the timer stays primed, so a new mine drops as soon as a slot frees.
       if (this.mineTimer <= 0 && this.mineCount < Math.min(MINE_POOL, W.mineMaxActive(level))) {
-        // Minefield Triad: three mines per drop, in a small triangle.
+        // Minefield Triad: three mines per drop, in a small triangle tossed toward the nearest enemy.
         const n = level.t12 ? W.triadCount : 1;
-        for (let k = 0; k < n && this.mineCount < MINE_POOL; k++) this.dropMine(game.player, level, n > 1 ? k : -1);
+        const toward = level.t12 ? this.nearestMineTarget(game, game.player.x, game.player.y, W.triadRange) : null;
+        for (let k = 0; k < n && this.mineCount < MINE_POOL; k++) this.dropMine(game.player, level, n > 1 ? k : -1, toward);
         game.sound?.playMineDrop?.();
         this.mineTimer = W.mineCooldown(level);
       }
@@ -128,14 +129,22 @@ export class Deployables {
     }
   }
 
-  // Mines drop in the ship's wake (behind its motion, or behind the turret when parked).
-  dropMine(p, level, corner = -1) {
+  // Mines drop in the ship's wake (behind its motion, or behind the turret when parked); Minefield Triad
+  // tosses its triangle up to W.triadToss toward enemy `toward` instead (in the wake when there is none).
+  dropMine(p, level, corner = -1, toward = null) {
     const moving = Math.hypot(p.vx, p.vy) > 0.5;
     const back = moving ? Math.atan2(-p.vy, -p.vx) : p.angle + Math.PI;
     const off = (p.radius || 15) + 12;
     const m = this.mines[this.mineCount++];
-    m.x = p.x + Math.cos(back) * off;
-    m.y = p.y + Math.sin(back) * off;
+    if (toward) {
+      const d = Math.hypot(toward.x - p.x, toward.y - p.y) || 1;
+      const toss = Math.min(d, W.triadToss);
+      m.x = p.x + ((toward.x - p.x) / d) * toss;
+      m.y = p.y + ((toward.y - p.y) / d) * toss;
+    } else {
+      m.x = p.x + Math.cos(back) * off;
+      m.y = p.y + Math.sin(back) * off;
+    }
     if (corner >= 0) {
       const a = back + (corner * Math.PI * 2) / W.triadCount;
       m.x += Math.cos(a) * W.triadSpacing;
@@ -163,19 +172,25 @@ export class Deployables {
     if (m.cluster) game.weaponFx?.scatter(m.x, m.y, W.mineClusterBomblets, m.blast * 0.7, m.blast * 0.4, m.damage * W.mineClusterShare, W.mineClusterDelay, hue, 'mine');
   }
 
-  // Seeker Mines: an armed mine crawls toward the nearest enemy in seekerRange.
-  crawlMine(game, m, dt) {
+  // Nearest valid enemy within `range` of (x, y), or null.
+  nearestMineTarget(game, x, y, range) {
     const enemies = game.enemyManager.enemies;
     let best = null;
-    let bestSq = W.seekerRange * W.seekerRange;
+    let bestSq = range * range;
     for (let j = 0; j < enemies.length; j++) {
       const e = enemies[j];
       if (!isDeployableTarget(e)) continue;
-      const dSq = (e.x - m.x) ** 2 + (e.y - m.y) ** 2;
+      const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
       if (dSq < bestSq) { bestSq = dSq; best = e; }
     }
+    return best;
+  }
+
+  // Seeker Mines: an armed mine crawls toward the nearest enemy in seekerRange.
+  crawlMine(game, m, dt) {
+    const best = this.nearestMineTarget(game, m.x, m.y, W.seekerRange);
     if (!best) return;
-    const d = Math.sqrt(bestSq) || 1;
+    const d = Math.hypot(best.x - m.x, best.y - m.y) || 1;
     const step = W.seekerSpeed * dt * 60;
     m.x += ((best.x - m.x) / d) * step;
     m.y += ((best.y - m.y) / d) * step;
@@ -303,7 +318,7 @@ export class Deployables {
   fireTurretBolt(game, t, level) {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
-    // Piercing Rail: every railEvery-th shot is a fast rail slug that pierces a whole line.
+    // Piercing Rail: every railEvery-th shot is a fast rail slug that punches through railPierce enemies in a line.
     t.shots = (t.shots || 0) + 1;
     const rail = level.t8 && t.shots % W.railEvery === 0;
     // Twin Barrels: two bolts side by side.

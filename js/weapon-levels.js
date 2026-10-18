@@ -126,18 +126,18 @@ export const TRANSFORMS = {
   },
   missiles: {
     6: tf('cluster', 'Cluster Bomblets', 'Each Swarm Missile throws four bomblets that hop onto nearby enemies past its blast and pop a moment later.'),
-    12: tf('rain', 'Orbital Rain', 'Swarm Missiles launch out of sight and crash down on marked targets from above.'),
+    12: tf('rain', 'Orbital Rain', 'Swarm Missiles launch out of sight and crash down on marked targets from above in wider blasts.'),
     18: tf('nuke', 'Tactical Nuke', 'Every fourth Swarm Missile salvo is one huge nuke with a giant blast.')
   },
   lightning: {
     6: tf('fork', 'Forked Chains', 'Tesla Arc forks: two chains leap out at once, each a little weaker.'),
     12: tf('orb', 'Ball Lightning', 'Each Tesla Arc discharge also drops a crackling orb on the nearest enemy that zaps whatever is close.'),
-    18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above that blasts its last target and anything right beside it.')
+    18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above on its last target and anything right beside it, stronger the more enemies the chain hit.')
   },
   singularity: {
     6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two singularities at once: the second goes after enemies on your far side.'),
     12: tf('aftershock', 'Aftershock Collapse', 'Vortex Singularity pulls from further out and collapses twice: a tighter second implosion follows.'),
-    18: tf('cascade', 'Hawking Cascade', 'Collapsing Vortex Singularities spit out three mini-singularities that implode in turn.')
+    18: tf('cascade', 'Hawking Cascade', 'Collapsing Vortex Singularities spit out three mini-singularities that drift onto nearby enemies and implode in turn.')
   },
   orbitals: {
     6: tf('counter', 'Counter-Rotating Ring', 'Orbit Blades gain a second, wider ring that spins the other way.'),
@@ -147,11 +147,11 @@ export const TRANSFORMS = {
   mines: {
     6: tf('cluster', 'Cluster Mines', 'Proximity Mines scatter three bomblets that pop just after the main blast.'),
     12: tf('seeker', 'Seeker Mines', 'Armed Proximity Mines crawl toward the nearest enemy.'),
-    18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, each a little weaker.')
+    18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, each a little weaker, tossed out toward the nearest enemy.')
   },
   turret: {
     6: tf('twin', 'Twin Barrels', 'Sentry Turrets fire two bolts per shot, side by side.'),
-    12: tf('rail', 'Piercing Rail', 'Every fifth Sentry Turret shot is a rail slug that pierces a whole line.'),
+    12: tf('rail', 'Piercing Rail', 'Every fifth Sentry Turret shot is a heavy rail slug that punches through three enemies in a line.'),
     18: tf('mortar', 'Mortar Battery', 'Sentry Turrets also lob mortar shells that crash down on enemies in range.')
   },
   drones: {
@@ -162,7 +162,7 @@ export const TRANSFORMS = {
   grenades: {
     6: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets hop onto nearby enemies past the blast and pop a moment later.'),
     12: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that burns, freezes or corrodes (by its element) everything inside.'),
-    18: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades pull nearby enemies in toward themselves, then blast harder.')
+    18: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades drag nearby enemies in, harder as the fuse burns down, then blast.')
   }
 };
 

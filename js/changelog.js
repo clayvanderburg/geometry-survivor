@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.2',
+    date: '2026-10-18',
+    title: 'Fine Tuning',
+    notes: [
+      { type: 'balance', text: 'Gravity Grenade: each enemy falls toward one grenade, and the pull builds as the fuse burns down.' },
+      { type: 'balance', text: 'Hawking Cascade minis drift onto nearby enemies; Orbital Rain blasts wider; Minefield Triad is tossed toward the nearest enemy.' },
+      { type: 'balance', text: 'Piercing Rail punches through 3 enemies (was 8); Thunderstrike on a lone target only counts the chain hits that landed.' }
+    ]
+  },
+  {
     version: '0.22.1',
     date: '2026-10-18',
     title: 'On Target',

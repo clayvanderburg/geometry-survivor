@@ -73,6 +73,23 @@ test('mines drop in the ship wake, ignore enemies until armed, then burst for th
   assert.equal(e.dmgNum.source, 'mine');
 });
 
+test('Minefield Triad tosses its triangle toward the nearest enemy, at most triadToss out; with nobody near it drops in the wake', () => {
+  const centre = (d) => d.mines.slice(0, 3).reduce((c, m) => ({ x: c.x + m.x / 3, y: c.y + m.y / 3 }), { x: 0, y: 0 });
+  const g = arena({ enemies: [enemy(2300, 2000)] });
+  g.player.weapons.mines = 18;
+  g.player.breakthroughs = { mines: { 18: 'transform' } };
+  tick(g, 0.52);
+  assert.equal(g.deployables.mineCount, W.triadCount);
+  let c = centre(g.deployables);
+  assert.ok(Math.abs(c.x - (2000 + W.triadToss)) < 1e-6 && Math.abs(c.y - 2000) < 1e-6, 'a short toss toward the enemy');
+  const far = arena({ enemies: [enemy(2000 + W.triadRange + 50, 2000)] });
+  far.player.weapons.mines = 18;
+  far.player.breakthroughs = { mines: { 18: 'transform' } };
+  tick(far, 0.52);
+  c = centre(far.deployables);
+  assert.ok(c.x < 2000, 'out of range: in the wake behind the ship');
+});
+
 test('active mines respect the level cap and self-detonate at the end of their fuse', () => {
   const g = arena();
   let bursts = 0;

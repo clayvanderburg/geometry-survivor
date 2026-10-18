@@ -89,3 +89,14 @@ test('Cluster Bomblets hop onto enemies past the blast, one each, and scatter th
   assert.equal(on(hub), 0, 'none on the enemy the blast already hit');
   assert.ok(pops.every((ev) => Math.hypot(ev.x - hub.x, ev.y - hub.y) <= blast * W.clusterSpread + 1e-9), 'the far enemy is out of reach; the rest scatter nearby');
 });
+
+test('Orbital Rain warheads crash down in rainRadiusMult wider blasts on their marked targets', async () => {
+  const { makeBuild } = await import('../js/weapon-levels.js');
+  const { missileBlastRadius } = await import('../js/weapon-scaling.js');
+  const g = fight([[200, 0], [0, 220]]);
+  const b = makeBuild('missiles', 12, {}, { 12: 'transform' });
+  g.fireSwarmMissiles(b);
+  const strikes = g.weaponFx.events.filter((ev) => ev.style === 'strike');
+  assert.equal(strikes.length, W.missileSalvo(b));
+  for (const ev of strikes) assert.ok(Math.abs(ev.radius - missileBlastRadius(g.player, b) * W.rainRadiusMult) < 1e-9);
+});

@@ -241,3 +241,21 @@ test('Cluster Grenade bomblets scatter past the main blast', () => {
   assert.ok(total > 0, 'bomblets scattered');
   assert.ok(far / total > 0.9, `most bomblets land outside the blast (${far}/${total})`);
 });
+
+test('Gravity Grenade: the pull builds up over the fuse, and an enemy in reach of two falls toward the one pulling hardest', async () => {
+  const { gravityRamp } = await import('../js/grenades.js');
+  const { wellPullScale } = await import('../js/gravity.js');
+  assert.equal(gravityRamp(0), 0, 'no pull on landing');
+  assert.equal(gravityRamp(1), W.gravityRamp + 1, 'strongest as it blasts');
+  let sum = 0;
+  for (let i = 0; i < 1000; i++) sum += gravityRamp((i + 0.5) / 1000);
+  assert.ok(Math.abs(sum / 1000 - 1) < 1e-3, 'averages the old steady pull over the fuse');
+  const gr = new Grenades();
+  const arm = (x) => Object.assign(gr.items[gr.count++], { x, y: 0, landed: true, gravity: true, armedT: 0.5, fuse: 1, pullRadius: 200 });
+  arm(-60);
+  arm(100);
+  const e = { x: 0, y: 0, hp: 1, maxHp: 1 };
+  gr.pull({ enemyManager: { enemies: [e] }, particles: {} });
+  const k = wellPullScale(-60, 0, 200, W.gravityPull * gravityRamp(0.5), 10);
+  assert.ok(near(e.gvx, -60 * k), 'pulled by the nearer grenade alone, not dragged by both');
+});
