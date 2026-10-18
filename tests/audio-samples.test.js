@@ -234,5 +234,5 @@ test('intensity layers: calm = pads + bass, mid adds drums, high adds lead and e
   const boss = run(1, { boss: 2 });
   assert.ok(boss.playBossStab > 0);
   const muffled = run(0.9, { muffled: true });
-  assert.ok(!muffled.playHiHat && !muffled.playArpNote, 'menus drop hats and lead');
+  assert.deepEqual(muffled, high, 'menus keep the same arrangement (only the bus low-pass glides down)');
 });

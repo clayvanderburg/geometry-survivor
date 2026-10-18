@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.24.1',
+    date: '2026-10-18',
+    title: 'Smooth Menus',
+    notes: [
+      { type: 'fix', text: 'Opening a level-up or pause menu no longer snaps the music to a different-sounding mix: the same song keeps playing and softens gently.' }
+    ]
+  },
+  {
     version: '0.24.0',
     date: '2026-10-18',
     title: 'Living Grid',
