@@ -3962,6 +3962,22 @@ body.touch-mode .key-hint { display: none; }
    sections open as their own windows (Game.bindMobileMenus). Desktop never sees any of this. ===== */
 .m-menu, .card-more-btn { display: none; }
 
+/* Title screen footer: about, legal and feedback pages */
+.site-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin-top: 14px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.site-links a { color: var(--text-dim); text-decoration: none; }
+.site-links a:hover, .site-links a:focus-visible { color: var(--cyan); text-decoration: underline; }
+a.m-btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+body.touch-mode .site-links { margin-top: 2px; font-size: 10px; }
+
 /* HUD: score, wave + XP, shield and a small pause button. Everything else steps aside. */
 body.touch-mode #hud { padding: max(6px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
 body.touch-mode .hud-top { gap: 10px; grid-template-columns: 1fr 1.6fr 1fr; }

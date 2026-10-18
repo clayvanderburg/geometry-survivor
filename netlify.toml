@@ -1,6 +1,6 @@
 # Netlify publishes only the playable game; tests, tools and dev docs stay out of the site.
 [build]
-  command = "rm -rf dist && mkdir dist && cp -r index.html tuner.html stats.html sounds.html manifest.webmanifest css js assets dist/"
+  command = "rm -rf dist && mkdir dist && cp -r index.html tuner.html stats.html sounds.html about.html privacy.html terms.html contact.html contact-thanks.html 404.html robots.txt manifest.webmanifest css js assets dist/"
   publish = "dist"
 
 # The global leaderboard API (/api/scores, see netlify/functions/scores.mjs) deploys alongside the
@@ -9,3 +9,11 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+# Basic security headers for every page (the game loads only same-origin code).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

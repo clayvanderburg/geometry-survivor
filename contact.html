@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Report a bug, suggest an idea or get in touch with the developer of VEXOLITH // SURVIVOR." />
+  <meta name="theme-color" content="#030308" />
+  <link rel="icon" href="/assets/icon-192.png" />
+  <title>Feedback & Contact · VEXOLITH // SURVIVOR</title>
+  <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="site-logo" href="/">VEXOLITH<span>//</span>SURVIVOR</a>
+    <a class="play-btn" href="/">▶ PLAY</a>
+  </header>
+  <main>
+
+    <h1>Feedback &amp; Contact</h1>
+    <p class="lede">Found a bug, have an idea, or want to say hi? Every message is read.</p>
+
+    <!-- Netlify Forms: detected at deploy (form detection must be enabled under Site configuration -> Forms).
+         Submissions show up in the Netlify UI and can be emailed to the site owner from there. -->
+    <form class="card" name="feedback" method="POST" action="/contact-thanks.html" data-netlify="true" netlify-honeypot="bot-field">
+      <input type="hidden" name="form-name" value="feedback" />
+      <p class="hidden-field"><label>Leave this empty: <input name="bot-field" tabindex="-1" autocomplete="off" /></label></p>
+
+      <div class="form-row">
+        <label for="fb-topic">Topic</label>
+        <select id="fb-topic" name="topic">
+          <option>Bug report</option>
+          <option>Idea / suggestion</option>
+          <option>Balance feedback</option>
+          <option>Leaderboard or privacy request</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="fb-message">Message</label>
+        <textarea id="fb-message" name="message" required maxlength="5000" placeholder="What happened, or what would you like to see? For bugs: your device, browser and game version (shown under the title) help a lot."></textarea>
+      </div>
+      <div class="form-row">
+        <label for="fb-callsign">Callsign <span class="muted">(optional)</span></label>
+        <input id="fb-callsign" name="callsign" type="text" maxlength="18" autocomplete="nickname" />
+      </div>
+      <div class="form-row">
+        <label for="fb-email">Email <span class="muted">(optional, only if you'd like a reply)</span></label>
+        <input id="fb-email" name="email" type="email" autocomplete="email" />
+      </div>
+      <input type="hidden" name="game-version" id="fb-version" value="" />
+      <button class="submit-btn" type="submit">SEND FEEDBACK</button>
+      <p class="muted">By sending, you agree to the <a href="/privacy.html">Privacy Policy</a>. We only use your email to reply.</p>
+    </form>
+
+    <h2>Leaderboard removal</h2>
+    <p>To remove a leaderboard entry, pick "Leaderboard or privacy request" above and include the callsign, approximate date and score.</p>
+
+    <script type="module">
+      // Attach the running game version so bug reports say which build they're about.
+      import { GAME_VERSION } from '/js/version.js';
+      document.getElementById('fb-version').value = GAME_VERSION;
+    </script>
+  </main>
+  <footer class="site-footer">
+    <nav aria-label="Site">
+      <a href="/">Play</a>
+      <a href="/about.html">About &amp; Credits</a>
+      <a href="/contact.html">Feedback &amp; Contact</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="/terms.html">Terms</a>
+    </nav>
+    <p>© 2026 Clay Vanderburg. VEXOLITH™ and VEXOLITH // SURVIVOR™ are trademarks of Clay Vanderburg. All rights reserved.</p>
+  </footer>
+</body>
+</html>

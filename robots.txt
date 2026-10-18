@@ -1,0 +1,7 @@
+# The game and its about/legal pages are public; the developer tools are not linked and not indexed.
+User-agent: *
+Disallow: /tuner.html
+Disallow: /stats.html
+Disallow: /sounds.html
+Disallow: /contact-thanks.html
+Disallow: /api/

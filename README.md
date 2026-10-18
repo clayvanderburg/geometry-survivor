@@ -18,6 +18,12 @@ The game has a semver version, `GAME_VERSION` in **`js/version.js`** (the single
 
 Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.0 the original prototype, 0.2.0 PR #3–#4, 0.3.0 #5–#6, 0.4.0 #7–#8, 0.5.0 #9, 0.6.0 #10–#11, 0.7.0 #12–#13, 0.8.0 #14, 0.8.1 #15, 0.9.0 versioned leaderboard + patch notes.
 
+
+## Site pages (about, legal, feedback)
+
+Plain pages around the game, styled by **`css/site.css`** and linked from the title screen footer (plus a 💬 FEEDBACK button in the touch menu): `about.html` (about + music/SFX credits), `privacy.html`, `terms.html` (terms, trademarks, copyright, seizure warning), `contact.html` (feedback form), `contact-thanks.html` and `404.html` (Netlify serves it for unknown paths). `robots.txt` keeps the dev tools out of search results. The privacy policy describes exactly what the leaderboard and `/api/stats` collect: **update it whenever either one starts sending or storing something new.**
+
+The feedback form is a **Netlify Form** (`data-netlify="true"`, honeypot field): enable form detection once under *Site configuration → Forms*, and add an email notification there to get submissions in your inbox. New pages must also be added to the `cp` list in `netlify.toml`.
 ---
 
 ## Core Mechanics & Features
