@@ -111,3 +111,61 @@ test('a milestone is offered once per run, even if its choice never recorded; a 
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 5 });
   assert.deepEqual(pendingBreakthroughs(p, 'rockets'), [6], 're-equipped weapon starts fresh');
 });
+
+// A fresh game with one weapon and its LV 18 transform, plus still enemies at (dx, dy) off the ship.
+async function transformFight(id, lv, at) {
+  const g = freshGame();
+  const p = g.player;
+  p.invuln = 1e9;
+  acquireWeapon(p, id);
+  p.loadout = [id];
+  p.breakthroughs = { [id]: { 18: 'transform' } };
+  g.asteroidManager.asteroids = [];
+  g.asteroidManager.getNearbyAsteroids = () => [];
+  g.enemyManager.enemies = [];
+  for (const [dx, dy] of at) {
+    const e = g.enemyManager.getArchetype('swarmer', 1);
+    g.enemyManager.enemies.push(Object.assign(e, { x: p.x + dx, y: p.y + dy, vx: 0, vy: 0, hp: 1e7, maxHp: 1e7, trail: e.trail || [] }));
+  }
+  const { makeBuild } = await import('../js/weapon-levels.js');
+  return { g, p, b: makeBuild(id, lv, {}, { 18: 'transform' }) };
+}
+
+test('Thunderstrike carries strikeShare of the jumps that landed, so a lone target takes one jump\'s share', async () => {
+  const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+  for (const at of [[[150, 0]], [[150, 0], [210, 0], [270, 0]]]) {
+    const { g, b } = await transformFight('lightning', 18, at);
+    const hits = [];
+    const hitEnemy = g.hitEnemy.bind(g);
+    g.hitEnemy = (e, dmg, ...rest) => { hits.push(dmg); return hitEnemy(e, dmg, ...rest); };
+    g.fireChainLightning(b);
+    const strikes = g.weaponFx.events.filter((ev) => ev.style === 'thunder');
+    assert.equal(hits.length, at.length, 'every enemy takes one jump');
+    assert.equal(strikes.length, 1);
+    assert.ok(Math.abs(strikes[0].damage / (Math.min(...hits) * at.length * W.strikeShare) - 1) < 1e-9, `${at.length} jumps landed`);
+  }
+});
+
+test('Hawking Cascade minis drift onto their own nearby enemies, and spread out when there are none', async () => {
+  const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+  const { g, p, b } = await transformFight('singularity', 18, [[150, 0], [0, 160], [-170, 0], [600, 600]]);
+  const sg = { x: p.x, y: p.y, radius: 22, pullRadius: 300, collapseRadius: 255, cascade: b };
+  g.singularities = [];
+  g.spawnCascade(sg);
+  assert.equal(g.singularities.length, W.cascadeMinis);
+  const near = g.enemyManager.enemies.slice(0, 3);
+  for (const e of near) {
+    const aimed = g.singularities.filter((m) => Math.abs(Math.atan2(m.vy, m.vx) - Math.atan2(e.y - p.y, e.x - p.x)) < 1e-9);
+    assert.equal(aimed.length, 1, 'one mini heads for each nearby enemy');
+  }
+  // Drifting on the singularity drag, the first mini comes to rest on the nearest enemy as it implodes.
+  const m = g.singularities[0];
+  let x = m.x, y = m.y, vx = m.vx, vy = m.vy;
+  for (let t = 0; t < W.cascadeLife * 60; t++) { x += vx; y += vy; vx *= 0.985; vy *= 0.985; }
+  assert.ok(Math.hypot(x - near[0].x, y - near[0].y) < 1);
+  g.enemyManager.enemies = [];
+  g.singularities = [];
+  g.spawnCascade(sg);
+  assert.equal(g.singularities.length, W.cascadeMinis);
+  assert.ok(g.singularities.every((s) => Math.hypot(s.vx, s.vy) > 0), 'with nobody near they still burst out');
+});

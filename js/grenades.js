@@ -45,6 +45,10 @@ const ARC_SPLIT = 0.8;    // share of the flight spent on the main arc; the rest
 const ARC_REACH = 0.9;    // share of the throw distance covered by the main arc
 const LEAD = 0.5;         // share of the target's motion over the flight that the throw leads
 
+// Gravity Grenade pull strength (x W.gravityPull) at `k` of the fuse burnt: it builds up as the fuse burns
+// down (averaging 1 over the fuse), so bomblets land on enemies before the field yanks them in for the blast.
+export const gravityRamp = (k) => (W.gravityRamp + 1) * Math.pow(Math.min(1, Math.max(0, k)), W.gravityRamp);
+
 export class Grenades {
   constructor() {
     this.items = Array.from({ length: POOL }, () => ({
@@ -84,6 +88,7 @@ export class Grenades {
         this.timer = W.grenadeCooldown(b);
       }
     }
+    let wells = 0;
     for (let i = this.count - 1; i >= 0; i--) {
       const g = this.items[i];
       g.age += dt;
@@ -105,14 +110,14 @@ export class Grenades {
         continue;
       }
       g.armedT += dt;
-      if (g.gravity) this.pull(game, g);
       if (g.armedT >= g.fuse) {
         // Swap-remove keeps live grenades packed; `g` keeps its data until the slot is reused.
         this.items[i] = this.items[this.count - 1];
         this.items[--this.count] = g;
         this.explode(game, g);
-      }
+      } else if (g.gravity) wells++;
     }
+    if (wells > 0) this.pull(game);
   }
 
   // Up to `max` targets for one throw, into this.picks: the nearest enemy first, then each next pick is
@@ -261,21 +266,31 @@ export class Grenades {
     }
   }
 
-  // Gravity Grenade: an armed grenade drags nearby enemies in (bosses and portals hold their ground).
-  pull(game, g) {
-    const R = g.pullRadius;
+  // Gravity Grenade: armed grenades drag nearby enemies in (bosses and portals hold their ground). An enemy
+  // in reach of several falls toward the one pulling hardest, so overlapping fields never add up and
+  // crush a whole crowd into one spot.
+  pull(game) {
     const enemies = game.enemyManager.enemies;
-    const strength = W.gravityPull * (0.6 + 0.8 * Math.min(1, g.armedT / g.fuse));
-    game.particles.applyGravityWell?.(g.x, g.y, 1.2, R);
+    for (let i = 0; i < this.count; i++) {
+      const g = this.items[i];
+      if (g.landed && g.gravity) game.particles.applyGravityWell?.(g.x, g.y, 1.2, g.pullRadius);
+    }
     for (let j = 0; j < enemies.length; j++) {
       const e = enemies[j];
       if (e.isBoss || !isDeployableTarget(e)) continue;
-      const dx = g.x - e.x;
-      const dy = g.y - e.y;
-      const k = wellPullScale(dx, dy, R, strength, 10);
-      if (k === 0) continue;
-      e.gvx = (e.gvx || 0) + (dx - dy * 0.3) * k;
-      e.gvy = (e.gvy || 0) + (dy + dx * 0.3) * k;
+      let best = 0, bx = 0, by = 0;
+      for (let i = 0; i < this.count; i++) {
+        const g = this.items[i];
+        if (!g.landed || !g.gravity) continue;
+        const dx = g.x - e.x;
+        const dy = g.y - e.y;
+        const k = wellPullScale(dx, dy, g.pullRadius, W.gravityPull * gravityRamp(g.armedT / g.fuse), 10);
+        const a = k * Math.hypot(dx, dy);
+        if (a > best) { best = a; bx = (dx - dy * 0.3) * k; by = (dy + dx * 0.3) * k; }
+      }
+      if (best === 0) continue;
+      e.gvx = (e.gvx || 0) + bx;
+      e.gvy = (e.gvy || 0) + by;
     }
   }
 

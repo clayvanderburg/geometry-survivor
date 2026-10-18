@@ -2722,9 +2722,9 @@ export class Game {
     const nuke = b.t12 && this.missileSalvos % W.nukeEvery === 0;
     const count = nuke ? 1 : salvo;
     const each = nuke ? damage * salvo * W.nukeUnits : damage;
-    const radius = nuke ? blastRadius * W.nukeRadiusMult : blastRadius;
+    const radius = (nuke ? blastRadius * W.nukeRadiusMult : blastRadius) * (b.t8 ? W.rainRadiusMult : 1);
     if (b.t8) {
-      // Orbital Rain: the salvo leaves the screen; each warhead crashes down on a marked target.
+      // Orbital Rain: the salvo leaves the screen; each warhead crashes down on a marked target in a wider blast.
       const targets = this.missileTargets(p, count);
       for (let i = 0; i < count; i++) {
         const t = targets[i % Math.max(1, targets.length)];
@@ -2823,8 +2823,9 @@ export class Game {
       const end = this.fireArcChain(bb, damage, originX, originY, hitSet, c);
       hits += end.hits;
       if (bb.t12 && end.last) {
-        // Thunderstrike: the chain's last target is struck from above.
-        this.weaponFx.schedule({ x: end.last.x, y: end.last.y, delay: 0.12, radius: W.strikeRadius * (p.stats.areaMult ?? 1), damage: damage * W.lightningJumps(bb) * W.strikeShare, hue: ARC_HUE, source: 'lightning', style: 'thunder', knock: KNOCKBACK.lightning, falloff: W.strikeFalloff });
+        // Thunderstrike: the chain's last target is struck from above. It carries strikeShare of the jumps
+        // that landed (like Ball Lightning), so a lone target cannot take a full chain's strike.
+        this.weaponFx.schedule({ x: end.last.x, y: end.last.y, delay: 0.12, radius: W.strikeRadius * (p.stats.areaMult ?? 1), damage: damage * end.hits * W.strikeShare, hue: ARC_HUE, source: 'lightning', style: 'thunder', knock: KNOCKBACK.lightning, falloff: W.strikeFalloff });
       }
     }
     if (bb.t8 && hits > 0) {
@@ -2955,20 +2956,28 @@ export class Game {
     this.sound.playSingularityLaunch?.();
   }
 
-  // Hawking Cascade: three mini-singularities burst out of a collapse, grind briefly and implode.
+  // Hawking Cascade: three mini-singularities burst out of a collapse, grind briefly and implode. Each one
+  // drifts onto its own enemy within the collapsed core's pull radius (nearest first, never two on one
+  // spot: the first usually stays on the clump the core left); minis with nobody left to find spread out.
   spawnCascade(sg) {
     const p = this.player;
     const b = sg.cascade;
     const ratio = weaponDamage(p, 'singularity', b) / W.singularityDamageMult(b);
+    const pullRadius = sg.pullRadius * W.cascadePullScale;
+    const collapseRadius = sg.collapseRadius * W.cascadeRadiusFrac;
+    const targets = this.cascadeTargets(sg.x, sg.y, W.cascadeMinis, sg.pullRadius, collapseRadius);
+    // Launch speed that drifts a mini 1 px over its life (the 0.985 per-tick drag in updateSingularities).
+    const drift = (1 - Math.pow(0.985, W.cascadeLife * 60)) / 0.015;
     for (let k = 0; k < W.cascadeMinis; k++) {
-      const a = (k / W.cascadeMinis) * Math.PI * 2 + Math.random() * 0.6;
-      const pullRadius = sg.pullRadius * W.cascadePullScale;
+      const t = targets[k];
+      const a = t ? Math.atan2(t.y - sg.y, t.x - sg.x) : (k / W.cascadeMinis) * Math.PI * 2 + Math.random() * 0.6;
+      const speed = t ? Math.hypot(t.x - sg.x, t.y - sg.y) / drift : 3;
       this.singularities.push({
-        x: sg.x, y: sg.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3,
+        x: sg.x, y: sg.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
         radius: sg.radius * 0.6,
         pullRadius,
         damage: W.cascadeDamageMult(b) * ratio,
-        collapseRadius: sg.collapseRadius * W.cascadeRadiusFrac,
+        collapseRadius,
         collapseDamage: W.cascadeCollapseDamageMult(b) * ratio * (TUNING.singularityCollapseMult ?? 1),
         aftershock: 0,
         cascade: null,
@@ -2979,6 +2988,27 @@ export class Game {
         hue: 310
       });
     }
+  }
+
+  // Up to `count` nearest enemies within `range` of (x, y), nearest first, none within `spacing` of another pick.
+  cascadeTargets(x, y, count, range, spacing) {
+    const enemies = this.enemyManager.enemies;
+    const out = [];
+    for (let k = 0; k < count; k++) {
+      let best = null;
+      let bestSq = range * range;
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (e.dead || e.type === 'blackhole') continue;
+        const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+        if (dSq >= bestSq || out.some((q) => (e.x - q.x) ** 2 + (e.y - q.y) ** 2 < spacing * spacing)) continue;
+        best = e;
+        bestSq = dSq;
+      }
+      if (!best) break;
+      out.push(best);
+    }
+    return out;
   }
 
   // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
