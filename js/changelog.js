@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.4',
+    date: '2026-10-18',
+    title: 'Synth Picks',
+    notes: [
+      { type: 'new', text: 'New synth sounds for the Autocannon, grenade blasts, taking damage, dashing and the Supernova.' },
+      { type: 'fix', text: 'Level up is back to its original sound, and Orbit Blade hits are quieter and subtler.' }
+    ]
+  },
+  {
     version: '0.19.3',
     date: '2026-10-18',
     title: 'Hand-Picked Sounds',

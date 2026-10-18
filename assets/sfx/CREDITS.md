@@ -70,3 +70,9 @@ peaks held below -1.5 dBFS, encoded as 44.1 kHz mono 96 kbps MP3. They only play
 | `dash_{a,b}` | Airy soft filtered synth whoosh with a smooth resonant filter sweep upward, quick and clean, 80s synthwave | 0.7 s / 0.50 s and 0.44 s |
 | `supernova_{a,b}` | Huge warm analog synth bass drop at A1 sliding down, with a soft glittering synth pad shimmer on top, 80s synthwave | 2 s / 1.6 s |
 | `ui_confirm_{a,b}` | Soft pleasant two-note synth blip, A4 then E5, round sine-like tone, very short and clean, 80s synthwave menu | 0.5 s / 0.40 s |
+
+## Round 2 regen: blade_hit
+
+`v2/blade_hit_a.mp3` and `v2/blade_hit_b.mp3` were regenerated at the player's request ("more subtle, quieter"):
+"Very soft subtle synth tick, quiet muted pluck with a faint airy shimmer, short gentle decay, low volume"
+(0.5 s, prompt influence 0.5), trimmed to 0.35 s, low-passed at 8 kHz, loudness-normalized to -22 LUFS.

@@ -57,8 +57,14 @@ export const SFX_LIBRARY = Object.freeze({
 // Samples the player approved for the game. Every other sound uses its original procedural version.
 export const SFX_IN_GAME = Object.freeze([
   'rocket_launch', 'missile_launch', 'explosion_small', 'explosion_large', 'missile_impact', 'arc_zap', 'grenade_throw',
-  'singularity_launch', 'implosion', 'level_up', 'cache_open', 'boss_arrival', 'lieutenant_arrival', 'elite_charge', 'ui_select', 'game_over'
+  'singularity_launch', 'implosion', 'cache_open', 'boss_arrival', 'lieutenant_arrival', 'elite_charge', 'ui_select', 'game_over',
+  'grenade_blast', 'player_hit', 'autocannon_shot', 'dash', 'supernova'
 ]);
+// In-game samples that use a round-2 take instead of the round-1 file (path under assets/sfx, no .mp3).
+export const SFX_FILE = Object.freeze({
+  grenade_blast: 'v2/grenade_blast_a', player_hit: 'v2/player_hit_a', autocannon_shot: 'v2/autocannon_shot_b',
+  dash: 'v2/dash_b', supernova: 'v2/supernova_b'
+});
 export const SFX_SAMPLES = Object.freeze(Object.fromEntries(SFX_IN_GAME.map((name) => [name, SFX_LIBRARY[name]])));
 
 // Round-2 candidates (musical synthwave takes, two variations each: <name>_a.mp3 / <name>_b.mp3) for the
@@ -344,7 +350,7 @@ export class SoundEngine {
     for (const name of names) {
       if (this.sampleRequested.has(name)) continue;
       this.sampleRequested.add(name);
-      this.fetchBuffer(`${SFX_BASE}${name}.mp3`)
+      this.fetchBuffer(`${SFX_BASE}${SFX_FILE[name] ?? name}.mp3`)
         .then(buffer => { if (this.ctx === ctx) this.samples.set(name, buffer); })
         .catch(() => { this.sampleFailures.add(name); });
     }
@@ -1618,11 +1624,11 @@ export class SoundEngine {
     const noise = this.noiseSource();
     const band = this.ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.setValueAtTime(4200 + Math.random() * 900, t);
+    band.frequency.setValueAtTime(3000 + Math.random() * 600, t);
     band.Q.value = 6;
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.09, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+    g.gain.setValueAtTime(0.04, t); // subtler and quieter at the player's request (was 0.09)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
     noise.connect(band);
     band.connect(g);
     g.connect(this.sfxGain);

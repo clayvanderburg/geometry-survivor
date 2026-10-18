@@ -56,7 +56,7 @@
   </div>
 </main>
 <script type="module">
-  import { SoundEngine, SFX_LIBRARY, SFX_IN_GAME, SFX_ROUND2, SFX_V2_BASE } from './js/audio.js';
+  import { SoundEngine, SFX_LIBRARY, SFX_IN_GAME, SFX_ROUND2, SFX_V2_BASE, SFX_BASE } from './js/audio.js';
 
   const WHEN = {
     autocannon_shot: 'Autocannon shot', drone_shot: 'Escort Drone shot', rocket_launch: 'Wing Rocket launch',
@@ -90,7 +90,8 @@
     if (ready) return;
     engine.init();
     engine.stopMusic?.();
-    engine.loadSamples(Object.keys(SFX_LIBRARY));
+    // NEW = the round-1 file for every sound (the game may use a round-2 take for some of them).
+    for (const name of Object.keys(SFX_LIBRARY)) engine.loadPreview(`${SFX_BASE}${name}.mp3`);
     for (const name of SFX_ROUND2) for (const v of ['a', 'b']) engine.loadPreview(v2Url(name, v));
     ready = true;
     document.getElementById('start').textContent = 'AUDIO ON';
@@ -107,10 +108,7 @@
   function playNew(name) {
     enable();
     engine.weaponVoices = {};
-    engine.previewAll = true;
-    const ok = engine.playSample(name);
-    engine.previewAll = false;
-    if (!ok) setTimeout(() => { engine.previewAll = true; engine.playSample(name); engine.previewAll = false; }, 400);
+    engine.playPreview(`${SFX_BASE}${name}.mp3`, SFX_LIBRARY[name]);
   }
 
   function playV2(name, variant) {
