@@ -33,6 +33,7 @@ import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOption
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
+import { SplashScreen } from './splash.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -270,6 +271,9 @@ export class Game {
     // First-run tutorial (js/tutorial.js): opens on the first LAUNCH on a device (the run starts when it
     // closes; switched on by the browser boot, enableFirstLaunchTutorial), skippable on every slide,
     // replayed from the TUTORIAL buttons.
+    // Splash screen (js/splash.js): the key art over everything when the game opens (showSplash).
+    this.splashOpen = false;
+    this.splash = new SplashScreen({ onDismiss: () => this.onSplashDismissed() });
     this.tutorialOpen = false;
     this.tutorialOnLaunch = false;
     this.tutorialLaunchAfter = false;
@@ -597,6 +601,13 @@ export class Game {
     });
 
     window.addEventListener('keydown', (e) => {
+      // Any key on the splash screen just continues to the title.
+      if (this.splashOpen) {
+        if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return; // browser shortcuts still work
+        if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+        if (!e.repeat) this.splash.dismiss();
+        return;
+      }
       const focused = document.activeElement;
       const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
         (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
@@ -4346,6 +4357,10 @@ export class Game {
   // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
   // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
   updateMenuController(gp, dt) {
+    if (this.splashOpen) {
+      if (gp && [PAD.A, PAD.B, PAD.X, PAD.Y, PAD.START].some(b => gp.pressed(b))) this.splash.dismiss();
+      return;
+    }
     if (this.tutorialOpen) {
       this.updateTutorialController(gp, dt);
       return;
@@ -5208,6 +5223,24 @@ export class Game {
 
   // --- Tutorial ------------------------------------------------------------------------------------
 
+  // The browser boot shows the splash on every load; the title waits behind it.
+  showSplash() {
+    if (this.state === 'TITLE' && this.splash?.show()) {
+      this.splashOpen = true;
+      this.resetInput();
+    }
+    return this;
+  }
+
+  // The dismissing key / tap / button is a user gesture: audio can start. Menus get a fresh grace
+  // period so the same controller press doesn't also hit LAUNCH.
+  onSplashDismissed() {
+    this.splashOpen = false;
+    this.sound?.init?.();
+    this.menuState = null;
+    this.menuNav?.clear();
+  }
+
   // The browser boot switches this on: the first LAUNCH on a device (the tutorial was never skipped or
   // finished here) shows the tutorial before the run. Headless tests and tools leave it off.
   enableFirstLaunchTutorial() {
@@ -5944,5 +5977,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().showSplash());
 }

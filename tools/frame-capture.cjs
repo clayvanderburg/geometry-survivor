@@ -81,7 +81,9 @@ const SCENES = {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('http://127.0.0.1:8096/index.html');
-    await page.waitForTimeout(500);
+    await page.locator('#splash-screen').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape'); // past the splash screen
+    await page.locator('#splash-screen').waitFor({ state: 'hidden' });
     await page.locator(scene === 'range' ? '#btn-weapon-range' : '#btn-start-game').click();
     await page.waitForTimeout(400);
 

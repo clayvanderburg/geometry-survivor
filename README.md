@@ -129,6 +129,10 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
 
 ---
 
+## Splash screen
+
+`js/splash.js` (`#splash-screen`, art in `assets/splash.webp`): the VEXOLITH key art fills the screen when the game opens, with a pulsing **PRESS ANY KEY** (touch: **TAP TO START**). Any key, click, tap or controller face button / Start fades it into the title screen. That press is a user gesture, so it also lets the audio start. It never launches a run, and menus get a fresh grace period so the same controller press can't hit LAUNCH. Browser shortcuts (Ctrl/Cmd/Alt combos, F-keys) pass through. It shows every time the game opens, refreshes included. Landscape screens crop the art to fill (anchored at the top so the logo stays whole); portrait screens show the whole picture over a blurred copy of it. Only the browser boot shows it (`Game.showSplash`), so headless tests never see it; the Playwright tools dismiss it (or cover it in the browser / controller smoke runs).
+
 ## Tutorial (first-run slides)
 
 `js/tutorial.js` (`#tutorial-modal`) is a six-slide PILOT BRIEFING for new players: FLY & FIGHT, SURVIVE THE SWARM, MINE ASTEROIDS (gold veins change upgrade choices, green veins restore the shield, purple cores give Void Cores), LEVEL UP (NEW WEAPON / upgrades, gold REROLL / LOCK), ELITES & BOSSES and YOU'RE READY (Void Armory, then *for in-depth info, check our handy 📖 FIELD GUIDE*, with a button that opens it). Each slide is a looping clip of the real game plus one or two short lines.
@@ -277,6 +281,7 @@ Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created o
 - `js/leaderboard-rules.js` — Callsign alphabet (`sanitizeCallsign`) and board versions (`BOARD_VERSIONS`, `ALL_TIME`) shared by the game and the function.
 - `js/version.js` — `GAME_VERSION` (single source of truth), `VERSIONED_SINCE`, semver compare and `v0.X.Y` / `pre-0.9` labels; shared with the function.
 - `js/changelog.js` — `CHANGELOG`: player-facing patch notes, newest first; also the server's list of known versions.
+- `js/splash.js` — Splash screen (`SplashScreen`): the key art on every load, any input continues to the title. Art: `assets/splash.webp`.
 - `js/tutorial.js` — First-run TUTORIAL slides (`tutorialSlides`, `TUTORIAL_REVIEWED_FOR`), seen flag and the `#tutorial-modal` controller (`TutorialUI`). Keep its slides accurate (rule at the top of this README).
 - `assets/tutorial/` — The tutorial clips (animated WebP), captured by `tools/tutorial-media.cjs` (`npm run tutorial-media`).
 - `js/patch-notes.js` — PATCH NOTES screen (`#notes-modal`): HTML builders, NEW badge / last-seen version, expand/collapse.

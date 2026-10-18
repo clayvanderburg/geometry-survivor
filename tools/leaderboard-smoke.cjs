@@ -52,6 +52,9 @@ async function openGame(browser, api) {
     navigator.getGamepads = () => [{ connected: true, axes: window.__pad.axes, buttons: window.__pad.buttons.map(pressed => ({ pressed })) }];
   });
   await page.goto('http://127.0.0.1:8096');
+  await page.locator('#splash-screen').waitFor({ state: 'visible' });
+  await page.keyboard.press('Escape'); // past the splash screen
+  await page.locator('#splash-screen').waitFor({ state: 'hidden' });
   return { page, errors, context };
 }
 

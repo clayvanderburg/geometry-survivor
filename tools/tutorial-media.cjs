@@ -25,7 +25,9 @@ const OUT_WIDTH = 480; // clips are shown at most ~520 css px wide; small files 
 
 // Page-side setups. `g` is the Game, `p` the player. `setup` runs once mid-run; `tick(g, p, i)` runs
 // before frame i. `start: false` stays on the title screen. `still: true` writes one frame; with `shot`
-// it is the top 16:9 of that element. `view` overrides the viewport.
+// it is the top 16:9 of that element. `view` overrides the viewport. `hud: true` keeps the HUD; with
+// `hudKeep` (a selector list) only those parts of it stay visible, and `hudCss` adds capture-only styles
+// (e.g. enlarging the shield bar so it reads at clip size).
 const CLIPS = {
   // Flying loops with auto-fire through a light swarm.
   fly: {
@@ -42,23 +44,30 @@ const CLIPS = {
       if (i === 22) g.triggerDash();
     }
   },
-  // A dense swarm closing in; the ship kites and the shield takes a hit.
+  // Sitting still with the guns off: the swarm piles on and the shield drains from full to almost
+  // nothing (blue -> amber -> red). The shield never quite breaks, so the clip never ends in a game over.
   swarm: {
-    frames: 40, every: 4,
+    frames: 50, every: 6, zoom: 1.5, warmup: 10, hud: true,
+    hudKeep: '.bars-wrapper > .bar-group',
+    hudCss: '.bars-wrapper > .bar-group { transform: scale(2.2); transform-origin: top right; }',
     setup: (g, p) => {
-      g.wave = 4;
-      for (let i = 0; i < 40; i++) {
-        const a = (i / 40) * Math.PI * 2;
-        const r = 330 + (i % 5) * 30;
-        const type = ['swarmer', 'swarmer', 'weaver', 'pinwheel', 'splitter'][i % 5];
-        g.enemyManager.queueSpawn(type, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r * 0.7, 1, { instant: true });
+      g.wave = 6;
+      g.autoFire = false;
+      p.invuln = 0;
+      p.hp = p.maxHp;
+      const floor = p.maxHp * 0.04;
+      const hurt = g.damagePlayer;
+      g.damagePlayer = function (...a) { hurt.apply(this, a); if (p.hp < floor) p.hp = floor; return false; };
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * Math.PI * 2;
+        const r = 260 + (i % 4) * 45;
+        const type = ['swarmer', 'swarmer', 'pinwheel', 'weaver'][i % 4];
+        g.enemyManager.queueSpawn(type, p.x + Math.cos(a) * r, p.y + Math.sin(a) * r * 0.75, 1, { instant: true });
       }
-      g.enemyManager.queueSpawn('gunner', p.x + 300, p.y - 120, 1, { instant: true });
-      g.enemyManager.queueSpawn('bruiser', p.x - 280, p.y + 90, 1, { instant: true });
+      g.enemyManager.queueSpawn('bruiser', p.x - 260, p.y + 60, 1, { instant: true });
+      g.enemyManager.queueSpawn('gunner', p.x + 280, p.y - 90, 1, { instant: true });
     },
-    tick: (g, p, i) => {
-      g.keys = { KeyA: i < 20, KeyW: i >= 14 && i < 30, KeyD: i >= 27 };
-    }
+    tick: (g, p) => { g.keys = {}; p.vx = p.vy = 0; if (p.hp > p.maxHp * 0.04) p.invuln = Math.min(p.invuln, 0.35); }
   },
   // Drilling into an asteroid cluster: plain rock, a gold vein and a green shield vein.
   mine: {
@@ -94,15 +103,32 @@ const CLIPS = {
       g.applyLiveTuning('FORCE_LEVELUP');
     }
   },
-  // A boss warning and arrival.
+  // A boss warping in next to the ship in open space (the end of its warning, the arrival), then
+  // closing in while the ship holds its ground and shoots it.
   boss: {
-    frames: 44, every: 6,
+    frames: 50, every: 5, zoom: 1.35, warmup: 120, hud: true,
+    hudKeep: '#boss-hud',
+    hudCss: '#boss-hud { position: fixed !important; top: 10px !important; left: 50% !important; width: 560px !important; margin: 0 !important; transform: translateX(-50%) scale(1.2) !important; transform-origin: top center; } #boss-card { display: none !important; }',
     setup: (g, p) => {
+      const rocks = g.asteroidManager.asteroids;
+      const clear = (x, y) => rocks.every(r => Math.hypot(r.x - x, r.y - y) > r.radius + 420);
+      let spot = null;
+      for (let y = 600; y < g.worldHeight - 600 && !spot; y += 120) {
+        for (let x = 600; x < g.worldWidth - 600 && !spot; x += 120) if (clear(x, y)) spot = { x, y };
+      }
+      if (spot) { p.x = spot.x - 140; p.y = spot.y; }
+      p.vx = p.vy = 0;
+      g.camX = p.x - g.width / 2;
+      g.camY = p.y - g.height / 2;
       g.wave = 3;
-      g.applyLiveTuning('SPAWN_BOSS');
-      for (let i = 0; i < 10; i++) g.enemyManager.queueSpawn('swarmer', p.x - 380, p.y + (i - 5) * 40, 1, { instant: true });
+      g.queueBossEncounter({ x: p.x + 270, y: p.y - 20, onScreen: true }, g.getWaveScale(), 'WAVE 3 WARDEN');
     },
-    tick: (g, p, i) => { g.keys = { KeyA: (i % 22) < 11, KeyD: (i % 22) >= 11 }; }
+    tick: (g, p) => {
+      g.keys = {};
+      p.vx = p.vy = 0;
+      const boss = g.enemyManager.enemies.find(e => e.type === 'boss' && !e.dead);
+      if (boss) { g.mouse.x = boss.x - g.camX; g.mouse.y = boss.y - g.camY; }
+    }
   },
   // The Void Armory on the title screen.
   armory: {
@@ -139,7 +165,10 @@ const CLIPS = {
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto('http://127.0.0.1:8096/index.html');
-      await page.waitForTimeout(600);
+      await page.locator('#splash-screen').waitFor({ state: 'visible' });
+      await page.keyboard.press('Escape'); // past the splash screen
+      await page.locator('#splash-screen').waitFor({ state: 'hidden' });
+      await page.waitForTimeout(300);
       const frameDir = path.join(tmp, name);
       fs.mkdirSync(frameDir, { recursive: true });
 
@@ -154,7 +183,7 @@ const CLIPS = {
         await page.locator('#btn-start-game').click();
         await page.waitForTimeout(400);
         // Grab the running Game and stop its loop so only our steps advance it (as in frame-capture).
-        await page.evaluate(async ({ setup, hud, zoom }) => {
+        await page.evaluate(async ({ setup, hud, zoom, hudKeep, hudCss }) => {
           const m = await import('/js/main.js');
           const g = await new Promise((resolve) => {
             const update = m.Game.prototype.update;
@@ -165,12 +194,19 @@ const CLIPS = {
           const p = g.player;
           p.invuln = 1e9;
           if (zoom) { g.viewScale *= zoom; g.renderScale *= zoom; g.width /= zoom; g.height /= zoom; }
+          if (hudKeep) {
+            g.radarVisible = false;
+            const style = document.createElement('style');
+            style.textContent = `#game-container *:not(canvas):not(:is(${hudKeep}, ${hudKeep.split(',').map(k => k.trim() + ' *').join(', ')})) { visibility: hidden !important; transition: none !important; }
+              :is(${hudKeep}) { visibility: visible !important; } ${hudCss || ''}`;
+            document.head.appendChild(style);
+          }
           if (!hud) {
             g.toggleHud();
             document.querySelectorAll('[class*="hint"]').forEach((el) => { if (/SHOW HUD/.test(el.textContent)) el.remove(); });
           }
           new Function('g', 'p', `(${setup})(g, p)`)(g, p);
-        }, { setup: clip.setup.toString(), hud: !!clip.hud, zoom: clip.zoom || 0 });
+        }, { setup: clip.setup.toString(), hud: !!clip.hud, zoom: clip.zoom || 0, hudKeep: clip.hudKeep || '', hudCss: clip.hudCss || '' });
 
         const tick = clip.tick ? clip.tick.toString() : null;
         const step = (ticks, i) => page.evaluate(({ ticks, i, tick }) => {
@@ -186,7 +222,7 @@ const CLIPS = {
           await page.waitForTimeout(300);
           await shoot(path.join(frameDir, 'frame-000.png'));
         } else {
-          await step(20, 0);
+          await step(clip.warmup ?? 20, 0);
           for (let i = 0; i < clip.frames; i++) {
             await step(i === 0 ? 0 : clip.every, i);
             await page.screenshot({ path: path.join(frameDir, `frame-${String(i).padStart(3, '0')}.png`) });

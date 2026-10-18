@@ -52,6 +52,13 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
       if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`);
     };
 
+    // Splash: START continues to the title (no run, no tutorial yet).
+    if (!await page.locator('#splash-screen').isVisible()) throw Error('The splash should show when the game opens');
+    await press(START);
+    await page.locator('#splash-screen').waitFor({ state: 'hidden' });
+    if (await state() !== 'TITLE' || await page.locator('#tutorial-modal').isVisible()) throw Error('START on the splash should only reveal the title');
+    await page.waitForTimeout(400);
+
     // First LAUNCH: A on the title opens the tutorial; RB moves a slide, B skips it into the run.
     await press(A);
     if (!await page.locator('#tutorial-modal').isVisible()) throw Error('The first launch should show the tutorial');
@@ -367,6 +374,6 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     if (await page.evaluate(() => __game.mode) !== 'blitz') throw Error('The run should fly BLITZ');
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: first-launch tutorial (A launch, RB next, B skip into the run), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
+    console.log('Controller smoke PASS: splash (START continues), first-launch tutorial (A launch, RB next, B skip into the run), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
