@@ -94,6 +94,8 @@ const BLACKHOLE_GRID_DEPTH = 290;
 const ROCKET_CONVERGE = 320;
 // Autocannon tracers are drawn at this share of the shared bolt thickness (the hitbox is unchanged).
 const AUTOCANNON_DRAW_WIDTH = 0.6;
+// Music / SFX level sliders read as a percentage (TUNING level 1 = 100%), like MASTER VOLUME.
+const levelPct = (v) => `${Math.round(Number(v) * 100)}%`;
 // Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
 const HAND_SIZE = 4;
 const SINGULARITY_GRID_DEPTH = 340;
@@ -734,18 +736,18 @@ export class Game {
     }
     if (pauseMusicSlider) {
       pauseMusicSlider.value = TUNING.musicVolume;
-      if (pauseMusicLabel) pauseMusicLabel.textContent = `${Number(TUNING.musicVolume).toFixed(2)}x`;
+      if (pauseMusicLabel) pauseMusicLabel.textContent = levelPct(TUNING.musicVolume);
       pauseMusicSlider.addEventListener('input', (e) => {
         updateTuningKey('musicVolume', e.target.value);
-        if (pauseMusicLabel) pauseMusicLabel.textContent = `${Number(e.target.value).toFixed(2)}x`;
+        if (pauseMusicLabel) pauseMusicLabel.textContent = levelPct(e.target.value);
       });
     }
     if (pauseSfxSlider) {
       pauseSfxSlider.value = TUNING.sfxVolume;
-      if (pauseSfxLabel) pauseSfxLabel.textContent = `${Number(TUNING.sfxVolume).toFixed(2)}x`;
+      if (pauseSfxLabel) pauseSfxLabel.textContent = levelPct(TUNING.sfxVolume);
       pauseSfxSlider.addEventListener('input', (e) => {
         updateTuningKey('sfxVolume', e.target.value);
-        if (pauseSfxLabel) pauseSfxLabel.textContent = `${Number(e.target.value).toFixed(2)}x`;
+        if (pauseSfxLabel) pauseSfxLabel.textContent = levelPct(e.target.value);
       });
     }
 
@@ -869,7 +871,7 @@ export class Game {
       const slider = document.getElementById(`pause-${id}-slider`);
       const label = document.getElementById(`pause-${id}-label`);
       if (slider && document.activeElement !== slider) slider.value = TUNING[key];
-      if (label) label.textContent = `${Number(TUNING[key]).toFixed(2)}x`;
+      if (label) label.textContent = levelPct(TUNING[key]);
     }
 
     // Sync drawer UI readouts if open

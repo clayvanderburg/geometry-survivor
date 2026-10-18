@@ -63,10 +63,10 @@ const path = require('node:path');
       };
       const create = (seconds, boosted = false) => {
         Object.assign(TUNING, DEFAULT_TUNING);
-        if (boosted) Object.assign(TUNING, { musicVolume: 3, sfxVolume: 2 });
+        if (boosted) Object.assign(TUNING, { musicVolume: 2, sfxVolume: 2 });
         const offline = new OfflineAudioContext(2, Math.ceil(48000 * seconds), 48000);
         window.AudioContext = function () { return offline; };
-        localStorage.setItem('vectra_master_vol', boosted ? '200' : '100');
+        localStorage.setItem('vexolith_master_vol', boosted ? '200' : '100');
         const engine = new SoundEngine();
         engine.init();
         clearInterval(engine.schedulerId);

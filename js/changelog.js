@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.27.0',
+    date: '2026-10-18',
+    title: 'Balanced Volume',
+    notes: [
+      { type: 'fix', text: 'Volume sliders are rescaled: 100% on Master, Music and SFX is now a comfortable, balanced mix, and all three read in %.' },
+      { type: 'fix', text: 'Your saved volume settings convert automatically, so the game sounds exactly as it did.' }
+    ]
+  },
+  {
     version: '0.26.2',
     date: '2026-10-18',
     title: 'Full Volume Menus',

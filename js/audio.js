@@ -9,7 +9,13 @@
 //   they stream through the same music bus instead (menu theme, an in-game playlist that builds in
 //   intensity and cross-fades track to track, a boss theme), and the procedural score is the fallback.
 // Everything no-ops safely without an AudioContext (node tests, very old browsers).
-import { TUNING } from './config.js';
+import { TUNING, VOLUME_REF } from './config.js';
+
+const MASTER_VOL_KEY = 'vexolith_master_vol';
+const LEGACY_MASTER_VOL_KEY = 'vectra_master_vol';
+// Bus gains of the MUSIC / SFX level sliders (TUNING levels: 1 = 100% = the reference mix).
+const musicBusGain = () => VOLUME_REF.music * (TUNING.musicVolume ?? 1);
+const sfxBusGain = () => VOLUME_REF.sfx * (TUNING.sfxVolume ?? 1);
 
 // Sixteenth steps of the boss-fight riff inside each bar.
 const BOSS_RIFF_STEPS = [0, 3, 6, 8, 11, 14];
@@ -153,10 +159,17 @@ export class SoundEngine {
     this.enabled = true;
     this.masterVolumePct = 100;
     try {
-      const stored = localStorage.getItem('vectra_master_vol');
+      // MASTER % is stored under MASTER_VOL_KEY; a value saved before the rescale (LEGACY_MASTER_VOL_KEY,
+      // where 100% was a gain of VOLUME_REF.legacyMaster) converts once to the same loudness on the new scale.
+      let stored = localStorage.getItem(MASTER_VOL_KEY);
+      const legacy = stored === null ? localStorage.getItem(LEGACY_MASTER_VOL_KEY) : null;
+      if (legacy !== null && legacy.trim() !== '' && Number.isFinite(Number(legacy))) {
+        stored = String(Math.round(Number(legacy) * VOLUME_REF.legacyMaster / VOLUME_REF.master));
+      }
       const savedVol = Number(stored);
       if (stored !== null && stored.trim() !== '' && Number.isFinite(savedVol)) {
         this.masterVolumePct = Math.max(0, Math.min(200, savedVol));
+        if (legacy !== null) localStorage.setItem(MASTER_VOL_KEY, String(this.masterVolumePct));
       }
     } catch (_e) { /* Storage may be unavailable in private or embedded contexts. */ }
     this.masterGain = null;
@@ -224,7 +237,7 @@ export class SoundEngine {
   }
 
   getMasterGainValue() {
-    return this.enabled ? 0.85 * (this.masterVolumePct / 100) : 0;
+    return this.enabled ? VOLUME_REF.master * (this.masterVolumePct / 100) : 0;
   }
 
   setMasterVolume(pct) {
@@ -232,7 +245,7 @@ export class SoundEngine {
     if (!Number.isFinite(value)) return;
     this.masterVolumePct = Math.max(0, Math.min(200, value));
     try {
-      localStorage.setItem('vectra_master_vol', String(this.masterVolumePct));
+      localStorage.setItem(MASTER_VOL_KEY, String(this.masterVolumePct));
     } catch (_e) {}
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.getMasterGainValue(), this.ctx.currentTime, 0.03);
@@ -244,10 +257,10 @@ export class SoundEngine {
     this.bpm = this.baseBpm + (SONGS[this.songIndex]?.bpmOffset || 0);
     if (this.ctx) {
       if (this.musicGain) {
-        this.musicGain.gain.setTargetAtTime(TUNING.musicVolume ?? 0.4, this.ctx.currentTime, 0.03);
+        this.musicGain.gain.setTargetAtTime(musicBusGain(), this.ctx.currentTime, 0.03);
       }
       if (this.sfxGain) {
-        this.sfxGain.gain.setTargetAtTime(TUNING.sfxVolume ?? 0.38, this.ctx.currentTime, 0.03);
+        this.sfxGain.gain.setTargetAtTime(sfxBusGain(), this.ctx.currentTime, 0.03);
       }
       if (this.masterGain) {
         this.masterGain.gain.setTargetAtTime(this.getMasterGainValue(), this.ctx.currentTime, 0.03);
@@ -297,7 +310,7 @@ export class SoundEngine {
 
     // Keep SFX tucked underneath the music so lasers/explosions never drown out the beat
     this.sfxGain = this.ctx.createGain();
-    this.sfxGain.gain.value = TUNING.sfxVolume ?? 0.38;
+    this.sfxGain.gain.value = sfxBusGain();
     this.sfxGain.connect(this.masterGain);
 
     // Music bus: every music voice -> musicFilter (muffle / warning-drop low-pass) -> musicGain.
@@ -307,7 +320,7 @@ export class SoundEngine {
     this.musicFilter.Q.value = 0.8;
 
     this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = TUNING.musicVolume ?? 0.4;
+    this.musicGain.gain.value = musicBusGain();
     this.musicFilter.connect(this.musicGain);
     this.musicGain.connect(this.masterGain);
 

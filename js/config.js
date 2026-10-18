@@ -9,6 +9,11 @@ const LEGACY_TUNING_KEY = 'vectra_survivor_tuning_v3';
 
 // Tuning keys that are player settings (pause-menu sliders), not balance: changing them is fair play.
 export const PLAYER_SETTING_KEYS = Object.freeze(['musicVolume', 'sfxVolume']);
+// Volume sliders read 100% at a comfortable mix: the master bus gain at MASTER 100%, and the music / SFX
+// bus gains at 100% (TUNING.musicVolume / sfxVolume are levels, 1 = 100%). Before v0.27 the sliders
+// were raw gains (master 0.85 at 100%, music 0.4, SFX 0.38); loadTuning converts saved values once.
+export const VOLUME_REF = Object.freeze({ master: 0.255, music: 1.3, sfx: 2.0, legacyMaster: 0.85 });
+const VOLUME_SCALE_MARK = 'vexolith_volume_scale_v2';
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
@@ -59,8 +64,8 @@ export const DEFAULT_TUNING = {
   maxWaveCores: 3,
 
   // 5. Audio, Enemies & Visual FX
-  musicVolume: 0.4,
-  sfxVolume: 0.38,
+  musicVolume: 1,
+  sfxVolume: 1,
   musicBpm: 132,
   screenShakeMult: 1.0,
   gridWarpMult: 1.0,
@@ -275,8 +280,8 @@ export const TUNING_SCHEMA = [
   {
     group: '🎵 Audio, Enemies & Visual FX',
     items: [
-      { key: 'musicVolume', label: 'Music Master Volume', type: 'range', min: 0.0, max: 3.0, step: 0.05, unit: 'x' },
-      { key: 'sfxVolume', label: 'SFX Volume', type: 'range', min: 0.0, max: 2.0, step: 0.02, unit: 'x' },
+      { key: 'musicVolume', label: 'Music Level (1 = 100%)', type: 'range', min: 0.0, max: 2.0, step: 0.05, unit: 'x' },
+      { key: 'sfxVolume', label: 'SFX Level (1 = 100%)', type: 'range', min: 0.0, max: 2.0, step: 0.05, unit: 'x' },
       { key: 'musicBpm', label: 'Synthwave Tempo (BPM)', type: 'range', min: 85, max: 180, step: 1, unit: 'BPM' },
       { key: 'screenShakeMult', label: 'Screen Shake Intensity', type: 'range', min: 0.0, max: 2.5, step: 0.1, unit: 'x' },
       { key: 'gridWarpMult', label: 'Neon Grid Warp Force', type: 'range', min: 0.0, max: 3.0, step: 0.1, unit: 'x' },
@@ -487,10 +492,23 @@ function readLegacyPlayerSettings() {
   return kept;
 }
 
+// Saved music / SFX volumes from before the v0.27 rescale were raw bus gains: turn them into levels of the
+// new 100% reference once (so the mix sounds exactly as before), then mark the storage as converted.
+function rescaleSavedVolumes(saved) {
+  if (localStorage.getItem(VOLUME_SCALE_MARK)) return saved;
+  localStorage.setItem(VOLUME_SCALE_MARK, '1');
+  if (!saved || typeof saved !== 'object') return saved;
+  const out = { ...saved };
+  if (out.musicVolume !== undefined) out.musicVolume = Number(out.musicVolume) / VOLUME_REF.music;
+  if (out.sfxVolume !== undefined) out.sfxVolume = Number(out.sfxVolume) / VOLUME_REF.sfx;
+  localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides(normalizeTuning(out))));
+  return out;
+}
+
 export function loadTuning() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
-    const saved = raw ? JSON.parse(raw) : readLegacyPlayerSettings();
+    const saved = rescaleSavedVolumes(raw ? JSON.parse(raw) : readLegacyPlayerSettings());
     Object.assign(TUNING, normalizeTuning(saved || {}));
   } catch (e) {
     Object.assign(TUNING, DEFAULT_TUNING);
