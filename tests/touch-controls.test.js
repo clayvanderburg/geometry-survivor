@@ -52,3 +52,15 @@ test('touch play shrinks the radar to leave the thumbs room', () => {
   assert.equal(radarSize(1298, 600), 330);
   assert.equal(radarSize(1298, 600, 0.36), 216);
 });
+
+test('fullscreen is offered where it works, never on iPhone or iPad', async () => {
+  const { fullscreenUsable } = await import('../js/main.js');
+  const doc = { fullscreenEnabled: true };
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile', maxTouchPoints: 5 }), true);
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/130', maxTouchPoints: 0 }), true);
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605', maxTouchPoints: 0 }), true, 'a Mac keeps it');
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605', maxTouchPoints: 1 }), false, 'iPad Safari (desktop UA, any touch)');
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)', maxTouchPoints: 5 }), false);
+  assert.equal(fullscreenUsable(doc, { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', maxTouchPoints: 5 }), false);
+  assert.equal(fullscreenUsable({}, { userAgent: 'Mozilla/5.0 (Linux; Android 14)', maxTouchPoints: 5 }), false, 'no API, no button');
+});

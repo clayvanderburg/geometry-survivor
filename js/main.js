@@ -85,6 +85,15 @@ export function radarSize(width, height, shortShare = 0.55) {
 // as a small laptop window: enemies spawn just off screen, so a tiny view would put them on top of the ship.
 // Touch play zooms out a further 30% (TOUCH_VIEW_MIN_SIDE): thumbs cover part of the screen.
 const VIEW_MIN_SIDE = 600;
+
+// Whether a FULLSCREEN button can work here. iPhone and iPad Safari can't hold it: iPhone has no page
+// fullscreen, and iPad Safari leaves it on any downward swipe (a joystick drag included), by design, with
+// no way for a page to block it. The buttons are hidden there rather than asking players to work around it.
+export function fullscreenUsable(doc = globalThis.document, nav = globalThis.navigator) {
+  const ua = nav?.userAgent || '';
+  const appleTouch = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (nav?.maxTouchPoints || 0) > 0);
+  return !appleTouch && !!(doc?.fullscreenEnabled || doc?.webkitFullscreenEnabled);
+}
 const TOUCH_VIEW_MIN_SIDE = Math.round(VIEW_MIN_SIDE / 0.7);
 export function viewScale(width, height, minSide = VIEW_MIN_SIDE) {
   const side = Math.min(width, height);
@@ -492,13 +501,8 @@ export class Game {
       doc.getElementById(btn.dataset.mProxy)?.click();
     }));
     doc.querySelectorAll('[data-fullscreen-btn]').forEach((btn) => btn.addEventListener('click', () => {
-      const supported = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
-      if (supported) {
-        this.toggleFullscreen();
-        globalThis.screen?.orientation?.lock?.('landscape')?.catch?.(() => {});
-      } else {
-        btn.closest('.m-menu')?.querySelector('.m-fs-tip')?.classList.toggle('hidden');
-      }
+      this.toggleFullscreen();
+      globalThis.screen?.orientation?.lock?.('landscape')?.catch?.(() => {});
     }));
   }
 
@@ -1463,6 +1467,7 @@ export class Game {
     const doc = globalThis.document;
     if (!doc) return;
     const active = doc.fullscreenElement || doc.webkitFullscreenElement;
+    if (!active && !fullscreenUsable(doc)) return; // iPhone / iPad: see fullscreenUsable
     try {
       const done = active
         ? (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
@@ -1475,21 +1480,20 @@ export class Game {
     const doc = globalThis.document;
     if (!doc) return;
     const on = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
-    const supported = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
-    // The big touch-menu buttons: on iPhone (no element fullscreen) they explain Add to Home Screen instead,
-    // and a game already launched from the home screen has no browser bar to hide.
+    const supported = fullscreenUsable(doc);
+    // The big touch-menu buttons. A game launched from a home-screen icon has no browser bar to hide.
     const standalone = !!(globalThis.matchMedia?.('(display-mode: fullscreen), (display-mode: standalone)')?.matches || globalThis.navigator?.standalone);
     doc.querySelectorAll?.('[data-fullscreen-btn]').forEach((btn) => {
-      btn.textContent = on ? '⛶ EXIT FULLSCREEN' : supported ? '⛶ GO FULLSCREEN' : '⛶ FULL SCREEN';
+      btn.textContent = on ? '⛶ EXIT FULLSCREEN' : '⛶ GO FULLSCREEN';
       btn.classList.toggle('active', on);
-      btn.classList.toggle('hidden', standalone && !on);
+      btn.classList.toggle('hidden', !supported || (standalone && !on));
     });
     for (const [id, label] of [['btn-fullscreen', on ? '⛶ EXIT FULLSCREEN [V]' : '⛶ FULLSCREEN [V]'], ['btn-pause-fullscreen', `⛶ FULLSCREEN: ${on ? 'ON' : 'OFF'} [V]`]]) {
       const btn = doc.getElementById(id);
       if (!btn) continue;
       btn.textContent = label;
       btn.classList.toggle('active', on);
-      btn.classList.toggle('hidden', !supported); // e.g. iPhone Safari has no element fullscreen
+      btn.classList.toggle('hidden', !supported);
     }
   }
 
