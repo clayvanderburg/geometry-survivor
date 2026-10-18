@@ -6,7 +6,7 @@ const fs = require('node:fs/promises'), path = require('node:path');
  try {
  const context=await browser.newContext({viewport:{width:1280,height:720}});
  const root=path.resolve(__dirname,'..');
- await context.addInitScript(()=>{ try{localStorage.setItem('vexolith_tutorial_seen','1');}catch{} window.requestAnimationFrame=()=>1; let seed=49374; Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}; });
+ await context.addInitScript(()=>{ try{localStorage.setItem('vexolith_tutorial_seen','1');sessionStorage.setItem('vexolith_splash_seen','1');}catch{} window.requestAnimationFrame=()=>1; let seed=49374; Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}; });
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url()); if(url.hostname!=='127.0.0.1')return route.abort();
   const file=path.resolve(root,'.'+(url.pathname==='/'?'/index.html':decodeURIComponent(url.pathname)));
