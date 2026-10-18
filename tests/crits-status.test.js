@@ -295,9 +295,9 @@ test('tag cards are only offered once an equipped weapon carries the tag', () =>
   assert.equal(byId('tag_kinetic').req(p), true, 'the Autocannon is kinetic');
   assert.equal(loadoutAllows(p, byId('thermite')), true, 'Autocannon bolts ignite');
   p.loadout = ['blaster', 'rockets'];
-  assert.equal(byId('tag_explosive').req(p), true, 'wing rockets are explosive');
-  assert.equal(byId('tag_area').req(p), true, 'wing rockets are area');
-  assert.equal(loadoutAllows(p, byId('cryo')), true, 'wing rockets carry cryo');
+  assert.equal(byId('tag_explosive').req(p), true, 'rocket pods are explosive');
+  assert.equal(byId('tag_area').req(p), true, 'rocket pods are area');
+  assert.equal(loadoutAllows(p, byId('cryo')), true, 'rocket pods carry cryo');
   p.loadout = ['rockets'];
   assert.equal(byId('tag_kinetic').req(p), false, 'no kinetic weapon equipped');
   assert.equal(loadoutAllows(p, byId('thermite')), false, 'no Autocannon, no thermite');

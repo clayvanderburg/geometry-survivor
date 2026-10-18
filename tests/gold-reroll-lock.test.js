@@ -220,9 +220,9 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
 
   // Its weapon discarded.
   const g2 = freshGame();
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }), null, 'Wing Rockets not equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }), null, 'Rocket Pods not equipped');
   acquireWeapon(g2.player, 'rockets');
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }).id, 'rockets_damage', 'valid while Wing Rockets are equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }).id, 'rockets_damage', 'valid while Rocket Pods are equipped');
   discardWeapon(g2.player, 'rockets');
   assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 1 }), null);
 

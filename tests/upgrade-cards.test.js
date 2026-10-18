@@ -260,3 +260,28 @@ test('reload and fire-rate cards change only their own stat', () => {
   const t = describeUpgrade(p, byId('turret_rate'));
   assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
 });
+
+test('the HUD lists each weapon once (slot chip, real level); the row below shows only non-weapon upgrades', async () => {
+  const { UPGRADE_BY_ID, acquireWeapon, hudUpgradeLines } = await import('../js/upgrades.js');
+  const g = game();
+  const p = g.player;
+  p.loadout = []; // a real run: weapons join through acquireWeapon (equip line at rank 1)
+  for (const id of ['blaster', 'lightning', 'grenades']) assert.equal(acquireWeapon(p, id), true, id);
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 5 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.lightning_damage, levelJump: 2 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.thermite, levelJump: 2 });
+  assert.equal(weaponLevel(p, 'blaster'), 6);
+  assert.equal(weaponLevel(p, 'lightning'), 3);
+
+  assert.deepEqual(hudUpgradeLines(p).map((u) => `${u.name} LV ${u.level}`), ['Thermite Rounds LV 2'],
+    'equip lines (rank 1) and stat cards stay out of the upgrade row');
+
+  g.updateHUD();
+  const bar = elements.get('active-weapons-bar').innerHTML;
+  const [slots, upgradeRow] = bar.split('<span class="weapon-bar-break"></span>');
+  assert.match(slots, /Autocannon LV 6</);
+  assert.match(slots, /Tesla Arc LV 3</);
+  assert.match(slots, /Grenades LV 1</);
+  assert.match(upgradeRow, /Thermite Rounds LV 2</);
+  for (const name of ['Autocannon', 'Tesla Arc Emitter', 'Plasma Grenades']) assert.ok(!upgradeRow.includes(name), `${name} is not listed twice`);
+});

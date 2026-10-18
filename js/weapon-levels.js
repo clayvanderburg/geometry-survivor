@@ -40,10 +40,10 @@ export const STAT_CARDS = {
     card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes a little less).', cap(6))
   ],
   rockets: [
-    card('rockets', 'rockets_damage', 'damage', 'Wing Rocket Warheads', 'rocketDamage', 'Wing Rockets: heavier warheads. Only damage per rocket.'),
-    card('rockets', 'rockets_count', 'count', 'Wing Rocket Pods', 'rocketCount', 'Wing Rockets: one more rocket per volley.', cap(6)),
-    card('rockets', 'rockets_reload', 'reload', 'Wing Rocket Launch Rails', 'rocketCooldown', 'Wing Rockets: shorter time between volleys.', cap(8)),
-    card('rockets', 'rockets_radius', 'radius', 'Wing Rocket Blast Size', 'rocketBlast', 'Wing Rockets: wider blasts. Only blast size.')
+    card('rockets', 'rockets_damage', 'damage', 'Rocket Pod Warheads', 'rocketDamage', 'Rocket Pods: heavier warheads. Only damage per rocket.'),
+    card('rockets', 'rockets_count', 'count', 'Rocket Pod Tubes', 'rocketCount', 'Rocket Pods: one more rocket per volley.', cap(6)),
+    card('rockets', 'rockets_reload', 'reload', 'Rocket Pod Launch Rails', 'rocketCooldown', 'Rocket Pods: shorter time between volleys.', cap(8)),
+    card('rockets', 'rockets_radius', 'radius', 'Rocket Pod Blast Size', 'rocketBlast', 'Rocket Pods: wider blasts. Only blast size.')
   ],
   missiles: [
     card('missiles', 'missiles_damage', 'damage', 'Swarm Missile Warheads', 'missileDamage', 'Swarm Missiles: heavier warheads. Only damage per missile.'),
@@ -106,7 +106,7 @@ export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.i
 // Category badge on a weapon's stat and Breakthrough cards: the weapon's name, so every card says
 // which weapon it upgrades.
 export const WEAPON_BADGE = {
-  blaster: 'AUTOCANNON', rockets: 'WING ROCKETS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
+  blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
   grenades: 'PLASMA GRENADES'
 };
@@ -120,9 +120,9 @@ export const TRANSFORMS = {
     18: tf('arc', 'Arc Rounds', 'Every Autocannon hit arcs cyan lightning into 2 nearby enemies.')
   },
   rockets: {
-    6: tf('tandem', 'Tandem Warheads', 'Wing Rockets blast twice: a second, delayed detonation rocks the same spot.'),
-    12: tf('napalm', 'Napalm Trail', 'Wing Rockets streak fire and leave a burning napalm pool where they burst.'),
-    18: tf('mirv', 'MIRV Rockets', 'Each Wing Rocket splits into three mini-rockets mid-flight.')
+    6: tf('tandem', 'Tandem Warheads', 'Rocket Pod rockets blast twice: a second, delayed detonation rocks the same spot.'),
+    12: tf('napalm', 'Napalm Trail', 'Rocket Pod rockets streak fire and leave a burning napalm pool where they burst.'),
+    18: tf('mirv', 'MIRV Rockets', 'Each Rocket Pod rocket splits into three mini-rockets mid-flight.')
   },
   missiles: {
     6: tf('cluster', 'Cluster Bomblets', 'Each Swarm Missile scatters four bomblets that pop a moment after its blast.'),

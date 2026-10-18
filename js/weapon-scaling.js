@@ -75,8 +75,8 @@ export const WEAPON_SCALING = {
   blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
-  // --- Wing Rockets (stats: damage, count, reload, radius) ----------------------------------------
-  // Dumbfire rockets from the outer wing tips, fired along the turret aim. Direct hit + a blast worth
+  // --- Rocket Pods (stats: damage, count, reload, radius) -----------------------------------------
+  // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
   wingRocketCooldown: (b) => 1 / rateMult(b.r.reload),
