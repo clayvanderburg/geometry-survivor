@@ -104,3 +104,33 @@ test('a lifted focused card never makes its neighbour count as "down": the butto
   // Nothing in the cone: still falls back to whatever lies on that side.
   assert.equal(pickInDirection(card(0, 0), [card(900, 10)], 0, 1), 0);
 });
+
+test('left / right stays in its row: stacked rows of small pills never trade focus sideways', () => {
+  // MODE pills above VERSION pills (leaderboard panel): from v0.X.Y, LEFT is ALL-TIME, not HARDCORE above-left.
+  const pill = (left, top, width = 76) => ({ left, top, width, height: 20 });
+  const normal = pill(825, 110, 70), hardcore = pill(900, 110, 82), blitz = pill(988, 110, 54);
+  const allTime = pill(845, 133), current = pill(928, 133);
+  assert.equal(pickInDirection(current, [normal, hardcore, blitz, allTime], -1, 0), 3);
+  assert.equal(pickInDirection(hardcore, [normal, blitz, allTime, current], -1, 0), 0);
+  // Nothing further along the row: the old rule still finds the item on that side.
+  assert.equal(pickInDirection(allTime, [normal, hardcore], -1, 0), 0);
+});
+
+test('navRect: a button scrolled out of its panel sits on the panel edge, so it never steals a move', async () => {
+  const { navRect } = await import('../js/gamepad.js');
+  const box = (left, top, width, height) => ({ getBoundingClientRect: () => ({ left, top, width, height }) });
+  const panel = { ...box(0, 0, 500, 400), parentElement: null, style: { overflowX: 'hidden', overflowY: 'auto' } };
+  const hidden = { ...box(20, 600, 200, 30), parentElement: panel };
+  const seen = { ...box(20, 100, 200, 30), parentElement: panel };
+  const saved = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (el) => el.style || { overflowX: 'visible', overflowY: 'visible' };
+  try {
+    assert.deepEqual(navRect(hidden), { left: 20, top: 400, width: 200, height: 0 });
+    assert.deepEqual(navRect(seen), { left: 20, top: 100, width: 200, height: 30 });
+    // LAUNCH-style row below the panel: the hidden panel button is no longer "in its row".
+    const launch = { left: 300, top: 590, width: 200, height: 50 }, blitz = { left: 80, top: 595, width: 100, height: 40 };
+    assert.equal(pickInDirection(launch, [navRect(hidden), blitz], -1, 0), 1);
+  } finally {
+    globalThis.getComputedStyle = saved;
+  }
+});

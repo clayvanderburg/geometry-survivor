@@ -3,9 +3,12 @@
 //   2. slow     - the API never answers in time: the client times out and falls back, nothing blocks
 //   3. online   - /api/scores is fulfilled with fake boards (ALL-TIME default + a version filter): title board, tabs and the VERSION
 //                 selector (mouse + controller), ALL-TIME rows tagged with their version (pre-0.9 for legacy
-//                 runs), versioned auto-submit on game over and the "GLOBAL RANK #12 · v0.X.Y" line
+//                 runs), versioned auto-submit on game over and the "GLOBAL RANK #12 · v0.X.Y" line; the
+//                 NORMAL / HARDCORE / BLITZ board switch (mouse + controller, ?mode=), a HARDCORE run picked
+//                 on the title that submits with its mode, shows its own board and keeps its mode on restart
 // Screenshots: leaderboard-offline-smoke.png, leaderboard-title-smoke.png, leaderboard-local-smoke.png,
-// leaderboard-alltime-smoke.png, leaderboard-gameover-smoke.png (written to the current directory).
+// leaderboard-alltime-smoke.png, leaderboard-gameover-smoke.png, leaderboard-modes-smoke.png,
+// leaderboard-hardcore-smoke.png (written to the current directory).
 // Usage: node tools/leaderboard-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
@@ -96,22 +99,32 @@ const text = (page, sel) => page.locator(sel).innerText();
 
     // 3. Online with fake per-version boards (the current version and ALL-TIME, which mixes in legacy runs).
     {
-      const boards = { [GAME_VERSION]: fakeBoard(), all: fakeBoard('mixed') };
+      // Boards per game mode and version ('normal|all', 'blitz|0.X.Y', ...); NORMAL GETs carry no ?mode=.
+      const boards = { [`normal|${GAME_VERSION}`]: fakeBoard(), 'normal|all': fakeBoard('mixed'), 'blitz|all': fakeBoard().slice(0, 6) };
       const gets = [];
+      const modes = [];
       let posted = null;
       const api = async route => {
         const req = route.request();
         if (req.method() === 'GET') {
-          const version = new URL(req.url()).searchParams.get('version');
+          const params = new URL(req.url()).searchParams;
+          const version = params.get('version');
+          const mode = params.get('mode') || 'normal';
           gets.push(version);
-          const entries = boards[version] || [];
-          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version, current: GAME_VERSION, versions: [GAME_VERSION], entries, total: entries.length, boardSize: 100 }) });
+          modes.push(mode);
+          const entries = boards[`${mode}|${version}`] || [];
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version, mode, current: GAME_VERSION, versions: [GAME_VERSION], entries, total: entries.length, boardSize: 100 }) });
         }
         posted = JSON.parse(req.postData());
         if (req.headers()['content-type'] !== 'application/json') throw Error('POST must be JSON');
         const entry = { id: 'run-new', ...posted, date: new Date().toISOString() };
-        for (const key of [posted.version, 'all']) boards[key] = [...boards[key].slice(0, 11), entry, ...boards[key].slice(11)].slice(0, 50);
-        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank: 12, allTimeRank: 12, version: posted.version, id: 'run-new', name: posted.name, censored: false, entries: boards[posted.version], total: 100, boardSize: 100, versions: [GAME_VERSION] }) });
+        for (const key of [posted.version, 'all'].map(v => `${posted.mode}|${v}`)) {
+          const list = boards[key] || [];
+          boards[key] = [...list.slice(0, 11), entry, ...list.slice(11)].slice(0, 50);
+        }
+        const own = boards[`${posted.mode}|${posted.version}`];
+        const rank = own.findIndex(e => e.id === 'run-new') + 1;
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank, allTimeRank: rank, version: posted.version, mode: posted.mode, id: 'run-new', name: posted.name, censored: false, entries: own, total: 100, boardSize: 100, versions: [GAME_VERSION] }) });
       };
       const { page, errors } = await openGame(browser, api);
       // GLOBAL opens on the one shared board that never resets: ALL-TIME, every row tagged with its version.
@@ -183,11 +196,35 @@ const text = (page, sel) => page.locator(sel).innerText();
       await page.waitForFunction(() => __game.globalBoard.version === 'all' && document.querySelectorAll('#highscore-list .hs-ver').length === 50);
       if (await page.evaluate(() => __game.menuNav.focused?.dataset?.boardVersion) !== 'all') throw Error('Focus should stay on the version button after switching');
 
+      // Mode switch beside the version selector: BLITZ by mouse (?mode=blitz), HARDCORE by controller, back to NORMAL.
+      const modeChips = () => page.locator('#title-board-modes [data-board-mode]').evaluateAll(els => els.map(b => [b.dataset.boardMode, b.classList.contains('active')]));
+      if (JSON.stringify(await modeChips()) !== JSON.stringify([['normal', true], ['hardcore', false], ['blitz', false]])) throw Error('Mode switch should offer NORMAL (active), HARDCORE, BLITZ: ' + JSON.stringify(await modeChips()));
+      await page.locator('#title-board-modes [data-board-mode="blitz"]').click();
+      await page.waitForFunction(() => document.getElementById('highscore-note').textContent === 'TOP 50 // BLITZ // ALL-TIME' && document.querySelectorAll('#highscore-list .hs-row').length === 6);
+      if (modes.at(-1) !== 'blitz' || gets.at(-1) !== 'all') throw Error('BLITZ should fetch ?version=all&mode=blitz');
+      if (await page.locator('#go-board-modes [data-board-mode="blitz"].active').count() !== 1) throw Error('Both board panels share the mode');
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: 'leaderboard-modes-smoke.png' });
+      await page.evaluate(() => {
+        const root = document.getElementById('title-modal');
+        const btns = [...root.querySelectorAll('[data-board-mode]')];
+        if (btns.length !== 3 || !btns.every(b => __game.menuNav.items(root).includes(b))) throw Error('Mode buttons must be controller focus stops');
+        __game.menuNav.setFocus(root.querySelector('[data-board-mode="blitz"]'));
+      });
+      await press(LEFT);
+      if (await page.evaluate(() => __game.menuNav.focused?.dataset?.boardMode) !== 'hardcore') throw Error('LEFT from BLITZ should focus HARDCORE');
+      await press(A);
+      await page.waitForFunction(() => __game.globalBoard.mode === 'hardcore' && /NO HARDCORE \/\/ ALL-TIME RUNS YET/.test(document.getElementById('highscore-note').textContent));
+      await page.locator('#title-board-modes [data-board-mode="normal"]').click();
+      await page.waitForFunction(() => __game.globalBoard.mode === 'normal' && document.querySelectorAll('#highscore-list .hs-ver').length === 50);
+
       await endRun(page);
       await page.waitForFunction(() => /GLOBAL RANK #12/.test(document.getElementById('go-global-rank').textContent));
       if (await text(page, '#go-global-rank') !== `◎ GLOBAL RANK #12 · v${GAME_VERSION}`) throw Error('Rank line should name the version: ' + await text(page, '#go-global-rank'));
-      const expected = { name: 'MADKING', score: 123456, wave: 10, level: 14, kills: 900, multiplier: 12.3, time: 200.4, version: GAME_VERSION };
+      const expected = { name: 'MADKING', score: 123456, wave: 10, level: 14, kills: 900, multiplier: 12.3, time: 200.4, version: GAME_VERSION, mode: 'normal' };
       if (JSON.stringify(posted) !== JSON.stringify(expected)) throw Error('Unexpected submission: ' + JSON.stringify(posted));
+      // The ALL-TIME board on screen is re-read after the submit: wait for it to come back with the new run.
+      await page.waitForFunction(() => document.querySelectorAll('#go-highscore-list .hs-current').length === 1);
       const current = page.locator('#go-highscore-list .hs-current');
       if (await current.count() !== 1 || !/#12/.test(await current.innerText())) throw Error('The new run should be highlighted at #12');
       const inView = await page.evaluate(() => {
@@ -200,8 +237,29 @@ const text = (page, sel) => page.locator(sel).innerText();
 
       // The game-over board is the shared ALL-TIME one: the new run sits there with its version tag.
       await page.waitForFunction(() => document.querySelector('#go-highscore-list .hs-current .hs-ver'));
+
+      // A HARDCORE run: picked on the title (the board follows), submitted with its mode, shown on the
+      // HARDCORE board at game over, and RELAUNCH keeps the mode.
+      await page.locator('#btn-go-menu').click();
+      await page.locator('#mode-select [data-game-mode="hardcore"]').click();
+      await page.waitForFunction(() => __game.selectedMode === 'hardcore' && __game.globalBoard.mode === 'hardcore');
+      if (await page.locator('#mode-select [data-game-mode="hardcore"]').getAttribute('aria-checked') !== 'true') throw Error('The title selector should mark HARDCORE');
+      await endRun(page);
+      await page.waitForFunction(() => /HARDCORE/.test(document.getElementById('go-global-rank').textContent));
+      if (posted.mode !== 'hardcore') throw Error('The HARDCORE run should be submitted with its mode: ' + JSON.stringify(posted));
+      if (await page.locator('#go-board-modes [data-board-mode="hardcore"].active').count() !== 1) throw Error('Game over should show the HARDCORE board');
+      if (await text(page, '#go-mode-tag') !== '☠ HARDCORE') throw Error('Game over should name the mode');
+      if (!/HARDCORE/.test(await text(page, '#gameover-subtitle'))) throw Error('Game-over subtitle should name the mode');
+      await page.waitForFunction(() => document.querySelectorAll('#go-highscore-list .hs-current').length === 1);
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: 'leaderboard-hardcore-smoke.png' });
+      await page.locator('#btn-restart-game').click();
+      if (await page.evaluate(() => __game.mode) !== 'hardcore') throw Error('RELAUNCH should keep the mode');
+      if (!await page.locator('#mode-hud-badge').isVisible()) throw Error('A HARDCORE run wears its HUD badge');
+      await page.evaluate(() => __game.returnToTitle());
+      await page.locator('#mode-select [data-game-mode="normal"]').click();
       if (errors.length) throw Error(errors.join('\n'));
     }
-    console.log('Leaderboard smoke PASS: offline fallback, slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version; no page errors.');
+    console.log('Leaderboard smoke PASS: offline fallback, slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version, NORMAL / HARDCORE / BLITZ boards (mouse + controller), a HARDCORE run on its own board; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

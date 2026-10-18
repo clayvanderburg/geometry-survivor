@@ -7,7 +7,8 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion
+  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
+  renderModeOptions, buildModeOptions
 } = await import('../js/leaderboard.js');
 const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
@@ -128,7 +129,7 @@ test('submit: success remembers the run id, adopts the returned board and report
   const board = new GlobalLeaderboard({ fetchImpl, storage });
   board.setVersion(GAME_VERSION); // filtered to this version, so the returned version board is shown
   const result = await board.submit(RUN);
-  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION });
+  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION, mode: 'normal' });
   assert.equal(result.ok, true);
   assert.equal(result.rank, 12);
   assert.equal(board.status, 'ready');
@@ -172,7 +173,7 @@ test('buildRunPayload folds any callsign into the server alphabet', () => {
   assert.equal(buildRunPayload({ ...RUN, name: undefined }).name, 'PILOT');
   assert.equal(buildRunPayload({ ...RUN, name: 'X'.repeat(30) }).name.length, 18);
   const p = buildRunPayload({ name: 'A', score: 12.9, wave: NaN, level: 0, kills: -3, multiplier: 0.2, time: -1 });
-  assert.deepEqual(p, { name: 'A', score: 12, wave: 1, level: 1, kills: 0, multiplier: 1, time: 0, version: GAME_VERSION });
+  assert.deepEqual(p, { name: 'A', score: 12, wave: 1, level: 1, kills: 0, multiplier: 1, time: 0, version: GAME_VERSION, mode: 'normal' });
 });
 
 test('tabs: GLOBAL is the default, MY RUNS shows the local board, unknown tabs fall back to GLOBAL', () => {
@@ -326,7 +327,7 @@ test('GLOBAL opens on the shared ALL-TIME board; the selector filters by version
   await pending;
   assert.equal(slow.version, GAME_VERSION);
   assert.equal(slow.entries.length, 0, 'the ALL-TIME answer did not land on the version board');
-  assert.equal(slow.cache.get('all').entries.length, 4);
+  assert.equal(slow.cache.get('normal|all').entries.length, 4);
 });
 
 test('the ALL-TIME view shows each run\'s version; runs from before versioning read pre-0.9', () => {
@@ -372,7 +373,7 @@ test('submit sends the game version and the game-over line names it; an unknown 
   assert.deepEqual([result.rank, result.allTimeRank, result.version], [4, 9, GAME_VERSION]);
   assert.deepEqual(describeSubmit(result), { text: `◎ GLOBAL RANK #9 · v${GAME_VERSION}`, tone: 'gold' }, 'the headline rank is all-time');
   assert.equal(board.entries.length, 0, 'the version board answer is cached, not shown under ALL-TIME');
-  assert.equal(board.cache.get(GAME_VERSION).entries.length, 3);
+  assert.equal(board.cache.get(`normal|${GAME_VERSION}`).entries.length, 3);
   assert.match(describeSubmit({ ok: true, rank: 7, allTimeRank: null, version: GAME_VERSION, boardSize: 100 }).text, new RegExp(`#7 ON v${GAME_VERSION.replace(/\./g, '\\.')} // OUTSIDE ALL-TIME TOP 100`));
   assert.match(describeSubmit({ ok: true, rank: null, allTimeRank: null, version: GAME_VERSION, boardSize: 100 }).text, /OUTSIDE GLOBAL TOP 100/);
 
@@ -483,4 +484,83 @@ test('unchecking "Post my runs to the public GLOBAL leaderboard" keeps runs loca
   assert.equal(submitted, 0, 'nothing is sent');
   assert.deepEqual(fake.globalSubmit, { reason: 'optout' });
   assert.deepEqual(describeSubmit(fake.globalSubmit), { text: 'GLOBAL POSTING OFF // RUN SAVED LOCALLY', tone: 'dim' });
+});
+
+// --- Game modes (js/modes.js): each mode has its own boards ----------------------------------------
+
+test('modes: a HARDCORE run is sent with its mode, its answer is filed under the HARDCORE board, and the line says so', async () => {
+  let sent = null;
+  const board = new GlobalLeaderboard({
+    fetchImpl: async (_url, init) => {
+      sent = JSON.parse(init.body);
+      return jsonResponse(201, { accepted: true, onBoard: true, rank: 2, allTimeRank: 3, version: GAME_VERSION, mode: 'hardcore', id: 'hc-run', name: 'MADKING', entries: GLOBAL, total: 3, boardSize: 100 });
+    },
+    storage: memoryStorage()
+  });
+  const result = await board.submit({ ...RUN, mode: 'hardcore' });
+  assert.equal(sent.mode, 'hardcore');
+  assert.equal(result.mode, 'hardcore');
+  assert.equal(board.cache.get(`hardcore|${GAME_VERSION}`).entries.length, 3);
+  assert.equal(board.cache.get(`normal|${GAME_VERSION}`), undefined, 'never filed under NORMAL');
+  assert.deepEqual(describeSubmit(result), { text: `◎ GLOBAL RANK #3 · HARDCORE · v${GAME_VERSION}`, tone: 'gold' });
+  assert.equal(buildRunPayload({ ...RUN, mode: 'blitz' }).mode, 'blitz');
+  assert.equal(buildRunPayload({ ...RUN, mode: 'nope' }).mode, 'normal');
+});
+
+test('modes: the switch reads ?mode= boards (NORMAL keeps the old URL) and keeps the version filter', async () => {
+  const urls = [];
+  const board = new GlobalLeaderboard({
+    fetchImpl: async (url) => {
+      urls.push(url);
+      const mode = new URL(url, 'https://game.example').searchParams.get('mode') || 'normal';
+      return jsonResponse(200, { mode, versions: [GAME_VERSION], entries: mode === 'blitz' ? GLOBAL.slice(0, 1) : GLOBAL, total: 3, boardSize: 100 });
+    },
+    storage: memoryStorage()
+  });
+  await board.refresh();
+  assert.equal(urls[0], '/api/scores?version=all');
+  assert.equal(board.setMode('blitz'), true);
+  assert.equal(board.status, 'loading');
+  await board.refresh();
+  assert.equal(urls[1], '/api/scores?version=all&mode=blitz');
+  assert.equal(board.entries.length, 1);
+  const view = buildBoardView({ tab: 'global', board, local: LOCAL });
+  assert.equal(view.note, 'TOP 50 // BLITZ // ALL-TIME');
+  assert.deepEqual(view.modes.map((m) => [m.label, m.active]), [['NORMAL', false], ['HARDCORE', false], ['BLITZ', true]]);
+  assert.deepEqual(view.rows.length, 1);
+  assert.equal(board.setMode('blitz'), false);
+  board.setMode('normal');
+  assert.equal(board.status, 'ready', 'switching back is instant from the cache');
+  assert.equal(board.entries.length, 3);
+  // MY RUNS is filtered to the mode on screen (saved runs without a mode are NORMAL).
+  board.setMode('hardcore');
+  assert.deepEqual(buildBoardView({ tab: 'local', board, local: [...LOCAL, { ...LOCAL[0], id: 'h', mode: 'hardcore' }] }).rows.map(r => r.key), ['h']);
+});
+
+test('modes: Game.setBoardMode switches and re-syncs; game over submits the run\'s mode', async () => {
+  const calls = [];
+  const fake = {
+    globalBoard: new GlobalLeaderboard({ fetchImpl: null, storage: memoryStorage() }),
+    refreshGlobalBoard() { calls.push(this.globalBoard.mode); }
+  };
+  Game.prototype.setBoardMode.call(fake, 'hardcore');
+  assert.deepEqual(calls, ['hardcore']);
+  assert.doesNotThrow(() => Game.prototype.setBoardMode.call({}, 'blitz'));
+
+  let posted = null;
+  const game = { globalBoard: { version: 'all', mode: 'blitz', submit: async (r) => { posted = r; return { ok: true, id: 'b', rank: 1, version: GAME_VERSION, mode: 'blitz' }; } }, runTainted: false, renderBoards() {}, refreshGlobalBoard() {} };
+  Game.prototype.submitGlobalRun.call(game, { ...RUN, mode: 'blitz' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(posted.mode, 'blitz');
+});
+
+test('renderModeOptions: three focusable buttons built once, the active mark moves', () => {
+  const container = new FakeEl('div', fakeDoc);
+  container.querySelectorAll = (sel) => (sel === '[data-board-mode]' ? container.children.filter(c => 'boardMode' in c.dataset) : []);
+  renderModeOptions(container, buildModeOptions('normal'));
+  const first = container.children.slice();
+  assert.deepEqual(first.slice(1).map(b => [b.tagName, b.dataset.boardMode, b.textContent]), [['BUTTON', 'normal', 'NORMAL'], ['BUTTON', 'hardcore', 'HARDCORE'], ['BUTTON', 'blitz', 'BLITZ']]);
+  renderModeOptions(container, buildModeOptions('blitz'));
+  assert.deepEqual(container.children, first, 'not rebuilt');
+  assert.deepEqual(first.slice(1).map(b => b.attrs['aria-pressed']), ['false', 'false', 'true']);
 });

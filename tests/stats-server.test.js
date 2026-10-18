@@ -290,3 +290,11 @@ test('run shape, enemies, cards and gold aggregate across runs', () => {
 
 function round3(v) { return Math.round(v * 10000) / 10000; }
 function round2(v) { return Math.round(v * 100) / 100; }
+
+test('the run\'s game mode is stored with it; a payload without one (older clients) is a NORMAL run', async () => {
+  const { store, handler } = setup();
+  assert.equal((await post(handler, runBody({ mode: 'blitz' }))).status, 201);
+  assert.equal((await post(handler, runBody())).status, 201);
+  const modes = store.keys(RUNS_PREFIX).map((k) => store.json(k).mode).sort();
+  assert.deepEqual(modes, ['blitz', 'normal']);
+});

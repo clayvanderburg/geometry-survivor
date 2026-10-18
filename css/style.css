@@ -3761,3 +3761,115 @@ html, body {
     max-height: 56vh;
   }
 }
+
+/* ---- Game modes (js/modes.js): title selector, HUD / game-over badge, board switch -------------- */
+.mode-select {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 243, 255, 0.28);
+  background: rgba(8, 12, 26, 0.85);
+}
+
+.mode-opt {
+  --mc: var(--cyan);
+  --mc-rgb: 0, 243, 255;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-opt.mode-hardcore { --mc: var(--danger); --mc-rgb: 255, 42, 85; }
+.mode-opt.mode-blitz { --mc: var(--gold); --mc-rgb: 255, 204, 0; }
+
+.mode-opt-name {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.mode-opt-sub {
+  margin-top: 1px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.mode-opt:hover,
+.mode-opt:focus-visible,
+.mode-opt.gp-focus { color: #fff; border-color: rgba(var(--mc-rgb), 0.6); outline: none; }
+
+.mode-opt.active {
+  color: #fff;
+  border-color: var(--mc);
+  background: rgba(var(--mc-rgb), 0.18);
+  box-shadow: 0 0 14px rgba(var(--mc-rgb), 0.45), inset 0 0 10px rgba(var(--mc-rgb), 0.15);
+  text-shadow: 0 0 8px rgba(var(--mc-rgb), 0.9);
+}
+
+.mode-opt.active .mode-opt-name { color: var(--mc); }
+
+.mode-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+  background: rgba(0, 243, 255, 0.1);
+  border: 1px solid rgba(0, 243, 255, 0.5);
+  border-radius: 99px;
+  text-shadow: 0 0 8px rgba(0, 243, 255, 0.7);
+  white-space: nowrap;
+}
+
+.mode-badge.mode-hardcore {
+  color: #ff7d97;
+  background: rgba(255, 42, 85, 0.14);
+  border-color: rgba(255, 42, 85, 0.65);
+  text-shadow: 0 0 10px rgba(255, 42, 85, 0.85);
+}
+
+.mode-badge.mode-blitz {
+  color: var(--gold);
+  background: rgba(255, 204, 0, 0.12);
+  border-color: rgba(255, 204, 0, 0.6);
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.8);
+}
+
+.mode-badge.hidden { display: none; }
+
+/* Board switch: same pills as the version selector, coloured per mode when active. */
+.board-ver.board-mode.mode-hardcore.active {
+  background: rgba(255, 42, 85, 0.2);
+  border-color: var(--danger);
+  box-shadow: 0 0 10px rgba(255, 42, 85, 0.45);
+  text-shadow: 0 0 6px rgba(255, 42, 85, 0.9);
+}
+
+.board-ver.board-mode.mode-blitz.active {
+  background: rgba(255, 204, 0, 0.18);
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.45);
+  text-shadow: 0 0 6px rgba(255, 204, 0, 0.9);
+}
+
+@media (max-width: 560px) {
+  .mode-select { width: 100%; }
+  .mode-opt { flex: 1; min-width: 0; padding: 5px 4px; }
+  .mode-opt-name { font-size: 11.5px; letter-spacing: 1px; }
+  .mode-opt-sub { font-size: 7.5px; letter-spacing: 0.4px; }
+}

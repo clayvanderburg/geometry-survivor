@@ -453,6 +453,41 @@ export const TUNING_SCHEMA = [
 
 export const TUNING = { ...DEFAULT_TUNING };
 
+// Game-mode overlay (js/modes.js): the keys a mode replaces in TUNING for one run, mapped to the values
+// they replaced. Saves, the cross-tab sync and the dev tuner's "modified" check read baseTuning(), the
+// player's own tuning without the overlay, so a BLITZ run never persists or broadcasts BLITZ values.
+const overlaid = new Map();
+
+export function applyTuningOverlay(overlay = {}) {
+  clearTuningOverlay();
+  for (const [key, value] of Object.entries(overlay)) {
+    if (!Object.hasOwn(DEFAULT_TUNING, key)) continue;
+    overlaid.set(key, TUNING[key]);
+    TUNING[key] = value;
+  }
+}
+
+export function clearTuningOverlay() {
+  for (const [key, value] of overlaid) TUNING[key] = value;
+  overlaid.clear();
+}
+
+// TUNING as the player (or dev tuner) set it, without the run's mode overlay.
+export function baseTuning() {
+  const t = { ...TUNING };
+  for (const [key, value] of overlaid) t[key] = value;
+  return t;
+}
+
+// Writes values from storage, another tab or a reset under the overlay: an overlaid key keeps its mode
+// value until the run ends and gets the new one back then.
+function assignBase(values) {
+  for (const [key, value] of Object.entries(values)) {
+    if (overlaid.has(key)) overlaid.set(key, value);
+    else TUNING[key] = value;
+  }
+}
+
 const listeners = new Set();
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('vectra_tuning_sync') : null;
 
@@ -509,9 +544,9 @@ export function loadTuning() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
     const saved = rescaleSavedVolumes(raw ? JSON.parse(raw) : readLegacyPlayerSettings());
-    Object.assign(TUNING, normalizeTuning(saved || {}));
+    assignBase(normalizeTuning(saved || {}));
   } catch (e) {
-    Object.assign(TUNING, DEFAULT_TUNING);
+    assignBase(DEFAULT_TUNING);
     console.warn('Failed to load tuning config:', e);
   }
   return TUNING;
@@ -519,24 +554,26 @@ export function loadTuning() {
 
 export function saveTuning(notifyChannel = true) {
   try {
-    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides()));
+    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides(baseTuning())));
   } catch (e) {
     console.warn('Failed to save tuning config:', e);
   }
   listeners.forEach((fn) => fn(TUNING));
   if (notifyChannel && channel) {
-    channel.postMessage({ type: 'TUNING_UPDATED', tuning: { ...TUNING } });
+    channel.postMessage({ type: 'TUNING_UPDATED', tuning: baseTuning() });
   }
 }
 
 export function updateTuningKey(key, value) {
   if (!Object.hasOwn(DEFAULT_TUNING, key)) return;
   TUNING[key] = normalizeTuningValue(key, value);
+  // A dev-tuner change to an overlaid key applies now and outlives the run.
+  if (overlaid.has(key)) overlaid.set(key, TUNING[key]);
   saveTuning(true);
 }
 
 export function resetTuningToDefaults() {
-  Object.assign(TUNING, DEFAULT_TUNING);
+  assignBase(DEFAULT_TUNING);
   saveTuning(true);
 }
 
@@ -574,7 +611,7 @@ export function getAgentTuningPayload() {
 if (channel) {
   channel.addEventListener('message', (ev) => {
     if (ev.data?.type === 'TUNING_UPDATED' && ev.data.tuning) {
-      Object.assign(TUNING, normalizeTuning(ev.data.tuning));
+      assignBase(normalizeTuning(ev.data.tuning));
       listeners.forEach((fn) => fn(TUNING));
     } else if (ev.data?.type === 'SANDBOX_ACTION') {
       listeners.forEach((fn) => fn(TUNING, ev.data.action));

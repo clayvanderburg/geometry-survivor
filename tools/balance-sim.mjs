@@ -9,8 +9,10 @@
 //   npm run balance -- --json balance.json  # raw per-run results for further analysis
 //   npm run balance -- --no-bench --stats-out sim-stats.json   # same summary format as /api/stats/summary
 //
+//   npm run balance -- --mode blitz         # fly a game mode (js/modes.js): normal, hardcore or blitz
+//
 // Flags: --runs N  --seed S  --strategies a,b  --focus  --max-minutes M  --workers N  --meta RANK
-//        --skill expert|average|novice  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
+//        --skill expert|average|novice  --mode M  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { writeFileSync } from 'node:fs';
@@ -19,7 +21,7 @@ import { aggregateRuns } from '../js/stats-aggregate.js';
 import { GAME_VERSION } from '../js/version.js';
 
 function parseArgs(argv) {
-  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null, statsOut: null };
+  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', mode: 'normal', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null, statsOut: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -42,6 +44,7 @@ function parseArgs(argv) {
     else if (a === '--workers') opts.workers = int(1);
     else if (a === '--meta') opts.meta = int(0);
     else if (a === '--skill') opts.skill = next();
+    else if (a === '--mode') opts.mode = next();
     else if (a === '--god') opts.god = true;
     else if (a === '--tune') {
       const spec = next();
@@ -119,7 +122,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
   const out = [];
   const capS = opts.maxMinutes * 60;
   out.push(`# Balance simulation`);
-  out.push(`seed \`${opts.seed}\` · ${opts.runs} run(s) per strategy · cap ${opts.maxMinutes} min game time · ${opts.skill} pilot${opts.god ? ' (god mode: pacing only)' : ''} · armory rank ${opts.meta} · ${Object.keys(opts.tune).length ? 'tuning ' + JSON.stringify(opts.tune) : 'default tuning'}${Object.keys(opts.weapons).length ? ' · weapons ' + JSON.stringify(opts.weapons) : ''} · ${wallSeconds.toFixed(0)} s wall`);
+  out.push(`seed \`${opts.seed}\` · ${opts.runs} run(s) per strategy · cap ${opts.maxMinutes} min game time · ${opts.skill} pilot${opts.mode && opts.mode !== 'normal' ? ` · ${opts.mode.toUpperCase()} mode` : ''}${opts.god ? ' (god mode: pacing only)' : ''} · armory rank ${opts.meta} · ${Object.keys(opts.tune).length ? 'tuning ' + JSON.stringify(opts.tune) : 'default tuning'}${Object.keys(opts.weapons).length ? ' · weapons ' + JSON.stringify(opts.weapons) : ''} · ${wallSeconds.toFixed(0)} s wall`);
 
   if (runs.length) {
     const byStrat = new Map(strategies.map(s => [s.name, runs.filter(r => r.strategy === s.name)]));
@@ -352,7 +355,8 @@ async function main() {
   const h = await import('./balance/harness.mjs');
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
-  opts.waveLength = h.DEFAULT_TUNING.waveLength;
+  if (!(opts.mode in h.MODES)) throw new Error(`--mode must be ${Object.keys(h.MODES).join('|')}`);
+  opts.waveLength = h.MODES[opts.mode].tuning.waveLength ?? h.DEFAULT_TUNING.waveLength;
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 
@@ -362,7 +366,7 @@ async function main() {
   const jobs = [];
   for (const s of strategies) {
     for (let i = 0; i < opts.runs; i++) {
-      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill, god: opts.god } });
+      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill, god: opts.god, mode: opts.mode } });
     }
   }
   // Long runs first so the pool drains evenly.
@@ -404,6 +408,7 @@ function readHelp() {
   --workers N       worker threads (default: CPU count, max 8)
   --meta R          give every Void Armory upgrade rank R (capped at its max)
   --skill S         pilot reaction latency: expert (1 tick), average (12, default), novice (20), or ticks
+  --mode M          game mode (js/modes.js): normal (default), hardcore or blitz
   --god             keep the ship alive (measures XP / level pacing over a full-length run)
   --tune k=v        override a DEFAULT_TUNING value (repeatable) for A/B comparisons
   --weapon k=expr   override a weapon-scaling entry: a number or an arrow fn, e.g. "orbitalRadius=lv => 80 + lv * 8"

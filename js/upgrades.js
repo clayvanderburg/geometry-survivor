@@ -1,5 +1,6 @@
 // Roguelite Upgrades, Luck Multi-Level Rolls (+2 / +3 Levels), Mining Drill, and Golden Synergies
 import { TUNING } from './config.js';
+import { modeRules } from './modes.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
 import {
   WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
@@ -144,6 +145,7 @@ export const UPGRADE_POOL = [
     maxLevel: 5,
     headline: 'moveSpeed',
     summary: 'Faster hull, tougher shield, and Phase Dash unleashes a damaging shockwave.',
+    shieldCard: true, // raises and repairs the shield: never offered in HARDCORE (js/modes.js)
     apply(player) {
       player.stats.moveSpeed *= 1.16;
       player.maxHp += 25;
@@ -509,11 +511,13 @@ export function applyUpgradeLevels(player, upg) {
   return jump;
 }
 
-// Cards the player can be offered right now: with room under their level caps (a weapon's LV 18
-// included), allowed by the loadout and by their own requirements.
+// Cards the player can be offered right now (level-up hands and caches): with room under their level caps
+// (a weapon's LV 18 included), allowed by the loadout, the run's mode and their own requirements.
 export function eligibleUpgrades(player) {
+  const shieldCards = modeRules(player).shieldCards;
   return UPGRADE_POOL.filter((u) => {
     if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
+    if (u.shieldCard && !shieldCards) return false; // HARDCORE: nothing raises or restores the shield
     if (!loadoutAllows(player, u)) return false;
     if (levelRoom(player, u) <= 0) return false;
     if (u.req && !u.req(player)) return false;

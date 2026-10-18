@@ -29,7 +29,7 @@ import {
 } from './upgrade-cards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
-import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
+import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
@@ -57,8 +57,12 @@ import {
   resetTuningToDefaults,
   onTuningChange,
   getAgentTuningPayload,
-  sendSandboxCommand
+  sendSandboxCommand,
+  applyTuningOverlay,
+  clearTuningOverlay,
+  baseTuning
 } from './config.js';
+import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -75,9 +79,13 @@ export function radarSize(width, height) {
   return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, 0.55 * Math.min(width, height)));
 }
 
-// Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
+// Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play. A game
+// mode's TUNING overlay (js/modes.js) isn't a change either: the check reads the tuning under it.
 const PLAYER_SETTINGS = new Set(PLAYER_SETTING_KEYS);
-const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTINGS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
+const isTuningModified = () => {
+  const base = baseTuning();
+  return Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTINGS.has(key) && base[key] !== DEFAULT_TUNING[key]);
+};
 
 // Run stats: damage stat ids -> weapon (by each weapon's tagSources) or another damage group.
 const STAT_GROUPS = buildSourceGroups(WEAPONS);
@@ -210,6 +218,10 @@ export class Game {
     // Anonymous run stats (js/run-stats.js): the RUN REPORT on game over and the opt-out upload.
     this.shareStats = readShareStats(defaultStatsStorage());
     this.postGlobal = readPostGlobal(defaultStatsStorage()); // title-screen checkbox: post runs to the GLOBAL board
+    // Game mode (js/modes.js): the title-screen choice (remembered) and the mode of the run being flown.
+    this.selectedMode = readStoredMode(defaultStatsStorage());
+    this.mode = DEFAULT_MODE;
+    this.globalBoard.setMode(this.selectedMode);
     this.statsUpload = null;
     this.statsUploadToken = null;
     this.goTab = 'report';
@@ -241,6 +253,7 @@ export class Game {
     this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
+    this.syncModeUI();
     this.renderHubUI();
     this.refreshGlobalBoard();
     this.initTunerDrawer();
@@ -253,9 +266,13 @@ export class Game {
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  resetRun() {
+  // A fresh run in `mode` (NORMAL unless startGame passes the title choice): its TUNING overlay goes on
+  // before anything reads TUNING, and the mode's Void Armory bonuses (HARDCORE drops the shield bonus).
+  resetRun(mode = DEFAULT_MODE) {
     this.resetInput();
-    const bonuses = this.progression.getBonuses();
+    this.mode = normalizeMode(mode);
+    applyTuningOverlay(modeRules(this.mode).tuning);
+    const bonuses = modeBonuses(this.progression.getBonuses(), this.mode);
 
     this.score = 0;
     this.runTainted = false;
@@ -314,6 +331,7 @@ export class Game {
       dashCooldown: 0,
       // Shield, bombs, Void Armory multipliers and stats: TUNING plus the armory (upgrades.js runStartPlayer).
       ...runStartPlayer(bonuses),
+      mode: this.mode, // card pools read the mode's rules off the player (upgrades.js eligibleUpgrades)
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -352,7 +370,7 @@ export class Game {
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
     snapshotBase(this.player);
     for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
-    this.runStats = new RunStats({ version: GAME_VERSION, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
+    this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
     this.syncRunStats();
@@ -447,6 +465,21 @@ export class Game {
         if (btn) this.setBoardVersion(btn.dataset.boardVersion);
       });
     });
+    // NORMAL / HARDCORE / BLITZ switch beside it (built on first render): delegate too.
+    document.querySelectorAll('[data-board-modes]').forEach((container) => {
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest?.('[data-board-mode]');
+        if (btn) this.setBoardMode(btn.dataset.boardMode);
+      });
+    });
+    // Title-screen mode selector next to LAUNCH (js/modes.js).
+    this.renderModeSelect();
+    document.getElementById('mode-select')?.addEventListener('click', (e) => {
+      const btn = e.target.closest?.('[data-game-mode]');
+      if (!btn) return;
+      this.sound.playUiSelect?.();
+      this.setSelectedMode(btn.dataset.gameMode);
+    });
     if (goNameInput) {
       goNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -510,6 +543,12 @@ export class Game {
       if (this.state === 'TITLE' && code === 'Space' && !onControl) {
         e.preventDefault();
         this.startGame();
+        return;
+      }
+      // [1] [2] [3] pick NORMAL / HARDCORE / BLITZ on the title screen.
+      const modeKey = this.state === 'TITLE' && /^(?:Digit|Numpad)([1-9])$/.exec(code);
+      if (modeKey && MODE_IDS[Number(modeKey[1]) - 1]) {
+        this.setSelectedMode(MODE_IDS[Number(modeKey[1]) - 1]);
         return;
       }
 
@@ -1050,6 +1089,8 @@ export class Game {
       renderBoardView(document.getElementById('go-highscore-list'), document.getElementById('go-board-note'), view);
       renderVersionOptions(document.getElementById('title-board-versions'), view.versions);
       renderVersionOptions(document.getElementById('go-board-versions'), view.versions);
+      renderModeOptions(document.getElementById('title-board-modes'), view.modes);
+      renderModeOptions(document.getElementById('go-board-modes'), view.modes);
       const rankEl = document.getElementById('go-global-rank');
       if (rankEl) {
         const { text, tone } = describeSubmit(this.globalSubmit);
@@ -1074,6 +1115,50 @@ export class Game {
     const changed = this.globalBoard.setVersion(version);
     // Picking any version, even the one on screen, re-syncs it (and retries after a failed fetch).
     if (changed || this.globalBoard.status !== 'loading') this.refreshGlobalBoard();
+  }
+
+  // Leaderboard mode switch (GLOBAL and MY RUNS): NORMAL, HARDCORE or BLITZ boards, keeping the version.
+  setBoardMode(mode) {
+    if (!this.globalBoard) return;
+    const changed = this.globalBoard.setMode(mode);
+    if (changed || this.globalBoard.status !== 'loading') this.refreshGlobalBoard();
+  }
+
+  // --- Game mode (js/modes.js) ---------------------------------------------------------------------
+
+  // The title-screen choice: remembered on this device, and the board panel follows it so the player
+  // sees the races of the mode they are about to fly.
+  setSelectedMode(mode) {
+    this.selectedMode = normalizeMode(mode);
+    writeStoredMode(defaultStatsStorage(), this.selectedMode);
+    this.syncModeUI();
+    this.setBoardMode(this.selectedMode);
+  }
+
+  // Title selector buttons, built from the MODES table.
+  renderModeSelect() {
+    const container = globalThis.document?.getElementById('mode-select');
+    if (!container) return;
+    container.innerHTML = MODE_IDS.map((id) => `<button type="button" class="mode-opt mode-${id}" data-game-mode="${id}" role="radio" aria-checked="false"
+      title="${MODES[id].blurb}"><span class="mode-opt-name">${MODES[id].label}</span><span class="mode-opt-sub">${MODES[id].tagline}</span></button>`).join('');
+  }
+
+  // The selector's checked mark and the HUD badge (HARDCORE / BLITZ runs only; never in the Weapon Range).
+  syncModeUI() {
+    const doc = globalThis.document;
+    if (!doc?.querySelectorAll) return;
+    for (const btn of doc.querySelectorAll('[data-game-mode]')) {
+      const on = btn.dataset.gameMode === this.selectedMode;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+    const badge = doc.getElementById('mode-hud-badge');
+    if (badge) {
+      const rules = modeRules(this);
+      badge.textContent = rules.badge;
+      badge.className = `mode-badge mode-${rules.id}${rules.badge ? '' : ' hidden'}`;
+      badge.title = rules.blurb;
+    }
   }
 
   refreshGlobalBoard() {
@@ -1103,9 +1188,10 @@ export class Game {
       if (this.globalSubmitToken !== token) return;
       this.globalSubmit = result;
       if (result.ok) this.lastGlobalRunId = result.id;
-      // The answer carries the run's own version board; another board on screen (e.g. ALL-TIME) is re-read
-      // so the new run shows up there too.
-      if (result.ok && typeof this.globalBoard.refresh === 'function' && this.globalBoard.version !== (result.version || 'all')) {
+      // The answer carries the run's own version board (of its mode); another board on screen (e.g.
+      // ALL-TIME) is re-read so the new run shows up there too.
+      const shown = this.globalBoard.version === (result.version || 'all') && (!result.mode || this.globalBoard.mode === result.mode);
+      if (result.ok && typeof this.globalBoard.refresh === 'function' && !shown) {
         this.refreshGlobalBoard();
       } else {
         this.renderBoards();
@@ -1401,7 +1487,9 @@ export class Game {
     this.ctx.fillStyle = '#030308';
     this.ctx.fillRect(0, 0, this.width, this.height);
 
-    this.resetRun();
+    // The Weapon Range ignores modes; a real run (and a restart) flies the title-screen choice.
+    this.resetRun(this.range?.active ? DEFAULT_MODE : this.selectedMode);
+    this.syncModeUI();
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
     this.sound.setMusicScene?.('run');
@@ -1427,6 +1515,7 @@ export class Game {
       pauseBtn.classList.remove('active');
     }
     this.resetRun();
+    this.syncModeUI();
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     this.sound.setMusicScene?.('menu');
     this.renderHubUI();
@@ -1495,8 +1584,9 @@ export class Game {
       bonusCores = 1;
     }
 
-    // Heal shield & award bonus Void Cores
-    this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
+    // Heal shield (not in HARDCORE) & award bonus Void Cores
+    const repairs = modeRules(this).shieldRepairs;
+    if (repairs) this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
     this.sessionCores += bonusCores;
     this.progression.addCores(bonusCores);
 
@@ -1516,7 +1606,7 @@ export class Game {
     document.getElementById('chest-tier-subtitle').textContent = tierSub;
     document.getElementById('chest-tier-title').textContent = tierTitle;
     document.getElementById('chest-bonus-desc').textContent =
-      `+${bonusCores} ❖ Void Cores Banked · +45 Shield Repaired · ${awarded.length} System Upgrade${awarded.length > 1 ? 's' : ''} Installed!`;
+      `+${bonusCores} ❖ Void Cores Banked · ${repairs ? '+45 Shield Repaired' : 'No Shield Repair (Hardcore)'} · ${awarded.length} System Upgrade${awarded.length > 1 ? 's' : ''} Installed!`;
 
     const gridEl = document.getElementById('chest-rewards-grid');
     gridEl.innerHTML = '';
@@ -1590,6 +1680,8 @@ export class Game {
     } else if (rock.oreType === 'shield_vein') {
       if (byElite) {
         this.particles.spawnFloatText(rock.x, rock.y - 12, 'SHIELD CRYSTAL CRUSHED', '#4a8f74', 12);
+      } else if (!modeRules(this).shieldRepairs) {
+        this.particles.spawnFloatText(rock.x, rock.y - 12, 'SHIELD CRYSTAL INERT // HARDCORE', '#4a8f74', 12);
       } else {
         this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
         this.particles.spawnFloatText(rock.x, rock.y - 12, '+25 SHIELD CRYSTAL!', '#00ff88', 14);
@@ -3417,11 +3509,12 @@ export class Game {
     this.runStats?.offered(this.currentChoices);
     this.recordHandOdds();
     if (this.currentChoices.length === 0) {
-      this.player.hp = this.player.maxHp;
+      const repairs = modeRules(this).shieldRepairs;
+      if (repairs) this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
       this.state = 'PLAYING';
       this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
-      this.particles.spawnFloatText(this.player.x, this.player.y - 24, 'ALL SYSTEMS MAXED // FULL SHIELD REPAIR!', '#ffcc00', 15);
+      this.particles.spawnFloatText(this.player.x, this.player.y - 24, repairs ? 'ALL SYSTEMS MAXED // FULL SHIELD REPAIR!' : 'ALL SYSTEMS MAXED // SCORE BONUS!', '#ffcc00', 15);
       return;
     }
 
@@ -3975,6 +4068,9 @@ export class Game {
       return;
     }
     this.state = 'GAMEOVER';
+    // The run is over: the mode's TUNING overlay comes off (this.mode still names the run for the results).
+    clearTuningOverlay();
+    const rules = modeRules(this);
     this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
     if (this.sound.playGameOver) this.sound.playGameOver();
@@ -3999,9 +4095,12 @@ export class Game {
       multiplier: +this.multiplier.toFixed(1),
       wave: this.wave,
       kills: this.kills,
-      timeStr
+      timeStr,
+      mode: this.mode
     });
     this.lastRunHighlightId = result.entryId;
+    // The board panel shows the races of the mode just flown.
+    if (this.globalBoard?.setMode?.(this.mode)) this.refreshGlobalBoard();
     this.submitGlobalRun({
       name: currentPilotName,
       score: this.score,
@@ -4009,7 +4108,8 @@ export class Game {
       level: this.player?.level ?? 1,
       kills: this.kills,
       multiplier: this.multiplier,
-      time: this.elapsedTime
+      time: this.elapsedTime,
+      mode: this.mode
     });
     this.lastRunSummary = this.finishRunStats();
     if (this.lastRunSummary) this.submitRunStats(this.lastRunSummary);
@@ -4017,10 +4117,20 @@ export class Game {
 
     const rankBadge = document.getElementById('go-rank-badge');
     if (rankBadge) {
+      const scope = rules.badge ? ` ${rules.label}` : '';
       rankBadge.textContent = result.rank
-        ? `★ NEW LOCAL #${result.rank} ★`
-        : 'Local top 8';
+        ? `★ NEW LOCAL${scope} #${result.rank} ★`
+        : `Local${scope} top 8`;
       rankBadge.style.color = result.rank ? 'var(--gold)' : 'var(--text-dim)';
+    }
+
+    const subtitle = document.getElementById('gameover-subtitle');
+    if (subtitle) subtitle.textContent = rules.badge ? `SHIELD COLLAPSED // ${rules.label} RUN COMPLETE` : 'SHIELD COLLAPSED // SESSION COMPLETE';
+    const modeTag = document.getElementById('go-mode-tag');
+    if (modeTag) {
+      modeTag.textContent = rules.badge || rules.label;
+      modeTag.className = `mode-badge mode-${rules.id}`;
+      modeTag.title = rules.blurb;
     }
 
     const statsEl = document.getElementById('gameover-stats');
@@ -4104,6 +4214,10 @@ export class Game {
       this.range.view?.endPadEdit();
     } else if (this.state === 'PAUSED' && this.quitConfirm && (gp.pressed(PAD.B) || gp.pressed(PAD.START))) {
       this.cancelAbandonRun(); // B / Start back out of ABANDON RUN? before they resume
+    } else if (this.state === 'TITLE' && (gp.pressed(PAD.LB) || gp.pressed(PAD.RB))) {
+      // LB / RB step through NORMAL / HARDCORE / BLITZ without leaving LAUNCH.
+      this.setSelectedMode(cycleMode(this.selectedMode, gp.pressed(PAD.LB) ? -1 : 1));
+      this.sound.playUiSelect?.();
     } else if (this.state === 'PAUSED' && (gp.pressed(PAD.LB) || gp.pressed(PAD.RB)) && this.overview) {
       // LB / RB switch the pause menu tabs; focus follows to the new tab.
       this.overview.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
@@ -4227,7 +4341,7 @@ export class Game {
     if (p.shieldFlash > 0) p.shieldFlash = Math.max(0, p.shieldFlash - dt * 2.4);
     if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
 
-    if (p.hp < p.maxHp) {
+    if (p.hp < p.maxHp && modeRules(this).shieldRegen) {
       p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2));
     }
 

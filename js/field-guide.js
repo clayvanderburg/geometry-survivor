@@ -4,7 +4,7 @@
 //
 // Hostile entry ids are enemy `type` strings, plus 'lieutenant' (any elite) and 'boss'. Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
-import { TUNING } from './config.js';
+import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { LT_MODIFIERS } from './lieutenants.js';
@@ -14,6 +14,7 @@ import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, lockCost, banishCost } from './gold.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
+import { MODES } from './modes.js';
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -213,6 +214,23 @@ export const MECHANIC_ENTRIES = [
       'Controller: left stick move · right stick aim and fire · A dash · B Supernova · X / Y auto-fire / auto-aim · Start pause. Menus: d-pad + A, B back; in the pause menu and this guide LB / RB switch tabs.',
       'Level-up cards: 1 / 2 / 3 or A picks · R or X rerolls (gold) · Shift+1 / 2 / 3 or Y locks a card (gold).'
     ]
+  },
+  {
+    id: 'mode_hardcore', icon: '☠', title: 'HARDCORE MODE',
+    body: () => [
+      'Pick it next to LAUNCH ([2], or LB / RB on a controller). The shield is your only life: it never regenerates, no card raises or restores it (Phase Nova Thrusters is never offered), relic caches and shield crystals repair nothing, and the Void Armory\'s Aegis Shield Matrix is switched off, so every run starts at the base 100. Every other armory upgrade still applies.',
+      'When the shield hits 0 the run is over, as always. HARDCORE runs race on their own global board (ALL-TIME and per version) and in MY RUNS.'
+    ]
+  },
+  {
+    id: 'mode_blitz', icon: '⚡', title: 'BLITZ MODE',
+    body: () => {
+      const b = MODES.blitz.tuning;
+      return [
+        `A quick run for a short session ([3] next to LAUNCH): waves every ${b.waveLength} s instead of ${DEFAULT_TUNING.waveLength}, cheaper levels (LV 2 at ${b.xpCurveBase} XP) so the build comes together fast, and the enemy HP, spawn and damage ramps squeezed into the shorter clock.`,
+        'A good BLITZ run ends around 7 to 9 minutes; a great one can push past 10. Shield rules are NORMAL. BLITZ runs race on their own global board and in MY RUNS.'
+      ];
+    }
   },
   {
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',

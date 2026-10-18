@@ -341,7 +341,25 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     await press(A);
     await expect('TITLE', 'MAIN MENU after a game over goes to the title');
 
+    // Game mode on the title: RB steps NORMAL -> HARDCORE, Left from LAUNCH reaches the selector and A
+    // picks BLITZ, and the next launch flies it.
+    await page.waitForTimeout(400);
+    const checked = () => page.evaluate(() => document.querySelector('#mode-select [aria-checked="true"]')?.dataset.gameMode);
+    if (await checked() !== 'normal') throw Error('NORMAL is the default mode');
+    await press(RB);
+    if (await checked() !== 'hardcore' || await page.evaluate(() => __game.selectedMode) !== 'hardcore') throw Error('RB on the title should pick HARDCORE');
+    await page.evaluate(() => __game.menuNav.setFocus(document.getElementById('btn-start-game')));
+    await press(LEFT);
+    const leftOfLaunch = await page.evaluate(() => { const f = __game.menuNav.focused; return f?.dataset?.gameMode || f?.id || f?.className || null; });
+    if (leftOfLaunch !== 'blitz') throw Error(`Left from LAUNCH should reach the BLITZ choice, got ${leftOfLaunch}`);
+    await press(A);
+    if (await checked() !== 'blitz') throw Error('A on BLITZ should pick it');
+    await page.evaluate(() => __game.menuNav.setFocus(document.getElementById('btn-start-game')));
+    await press(A);
+    await expect('PLAYING', 'A on LAUNCH starts the BLITZ run');
+    if (await page.evaluate(() => __game.mode) !== 'blitz') throw Error('The run should fly BLITZ');
+
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

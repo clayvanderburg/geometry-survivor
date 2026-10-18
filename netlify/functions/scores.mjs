@@ -1,8 +1,9 @@
 // Netlify Function (v2): the shared VEXOLITH // SURVIVOR leaderboard at /api/scores.
 //   GET  /api/scores?version=<v>   -> that game version's board: { version, current, versions, entries: top 50, total, boardSize }
 //   GET  /api/scores?version=all   -> the all-time board (also the default without ?version)
-//   POST /api/scores -> submit one run (JSON, with the game's `version`); 201 with { rank, allTimeRank, entries, ... }
-//                       or 400/413/415/422/429/503
+//   GET  ...&mode=hardcore|blitz   -> the same board of that game mode (NORMAL without ?mode)
+//   POST /api/scores -> submit one run (JSON, with the game's `version` and the run's `mode`, NORMAL when
+//                       absent); 201 with { rank, allTimeRank, mode, entries, ... } or 400/413/415/422/429/503
 // Boards and rate-limit state live in the "leaderboard" Netlify Blobs store (zero-config on Netlify).
 // The logic lives in ../lib/leaderboard.mjs so tests can run it against an in-memory store; the known
 // game versions come from js/changelog.js, which esbuild bundles in alongside js/leaderboard-rules.js.

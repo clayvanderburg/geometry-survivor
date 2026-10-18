@@ -55,8 +55,10 @@ const r0 = (v) => Math.round(v);
 export class RunStats {
   // dpsTarget(lv): the design potential DPS (x base damage) at a weapon level; onCurve(id): whether the
   // weapon is held to it. Both come from js/weapon-scaling.js in the game; tests pass their own.
-  constructor({ version = '', groups = buildSourceGroups(), dpsTarget = null, onCurve = () => false } = {}) {
+  // mode: the run's game mode id (js/modes.js), carried into the summary so stats can tell modes apart.
+  constructor({ version = '', mode = 'normal', groups = buildSourceGroups(), dpsTarget = null, onCurve = () => false } = {}) {
     this.version = version;
+    this.mode = mode;
     this.groupOf = groups;
     this.dpsTarget = typeof dpsTarget === 'function' ? dpsTarget : null;
     this.onCurve = onCurve;
@@ -289,6 +291,7 @@ export class RunStats {
     this.finished = {
       schema: 1,
       version: this.version,
+      mode: this.mode,
       time: r1(time),
       wave: Math.floor(wave),
       level: Math.floor(level),

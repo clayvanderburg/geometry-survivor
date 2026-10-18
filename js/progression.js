@@ -1,5 +1,9 @@
 // Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
+import { MODE_IDS, normalizeMode } from './modes.js';
+
 const SAVE_KEY = 'vectra_survivor_save_v2';
+// Local highscores ("MY RUNS") kept per game mode.
+export const LOCAL_TOP = 8;
 
 // Void Armory: permanent single-stat upgrades bought with Void Cores. Each rank adds a small `per` step;
 // rank n (0-based) costs round(baseCost * growth^n), so early ranks are quick and late ranks are a grind.
@@ -99,6 +103,13 @@ export function normalizePilotName(value) {
   return typeof value === 'string' ? value.trim().toUpperCase().slice(0, 18) || 'MADKING' : 'MADKING';
 }
 
+// The best LOCAL_TOP runs of each game mode, best first (entries without a mode are NORMAL runs).
+export function topRunsPerMode(entries) {
+  const sorted = [...entries].sort((a, b) => b.score - a.score);
+  return MODE_IDS.flatMap(mode => sorted.filter(e => normalizeMode(e.mode) === mode).slice(0, LOCAL_TOP))
+    .sort((a, b) => b.score - a.score);
+}
+
 function boundedInteger(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
 }
@@ -150,8 +161,9 @@ export function normalizeSave(value) {
     multiplier: typeof entry.multiplier === 'number' && Number.isFinite(entry.multiplier) ? Math.max(1, entry.multiplier) : 1,
     wave: boundedInteger(entry.wave, 1, 1),
     kills: boundedInteger(entry.kills, 0),
-    timeStr: typeof entry.timeStr === 'string' && /^\d{2,}:\d{2}$/.test(entry.timeStr) ? entry.timeStr : '00:00'
-  })).sort((a, b) => b.score - a.score).slice(0, 8) : [];
+    timeStr: typeof entry.timeStr === 'string' && /^\d{2,}:\d{2}$/.test(entry.timeStr) ? entry.timeStr : '00:00',
+    mode: normalizeMode(entry.mode)
+  })) : [];
   // An existing save from before ARMORY_VERSION had the old six bundled upgrades: its ranks and cores
   // are reset once (callsign, high scores, Field Guide and runs played are kept) and a notice is shown.
   const legacyArmory = Object.keys(source).length > 0 && source.armory !== ARMORY_VERSION;
@@ -163,7 +175,7 @@ export function normalizeSave(value) {
     armory: ARMORY_VERSION,
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
-    highscores: savedScores.length ? savedScores : DEFAULT_HIGHSCORES.map(entry => ({ ...entry }))
+    highscores: savedScores.length ? topRunsPerMode(savedScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
   };
 }
 
@@ -270,7 +282,8 @@ export class ProgressionManager {
     if (guide.fresh.length !== before) this.save();
   }
 
-  recordRun({ name, score, multiplier, wave, kills, timeStr }) {
+  // Saves a finished run on this device's board of its mode. Returns its id and its local rank in that mode.
+  recordRun({ name, score, multiplier, wave, kills, timeStr, mode }) {
     this.data.totalRuns++;
     const cleanName = this.setPilotName(name || this.data.pilotName);
     const entryId = globalThis.crypto?.randomUUID?.() || 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2);
@@ -281,15 +294,14 @@ export class ProgressionManager {
       multiplier,
       wave,
       kills,
-      timeStr
+      timeStr,
+      mode: normalizeMode(mode)
     };
 
-    this.data.highscores.push(entry);
-    this.data.highscores.sort((a, b) => b.score - a.score);
-    this.data.highscores = this.data.highscores.slice(0, 8);
+    this.data.highscores = topRunsPerMode([...this.data.highscores, entry]);
     this.save();
 
-    const rankIndex = this.data.highscores.findIndex((h) => h.id === entryId);
+    const rankIndex = this.data.highscores.filter((h) => h.mode === entry.mode).findIndex((h) => h.id === entryId);
     return {
       entryId,
       rank: rankIndex !== -1 ? rankIndex + 1 : null

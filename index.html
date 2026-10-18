@@ -17,6 +17,8 @@
           <div class="stat-label">SCORE</div>
           <div id="score-display" class="stat-value">0</div>
           <div class="left-badges">
+            <!-- HARDCORE / BLITZ runs wear their mode (js/modes.js); hidden in NORMAL -->
+            <div id="mode-hud-badge" class="mode-badge hidden"></div>
             <div id="multiplier-display" class="multiplier-badge">x1.0</div>
             <div id="luck-hud-display" class="luck-badge" title="Luck boosts +2/+3 Multi-Level Upgrades & Relic Chest Drops">🍀 100% LUCK</div>
             <div id="cores-hud-display" class="cores-badge" title="Void Cores harvested for permanent Armory upgrades">❖ 0 CORES</div>
@@ -366,6 +368,7 @@
             </div>
             <div class="board-status board-filter">
               <div id="highscore-note" class="board-note" aria-live="polite"></div>
+              <div id="title-board-modes" class="board-versions board-modes hidden" data-board-modes role="group" aria-label="Leaderboard game mode"></div>
               <div id="title-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
             </div>
             <div id="highscore-list" class="highscore-list"></div>
@@ -375,6 +378,7 @@
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
               <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar · <b>[H]:</b> Hide HUD · <b>[V]:</b> Fullscreen</span>
+              <span><b>Game mode:</b> [1] Normal · [2] Hardcore · [3] Blitz (controller: LB / RB on this screen)</span>
               <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock · [B]+[1-3] / RB×2 Banish (costs ◆ gold from gold veins)</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Back Radar · Start Pause · D-Pad + A in Menus</span>
             </div>
@@ -382,6 +386,8 @@
         </div>
 
         <div class="title-actions" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+          <!-- Game mode for the next launch (js/modes.js): buttons built by Game.renderModeSelect -->
+          <div id="mode-select" class="mode-select" role="radiogroup" aria-label="Game mode"></div>
           <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
           <button id="btn-weapon-range" class="neon-btn range-open-btn" title="Test any weapon build on target dummies: nothing is recorded">🎯 WEAPON RANGE</button>
         </div>
@@ -431,6 +437,7 @@
             <div class="go-title-row">
               <h2 class="neon-title danger-glow" style="font-size:38px; margin-bottom:0;">SIGNAL LOST</h2>
               <span class="version-tag" data-game-version title="Game version of this run"></span>
+              <span id="go-mode-tag" class="mode-badge" title="Game mode of this run"></span>
             </div>
           </div>
           <div class="wallet-pill">
@@ -472,6 +479,7 @@
               <input id="go-pilot-name" type="text" maxlength="18" class="name-input" placeholder="ENTER NAME" />
               <button id="btn-save-name" class="save-name-btn">SAVE</button>
             </div>
+            <div id="go-board-modes" class="board-versions board-modes hidden" data-board-modes role="group" aria-label="Leaderboard game mode"></div>
             <div id="go-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
             <div class="board-status">
               <span id="go-board-note" class="board-note" aria-live="polite"></span>

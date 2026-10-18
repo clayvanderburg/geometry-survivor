@@ -31,12 +31,16 @@ export function readGamepad(prevButtons = []) {
 // Choose the rect nearest `from` in direction (dx, dy); off-axis distance is penalised so
 // navigation prefers items in the same row/column. Items inside a 75-degree cone around the direction
 // win first, so a neighbour that is only a few pixels lower (a lifted focused card) never counts as
-// "down"; anything merely on that side is the fallback. Returns an index or -1.
+// "down"; anything merely on that side is the fallback. A left / right move stays in its row first
+// (items overlapping it vertically), so two stacked rows of small pills (the leaderboard's MODE and
+// VERSION switches) never trade focus sideways. Returns an index or -1.
 export function pickInDirection(from, rects, dx, dy) {
   const fx = from.left + from.width / 2, fy = from.top + from.height / 2;
-  const pick = (cone) => {
+  const sameRow = (r) => r.top < from.top + from.height && r.top + r.height > from.top;
+  const pick = (cone, row = false) => {
     let best = -1, bestScore = Infinity;
     rects.forEach((r, i) => {
+      if (row && !sameRow(r)) return;
       const vx = r.left + r.width / 2 - fx, vy = r.top + r.height / 2 - fy;
       const along = vx * dx + vy * dy;
       if (along <= 1) return;
@@ -47,8 +51,36 @@ export function pickInDirection(from, rects, dx, dy) {
     });
     return best;
   };
+  const inRow = dy === 0 ? pick(true, true) : -1;
+  if (inRow >= 0) return inRow;
   const inCone = pick(true);
   return inCone >= 0 ? inCone : pick(false);
+}
+
+// An element's rect for navigation, clamped to every scrolling ancestor's visible box: a button scrolled
+// out of sight inside a panel (the title armory grid) sits on that panel's edge instead of wherever its
+// hidden rect lands, so it never steals a move from a visible neighbour (Left from LAUNCH), while d-pad
+// moves inside the panel still reach it and scroll it into view.
+export function navRect(el) {
+  const r = el.getBoundingClientRect();
+  let left = r.left, top = r.top, right = r.left + r.width, bottom = r.top + r.height;
+  const style = globalThis.getComputedStyle;
+  for (let a = el.parentElement; a && style; a = a.parentElement) {
+    const { overflowX, overflowY } = style(a);
+    const clipX = /auto|scroll|hidden/.test(overflowX), clipY = /auto|scroll|hidden/.test(overflowY);
+    if (!clipX && !clipY) continue;
+    const c = a.getBoundingClientRect();
+    const cRight = c.left + c.width, cBottom = c.top + c.height;
+    if (clipX) {
+      left = Math.min(Math.max(left, c.left), cRight);
+      right = Math.max(Math.min(right, cRight), c.left);
+    }
+    if (clipY) {
+      top = Math.min(Math.max(top, c.top), cBottom);
+      bottom = Math.max(Math.min(bottom, cBottom), c.top);
+    }
+  }
+  return { left, top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
 }
 
 // [data-gp-nav] marks other focus stops (e.g. Field Guide entries, so the d-pad can browse and scroll them).
@@ -108,7 +140,7 @@ export class MenuNavigator {
     const dx = pad.navY !== 0 ? 0 : pad.navX;
     const dy = pad.navY;
     const others = items.filter(item => item !== el);
-    const idx = pickInDirection(el.getBoundingClientRect(), others.map(item => item.getBoundingClientRect()), dx, dy);
+    const idx = pickInDirection(navRect(el), others.map(navRect), dx, dy);
     if (idx !== -1) {
       this.setFocus(others[idx]);
       this.onMove?.();
