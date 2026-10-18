@@ -86,6 +86,8 @@ function statsWeaponLevel(p, id) {
 const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 220;
+// Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
+const HAND_SIZE = 4;
 const SINGULARITY_GRID_DEPTH = 260;
 // Swarm Missile colour: orange-gold, turning pink once Storm Protocol charges them with lightning.
 const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
@@ -3089,7 +3091,7 @@ export class Game {
     // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
     this.beginHand();
-    this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.currentChoices = rollHandAround(this.player, HAND_SIZE, this.handLock, rollLevelUpHand);
     this.runStats?.offered(this.currentChoices);
     this.recordHandOdds();
     if (this.currentChoices.length === 0) {
@@ -3101,7 +3103,7 @@ export class Game {
       return;
     }
 
-    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Evolve');
+    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span>-<span>[4]</span>, Click, or D-Pad + <span>A</span> to Evolve');
     this.renderHand();
     document.getElementById('upgrade-modal').classList.remove('hidden');
   }
@@ -3164,11 +3166,11 @@ export class Game {
     }
   }
 
-  // Level-up modal keys: [1]-[3] pick, Shift+[1]-[3] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play), [B] then [1]-[3] banishes that card ([B] again or [Esc] cancels).
+  // Level-up modal keys: [1]-[4] pick, Shift+[1]-[4] lock/unlock that card, [R] rerolls (R is the
+  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels).
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
-    const digit = /^(?:Digit|Numpad)([1-3])$/.exec(code);
+    const digit = /^(?:Digit|Numpad)([1-4])$/.exec(code);
     if (digit) {
       const idx = Number(digit[1]) - 1;
       if (this.banishMode) {
@@ -3265,7 +3267,7 @@ export class Game {
     this.handRerolls++;
     this.banishArmed = -1;
     this.player.newWeaponDrought = this.handDrought;
-    this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.currentChoices = rollHandAround(this.player, HAND_SIZE, this.handLock, rollLevelUpHand);
     this.runStats?.reroll();
     this.runStats?.offered(this.currentChoices, this.handLock?.card);
     this.recordHandOdds();
@@ -3326,10 +3328,10 @@ export class Game {
     if (note) {
       const lockedName = this.handLock?.card.name.replace('SYNERGY: ', '');
       const bc = banishCost();
-      note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[3] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
+      note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[4] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
         : this.lockNote
         || (lockedName ? `🔒 ${lockedName} is locked: pick another card and it comes back next level-up`
-          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y   ✕ ${bc} ${GOLD_ICON} banishes one for the run · [B]+[1-3] / RB×2`);
+          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-4] / Y   ✕ ${bc} ${GOLD_ICON} banishes one for the run · [B]+[1-4] / RB×2`);
       note.classList?.[this.lockNote ? 'add' : 'remove']('dropped');
     }
     (this.choiceCardEls || []).forEach((el, idx) => {
@@ -3381,6 +3383,7 @@ export class Game {
   renderChoiceCards(descs) {
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
+    container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
     const shownAt = performance.now();
     this.choiceCardEls = [];
     descs.forEach((d, idx) => {

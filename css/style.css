@@ -1169,6 +1169,18 @@ html, body {
   gap: 16px;
 }
 
+/* Four-card level-up hands: one more column, and a wider modal to hold it. */
+.upgrade-choices-grid.cards-4 {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.modal-card:has(.cards-4) {
+  max-width: 1280px;
+}
+@media (max-width: 1100px) {
+  .upgrade-choices-grid.cards-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* Rarity palette: common white/gray, uncommon green, rare blue, epic purple, legendary gold.
    Rarity owns the card border, name and badge color; lucky +2/+3 level rolls get a separate ribbon. */
 .rarity-common { --rarity: #c9d4e4; --rarity-soft: rgba(201, 212, 228, 0.3); --rarity-bg: rgba(30, 36, 52, 0.94); }
@@ -1426,6 +1438,7 @@ html, body {
   }
 
   .upgrade-choices-grid,
+  .upgrade-choices-grid.cards-4,
   #chest-rewards-grid {
     grid-template-columns: 1fr;
     gap: 18px;

@@ -129,7 +129,7 @@ test('a reroll keeps the locked card in its slot and rolls the rest by the norma
     g.handRerolls = 0; // keep each reroll at the base cost
     assert.ok(g.rerollHand());
     assert.equal(g.currentChoices[1], locked, 'locked card stays in place');
-    assert.equal(g.currentChoices.length, 3);
+    assert.equal(g.currentChoices.length, 4);
     assert.equal(g.currentChoices.filter((c) => c.id === locked.id).length, 1, 'never duplicated');
     for (const c of g.currentChoices) assert.ok(offerable(p, c), `${c.id} obeys gating`);
     assert.ok(g.currentChoices.every((c) => c.levelJump >= 1));
@@ -162,7 +162,7 @@ test('a locked card passed over is guaranteed in the next hand, with one fewer r
   g.selectUpgrade(0);
   assert.equal(g.carriedLock.card, locked);
   plainHand(g);
-  assert.equal(g.currentChoices.length, 3);
+  assert.equal(g.currentChoices.length, 4);
   assert.equal(g.currentChoices[2].id, locked.id, 'back in its slot');
   assert.equal(g.currentChoices[2].levelJump, Math.min(locked.levelJump, locked.maxLevel - (g.player.upgradeLevels[locked.id] || 0)));
   assert.equal(g.handLock.card, g.currentChoices[2], 'shown locked');
@@ -444,4 +444,15 @@ test('BANISH: a locked card loses its lock, NEW WEAPON cannot be banished, keybo
   assert.equal(h2.banishCard(nwIdx), false);
   assert.equal(h2.banishCard(nwIdx, true), false);
   assert.equal(h2.gold, 200);
+});
+
+test('level-up hands show 4 cards, picked with keys 1-4', () => {
+  const g = freshGame(100);
+  plainHand(g);
+  assert.equal(g.currentChoices.length, 4);
+  const fourth = g.currentChoices[3];
+  g.handleUpgradeKey('Digit4');
+  if (g.handPhase === 'breakthrough') g.handleUpgradeKey('Digit1');
+  assert.equal(g.state, 'PLAYING');
+  assert.ok((g.player.upgradeLevels[fourth.id] || 0) > 0 || fourth.isNewWeapon, 'key 4 picked the fourth card');
 });

@@ -93,3 +93,14 @@ test('pressing A to launch a run does not also dash on the next tick', async () 
   assert.equal(g.game.state, 'PLAYING');
   assert.equal(g.game.gpDashLatch, true, 'held A is latched, so gameplay will not read it as a fresh dash');
 });
+
+test('a lifted focused card never makes its neighbour count as "down": the button below wins', () => {
+  // Four cards in a row; the focused second card is lifted 5 px (hover/focus transform); REROLL sits
+  // below, between cards 2 and 3.
+  const card = (left, top) => ({ left, top, width: 287, height: 396 });
+  const cards = [card(49, 173), card(348, 168), card(646, 173), card(945, 173)];
+  const reroll = { left: 570, top: 586, width: 276, height: 39 };
+  assert.equal(pickInDirection(cards[1], [...cards, reroll], 0, 1), 4);
+  // Nothing in the cone: still falls back to whatever lies on that side.
+  assert.equal(pickInDirection(card(0, 0), [card(900, 10)], 0, 1), 0);
+});
