@@ -33,32 +33,32 @@ export const STAT_CARDS = {
   blaster: [
     card('blaster', 'blaster_damage', 'damage', 'Pew Pews Plasma Charge', 'damage', 'Pew Pews: hotter bolts. Only damage per bolt.'),
     card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Pew Pews: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
-    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Pew Pews: fire faster. Only fire rate.'),
+    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Pew Pews: fire faster. Only fire rate.', cap(8)),
     card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Pew Pews: each bolt slices through one more target (each one behind takes a little less).', cap(6))
   ],
   rockets: [
     card('rockets', 'rockets_damage', 'damage', 'Wing Rocket Warheads', 'rocketDamage', 'Wing Rockets: heavier warheads. Only damage per rocket.'),
     card('rockets', 'rockets_count', 'count', 'Wing Rocket Pods', 'rocketCount', 'Wing Rockets: one more rocket per volley.', cap(6)),
-    card('rockets', 'rockets_reload', 'reload', 'Wing Rocket Launch Rails', 'rocketCooldown', 'Wing Rockets: shorter time between volleys.'),
+    card('rockets', 'rockets_reload', 'reload', 'Wing Rocket Launch Rails', 'rocketCooldown', 'Wing Rockets: shorter time between volleys.', cap(8)),
     card('rockets', 'rockets_radius', 'radius', 'Wing Rocket Blast Size', 'rocketBlast', 'Wing Rockets: wider blasts. Only blast size.')
   ],
   missiles: [
     card('missiles', 'missiles_damage', 'damage', 'Swarm Missile Warheads', 'missileDamage', 'Swarm Missiles: heavier warheads. Only damage per missile.'),
     card('missiles', 'missiles_salvo', 'salvo', 'Swarm Missile Salvo Size', 'missileSalvo', 'Swarm Missiles: one more missile per salvo.', cap(8)),
-    card('missiles', 'missiles_reload', 'reload', 'Swarm Missile Reload', 'missileCooldown', 'Swarm Missiles: shorter time between salvos.'),
+    card('missiles', 'missiles_reload', 'reload', 'Swarm Missile Reload', 'missileCooldown', 'Swarm Missiles: shorter time between salvos.', cap(8)),
     card('missiles', 'missiles_radius', 'radius', 'Swarm Missile Blast Size', 'missileBlast', 'Swarm Missiles: wider blasts. Only blast size.')
   ],
   lightning: [
     card('lightning', 'lightning_damage', 'damage', 'Tesla Arc Voltage', 'lightningDamage', 'Tesla Arc: higher voltage. Only damage per jump.'),
     card('lightning', 'lightning_chain', 'chain', 'Tesla Arc Chain Length', 'lightningJumps', 'Tesla Arc: each discharge jumps to more enemies. Only chain length.', cap(6)),
-    card('lightning', 'lightning_recharge', 'recharge', 'Tesla Arc Recharge', 'lightningCooldown', 'Tesla Arc: discharges more often.'),
+    card('lightning', 'lightning_recharge', 'recharge', 'Tesla Arc Recharge', 'lightningCooldown', 'Tesla Arc: discharges more often.', cap(8)),
     card('lightning', 'lightning_reach', 'reach', 'Tesla Arc Reach', 'lightningReach', 'Tesla Arc: each jump reaches further. Only reach.')
   ],
   singularity: [
     card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: a wider pull. Only pull radius (the pull still fades hard toward the rim).'),
     card('singularity', 'singularity_damage', 'damage', 'Vortex Implosion Damage', 'singularityCollapse', 'Vortex Singularity: harder core grind and collapse. Only damage.'),
     card('singularity', 'singularity_duration', 'duration', 'Vortex Lifetime', 'singularityLife', 'Vortex Singularity: each singularity lasts longer before it collapses. Only lifetime.'),
-    card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often. Only cooldown.'),
+    card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often. Only cooldown.', cap(8)),
     card('singularity', 'singularity_core', 'core', 'Vortex Core Size', 'singularityCore', 'Vortex Singularity: a bigger core grinds a wider area. Only core size.', cap(6))
   ],
   orbitals: [
@@ -71,19 +71,19 @@ export const STAT_CARDS = {
   mines: [
     card('mines', 'mines_damage', 'damage', 'Proximity Mine Charge', 'mineDamage', 'Proximity Mines: bigger charges. Only blast damage.'),
     card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once.', cap(8)),
-    card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often. Only drop rate.'),
+    card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often. Only drop rate.', cap(8)),
     card('mines', 'mines_radius', 'radius', 'Proximity Mine Blast Size', 'mineBlastRadius', 'Proximity Mines: wider blasts. Only blast size.'),
     card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
   ],
   turret: [
     card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
-    card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.'),
+    card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.', cap(8)),
     card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
     card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Redeploy', 'turretCooldown', 'Sentry Turret: plants a new turret sooner.')
   ],
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
-    card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.'),
+    card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
     card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ]

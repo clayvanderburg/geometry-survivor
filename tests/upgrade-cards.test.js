@@ -160,8 +160,8 @@ test('headlines are computed from the rolled level jump', () => {
   assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
   assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 PEW PEWS PIERCE');
-  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+30% PEW PEWS DAMAGE');
-  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+69% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+40% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+96% PEW PEWS DAMAGE');
   assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(levelBuild('missiles', 1))} MISSILES / SALVO`);
 });
 
@@ -260,8 +260,8 @@ test('reload and fire-rate cards change only their own stat', () => {
   const p = makePlayer();
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
   const m = describeUpgrade(p, byId('missiles_reload'));
-  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.11s' }]);
+  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.03s' }]);
   p.upgradeLevels.turret = 1; p.weapons.turret = 1;
   const t = describeUpgrade(p, byId('turret_rate'));
-  assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '7.93/s' }]);
+  assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
 });

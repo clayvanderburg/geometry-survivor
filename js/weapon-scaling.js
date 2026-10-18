@@ -26,8 +26,9 @@ export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 
 // Per-rank steps of the POWER stats shared by every weapon.
-export const DAMAGE_GROWTH = 1.3; // Damage card: x1.3 damage per hit per rank (compounding)
-export const RATE_STEP = 0.3;     // fire rate / reload / cooldown cards: +30% attacks per second per rank
+// x1.4 compounding: a weapon built purely for damage reaches ~40x at LV 12, the old LV 1 -> 12 curve.
+export const DAMAGE_GROWTH = 1.4; // Damage card: x1.4 damage per hit per rank (compounding)
+export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
 export const hitMult = (b) => Math.pow(DAMAGE_GROWTH, b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the

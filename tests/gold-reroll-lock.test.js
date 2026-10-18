@@ -284,6 +284,8 @@ test('keyboard in the level-up modal: R rerolls, Shift+1-3 locks, 1-3 picks; R l
   assert.equal(g.handLock, null, 'Shift+2 again unlocks');
   assert.equal(g.handleUpgradeKey('KeyQ'), false);
   g.handleUpgradeKey('Digit1');
+  // A lucky +3 roll can take a weapon to LV 4: its Breakthrough picks with the same keys.
+  if (g.handPhase === 'breakthrough') g.handleUpgradeKey('Digit1');
   assert.equal(g.state, 'PLAYING');
   assert.equal(g.handleUpgradeKey('KeyR'), false, 'nothing outside the modal');
 });
