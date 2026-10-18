@@ -20,7 +20,8 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'New weapon cards: damage cards for every weapon, Vortex Core Size and Lifetime, Orbit Blade Size, Proximity Mine Fuse, and more.' },
       { type: 'new', text: 'BREAKTHROUGHS at weapon LV 4, 8 and 12: pick a transform that changes how the weapon works (flak rounds, twin singularities...) or +18% damage and reach.' },
       { type: 'balance', text: 'Damage, fire rate and count cards add damage. Size, reach and pull cards add none: they make the weapon easier to land instead. Weapons built for damage are equally strong.' },
-      { type: 'new', text: 'The pause-menu loadout lists each weapon\'s Breakthroughs, and the Field Guide explains weapon levels.' }
+      { type: 'balance', text: 'Enemy health climbs more slowly per wave to match the new cards. Missiles and Mines are no longer far ahead of other weapons.' },
+      { type: 'new', text: 'The pause-menu loadout shows every weapon\'s level (Pew Pews too) and its Breakthroughs, and the Field Guide explains weapon levels.' }
     ]
   },
   {
