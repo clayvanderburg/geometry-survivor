@@ -1394,6 +1394,7 @@ export class Game {
     this.resetRun();
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
+    this.sound.setMusicScene?.('run');
 
     this.grid.applyImpulse(this.player.x, this.player.y, 48, 260, 188);
     this.grid.ripple?.(this.player.x, this.player.y, 240, 188);
@@ -1417,6 +1418,7 @@ export class Game {
     }
     this.resetRun();
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
+    this.sound.setMusicScene?.('menu');
     this.renderHubUI();
     document.getElementById('title-modal')?.classList.remove('hidden');
   }

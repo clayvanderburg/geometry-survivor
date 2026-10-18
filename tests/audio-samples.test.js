@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 globalThis.window = globalThis.window || { addEventListener() {} };
 globalThis.BroadcastChannel = undefined; // config.js tuning sync would keep the test process alive
 globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {} };
-const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_FILE, SFX_BASE, SFX_V2_BASE, SFX_ROUND2, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
+const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_FILE, SFX_BASE, SFX_V2_BASE, SFX_ROUND2, SOUNDTRACK, SONGS, BOSS_SECTION } = await import('../js/audio.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const playMethods = Object.getOwnPropertyNames(SoundEngine.prototype).filter(name => name.startsWith('play') && name !== 'playSample' && name !== 'playPreview');
@@ -185,7 +185,9 @@ test('synthwave arrangement: three songs in distinct keys with 8-16 bar sections
     }
   }
   assert.equal(BOSS_SECTION.chords.length * BOSS_SECTION.barsPerChord, 8);
-  assert.deepEqual(MUSIC_TRACKS, [], 'procedural score by default');
+  // The streamed soundtrack's files all exist (the procedural score is only the fallback).
+  for (const src of [SOUNDTRACK.menu, SOUNDTRACK.boss, ...SOUNDTRACK.run]) assert.ok(fs.existsSync(new URL(`../${src}`, import.meta.url)), src);
+  assert.equal(SOUNDTRACK.run.length, 4);
 });
 
 test('arrangement advances sections and rotates songs; boss swaps in the dark section', () => {
@@ -235,4 +237,19 @@ test('intensity layers: calm = pads + bass, mid adds drums, high adds lead and e
   assert.ok(boss.playBossStab > 0);
   const muffled = run(0.9, { muffled: true });
   assert.deepEqual(muffled, high, 'menus keep the same arrangement (only the bus low-pass glides down)');
+});
+
+test('streamed soundtrack: menu theme on the title, a shuffled playlist in runs, the boss theme in boss fights', () => {
+  const engine = new SoundEngine();
+  assert.deepEqual(engine.wantedTrack(), { src: SOUNDTRACK.menu, loop: true }, 'title screen');
+  engine.setMusicScene('run');
+  assert.deepEqual([...engine.playlist].sort(), [...SOUNDTRACK.run].sort(), 'each run shuffles the whole playlist');
+  assert.deepEqual(engine.wantedTrack(), { src: engine.playlist[0], loop: false });
+  engine.bossStage = 2;
+  assert.deepEqual(engine.wantedTrack(), { src: SOUNDTRACK.boss, loop: true }, 'boss fight');
+  engine.bossStage = 0;
+  engine.playIndex = 5;
+  assert.equal(engine.wantedTrack().src, engine.playlist[1], 'the playlist wraps around');
+  engine.setMusicScene('menu');
+  assert.equal(engine.wantedTrack().src, SOUNDTRACK.menu);
 });

@@ -5,8 +5,9 @@
 //   WebAudio sound that shipped before it, so the game is never silent.
 // - Music: a procedural 90s synthwave / outrun score (lookahead scheduler on the AudioContext clock,
 //   three songs in different keys, sections that change every 8-16 bars, intensity layering, kick
-//   sidechain pumping, convolution reverb and a dotted-eighth delay). If MUSIC_TRACKS lists audio files,
-//   they stream through the same music bus instead, cross-fading from one track to the next.
+//   sidechain pumping, convolution reverb and a dotted-eighth delay). When SOUNDTRACK lists audio files
+//   they stream through the same music bus instead (menu theme, a shuffled in-game playlist that
+//   cross-fades track to track, a boss theme), and the procedural score is the fallback.
 // Everything no-ops safely without an AudioContext (node tests, very old browsers).
 import { TUNING } from './config.js';
 
@@ -76,10 +77,32 @@ export const SFX_ROUND2 = Object.freeze([
   'player_hit', 'xp_pickup', 'gold_pickup', 'breakthrough', 'boss_warning', 'dash', 'supernova', 'ui_confirm'
 ]);
 
-// Drop-in soundtrack: list audio files here (e.g. 'assets/music/track1.mp3') and they replace the
-// procedural score, streaming one after another with a cross-fade. Empty = procedural synthwave.
-export const MUSIC_TRACKS = [];
-const MUSIC_XFADE = 4; // seconds of overlap between streamed tracks
+// Streamed soundtrack (assets/music, loudness-matched MP3s): `menu` loops on the title screen, `run` is
+// the in-game playlist (shuffled per run, cross-fading track to track) and `boss` loops through boss
+// fights. An empty `run` list keeps the procedural synthwave score.
+export const SOUNDTRACK = Object.freeze({
+  menu: 'assets/music/menu-vexolith-drift.mp3',
+  run: Object.freeze([
+    'assets/music/run-geom-harvest.mp3',
+    'assets/music/run-asteroid-fields.mp3',
+    'assets/music/run-neon-wake.mp3',
+    'assets/music/run-singularity.mp3'
+  ]),
+  boss: 'assets/music/boss-theme.mp3'
+});
+// A copy of `list` in random order (Fisher-Yates).
+function shuffled(list) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+const MUSIC_XFADE = 4; // seconds of overlap between playlist tracks
+const MUSIC_SWITCH_FADE = 1.6; // seconds of overlap when the scene changes (menu <-> run, boss in/out)
+// Beat pulse while streaming: the low band (bins up to ~170 Hz at fftSize 1024) against its running average.
+const PULSE_LOW_BINS = 4;
 
 // ---- Procedural synthwave score ----
 const CHORD_TONES = { m: [0, 3, 7], M: [0, 4, 7], m7: [0, 3, 7, 10], M7: [0, 4, 7, 11], sus4: [0, 5, 7] };
@@ -200,10 +223,16 @@ export class SoundEngine {
     this.pendingBeats = [];
     this.schedulerId = null;
 
-    // Streamed music files (MUSIC_TRACKS)
-    this.musicTracks = MUSIC_TRACKS;
+    // Streamed soundtrack (SOUNDTRACK): which scene's music plays, the run's shuffled playlist.
+    this.soundtrack = SOUNDTRACK;
+    this.musicScene = 'menu';
+    this.playlist = shuffled(SOUNDTRACK.run);
+    this.playIndex = 0;
     this.decks = null;
+    this.deckSrc = [null, null];
     this.fileMode = false;
+    this.filePulse = 0;
+    this.lowAvg = 0;
   }
 
   getMasterGainValue() {
@@ -321,7 +350,9 @@ export class SoundEngine {
       // A boss warning sweeps the mix down into a tense drop; the arrival snaps it wide open.
       // Menus (pause, level-up) only soften the same song: a gentle low-pass that glides in and out
       // (MUFFLE_CUTOFF over MUFFLE_GLIDE s), never a different arrangement that snaps in.
-      const raw = muffled ? MUFFLE_CUTOFF : boss === 1 ? 1000 : boss === 2 ? 16000 : 5500 + this.intensity * 10500;
+      // The streamed menu theme is the title screen's own music: it plays open, not softened.
+      const soft = muffled && !(this.fileMode && this.musicScene === 'menu');
+      const raw = soft ? MUFFLE_CUTOFF : boss === 1 ? 1000 : boss === 2 ? 16000 : 5500 + this.intensity * 10500;
       const target = Math.round(raw / 250) * 250;
       if (target !== this.lastFilterTarget) {
         this.lastFilterTarget = target;
@@ -332,8 +363,22 @@ export class SoundEngine {
     }
   }
 
+  // Which music plays: 'menu' (title screen) or 'run' (a new run reshuffles the playlist). Streaming
+  // only; the procedural score follows setMusicState alone.
+  setMusicScene(scene) {
+    if (scene === 'run') {
+      this.playlist = shuffled(this.soundtrack.run);
+      this.playIndex = 0;
+    } else if (scene === this.musicScene) {
+      return;
+    }
+    this.musicScene = scene;
+    this.updateFileMusic();
+  }
+
   getBeatPulse() {
     if (!this.ctx || !this.enabled || !this.isPlayingMusic) return 0;
+    if (this.fileMode) return this.streamPulse();
     while (this.pendingBeats.length && this.pendingBeats[0] <= this.ctx.currentTime) {
       this.lastBeatTime = this.pendingBeats.shift();
     }
@@ -436,7 +481,7 @@ export class SoundEngine {
 
   startMusic() {
     if (!this.ctx || this.isPlayingMusic) return;
-    if (this.musicTracks.length && this.startFileMusic()) return;
+    if (this.soundtrack.run.length && this.startFileMusic()) return;
     this.songIndex = Math.floor(Math.random() * SONGS.length);
     this.formIndex = 0;
     this.sectionBar = 0;
@@ -481,6 +526,7 @@ export class SoundEngine {
     this.pendingBeats = [];
     this.lastBeatTime = -Infinity;
     if (this.decks) for (const deck of this.decks) { try { deck.el.pause(); } catch (_e) {} }
+    this.deckSrc = [null, null];
     this.fileMode = false;
   }
 
@@ -957,7 +1003,7 @@ export class SoundEngine {
   }
 
   // =====================================================================
-  // Music: streamed files (MUSIC_TRACKS)
+  // Music: streamed soundtrack (SOUNDTRACK)
   // =====================================================================
 
   startFileMusic() {
@@ -965,6 +1011,13 @@ export class SoundEngine {
     if (!ctx || typeof Audio === 'undefined' || typeof ctx.createMediaElementSource !== 'function' || !this.musicFilter) return false;
     try {
       if (!this.decks) {
+        // Both decks feed an analyser (the beat pulse) as well as the music bus.
+        this.musicAnalyser = ctx.createAnalyser?.() || null;
+        if (this.musicAnalyser) {
+          this.musicAnalyser.fftSize = 1024;
+          this.musicAnalyser.smoothingTimeConstant = 0.2;
+          this.pulseBins = new Uint8Array(this.musicAnalyser.frequencyBinCount);
+        }
         this.decks = [0, 1].map(() => {
           const el = new Audio();
           el.crossOrigin = 'anonymous';
@@ -974,8 +1027,9 @@ export class SoundEngine {
           gain.gain.value = 0;
           src.connect(gain);
           gain.connect(this.musicFilter);
+          if (this.musicAnalyser) gain.connect(this.musicAnalyser);
           el.addEventListener('error', () => this.onTrackError());
-          return { el, src, gain };
+          return { el, src, gain, token: 0 };
         });
       }
     } catch (_e) {
@@ -985,18 +1039,60 @@ export class SoundEngine {
     this.fileMode = true;
     this.isPlayingMusic = true;
     this.deckIndex = 0;
-    this.trackIndex = 0;
-    this.crossfading = false;
-    this.startDeck(0, 0, 1.5);
+    this.deckSrc = [null, null];
+    this.updateFileMusic();
     this.schedulerId = setInterval(() => this.updateFileMusic(), 250);
     return true;
   }
 
-  startDeck(index, track, fade) {
-    if (!this.decks || !this.ctx) return;
-    const deck = this.decks[index];
+  // The track the current scene wants: the menu theme, the boss theme in a boss fight, else the playlist.
+  wantedTrack() {
+    const s = this.soundtrack;
+    if (this.musicScene === 'menu' && s.menu) return { src: s.menu, loop: true };
+    if (this.bossStage === 2 && s.boss) return { src: s.boss, loop: true };
+    return { src: this.playlist[this.playIndex % this.playlist.length], loop: false };
+  }
+
+  // Keeps the right track playing: cross-fades on a scene change (menu, run, boss), and into the next
+  // playlist track MUSIC_XFADE seconds before the current one ends.
+  updateFileMusic() {
+    if (!this.fileMode || !this.decks || !this.ctx) return;
+    let want = this.wantedTrack();
+    // Leaving a boss fight moves on to the next playlist track instead of restarting the last one.
+    if (!want.loop && this.deckSrc[this.deckIndex] === this.soundtrack.boss) {
+      this.playIndex++;
+      want = this.wantedTrack();
+    }
+    if (this.deckSrc[this.deckIndex] !== want.src) {
+      this.crossfadeTo(want, this.deckSrc[this.deckIndex] ? MUSIC_SWITCH_FADE : 1.5);
+      return;
+    }
+    if (want.loop) return;
+    const { duration, currentTime } = this.decks[this.deckIndex].el;
+    if (!Number.isFinite(duration) || duration <= 0 || duration - currentTime > MUSIC_XFADE) return;
+    this.playIndex++;
+    this.crossfadeTo(this.wantedTrack(), MUSIC_XFADE);
+  }
+
+  // Fades the playing deck out and starts `track` on the other deck, fading in over `fade` seconds.
+  crossfadeTo(track, fade) {
     const t = this.ctx.currentTime;
-    deck.el.src = this.musicTracks[track % this.musicTracks.length];
+    const out = this.decks[this.deckIndex];
+    const outToken = ++out.token;
+    out.gain.gain.cancelScheduledValues(t);
+    out.gain.gain.setValueAtTime(out.gain.gain.value, t);
+    out.gain.gain.linearRampToValueAtTime(0, t + fade);
+    setTimeout(() => {
+      // Only if nothing restarted this deck since (a quick boss in-and-out reuses it).
+      if (out.token === outToken) try { out.el.pause(); } catch (_e) {}
+    }, fade * 1000 + 100);
+    this.deckIndex = 1 - this.deckIndex;
+    const deck = this.decks[this.deckIndex];
+    deck.token++;
+    this.deckSrc[this.deckIndex] = track.src;
+    if (!deck.el.src.endsWith(track.src)) deck.el.src = track.src;
+    deck.el.loop = !!track.loop;
+    try { deck.el.currentTime = 0; } catch (_e) {}
     const playing = deck.el.play();
     if (playing && typeof playing.catch === 'function') playing.catch(() => this.onTrackError());
     deck.gain.gain.cancelScheduledValues(t);
@@ -1004,31 +1100,26 @@ export class SoundEngine {
     deck.gain.gain.linearRampToValueAtTime(1, t + fade);
   }
 
-  // Cross-fade into the next track MUSIC_XFADE seconds before the current one ends.
-  updateFileMusic() {
-    if (!this.fileMode || !this.decks || this.crossfading) return;
-    const current = this.decks[this.deckIndex];
-    const { duration, currentTime } = current.el;
-    if (!Number.isFinite(duration) || duration <= 0 || duration - currentTime > MUSIC_XFADE) return;
-    this.crossfading = true;
-    const t = this.ctx.currentTime;
-    current.gain.gain.cancelScheduledValues(t);
-    current.gain.gain.setValueAtTime(current.gain.gain.value, t);
-    current.gain.gain.linearRampToValueAtTime(0, t + MUSIC_XFADE);
-    this.deckIndex = 1 - this.deckIndex;
-    this.trackIndex = (this.trackIndex + 1) % this.musicTracks.length;
-    this.startDeck(this.deckIndex, this.trackIndex, MUSIC_XFADE);
-    setTimeout(() => {
-      try { current.el.pause(); } catch (_e) {}
-      this.crossfading = false;
-    }, MUSIC_XFADE * 1000 + 100);
+  // Beat pulse from the streamed music: low-band energy jumping above its running average (kicks),
+  // decaying between hits. 0..1, read once per drawn frame.
+  streamPulse() {
+    const a = this.musicAnalyser;
+    if (!a || !this.pulseBins) return 0;
+    a.getByteFrequencyData(this.pulseBins);
+    let e = 0;
+    for (let i = 0; i < PULSE_LOW_BINS; i++) e += this.pulseBins[i];
+    e /= PULSE_LOW_BINS * 255;
+    this.lowAvg = this.lowAvg > 0 ? this.lowAvg * 0.97 + e * 0.03 : e;
+    const hit = (e - this.lowAvg * 1.05) / Math.max(0.03, this.lowAvg * 0.25);
+    this.filePulse = Math.max(hit, this.filePulse * 0.86);
+    return Math.max(0, Math.min(1, this.filePulse));
   }
 
   // A track that cannot load or play: give up on files for this session and run the procedural score.
   onTrackError() {
     if (!this.fileMode) return;
     this.stopMusic();
-    this.musicTracks = [];
+    this.soundtrack = { menu: null, run: [], boss: null };
     this.startMusic();
   }
 
