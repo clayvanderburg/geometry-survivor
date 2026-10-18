@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.27.4',
+    date: '2026-10-18',
+    title: 'Mobile Sentries',
+    notes: [
+      { type: 'balance', text: 'Sentry Turret Count now goes up to 9 turrets (was 6).' },
+      { type: 'new', text: 'New LV 12 Sentry Turret Breakthrough, Mobile Sentries: planted turrets slowly follow you, and their bolts hit harder. It replaces Piercing Rail.' }
+    ]
+  },
+  {
     version: '0.27.3',
     date: '2026-10-18',
     title: 'Armory Tidy',

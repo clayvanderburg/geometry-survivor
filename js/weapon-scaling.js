@@ -51,7 +51,7 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
-export const TURRET_MAX_ACTIVE = 6; // 3 + Sentry Turret Count (cap 3)
+export const TURRET_MAX_ACTIVE = 9; // 3 + Sentry Turret Count (cap 6)
 
 export const WEAPON_SCALING = {
   // --- Autocannon (stats: damage, prism, rate, pierce) -----------------------------------------------
@@ -269,22 +269,20 @@ export const WEAPON_SCALING = {
   // Turrets counted for potential DPS: all of them out.
   turretAverageActive: (b) => W.turretMaxActive(b),
   turretBoltSpeed: 13,
-  // Transforms: Twin Barrels (2 bolts per shot), Piercing Rail (every railEvery-th shot is a rail worth
-  // railUnits bolts that pierces railPierce enemies, valued at railHitShare), Mortar Battery (a shell every
+  // Transforms: Twin Barrels (2 bolts per shot), Mobile Sentries (planted turrets drift after the ship at
+  // turretFollowSpeed px/s into a ring turretFollowRadius px around it: no extra attacks, so its rescale
+  // makes every bolt BT_TRANSFORM_DPS harder), Mortar Battery (a shell every
   // mortarEvery s worth 22% of the turret's bolt damage, valued at mortarHitShare).
   turretBarrels: (b) => (b.t4 ? 2 : 1),
-  railEvery: 5,
-  railUnits: 2.1,
-  railSpeed: 30,
-  railPierce: 3,
-  railHitShare: 1.4, // a rail through a pack hits the enemies behind its target too: valued at this share
+  turretFollowSpeed: 105, // px/s: about a third of the ship's cruising speed, so they trail behind
+  turretFollowRadius: 95,
   mortarEvery: 1.5,
   mortarShare: 0.22,
   mortarRadius: 60,
   mortarDelay: 0.7,
   mortarFalloff: 0.8, // hits hard at the target, fading to 20% at the rim
   mortarHitShare: 1.75, // a shell on a pack catches its neighbours too: valued at this share
-  turretShotUnits: (b) => W.turretBarrels(b) * (b.t8 ? (W.railEvery - 1 + W.railUnits * W.railHitShare) / W.railEvery : 1),
+  turretShotUnits: (b) => W.turretBarrels(b),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare * W.mortarHitShare : 0)),
   turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
   mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
