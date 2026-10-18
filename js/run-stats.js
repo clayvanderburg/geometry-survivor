@@ -20,7 +20,8 @@ export const SUB_SOURCES = Object.freeze({
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse
-  siege: 'turret'         // Siege Battery shell bursts on turret bolts
+  siege: 'turret',        // Siege Battery shell bursts on turret bolts
+  emp: 'grenades'         // EMP Grenades arcs, fired by Plasma Grenade blasts
 });
 
 // Damage that is not a loadout weapon's.

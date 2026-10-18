@@ -55,7 +55,7 @@ export function applyCorrode(e, lv) {
   s.corrodeT = W.corrodeDuration;
 }
 
-// Which weapon applies which damage type (one card each).
+// Which weapon applies which damage type (one card each; Plasma Grenades take every card owned).
 export function applyOnHitStatuses(p, e, source) {
   if (e.dead || statusImmune(e)) return;
   const w = p.weapons;
@@ -64,6 +64,11 @@ export function applyOnHitStatuses(p, e, source) {
   } else if (source === 'missile' || source === 'rocket') {
     if (w.cryo) applyChill(e, w.cryo);
   } else if (source === 'lightning') {
+    if (w.nanite) applyCorrode(e, w.nanite);
+  } else if (source === 'grenade') {
+    // Plasma Grenades (blasts, bomblets, clouds) carry every damage type the player owns.
+    if (w.thermite) applyBurn(p, e, w.thermite);
+    if (w.cryo) applyChill(e, w.cryo);
     if (w.nanite) applyCorrode(e, w.nanite);
   }
 }

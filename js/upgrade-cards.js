@@ -7,8 +7,9 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius
 } from './weapon-scaling.js';
+import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import {
   STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
@@ -121,6 +122,15 @@ export const STAT_ROWS = [
   { id: 'droneRange', label: 'Drone range', get: (p) => wb(p, 'drones', W.droneRange), fmt: int, headline: 'count', unit: 'DRONE RANGE' },
   { id: 'droneDamage', label: 'Drone bolt damage', get: (p) => wb(p, 'drones', (b) => weaponDamage(p, 'drone', b)), fmt: dec1, headline: 'pct', unit: 'DRONE DAMAGE' },
 
+  // Plasma Grenades (+ EMP Grenades)
+  { id: 'grenadeCount', label: 'Grenades / throw', get: (p) => wb(p, 'grenades', W.grenadeCount), fmt: int, headline: 'count', unit: 'GRENADES / THROW', newText: (a) => `PLASMA GRENADES // ${a} / THROW` },
+  { id: 'grenadeDamage', label: 'Grenade blast damage', get: (p) => wb(p, 'grenades', (b) => weaponDamage(p, 'grenade', b)), fmt: dec1, headline: 'pct', unit: 'GRENADE DAMAGE' },
+  { id: 'grenadeCooldown', label: 'Throw interval', get: (p) => wb(p, 'grenades', W.grenadeCooldown), fmt: secs, headline: 'pct', unit: 'GRENADE THROW INTERVAL' },
+  { id: 'grenadeBlast', label: 'Grenade blast radius', get: (p) => wb(p, 'grenades', (b) => grenadeBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'GRENADE BLAST RADIUS' },
+  { id: 'grenadeRange', label: 'Throw range', get: (p) => wb(p, 'grenades', W.grenadeRange), fmt: int, headline: 'count', unit: 'GRENADE THROW RANGE' },
+  { id: 'grenadeElement', label: 'Grenade element', get: (p) => wb(p, 'grenades', () => grenadeElement(p).label), fmt: (v) => v },
+  { id: 'empArcs', label: 'EMP arcs / grenade blast', get: (p) => (p.weapons.empGrenades && ownsWeapon(p, 'grenades') ? W.empArcs : null), fmt: int, newText: (a) => `GRENADE BLASTS ARC // ${a} ZAPS` },
+
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
   { id: 'miningRange', label: 'Claw reach', get: (p) => p.stats.miningRange, fmt: int },
@@ -149,14 +159,14 @@ export const STAT_ROWS = [
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
   // Damage types (status effects, see status-effects.js)
-  { id: 'burnMax', label: 'Max burn DPS / target', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l) * W.burnMaxStacks(l)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `BOLTS IGNITE // ${row.fmt(a)} BURN DPS` },
+  { id: 'burnMax', label: 'Max burn DPS / target', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l) * W.burnMaxStacks(l)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
   { id: 'burnStack', label: 'Burn DPS / stack', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l)), fmt: dec1 },
   { id: 'burnStacks', label: 'Burn max stacks', get: (p) => owned(p, 'thermite', W.burnMaxStacks), fmt: int },
   { id: 'burnDuration', label: 'Burn duration', get: (p) => owned(p, 'thermite', () => W.burnDuration), fmt: secs },
   { id: 'chillSlow', label: 'Chill slow', get: (p) => owned(p, 'cryo', (l) => chillSlow(l)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `BLASTS CHILL // -${row.fmt(a)} SPEED` },
   { id: 'chillBoss', label: 'Chill slow on bosses', get: (p) => owned(p, 'cryo', (l) => chillSlow(l, true)), fmt: pct },
   { id: 'chillDuration', label: 'Chill duration', get: (p) => owned(p, 'cryo', W.chillDuration), fmt: secs },
-  { id: 'corrodeMax', label: 'Max damage taken', get: (p) => owned(p, 'nanite', (l) => corrodePerStack() * W.corrodeMaxStacks(l)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `ARCS CORRODE // ${row.fmt(a)} DMG TAKEN` },
+  { id: 'corrodeMax', label: 'Max damage taken', get: (p) => owned(p, 'nanite', (l) => corrodePerStack() * W.corrodeMaxStacks(l)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `HITS CORRODE // ${row.fmt(a)} DMG TAKEN` },
   { id: 'corrodeStack', label: 'Damage taken / stack', get: (p) => owned(p, 'nanite', () => corrodePerStack()), fmt: bonus },
   { id: 'corrodeStacks', label: 'Corrode max stacks', get: (p) => owned(p, 'nanite', W.corrodeMaxStacks), fmt: int },
   { id: 'corrodeDuration', label: 'Corrode duration', get: (p) => owned(p, 'nanite', () => W.corrodeDuration), fmt: secs }
@@ -305,7 +315,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade' };
   let v = POTENTIAL_DPS[id](b) * p.stats.damage * tagDamageMult(p, SRC[id]);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

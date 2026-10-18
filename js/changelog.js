@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.18.0',
+    date: '2026-10-18',
+    title: 'Plasma Grenades',
+    notes: [
+      { type: 'new', text: 'New weapon: Plasma Grenades. Lobbed at nearby enemies, they land, blink for a moment and blow up in a wide blast.' },
+      { type: 'new', text: 'Grenades take on the element of your damage cards: Thermite burns, Cryo freezes, Nanite corrodes. Every card you own applies to them.' },
+      { type: 'new', text: 'Grenade Breakthroughs: Cluster Grenades (split on landing), Lingering Cloud (an elemental cloud) and Gravity Grenade (drags enemies in, then blasts).' },
+      { type: 'new', text: 'New evolution: EMP Grenades (Plasma Grenades + Tesla Arc). Every blast arcs lightning into nearby enemies.' }
+    ]
+  },
+  {
     version: '0.17.1',
     date: '2026-10-18',
     title: 'Autocannon',

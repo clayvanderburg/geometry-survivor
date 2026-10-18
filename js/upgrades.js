@@ -42,7 +42,8 @@ const CORE_INFO = {
   singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
   mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
   turret: { headline: 'turretMaxActive', summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.' },
-  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' }
+  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
+  grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' }
 };
 
 function weaponGroup(id) {
@@ -107,6 +108,7 @@ export const UPGRADE_POOL = [
   ...weaponGroup('orbitals'),
   ...weaponGroup('lightning'),
   ...weaponGroup('singularity'),
+  ...weaponGroup('grenades'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
@@ -205,7 +207,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'explosive') || player.weapons.tectonicBore >= 1;
     },
-    summary: 'EXPLOSIVE weapons hit harder: rockets, missile and mine blasts, and tectonic drill detonations.',
+    summary: 'EXPLOSIVE weapons hit harder: rockets, missile, grenade and mine blasts, and tectonic drill detonations.',
     apply(player) {
       addTagDamage(player, 'explosive');
     }
@@ -236,7 +238,7 @@ export const UPGRADE_POOL = [
       const w = player.weapons;
       return hasTag(player, 'area') || w.dashNova >= 1 || w.tectonicBore >= 1;
     },
-    summary: 'AREA weapons reach further: rocket, missile and mine blasts, singularity pull and collapse, dash nova and drill blasts.',
+    summary: 'AREA weapons reach further: rocket, missile, grenade and mine blasts, singularity pull and collapse, dash nova and drill blasts.',
     apply(player) {
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }
@@ -246,11 +248,11 @@ export const UPGRADE_POOL = [
     id: 'thermite',
     name: 'Thermite Rounds',
     category: 'DAMAGE TYPE',
-    owners: ['blaster'],
+    owners: ['blaster', 'grenades'],
     tags: ['burn', 'projectile'],
     maxLevel: 5,
     headline: 'burnMax',
-    summary: 'Primary and helix bolts ignite targets. Each hit adds a burn stack and refreshes the fire.',
+    summary: 'Autocannon and helix bolts ignite targets, and Plasma Grenades become FIRE grenades. Each hit adds a burn stack and refreshes the fire.',
     apply(player) {
       player.weapons.thermite = (player.weapons.thermite || 0) + 1;
     }
@@ -262,8 +264,8 @@ export const UPGRADE_POOL = [
     tags: ['chill', 'explosive'],
     maxLevel: 5,
     headline: 'chillSlow',
-    owners: ['rockets', 'missiles'],
-    summary: 'Rocket and missile blasts chill everything they catch, slowing it. Bosses resist most of the slow.',
+    owners: ['rockets', 'missiles', 'grenades'],
+    summary: 'Rocket, missile and Plasma Grenade blasts chill everything they catch, slowing it (Plasma Grenades become FROST grenades). Bosses resist most of the slow.',
     apply(player) {
       player.weapons.cryo = (player.weapons.cryo || 0) + 1;
     }
@@ -275,8 +277,8 @@ export const UPGRADE_POOL = [
     tags: ['corrode', 'electric'],
     maxLevel: 5,
     headline: 'corrodeMax',
-    owners: ['lightning'],
-    summary: 'Arcs seed corroding nanites: each stack makes the target take more damage from everything.',
+    owners: ['lightning', 'grenades'],
+    summary: 'Tesla arcs and Plasma Grenade blasts seed corroding nanites (Plasma Grenades become CORROSIVE): each stack makes the target take more damage from everything.',
     apply(player) {
       player.weapons.nanite = (player.weapons.nanite || 0) + 1;
     }
@@ -352,6 +354,23 @@ export const UPGRADE_POOL = [
     summary: 'EVOLUTION: Upgrades your Proximity Mines and Sentry Turret: sentry turrets load mine charges, so every bolt that hits bursts into nearby enemies.',
     apply(player) {
       player.weapons.siegeBattery = 1;
+    }
+  },
+  {
+    id: 'evo_emp',
+    name: 'SYNERGY: EMP Grenades',
+    category: 'GRENADES + TESLA ARC',
+    ownersAll: ['grenades', 'lightning'],
+    tags: ['explosive', 'electric'],
+    isSynergy: true,
+    maxLevel: 1,
+    req(player) {
+      return (player.weapons.grenades >= 1 && player.weapons.lightning >= 1);
+    },
+    headline: 'empArcs',
+    summary: 'EVOLUTION: Upgrades your Plasma Grenades and Tesla Arc: every Plasma Grenade blast sets off an EMP that arcs lightning into nearby enemies.',
+    apply(player) {
+      player.weapons.empGrenades = 1;
     }
   },
   {

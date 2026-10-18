@@ -60,6 +60,11 @@ export const WEAPONS = [
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
     color: '#b6ff4a',
     summary: 'Gunship drones fly in formation behind the hull and fire at nearby targets.'
+  },
+  {
+    id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
+    color: '#38ffc8',
+    summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst. Thermite, Cryo Payload and Nanite Swarm set their element.'
   }
 ];
 
