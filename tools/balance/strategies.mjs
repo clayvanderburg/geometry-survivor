@@ -1,14 +1,14 @@
 // Scripted build strategies for the balance simulator. `priorities` are UPGRADE_POOL ids (or
 // "synergy" for any evolution, "new_weapon" for the NEW WEAPON card) in pick order; cards outside the
 // list are picked at random. `weapons` are loadout.js weapon ids the strategy equips, in order, when a
-// NEW WEAPON pick is offered (anything else is a random pick). Every run starts with Pew Pews only
+// NEW WEAPON pick is offered (anything else is a random pick). Every run starts with Autocannon only
 // (STARTING_WEAPONS); weapon level-ups only appear once a weapon is equipped. Ids missing from UPGRADE_POOL are
 // ignored, and every upgrade also gets an automatic "focus:<id>" strategy, so weapons added later are
 // covered without editing this file.
 import { POWER_STATS } from '../../js/weapon-levels.js';
 
 export const NAMED_STRATEGIES = [
-  { name: 'projectile', desc: 'Pew Pews lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['blaster_damage', 'multishot', 'firerate', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret'] },
+  { name: 'projectile', desc: 'Autocannon lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['blaster_damage', 'multishot', 'firerate', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret'] },
   { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'rockets', 'mines'] },
   { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
   { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters'], weapons: ['singularity', 'mines'] },

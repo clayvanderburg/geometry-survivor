@@ -1,6 +1,6 @@
 // Weapon levels 1-12, single-stat cards and Breakthroughs.
 //
-// Every slot weapon (Pew Pews included) has a level from 1 to WEAPON_MAX_LEVEL. Equipping it is LV 1;
+// Every slot weapon (Autocannon included) has a level from 1 to WEAPON_MAX_LEVEL. Equipping it is LV 1;
 // every stat card for that weapon raises ONLY its own stat, and the weapon level by 1 (a +N rarity jump
 // raises both by N, clamped so the weapon never passes LV 12). The level itself adds nothing: it counts
 // cards toward the LV 4 / 8 / 12 Breakthroughs. POWER cards (damage, fire rate / reload / cooldown,
@@ -24,17 +24,17 @@ export const BT_BOOST_RANKS = 1;
 
 // Single-stat cards per weapon. `stat` is the rank key read by weapon-scaling.js; `headline` the
 // STAT_ROWS id shown enlarged on the card; maxLevel is the most ranks one card can take (the weapon
-// cap of LV 12 usually bites first). Ids of the old Pew Pews lines are kept, so saves, locks and
+// cap of LV 12 usually bites first). Ids of the old Autocannon lines are kept, so saves, locks and
 // strategies keep working.
 const card = (weapon, id, stat, name, headline, summary, extra = {}) => ({ weapon, id, stat, name, headline, summary, maxLevel: WEAPON_MAX_LEVEL - 1, ...extra });
 const cap = (maxLevel) => ({ maxLevel });
 
 export const STAT_CARDS = {
   blaster: [
-    card('blaster', 'blaster_damage', 'damage', 'Pew Pews Plasma Charge', 'damage', 'Pew Pews: hotter bolts. Only damage per bolt.'),
-    card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Pew Pews: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
-    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Pew Pews: fire faster. Only fire rate.', cap(8)),
-    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Pew Pews: each bolt slices through one more target (each one behind takes a little less).', cap(6))
+    card('blaster', 'blaster_damage', 'damage', 'Autocannon Plasma Charge', 'damage', 'Autocannon: hotter bolts. Only damage per bolt.'),
+    card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Autocannon: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
+    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Autocannon: fire faster. Only fire rate.', cap(8)),
+    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes a little less).', cap(6))
   ],
   rockets: [
     card('rockets', 'rockets_damage', 'damage', 'Wing Rocket Warheads', 'rocketDamage', 'Wing Rockets: heavier warheads. Only damage per rocket.'),
@@ -95,7 +95,7 @@ export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.i
 // Category badge on a weapon's stat and Breakthrough cards: the weapon's name, so every card says
 // which weapon it upgrades.
 export const WEAPON_BADGE = {
-  blaster: 'PEW PEWS', rockets: 'WING ROCKETS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
+  blaster: 'AUTOCANNON', rockets: 'WING ROCKETS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES'
 };
 
@@ -103,9 +103,9 @@ export const WEAPON_BADGE = {
 const tf = (id, name, summary) => ({ id, name, summary });
 export const TRANSFORMS = {
   blaster: {
-    4: tf('flak', 'Flak Rounds', 'Pew Pews bolts burst in a small flak blast wherever they hit.'),
-    8: tf('ricochet', 'Ricochet Rounds', 'Pew Pews bolts that hit ricochet into the nearest other enemy.'),
-    12: tf('arc', 'Arc Rounds', 'Every Pew Pews hit arcs cyan lightning into 2 nearby enemies.')
+    4: tf('flak', 'Flak Rounds', 'Autocannon bolts burst in a small flak blast wherever they hit.'),
+    8: tf('ricochet', 'Ricochet Rounds', 'Autocannon bolts that hit ricochet into the nearest other enemy.'),
+    12: tf('arc', 'Arc Rounds', 'Every Autocannon hit arcs cyan lightning into 2 nearby enemies.')
   },
   rockets: {
     4: tf('tandem', 'Tandem Warheads', 'Wing Rockets blast twice: a second, delayed detonation rocks the same spot.'),

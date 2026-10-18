@@ -76,7 +76,7 @@ const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_S
 
 // Run stats: damage stat ids -> weapon (by each weapon's tagSources) or another damage group.
 const STAT_GROUPS = buildSourceGroups(WEAPONS);
-// A weapon's level for the stats: its own level, or (Pew Pews, which has none) 1 + its upgrade levels.
+// A weapon's level for the stats: its own level, or (Autocannon, which has none) 1 + its upgrade levels.
 function statsWeaponLevel(p, id) {
   return weaponLevel(p, id) || 1 + weaponUpgradeLines(p, id).reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
 }
@@ -800,7 +800,7 @@ export class Game {
       const bonuses = this.progression.getBonuses();
       const liveStats = (upgLv, weapons) => ({
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
-        // Pew Pews stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
+        // Autocannon stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
         // their ranks are read from the weapon build when firing, so the base stays tunable.
         fireRate: TUNING.fireRate * bonuses.fireRateMult * (weapons.pulsarHelix ? 1.15 : 1),
         bulletSpeed: TUNING.bulletSpeed,
@@ -2481,7 +2481,7 @@ export class Game {
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
           damage: weaponDamage(p, 'helix', b),
           pierce,
-          hue: 305, // evolution magenta: reads apart from cyan Pew Pews shots and gold XP geoms
+          hue: 305, // evolution magenta: reads apart from cyan Autocannon shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
           life: 1.3
@@ -2493,13 +2493,14 @@ export class Game {
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
   }
 
-  // Starting weapon: dumbfire rockets from the outer wing tips, always along the hull's heading (where
-  // the crab is flying), independent of the turret's aim. Direct hit plus a small blast. Rockets
-  // alternate wings; each extra pair launches a little further back and fans slightly outward.
+  // Wing Rockets: dumbfire rockets from the outer wing tips, flying where the turret aims (mouse, right
+  // stick or auto-aim, like the Autocannon). Direct hit plus a small blast. Rockets alternate wings;
+  // each extra pair launches a little further back and fans slightly outward.
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
-    const heading = p.drillAngle ?? p.angle;
+    const heading = p.drillAngle ?? p.angle; // hull heading: where the wing tips are
+    const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
     const mirv = b.t12 ? W.mirvSplit : 1;
     const damage = weaponDamage(p, 'rocket', b) * mirv;
@@ -2508,7 +2509,7 @@ export class Game {
     for (let i = 0; i < count; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const tier = Math.floor(i / 2);
-      const a = heading + side * tier * 0.07;
+      const a = aim + side * tier * 0.07;
       const fx = Math.cos(a), fy = Math.sin(a);
       const hx = Math.cos(heading), hy = Math.sin(heading);
       // Wing tip in hull space: (0.25r forward, 1.12r out), matching drawCrabShip's carapace wings.

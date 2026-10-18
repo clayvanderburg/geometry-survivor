@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Weapon loadout: starting weapon (Pew Pews), 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
+// Weapon loadout: starting weapon (Autocannon), 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
 // weapon picks, discards, Wing Rockets as a leveled weapon, and the stepped XP curve. The balance
 // harness stubs the browser and builds a real Game, so resetRun and the level-up flow are the game's own.
 const h = await import('../tools/balance/harness.mjs');
@@ -42,7 +42,7 @@ function lcg(seed = 7) {
 
 const fill = (p, ids) => ids.forEach((id) => assert.ok(acquireWeapon(p, id), `equip ${id}`));
 
-test('a run starts with Pew Pews only in 1 of 6 slots; Wing Rockets join through NEW WEAPON', () => {
+test('a run starts with Autocannon only in 1 of 6 slots; Wing Rockets join through NEW WEAPON', () => {
   const p = freshGame().player;
   assert.deepEqual(p.loadout, ['blaster']);
   assert.ok(!(p.upgradeLevels.rockets > 0));
@@ -254,7 +254,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.deepEqual(p.loadout, ['blaster']);
 });
 
-test('discarding Pew Pews removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite and Pulsar Helix', () => {
+test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite and Pulsar Helix', () => {
   const g = freshGame();
   const p = g.player;
   fill(p, ['rockets']);
@@ -268,7 +268,7 @@ test('discarding Pew Pews removes Prism Split, Hyper-Capacitor, Phase Piercer, T
   assert.equal(p.stats.fireRate, base.fireRate);
   assert.equal(p.weapons.pulsarHelix, 0);
   assert.ok(!eligibleUpgrades(p).some((u) => ['multishot', 'firerate', 'pierce', 'thermite', 'tag_kinetic'].includes(u.id)));
-  // No Pew Pews: the blaster stops firing, wing rockets keep going.
+  // No Autocannon: the blaster stops firing, wing rockets keep going.
   g.player.invuln = 1e9;
   for (let i = 0; i < 120; i++) g.update(1 / 60);
   assert.ok(!g.bullets.some((b) => !b.source), 'no blaster bolts');
@@ -351,7 +351,7 @@ test('every weapon levels 1 to 12 through its stat cards, and stops at LV 12', (
   // A +5 roll at LV 11 installs only the one level left.
   assert.equal(applyUpgradeLevels(p, { ...UPGRADE_BY_ID.pierce, levelJump: 5 }), 1);
   assert.equal(weaponLevel(p, 'blaster'), 12);
-  assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Pew Pews cards past LV 12');
+  assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Autocannon cards past LV 12');
 });
 
 test('the XP curve is a stepped line, driven by TUNING', () => {

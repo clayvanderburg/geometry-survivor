@@ -271,7 +271,7 @@ test('WEAPONS and UPGRADES tabs are thin adapters: weapons on one, every other c
     assert.equal(upgrades.includes(`data-entry="${u.id}"`), !isWeapon, `${u.id} ${isWeapon ? 'should not be on' : 'missing from'} UPGRADES`);
   }
   assert.ok(html.includes('ARSENAL') && upgrades.includes('EVOLUTIONS') && upgrades.includes('TAGS'));
-  assert.ok(html.includes('PEW PEWS') && !html.includes('WING ROCKETS'), 'starting kit (Pew Pews only) comes from the loadout registry');
+  assert.ok(html.includes('AUTOCANNON') && !html.includes('WING ROCKETS'), 'starting kit (Autocannon only) comes from the loadout registry');
   const fake = [...UPGRADE_POOL, { id: 'plasma_whip', name: 'Plasma Whip', category: 'MELEE', tags: ['kinetic'], maxLevel: 4, summary: 'Lashes nearby hulls.' }];
   const g = weaponGuide({ plasma_whip: 2 }, fake);
   const whip = g.categories.find(c => c.id === 'MELEE').items[0];
