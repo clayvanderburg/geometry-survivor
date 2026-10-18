@@ -657,7 +657,7 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
     game.wave = bench.targetWave;
     const p = game.player;
     if (upgradeId) {
-      // Install exactly `level` levels (starting weapons such as Wing Rockets are already LV 1).
+      // Install exactly `level` levels (starting weapons such as Rocket Pods are already LV 1).
       const upg = UPGRADE_POOL.find(u => u.id === upgradeId);
       const jump = level - (p.upgradeLevels[upgradeId] || 0);
       if (jump > 0) applyUpgradeLevels(p, { ...upg, levelJump: jump });

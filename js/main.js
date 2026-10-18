@@ -11,8 +11,8 @@ import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
-  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
+  UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
+  discardWeapon, snapshotBase, xpToNextLevel, hudUpgradeLines, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
@@ -2620,13 +2620,13 @@ export class Game {
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
   }
 
-  // Wing Rockets: dumbfire rockets from the outer wing tips, flying where the turret aims (mouse, right
-  // stick or auto-aim, like the Autocannon). Direct hit plus a small blast. Rockets alternate wings;
+  // Rocket Pods: dumbfire rockets from the two flank pods, flying where the turret aims (mouse, right
+  // stick or auto-aim, like the Autocannon). Direct hit plus a small blast. Rockets alternate pods;
   // each extra pair launches a little further back and fans slightly outward.
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
-    const heading = p.drillAngle ?? p.angle; // hull heading: where the wing tips are
+    const heading = p.drillAngle ?? p.angle; // hull heading: where the flank pods are
     const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
     const mirv = b.t12 ? W.mirvSplit : 1;
@@ -2639,7 +2639,7 @@ export class Game {
       const a = aim + side * tier * 0.07;
       const fx = Math.cos(a), fy = Math.sin(a);
       const hx = Math.cos(heading), hy = Math.sin(heading);
-      // Wing tip in hull space: (0.25r forward, 1.12r out), matching drawCrabShip's carapace wings.
+      // Pod mount in hull space: (0.25r forward, 1.12r out), the tips of drawCrabShip's carapace flanks.
       const fwd = p.radius * 0.25 - tier * 7;
       const out = p.radius * 1.12 + tier * 3;
       const wx = p.x + hx * fwd - hy * side * out;
@@ -4422,11 +4422,8 @@ export class Game {
       tags.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${w.name}">${w.hudName}${lv}</span>`);
     }
     tags.push('<span class="weapon-bar-break"></span>');
-    for (const upg of UPGRADE_POOL) {
-      const lv = p.upgradeLevels[upg.id];
-      if (lv && upgradeKind(upg) !== 'weapon') {
-        tags.push(`<span class="weapon-tag${upg.isSynergy ? ' rarity-evolution' : ''}">${upg.name} ${upg.isSynergy ? '★' : `LV ${lv}`}</span>`);
-      }
+    for (const u of hudUpgradeLines(p)) {
+      tags.push(`<span class="weapon-tag${u.isSynergy ? ' rarity-evolution' : ''}">${u.name} ${u.isSynergy ? '★' : `LV ${u.level}`}</span>`);
     }
     const barHtml = tags.join('');
     if (barHtml !== this.weaponBarHtml) {
@@ -4704,7 +4701,7 @@ export class Game {
     }
   }
 
-  // Wing rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
+  // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
   drawWingRocket(ctx, b) {
     const a = Math.atan2(b.vy, b.vx);
     const c = Math.cos(a), s = Math.sin(a);

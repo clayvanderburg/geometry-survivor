@@ -22,9 +22,9 @@ export const WEAPONS = [
     summary: 'Twin plasma streams straight at your aim. Levels up through Prism Split, Hyper-Capacitor and Phase Piercer.'
   },
   {
-    id: 'rockets', name: 'Wing Rockets', hudName: 'Wing Rockets', levelId: 'rockets', levelKey: 'rockets', category: 'PRIMARY', tagSources: ['rocket'],
+    id: 'rockets', name: 'Rocket Pods', hudName: 'Rocket Pods', levelId: 'rockets', levelKey: 'rockets', category: 'PRIMARY', tagSources: ['rocket'],
     color: '#ff9b3d',
-    summary: 'Dumbfire rockets from both wing tips, fired where you aim. Direct hit plus a small blast.'
+    summary: 'Dumbfire rockets from pods on both flanks, fired where you aim. Direct hit plus a small blast.'
   },
   {
     id: 'missiles', name: 'Swarm Micro-Missiles', hudName: 'Missiles', levelId: 'missiles', levelKey: 'missiles', category: 'AUTONOMOUS', tagSources: ['missile'],
@@ -85,7 +85,7 @@ export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
 
-// The crab's starting kit: Autocannon only; Wing Rockets join through NEW WEAPON like every other weapon.
+// The crab's starting kit: Autocannon only; Rocket Pods join through NEW WEAPON like every other weapon.
 export const STARTING_WEAPONS = ['blaster'];
 
 // Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).

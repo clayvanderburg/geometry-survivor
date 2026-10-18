@@ -35,7 +35,7 @@ export function rarityFor(upg, jump = 1) {
 // damage from the level, so apply() only has to keep player.weapons[levelKey] equal to the level.
 const CORE_INFO = {
   blaster: { headline: 'damage', summary: 'Twin plasma streams straight at your aim.' },
-  rockets: { headline: 'rocketCount', summary: 'Wing-tip dumbfire rockets fly where you aim: a direct hit plus a small blast.' },
+  rockets: { headline: 'rocketCount', summary: 'Flank-pod dumbfire rockets fly where you aim: a direct hit plus a small blast.' },
   missiles: { headline: 'missileSalvo', summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.' },
   orbitals: { headline: 'orbitalBlades', summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.' },
   lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
@@ -417,6 +417,19 @@ export function upgradeKind(u) {
   if (u.category === 'SPECIALIST') return 'tag';
   if (u.owners) return 'line';
   return 'general';
+}
+
+// Installed upgrades for the HUD row under the weapon slots. A weapon's equip line ('core', always rank 1)
+// and its stat cards ('weapon') are left out: the slot chip already shows them as the weapon's level, so
+// listing the equip line again would show the weapon twice with a stale LV 1.
+export function hudUpgradeLines(player) {
+  const out = [];
+  for (const u of UPGRADE_POOL) {
+    const level = player.upgradeLevels?.[u.id] || 0;
+    const kind = upgradeKind(u);
+    if (level > 0 && kind !== 'core' && kind !== 'weapon') out.push({ id: u.id, name: u.name, level, isSynergy: !!u.isSynergy });
+  }
+  return out;
 }
 
 // Weapons an upgrade belongs to (its weapon for equip lines and stat cards, or its owners), for

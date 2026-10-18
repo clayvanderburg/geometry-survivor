@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.21.3',
+    date: '2026-10-18',
+    title: 'Rocket Pods',
+    notes: [
+      { type: 'new', text: 'Wing Rockets are now Rocket Pods.' },
+      { type: 'fix', text: 'The HUD no longer lists your weapons a second time as LV 1.' },
+      { type: 'fix', text: 'Weapon Range: AUTO ranks now light up the stat each level added, so extra rockets or missiles make sense.' }
+    ]
+  },
+  {
     version: '0.21.2',
     date: '2026-10-18',
     title: 'Trick Shots',

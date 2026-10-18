@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Weapon loadout: starting weapon (Autocannon), 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
-// weapon picks, discards, Wing Rockets as a leveled weapon, and the stepped XP curve. The balance
+// weapon picks, discards, Rocket Pods as a leveled weapon, and the stepped XP curve. The balance
 // harness stubs the browser and builds a real Game, so resetRun and the level-up flow are the game's own.
 const h = await import('../tools/balance/harness.mjs');
 const {
@@ -42,7 +42,7 @@ function lcg(seed = 7) {
 
 const fill = (p, ids) => ids.forEach((id) => assert.ok(acquireWeapon(p, id), `equip ${id}`));
 
-test('a run starts with Autocannon only in 1 of 6 slots; Wing Rockets join through NEW WEAPON', () => {
+test('a run starts with Autocannon only in 1 of 6 slots; Rocket Pods join through NEW WEAPON', () => {
   const p = freshGame().player;
   assert.deepEqual(p.loadout, ['blaster']);
   assert.ok(!(p.upgradeLevels.rockets > 0));
@@ -132,7 +132,7 @@ test('with one weapon NEW WEAPON is guaranteed on the 2nd hand in a row; with tw
     for (let i = 0; i < 6; i++) hands.push(rollLevelUpHand(one, 3).some((c) => c.id === NEW_WEAPON_ID));
     assert.deepEqual(hands, [false, true, false, true, false, true], 'never two hands in a row without one');
   });
-  // Discarding down to one weapon (e.g. dropping Wing Rockets) brings the 1-weapon pity back.
+  // Discarding down to one weapon (e.g. dropping Rocket Pods) brings the 1-weapon pity back.
   const dropped = freshGame().player;
   fill(dropped, ['rockets']);
   discardWeapon(dropped, 'rockets');
@@ -233,7 +233,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.deepEqual(p.loadout, ['blaster', 'rockets', 'lightning']);
   assert.equal(p.weapons.missiles, 0);
   assert.equal(p.weapons.stormProtocol, 0);
-  assert.equal(p.upgradeLevels.cryo, 2, 'Cryo Payload stays while Wing Rockets carry it');
+  assert.equal(p.upgradeLevels.cryo, 2, 'Cryo Payload stays while Rocket Pods carry it');
   assert.equal(p.upgradeLevels.nanite, 2);
   assert.equal(p.upgradeLevels.tag_electric, 2, 'tag cards are general and stay');
   assert.equal(p.upgradeLevels.overdrive, 2);
@@ -268,7 +268,7 @@ test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer,
   assert.equal(p.stats.fireRate, base.fireRate);
   assert.equal(p.weapons.pulsarHelix, 0);
   assert.ok(!eligibleUpgrades(p).some((u) => ['multishot', 'firerate', 'pierce', 'thermite', 'tag_kinetic'].includes(u.id)));
-  // No Autocannon: the blaster stops firing, wing rockets keep going.
+  // No Autocannon: the blaster stops firing, rocket pods keep going.
   g.player.invuln = 1e9;
   for (let i = 0; i < 120; i++) g.update(1 / 60);
   assert.ok(!g.bullets.some((b) => !b.source), 'no blaster bolts');
@@ -305,11 +305,11 @@ test('pause-menu discard goes through a confirm step', () => {
   assert.ok(!g.player.loadout.includes('missiles'));
 });
 
-test('Wing Rockets fire about once a second at LV 1; their cards add rockets and shorten the reload', () => {
+test('Rocket Pods fire about once a second at LV 1; their cards add rockets and shorten the reload', () => {
   const lv1 = levelBuild('rockets', 1);
   assert.equal(W.wingRocketCooldown(lv1), 1);
   assert.equal(W.wingRocketCount(lv1), 2);
-  assert.ok(W.wingRocketCount(makeBuild('rockets', 4, { count: 3 })) === 5, 'more rockets per Pods rank');
+  assert.ok(W.wingRocketCount(makeBuild('rockets', 4, { count: 3 })) === 5, 'more rockets per Tubes rank');
   assert.ok(W.wingRocketBlastRadius(makeBuild('rockets', 4, { radius: 3 })) > W.wingRocketBlastRadius(lv1), 'bigger blasts');
   assert.ok(Math.abs(POTENTIAL_DPS.rockets(lv1) / DPS_TARGET(1) - 1) < 1e-6, 'LV 1 on the shared curve');
   const g = freshGame();
@@ -327,7 +327,7 @@ test('Wing Rockets fire about once a second at LV 1; their cards add rockets and
   assert.equal(g.bullets.length, 5);
 });
 
-test('Cryo Payload chills enemies caught by wing rocket blasts', async () => {
+test('Cryo Payload chills enemies caught by Rocket Pod blasts', async () => {
   const { applyOnHitStatuses } = await import('../js/status-effects.js');
   const e = { type: 'swarmer', hp: 100, maxHp: 100 };
   applyOnHitStatuses({ weapons: { cryo: 2 } }, e, 'rocket');
@@ -468,7 +468,7 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
 test('owning Volatile Shatter unlocks the KINETIC tag card', () => {
   const p = freshGame().player;
   acquireWeapon(p, 'rockets');
-  discardWeapon(p, 'blaster'); // Wing Rockets alone carry no KINETIC tag
+  discardWeapon(p, 'blaster'); // Rocket Pods alone carry no KINETIC tag
   assert.deepEqual(p.loadout, ['rockets']);
   assert.ok(!ownedTags(p).has('kinetic'));
   assert.ok(!eligibleUpgrades(p).some((u) => u.id === 'tag_kinetic'));

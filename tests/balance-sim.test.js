@@ -37,7 +37,7 @@ test('every weapon card in UPGRADE_POOL is discovered and deals damage under its
   const base = h.benchUpgrade({ scenario: 'chase', bench });
   for (const w of weapons) {
     const r = h.benchUpgrade({ upgradeId: w.id, level: 3, scenario: 'chase', bench });
-    // Starting weapons (Wing Rockets) already fire at LV 1 in the baseline: their source must grow.
+    // Starting weapons (Rocket Pods) already fire at LV 1 in the baseline: their source must grow.
     const own = Object.keys(r.dps).filter(k => r.dps[k] > 0 && (!(k in base.dps) || (w.id === 'rockets' && k === 'rocket' && r.dps[k] > base.dps[k] * 1.25)));
     assert.ok(own.length > 0, `${w.id} produced no damage source of its own: ${JSON.stringify(r.dps)}`);
   }

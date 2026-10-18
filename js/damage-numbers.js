@@ -19,7 +19,7 @@ export const DAMAGE_SOURCE_COLORS = {
   drone: '#c4ff4a',       // Escort drone bolts
   grenade: '#5effd0',     // Plasma Grenade blasts, bomblets and clouds
   burn: '#ff5a2e',        // Thermite burn ticks (damage over time)
-  rocket: '#ffb347',      // Wing rockets
+  rocket: '#ffb347',      // Rocket Pods
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
 };
 

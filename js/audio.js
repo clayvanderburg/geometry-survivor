@@ -1502,7 +1502,7 @@ export class SoundEngine {
     thump.stop(t + 0.11);
   }
 
-  // Wing rockets (Prism Rockets): a bright ignition whoosh.
+  // Rocket Pods: a bright ignition whoosh.
   playRocketLaunch() {
     if (!this.enabled || !this.ctx) return;
     if (this.playSample('rocket_launch')) return;

@@ -68,7 +68,7 @@ export const RANGE_MOD_IDS = RANGE_MOD_GROUPS.flatMap((g) => g.ids);
 
 // Readout names for damage stats (hitEnemy `stat`); weapons not listed use their HUD name.
 const STAT_LABELS = {
-  blaster: 'Autocannon', helix: 'Pulsar Helix', rocket: 'Wing Rockets', missile: 'Swarm Missiles', storm: 'Storm Protocol',
+  blaster: 'Autocannon', helix: 'Pulsar Helix', rocket: 'Rocket Pods', missile: 'Swarm Missiles', storm: 'Storm Protocol',
   lightning: 'Tesla Arc', emp: 'EMP Grenades', singularity: 'Vortex Core', collapse: 'Vortex Collapse', orbital: 'Orbit Blades',
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades',
   burn: 'Thermite Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
