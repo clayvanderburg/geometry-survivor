@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.21.0',
+    date: '2026-10-18',
+    title: 'Weapon Range',
+    notes: [
+      { type: 'new', text: 'WEAPON RANGE on the title screen: build any loadout, set levels, Breakthroughs, damage types and synergies, then test it on target dummies.' },
+      { type: 'new', text: 'The range shows live DPS per damage source next to each weapon\'s potential DPS. Nothing there counts toward scores or stats.' }
+    ]
+  },
+  {
     version: '0.20.1',
     date: '2026-10-18',
     title: 'Spread Out',

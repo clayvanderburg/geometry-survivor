@@ -110,6 +110,11 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
    - **WEAPONS** is a thin adapter over `UPGRADE_POOL` / `WEAPON_TAGS` / `TAG_INFO` / `RARITY`: every upgrade card in pool order with its category, max level, tag chips and *OWNED LV n* when opened mid-run, evolutions with their recipe, and the starting kit. New cards appear with no guide edits.
    - Unlocks persist in the existing save (`vectra_survivor_save_v2`, `guide: { seen, fresh }`, normalized so old saves load). **New enemy type?** Add a `HOSTILE_ENTRIES` entry and a preview scene: `tests/field-guide.test.js` fails until every spawnable type has both.
 
+11. **Weapon Range (`js/weapon-range.js`, `js/weapon-range-ui.js`)**
+   - **🎯 WEAPON RANGE** on the title screen starts a sandbox run of the real simulation: no waves, bosses, lieutenants, asteroids or level-ups; the ship can't be hurt; kills drop nothing; nothing reaches the local or global boards, the run stats upload or the Field Guide. Leave with the panel's **◀ EXIT** or **EXIT WEAPON RANGE** in the pause menu.
+   - The side panel (top left; docked along the bottom on narrow screens, collapsible) has three tabs. **LOADOUT**: up to 6 weapons, each LV 1–18 with AUTO ranks (dealt round-robin over its stat cards) or CUSTOM ranks per stat, and a TRANSFORM / ACROSS THE BOARD toggle at LV 6, 12 and 18. **MODS**: damage types, synergies (only once their weapons are equipped) and general cards. **DUMMIES**: target hull (or MIXED), count, formation (ring, close ring, pack, line, scatter), SPAWN / CLEAR, and live settings for every dummy: infinite (refilled every tick) or wave-N HP, stationary or normal AI, respawn kills.
+   - The readout shows rolling 5 s DPS per damage source (damage-number colours) and in total, damage since RESET, and each weapon's live DPS against its potential DPS (`weaponPotentialDps`, one target). Edits apply live; the config is remembered in `localStorage` (`vexolith_weapon_range`) when storage allows. Controller: **Back** hands the pad to the panel (the sim holds), **B** returns to flying.
+
 ---
 
 ## Global leaderboard
@@ -249,6 +254,8 @@ Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created o
 - `js/field-guide.js` — Field Guide data: hostile entries (text, tips, exact stats from the real config), mechanics, the weapons adapter over `UPGRADE_POOL`, and encounter detection (`detectEncounters`).
 - `js/field-guide-scenes.js` — Animated hostile previews (`GuidePreview`) built on the real enemy AI/draw code, plus locked silhouettes.
 - `js/field-guide-ui.js` — Field Guide screen: tab HTML builders, NEW badges, visible-only preview loop.
+- `js/weapon-range.js` — Weapon Range: panel config → ship build (`applyRangeLoadout`), dummy formations, the rolling `DpsMeter` and the `WeaponRange` controller hooked into `Game`. DOM-free.
+- `js/weapon-range-ui.js` — Weapon Range side panel (`#range-panel`): tabs, steppers and the live DPS readout.
 - `js/grid.js` — Camera-culled Hooke's-law spring-mass warping neon grid.
 - `js/particles.js` — Polygon shatter shards, velocity-stretched sparks, dual-ring shockwaves, chain lightning, pooled hit-impact flares, and floating text.
 - `js/deployables.js` — Proximity Mines, Sentry Turrets and Escort Drones: pooled update, targeting (nearest visible enemy), bolts through the shared bullet sweep, and neon rendering.

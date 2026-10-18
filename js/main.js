@@ -44,6 +44,8 @@ import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD
 import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
+import { WeaponRange } from './weapon-range.js';
+import { RangePanel } from './weapon-range-ui.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -213,6 +215,9 @@ export class Game {
     this.notesOpen = false;
     this.patchNotes = new PatchNotesUI({ onClose: () => this.onNotesClosed() });
     this.renderVersionTags();
+    // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
+    this.range = new WeaponRange(this);
+    this.range.view = new RangePanel(this.range);
     this.bindEvents();
     this.resetRun();
     this.renderHubUI();
@@ -483,6 +488,7 @@ export class Game {
         this.handleNotesKey(e, onControl);
         return;
       }
+      if (this.range?.view?.handleKey(e)) return;
 
       this.sound.init();
       const code = e.code;
@@ -607,6 +613,7 @@ export class Game {
         (e.target.tagName === 'INPUT' ||
           e.target.tagName === 'BUTTON' ||
           e.target.closest('#tuner-drawer') ||
+          e.target.closest('#range-panel') ||
           e.target.closest('.hud-vol-pill'))
       ) {
         return;
@@ -633,6 +640,12 @@ export class Game {
       this.sound.init();
       this.startGame();
     });
+
+    document.getElementById('btn-weapon-range')?.addEventListener('click', () => {
+      this.sound.init();
+      this.range.enter();
+    });
+    document.getElementById('btn-pause-exit-range')?.addEventListener('click', () => this.range.exit());
 
     document.getElementById('btn-restart-game').addEventListener('click', () => {
       commitGameOverName();
@@ -1046,6 +1059,7 @@ export class Game {
   submitGlobalRun(run) {
     this.lastGlobalRunId = null;
     if (!this.globalBoard) return;
+    if (this.range?.active) return; // Weapon Range runs are never posted
     const token = {};
     this.globalSubmitToken = token; // a late answer for an earlier run is ignored
     if (this.postGlobal === false) {
@@ -1097,6 +1111,7 @@ export class Game {
 
   // Fire-and-forget like the leaderboard: opted-out, dev-tuner and very short runs are not sent.
   submitRunStats(summary) {
+    if (this.range?.active) return; // ...nor uploaded
     const token = {};
     this.statsUploadToken = token; // a late answer for an earlier run is ignored
     const opts = { share: this.shareStats === true, tainted: this.runTainted || isTuningModified() };
@@ -1276,7 +1291,23 @@ export class Game {
     this.grid.applyImpulse(this.player.x, this.player.y, 48, 260, 188);
     this.particles.spawnShockwave(this.player.x, this.player.y, 240, 188, 5, 0.5);
     this.sound.playLevelUp();
-    this.spawnWavePack();
+    if (this.range?.active) this.range.onRunStart();
+    else this.spawnWavePack();
+  }
+
+  // Back to the title screen without a game over (leaving the Weapon Range).
+  returnToTitle() {
+    this.state = 'TITLE';
+    for (const id of ['pause-modal', 'upgrade-modal', 'chest-modal', 'gameover-modal']) document.getElementById(id)?.classList.add('hidden');
+    const pauseBtn = document.getElementById('btn-pause');
+    if (pauseBtn) {
+      pauseBtn.textContent = '⏸ PAUSE [P]';
+      pauseBtn.classList.remove('active');
+    }
+    this.resetRun();
+    this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
+    this.renderHubUI();
+    document.getElementById('title-modal')?.classList.remove('hidden');
   }
 
   showBanner(text) {
@@ -1590,6 +1621,7 @@ export class Game {
       this.onCriticalHit(e);
     }
     this.runStats?.damage(stat, Math.min(dmg, Math.max(0, e.hp)));
+    if (this.range?.active) this.range.recordHit(stat, source, dmg);
     e.lastStat = stat;
     e.hp -= dmg;
     e.sinceHit = 0;
@@ -1697,15 +1729,19 @@ export class Game {
       this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348, 'other', undefined, undefined, 'blackhole');
     }
 
+    // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
+    const ranged = !!this.range?.active;
+    if (ranged) this.range.onKill(e);
+
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
     let bossBombGain = 0;
-    if (e.isBoss) {
+    if (e.isBoss && !ranged) {
       const bombsBefore = this.player.bombs;
       this.player.bombs = Math.min(9, this.player.bombs + 1);
       bossBombGain = this.player.bombs - bombsBefore;
       this.spawnRelicChest(e.x, e.y, true);
-    } else if (!fromBomb && this.chests.length < 3) {
+    } else if (!ranged && !fromBomb && this.chests.length < 3) {
       const chestChance = (
         e.isLieutenant ? 0.02 :
         e.type === 'blackhole' ? 0.008 :
@@ -1742,6 +1778,7 @@ export class Game {
         });
       }
     }
+    if (ranged) return;
 
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
@@ -1909,7 +1946,7 @@ export class Game {
   // Plasma orbs: blocked by rock, pass through a dash's invulnerability, absorbed by the shield.
   updateEnemyBullets(dt) {
     this.enemyBulletHit ||= (b) => {
-      if (this.player.invuln > 0 || this.player.hp <= 0) return false;
+      if (this.player.invuln > 0 || this.player.hp <= 0 || this.range?.active) return false; // range: orbs pass through
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
       this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
       return true;
@@ -3640,6 +3677,11 @@ export class Game {
   }
 
   triggerGameOver() {
+    // The range ship can't die, but nothing from a range run is ever recorded: leave to the title instead.
+    if (this.range?.active) {
+      this.range.exit();
+      return;
+    }
     this.state = 'GAMEOVER';
     this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
@@ -3745,7 +3787,8 @@ export class Game {
       UPGRADE: ['upgrade-modal', null],
       CHEST: ['chest-modal', 'btn-claim-chest'],
       PAUSED: ['pause-modal', 'btn-resume-game'],
-      GAMEOVER: ['gameover-modal', 'btn-restart-game']
+      GAMEOVER: ['gameover-modal', 'btn-restart-game'],
+      RANGE_EDIT: ['range-panel', null] // Weapon Range panel, opened with Back
     };
     if (this.menuState !== this.state) {
       this.menuState = this.state;
@@ -3764,7 +3807,9 @@ export class Game {
     this.menuNav.update(root, gp, dt, fallback);
     if (this.menuGrace > 0) return;
 
-    if (this.handleUpgradePad(gp)) {
+    if (this.state === 'RANGE_EDIT' && (gp.pressed(PAD.B) || gp.pressed(PAD.BACK) || gp.pressed(PAD.START))) {
+      this.range.view?.endPadEdit();
+    } else if (this.handleUpgradePad(gp)) {
       this.sound.init();
     } else if (gp.pressed(PAD.A)) {
       this.sound.init();
@@ -3812,7 +3857,14 @@ export class Game {
 
     if (gp?.pressed(PAD.X)) this.toggleAutoFire();
     if (gp?.pressed(PAD.Y)) this.toggleAutoAim();
-    if (gp?.pressed(PAD.BACK)) this.toggleRadar();
+    if (gp?.pressed(PAD.BACK)) {
+      // In the Weapon Range, Back hands the controller to the range panel (the sim holds meanwhile).
+      if (this.range?.active) {
+        this.range.view?.beginPadEdit();
+        return;
+      }
+      this.toggleRadar();
+    }
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
     if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
@@ -3834,8 +3886,12 @@ export class Game {
     const bossStage = this.getBossStage();
     this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
+    // Weapon Range: dummies and respawns instead of waves, bosses, lieutenants and packs.
+    const range = this.range?.active ? this.range : null;
+    if (range) range.tick();
+
     // Escalate waves every `waveLength` seconds (Difficulty Ramp tuning)
-    if (this.waveTimer >= (TUNING.waveLength ?? 22)) {
+    if (!range && this.waveTimer >= (TUNING.waveLength ?? 22)) {
       this.waveTimer = 0;
       this.wave++;
       this.coresDroppedThisWave = 0;
@@ -3855,12 +3911,14 @@ export class Game {
     }
 
     // Scheduled encounters retain their wave scaling and get the first free slots.
-    this.processPendingBossSpawns();
-    this.updateLieutenantSchedule();
-    this.spawnCooldown -= dt;
-    if (this.spawnCooldown <= 0) {
-      this.spawnWavePack();
-      this.spawnCooldown = spawnIntervalAt(this.wave);
+    if (!range) {
+      this.processPendingBossSpawns();
+      this.updateLieutenantSchedule();
+      this.spawnCooldown -= dt;
+      if (this.spawnCooldown <= 0) {
+        this.spawnWavePack();
+        this.spawnCooldown = spawnIntervalAt(this.wave);
+      }
     }
 
     const p = this.player;
@@ -4125,7 +4183,7 @@ export class Game {
       for (const lt of ltArrivals) this.onLieutenantArrived(lt);
       ltArrivals.length = 0;
     }
-    this.updateFieldGuide(dt);
+    if (!range) this.updateFieldGuide(dt); // range dummies don't unlock Field Guide entries
     this.asteroidManager.update(dt, p, enemies, this.bullets, (r) => this.onRockShattered(r), this.particles);
     if (this.asteroidManager.eliteGrinds > 0) {
       // Elite grinding a path through rock: a quiet scrape that fades out ~900 px from the ship.
@@ -4134,7 +4192,7 @@ export class Game {
     }
     if (this.updateEnemyBullets(dt)) return;
 
-    for (const e of [...enemies].reverse()) {
+    for (const e of range ? [] : [...enemies].reverse()) { // range dummies never touch the ship
       if (e.dead) continue;
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
