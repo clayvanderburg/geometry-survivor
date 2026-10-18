@@ -37,7 +37,7 @@ const sec1 = (v) => `${v.toFixed(1)}s`;
 const wb = (p, id, fn) => (ownsWeapon(p, id) ? fn(weaponBuild(p, id)) : null);
 // Deployable hits scale with bolt damage and the tuner's deployable multiplier (same as deployables.js).
 
-// headline: 'count' (+N UNIT), 'pct' (+N% UNIT), 'points' (+N% UNIT for ratio stats like luck),
+// headline: 'count' (+N UNIT), 'pct' (+N% UNIT, or N.N× UNIT from triple up), 'points' (+N% UNIT for ratio stats like luck),
 // or a function(before, after). newText: headline when the row comes online (before is null).
 export const STAT_ROWS = [
   // Build-wide modifiers first, so crit, tag and Reactor Overdrive cards lead with their own row
@@ -193,6 +193,8 @@ function readRows(player) {
   });
 }
 
+const trimDec = (v) => v.toFixed(1).replace(/\.0$/, '');
+
 function headlineText(row, before, after) {
   if (before === null) {
     if (row.newText) return row.newText(after, row);
@@ -201,7 +203,8 @@ function headlineText(row, before, after) {
   }
   if (typeof row.headline === 'function') return row.headline(before, after);
   const sign = after >= before ? '+' : '';
-  if (row.headline === 'pct') return `${sign}${Math.round((after / before - 1) * 100)}% ${row.unit}`;
+  // Compounding ranks (a +4 damage card is 1.5^4 = 5.06x) read as a multiplier once they triple the stat.
+  if (row.headline === 'pct') return after / before >= 3 ? `${trimDec(after / before)}× ${row.unit}` : `${sign}${Math.round((after / before - 1) * 100)}% ${row.unit}`;
   if (row.headline === 'points') return `${sign}${Math.round((after - before) * 100)}% ${row.unit}`;
   if (row.headline === 'count') return `${sign}${Math.round(after - before)} ${row.unit}`;
   return `${row.label.toUpperCase()} ${row.fmt(before)} → ${row.fmt(after)}`;
