@@ -1,5 +1,14 @@
 // Centralized Live Tuning Configuration & Cross-Tab Sync for VEXOLITH // SURVIVOR
-const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v3';
+// Saved tuning holds only the values that differ from DEFAULT_TUNING (player settings like volume, plus
+// anything changed in the dev tuner), so a balance patch that changes a default reaches every player.
+const TUNING_STORAGE_KEY = 'vexolith_tuning_overrides_v4';
+// Before 0.12.2 every save (even a volume slider) stored a full snapshot of TUNING. Loading one froze old
+// balance values in place and flagged every later run as dev-tuned (never sent to the global board), so
+// only the player settings are carried over from it.
+const LEGACY_TUNING_KEY = 'vectra_survivor_tuning_v3';
+
+// Tuning keys that are player settings (pause-menu sliders), not balance: changing them is fair play.
+export const PLAYER_SETTING_KEYS = Object.freeze(['musicVolume', 'sfxVolume']);
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
@@ -370,10 +379,27 @@ export function normalizeTuning(values) {
   return Object.fromEntries(Object.keys(DEFAULT_TUNING).map(key => [key, normalizeTuningValue(key, source[key])]));
 }
 
+// The values in `t` that differ from the defaults: what gets saved.
+export function tuningOverrides(t = TUNING) {
+  return Object.fromEntries(Object.keys(DEFAULT_TUNING).filter(key => t[key] !== DEFAULT_TUNING[key]).map(key => [key, t[key]]));
+}
+
+function readLegacyPlayerSettings() {
+  const raw = localStorage.getItem(LEGACY_TUNING_KEY);
+  if (!raw) return null;
+  const legacy = JSON.parse(raw);
+  const kept = {};
+  for (const key of PLAYER_SETTING_KEYS) if (legacy && legacy[key] !== undefined) kept[key] = legacy[key];
+  localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides(normalizeTuning(kept))));
+  localStorage.removeItem?.(LEGACY_TUNING_KEY);
+  return kept;
+}
+
 export function loadTuning() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
-    Object.assign(TUNING, normalizeTuning(raw ? JSON.parse(raw) : {}));
+    const saved = raw ? JSON.parse(raw) : readLegacyPlayerSettings();
+    Object.assign(TUNING, normalizeTuning(saved || {}));
   } catch (e) {
     Object.assign(TUNING, DEFAULT_TUNING);
     console.warn('Failed to load tuning config:', e);
@@ -383,7 +409,7 @@ export function loadTuning() {
 
 export function saveTuning(notifyChannel = true) {
   try {
-    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(TUNING));
+    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides()));
   } catch (e) {
     console.warn('Failed to save tuning config:', e);
   }
