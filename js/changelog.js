@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.3',
+    date: '2026-10-18',
+    title: 'Clean Numbers',
+    notes: [
+      { type: 'fix', text: 'Big upgrade cards read as a multiplier: a lucky +4 damage card now says 5.1× instead of +406%.' }
+    ]
+  },
+  {
     version: '0.22.2',
     date: '2026-10-18',
     title: 'Fine Tuning',
