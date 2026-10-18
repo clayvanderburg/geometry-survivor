@@ -12,13 +12,27 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.13.0',
+    version: '0.14.0',
     date: '2026-10-18',
     title: 'Run Report',
     notes: [
       { type: 'new', text: 'RUN REPORT on the game-over screen: how much of your damage each weapon dealt (with its DPS), which enemies hurt you most and what landed the final blow.' },
       { type: 'new', text: 'Runs now send anonymous stats (weapons, enemies, cards; never your callsign) so we can spot weapons that need a buff or a nerf. Runs under 20 seconds are not sent.' },
-      { type: 'new', text: 'Turn it off any time: SHARE ANONYMOUS STATS: ON/OFF in the pause menu. Your choice is remembered.' }
+      { type: 'new', text: 'Two checkboxes under your callsign, both on by default: post your runs to the public GLOBAL leaderboard, and share anonymous session stats.' },
+      { type: 'new', text: 'Uncheck either one any time and your choice is remembered. Anonymous stats can also be switched in the pause menu.' }
+    ]
+  },
+  {
+    version: '0.13.0',
+    date: '2026-10-18',
+    title: 'The Long Run',
+    notes: [
+      { type: 'balance', text: 'Runs are paced for the long haul: a strong run now lasts around 30 minutes and climbs past level 50, instead of hitting a wall around wave 30.' },
+      { type: 'balance', text: 'Enemies are about 2.5× tougher from the start but come in fewer, smaller packs, so burn, chill and corrosion have time to work.' },
+      { type: 'balance', text: 'Contact and plasma orb hits start at half damage and only ramp up from wave 15, more gently than before.' },
+      { type: 'balance', text: 'Late waves still get much tougher, so every run ends eventually. Bosses grow more slowly than before.' },
+      { type: 'balance', text: 'NEW WEAPON cards depend on how many weapons you carry: 80% of hands with one (and never two hands in a row without), then 70%, 60%, 40% and 30%.' },
+      { type: 'balance', text: 'Levels after 20 need more XP, and much more after 40, so upgrades keep coming through a long run.' }
     ]
   },
   {

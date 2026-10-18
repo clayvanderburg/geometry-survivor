@@ -2933,3 +2933,33 @@ html, body {
   .rr-section-title span { display: none; }
   .go-left-panel .panel-header { flex-wrap: wrap; }
 }
+
+/* Title-screen consent checkboxes (both start checked): GLOBAL posting and anonymous stats */
+.consent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -4px 0 10px;
+  padding: 0 4px;
+}
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(214, 230, 255, 0.78);
+  cursor: pointer;
+}
+.consent-check b { color: var(--cyan); font-weight: 800; }
+.consent-check i { color: rgba(214, 230, 255, 0.5); font-style: normal; }
+.consent-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 0;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.consent-check input.gp-focus,
+.consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }

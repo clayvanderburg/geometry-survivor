@@ -3,7 +3,7 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME, contactDamageAt } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
@@ -30,7 +30,7 @@ import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOption
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
-import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, defaultStatsStorage } from './stats-client.js';
+import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
 import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
@@ -184,6 +184,7 @@ export class Game {
     this.runTainted = false; // dev tuner / sandbox touched this run
     // Anonymous run stats (js/run-stats.js): the RUN REPORT on game over and the opt-out upload.
     this.shareStats = readShareStats(defaultStatsStorage());
+    this.postGlobal = readPostGlobal(defaultStatsStorage()); // title-screen checkbox: post runs to the GLOBAL board
     this.statsUpload = null;
     this.statsUploadToken = null;
     this.goTab = 'report';
@@ -438,7 +439,7 @@ export class Game {
         e.preventDefault();
       }
       // Space on a focused button/link activates that control instead of a menu shortcut.
-      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
+      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A' || (focused.tagName === 'INPUT' && focused.type === 'checkbox'));
 
       if (this.guideOpen) {
         this.handleGuideKey(e, onControl);
@@ -620,6 +621,11 @@ export class Game {
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
     document.getElementById('btn-pause-stats')?.addEventListener('click', () => this.toggleShareStats());
+    // Title-screen consent checkboxes (both start checked; unchecking is remembered).
+    document.getElementById('chk-post-global')?.addEventListener('change', (e) => this.setPostGlobal(e.target.checked));
+    document.getElementById('chk-share-stats')?.addEventListener('change', (e) => {
+      if (e.target.checked !== this.shareStats) this.toggleShareStats();
+    });
     document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
@@ -972,6 +978,10 @@ export class Game {
     if (!this.globalBoard) return;
     const token = {};
     this.globalSubmitToken = token; // a late answer for an earlier run is ignored
+    if (this.postGlobal === false) {
+      this.globalSubmit = { reason: 'optout' };
+      return;
+    }
     if (this.runTainted || isTuningModified()) {
       this.globalSubmit = { reason: 'tainted' };
       return;
@@ -1066,7 +1076,17 @@ export class Game {
     this.syncShareStatsButton();
   }
 
+  setPostGlobal(on) {
+    this.postGlobal = !!on;
+    writePostGlobal(defaultStatsStorage(), this.postGlobal);
+    this.syncShareStatsButton();
+  }
+
   syncShareStatsButton() {
+    const post = globalThis.document?.getElementById('chk-post-global');
+    if (post) post.checked = this.postGlobal !== false;
+    const share = globalThis.document?.getElementById('chk-share-stats');
+    if (share) share.checked = this.shareStats === true;
     const btn = globalThis.document?.getElementById('btn-pause-stats');
     if (!btn) return;
     btn.textContent = `📡 SHARE ANONYMOUS STATS: ${this.shareStats ? 'ON' : 'OFF'}`;
@@ -1200,7 +1220,7 @@ export class Game {
   }
 
   getWaveScale() {
-    return (1 + (this.wave - 1) * 0.25) * Math.pow(1.09, Math.max(0, this.wave - 6));
+    return waveScaleAt(this.wave);
   }
 
   spawnRelicChest(x, y, guaranteedSuper = false) {
@@ -1656,6 +1676,7 @@ export class Game {
     if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
     const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
+    const killXp = e.xp * xpScaleAt(this.wave);
     for (let g = 0; g < geomCount; g++) {
       const ga = Math.random() * Math.PI * 2;
       const gSpd = 1.5 + Math.random() * 4.5;
@@ -1665,7 +1686,7 @@ export class Game {
         y: e.y,
         vx: Math.cos(ga) * gSpd,
         vy: Math.sin(ga) * gSpd,
-        xp: Math.max(1, Math.round(e.xp / geomCount)),
+        xp: Math.max(1, Math.round(killXp / geomCount)),
         rotation: Math.random() * Math.PI * 2,
         hue: e.isBoss || e.isLieutenant ? 48 : 145,
         life: 16,
@@ -1774,7 +1795,7 @@ export class Game {
 
   // Gunner orbs scale with the wave exactly like contact damage.
   enemyBulletDamage(b) {
-    return b.damage * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return b.damage * damageRampAt(this.wave);
   }
 
   // Shared by contact and plasma-orb hits. Returns true when the hit was fatal (caller ends the run).
@@ -1860,7 +1881,7 @@ export class Game {
     }
     this.coresDroppedThisWave += cores;
     this.particles.spawnShockwave(e.x, e.y, 260, 48, 5, 0.55);
-    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp)} XP`];
+    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp * xpScaleAt(this.wave))} XP`];
     if (cores > 0) rewards.push(`+${cores} ❖ VOID CORE${cores > 1 ? 'S' : ''}`);
     this.showLieutenantCard('defeat', fromBomb ? '▲ LIEUTENANT VAPORIZED ▲' : '▲ LIEUTENANT DOWN ▲', e.name, e.epithet, rewards.join(' · '));
   }
@@ -2055,24 +2076,25 @@ export class Game {
     };
     const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
-      const count = Math.min(34, 12 + this.wave * 2);
+      const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
       em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
-      for (let i = 0; i < 3 + Math.floor(this.wave * 0.6); i++) {
+      const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
+      for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(30);
         em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale, this.placedSpawn(p2));
       }
     } else if (pack === 'splitter') {
-      spread('splitter', 2 + Math.floor(this.wave * 0.4), 450, 750);
+      spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
     } else if (pack === 'bruiser') {
-      spread('bruiser', Math.min(3, 1 + Math.floor(since('bruiser') / 4)), 460, 720);
+      spread('bruiser', packSize(Math.min(3, 1 + Math.floor(since('bruiser') / 4))), 460, 720);
     } else if (pack === 'gunner') {
-      spread('gunner', Math.min(5, 2 + Math.floor(since('gunner') / 4)), 520, 760);
+      spread('gunner', packSize(Math.min(5, 2 + Math.floor(since('gunner') / 4))), 520, 760);
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
-      const count = Math.min(3, 1 + Math.floor(since('shielder') / 5));
+      const count = packSize(Math.min(3, 1 + Math.floor(since('shielder') / 5)));
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(70);
         em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
@@ -2082,7 +2104,7 @@ export class Game {
         }
       }
     } else if (pack === 'blinker') {
-      spread('blinker', Math.min(7, 3 + Math.floor(since('blinker') / 3)), 480, 760);
+      spread('blinker', packSize(Math.min(7, 3 + Math.floor(since('blinker') / 3))), 480, 760);
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
       em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
@@ -3264,8 +3286,8 @@ export class Game {
     const bossStage = this.getBossStage();
     this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
-    // Escalate waves every 22 seconds
-    if (this.waveTimer >= 22) {
+    // Escalate waves every `waveLength` seconds (Difficulty Ramp tuning)
+    if (this.waveTimer >= (TUNING.waveLength ?? 22)) {
       this.waveTimer = 0;
       this.wave++;
       this.coresDroppedThisWave = 0;
@@ -3290,7 +3312,7 @@ export class Game {
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnWavePack();
-      this.spawnCooldown = Math.max(0.75, 2.6 - this.wave * 0.14);
+      this.spawnCooldown = spawnIntervalAt(this.wave);
     }
 
     const p = this.player;

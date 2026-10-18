@@ -6,6 +6,8 @@ import { statsSkipReason, fitPayload } from './stats-rules.js';
 
 export const STATS_ENDPOINT = '/api/stats';
 export const SHARE_STATS_KEY = 'vexolith_share_stats';
+// Posting runs to the public GLOBAL leaderboard: also on unless the player unchecked it ('0').
+export const POST_GLOBAL_KEY = 'vexolith_post_global';
 
 export function defaultStatsStorage() {
   try { return globalThis.localStorage || null; } catch { return null; }
@@ -14,6 +16,20 @@ export function defaultStatsStorage() {
 // Sharing is on unless the player turned it off ('0'). Blocked storage reads as the default.
 export function readShareStats(storage) {
   try { return storage?.getItem(SHARE_STATS_KEY) !== '0'; } catch { return true; }
+}
+
+export function readPostGlobal(storage) {
+  try { return storage?.getItem(POST_GLOBAL_KEY) !== '0'; } catch { return true; }
+}
+
+export function writePostGlobal(storage, on) {
+  try {
+    if (!storage) return false;
+    storage.setItem(POST_GLOBAL_KEY, on ? '1' : '0');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function writeShareStats(storage, on) {
@@ -48,7 +64,7 @@ export function describeStatsUpload(state) {
   if (state.pending) return 'SENDING ANONYMOUS STATS…';
   if (state.ok) return 'ANONYMOUS STATS SENT // THANKS, PILOT';
   switch (state.reason) {
-    case 'optout': return 'ANONYMOUS STATS OFF (PAUSE MENU)';
+    case 'optout': return 'ANONYMOUS STATS OFF (TITLE CHECKBOX OR PAUSE MENU)';
     case 'tainted': return 'DEV TUNER USED // STATS NOT SENT';
     case 'short': return 'SHORT RUN // STATS NOT SENT';
     case 'cooldown': return 'STATS UPLINK COOLING DOWN';

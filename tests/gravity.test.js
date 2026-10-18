@@ -201,7 +201,14 @@ test('loose geoms sink into a black hole while magnetized geoms still fly to the
 });
 
 test('a Vortex Singularity clumps the pack near its core, while the rim only nudges (pull falloff nerf)', () => {
+  // Seeded Math.random: enemy steering jitter is random, and the counts below sit near their thresholds.
   const clumped = (withSingularity) => {
+    const realRandom = Math.random;
+    let seed = 12345;
+    Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    try { return clumpedOnce(withSingularity); } finally { Math.random = realRandom; }
+  };
+  const clumpedOnce = (withSingularity) => {
     const { game, manager } = arena();
     game.player.x = 1500; game.player.weapons.singularity = 1;
     for (let k = 0; k < 24; k++) {

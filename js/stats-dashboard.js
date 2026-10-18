@@ -130,7 +130,13 @@ function hbarChart(rows, { min = 0, max = null, refs = [], fmt = (v) => fix(v), 
   const H = rows.length * groupH + 18;
   const x = (v) => labelW + (Math.max(min, Math.min(hi, v)) - min) / (hi - min) * plotW;
   let out = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
-  for (const ref of refs) out += `<line class="${ref === mid ? 'ref-mid' : 'ref'}" x1="${x(ref)}" x2="${x(ref)}" y1="0" y2="${H - 14}"/><text x="${x(ref)}" y="${H - 2}" text-anchor="middle">${fmt(ref)}</text>`;
+  // Reference lines always draw; their labels only where they don't collide (the mid line always gets one).
+  const labelGap = 30;
+  for (const ref of refs) {
+    const crowded = ref !== mid && refs.some(other => other !== ref && Math.abs(x(other) - x(ref)) < labelGap);
+    out += `<line class="${ref === mid ? 'ref-mid' : 'ref'}" x1="${x(ref)}" x2="${x(ref)}" y1="0" y2="${H - 14}"/>`;
+    if (!crowded) out += `<text x="${x(ref)}" y="${H - 2}" text-anchor="middle">${fmt(ref)}</text>`;
+  }
   rows.forEach((r, i) => {
     const y0 = i * groupH + 4;
     out += `<text x="0" y="${y0 + (slots.length * (barH + gap)) / 2 + 4}">${esc(r.label)}</text>`;

@@ -614,15 +614,29 @@ export function newWeaponCard(player) {
   };
 }
 
-// A level-up hand: rollUpgrades plus, while a slot is free, a NEW WEAPON card with TUNING.newWeaponChance
-// per hand, guaranteed once TUNING.newWeaponPity hands in a row went without one. Caches never offer it
-// (they install their pick automatically). Updates player.newWeaponDrought, the pity counter.
+// NEW WEAPON chance per hand by weapons owned: TUNING newWeaponChanceBy1..By5 (80/70/60/40/30% by
+// default; the By5 value also covers 6+ owned if the tuner adds slots). With no free slot it never shows.
+const NEW_WEAPON_CHANCE_DEFAULTS = [0.8, 0.8, 0.7, 0.6, 0.4, 0.3];
+export function newWeaponChanceFor(owned) {
+  const n = Math.max(1, Math.min(5, Math.floor(owned)));
+  return TUNING[`newWeaponChanceBy${n}`] ?? NEW_WEAPON_CHANCE_DEFAULTS[n];
+}
+
+// Hands in a row without a NEW WEAPON card before one is guaranteed: newWeaponPityOne while the ship
+// carries a single weapon (the 2nd hand by default), newWeaponPity (4) once it carries two or more.
+export function newWeaponPityFor(owned) {
+  return Math.max(1, Math.round(owned <= 1 ? (TUNING.newWeaponPityOne ?? 2) : (TUNING.newWeaponPity ?? 4)));
+}
+
+// A level-up hand: rollUpgrades plus, while a slot is free, a NEW WEAPON card with the chance for the
+// number of weapons owned, guaranteed once the pity count of hands in a row went without one. Caches
+// never offer it (they install their pick automatically). Updates player.newWeaponDrought, the pity counter.
 export function rollLevelUpHand(player, count = 3) {
   const canOffer = canOfferNewWeapon(player);
   let offer = false;
   if (canOffer) {
-    const pity = Math.max(1, Math.round(TUNING.newWeaponPity ?? 3));
-    offer = (player.newWeaponDrought || 0) + 1 >= pity || Math.random() < (TUNING.newWeaponChance ?? 0.35);
+    const owned = ownedWeapons(player).length;
+    offer = (player.newWeaponDrought || 0) + 1 >= newWeaponPityFor(owned) || Math.random() < newWeaponChanceFor(owned);
   }
   const hand = rollUpgrades(player, offer ? count - 1 : count);
   if (canOffer && hand.length === 0) offer = true; // nothing else left to offer
