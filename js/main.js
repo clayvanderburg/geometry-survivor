@@ -12,7 +12,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
+  discardWeapon, snapshotBase, retuneStats, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
@@ -838,30 +838,10 @@ export class Game {
 
     const p = this.player;
     if (p) {
-      const bonuses = this.progression.getBonuses();
-      const liveStats = (upgLv, weapons) => ({
-        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
-        // Autocannon stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
-        // their ranks are read from the weapon build when firing, so the base stays tunable.
-        fireRate: TUNING.fireRate * bonuses.fireRateMult * (weapons.pulsarHelix ? 1.15 : 1),
-        bulletSpeed: TUNING.bulletSpeed,
-        damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.12, upgLv.overdrive || 0),
-        magnetRadius: TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0),
-        xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0),
-        luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
-        coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
-        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
-        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1) * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
-        drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
-        // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
-        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
-        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0) + (upgLv.crit_damage || 0) * W.critDamageStep
-      });
-
+      // Fresh run-start stats from the tuned TUNING, then the owned upgrade levels replayed through each
+      // card's apply() (upgrades.js retuneStats). The snapshot follows too, so weapon discards keep the tuning.
       p.radius = TUNING.shipRadius;
-      Object.assign(p.stats, liveStats(p.upgradeLevels || {}, p.weapons));
-      // Weapon discards rebuild stats from the run-start snapshot, so it takes the tuned base values too.
-      if (p.base) Object.assign(p.base.stats, liveStats({}, {}));
+      retuneStats(p, runStartPlayer(this.progression.getBonuses()).stats);
     }
 
     for (const key of ['musicVolume', 'sfxVolume']) {

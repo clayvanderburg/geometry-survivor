@@ -746,6 +746,16 @@ function rebuildFromLevels(player) {
   player.hp = Math.min(player.hp, player.maxHp);
 }
 
+// The dev tuner's live retune (Game.applyLiveTuning): `startStats` (runStartPlayer with the current TUNING)
+// becomes the run-start snapshot, and the stats are rebuilt from it with the player's upgrade levels replayed
+// through each card's apply(), so a tuned base reaches a run in progress exactly as the cards scale it.
+// Weapons and shield are left as they are. A player built without resetRun (no snapshot) keeps none.
+export function retuneStats(player, startStats) {
+  const base = { ...(player.base || { weapons: {}, maxHp: player.maxHp }), stats: structuredClone(startStats) };
+  if (player.base) player.base = base;
+  Object.assign(player.stats, replayLevels({ ...player, base }, player.upgradeLevels || {}).stats);
+}
+
 // Remove a weapon from the loadout with its level, its weapon-specific upgrades (once no other equipped
 // weapon shares them) and any evolution that no longer qualifies. General and tag upgrades stay.
 // Returns the removed lines ({ id, name, levels }), or null when the weapon was not equipped.
