@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.18.2',
+    date: '2026-10-18',
+    title: 'Deeper Weapons',
+    notes: [
+      { type: 'balance', text: 'Weapons now level to LV 18, with Breakthroughs at LV 6, 12 and 18. One card can take at most 11 ranks, so LV 18 takes a mix.' },
+      { type: 'fix', text: 'Each weapon gets each Breakthrough exactly once per run (unless you discard and re-equip it).' },
+      { type: 'fix', text: 'Autocannon transforms stack visibly: Flak bursts flash orange, Ricochet bolts glow gold and carry the flak burst with them.' },
+      { type: 'balance', text: 'Sentry Turrets recharge twice as fast (2.5 s per turret).' }
+    ]
+  },
+  {
     version: '0.18.1',
     date: '2026-10-18',
     title: 'Weapon Tune-Up',

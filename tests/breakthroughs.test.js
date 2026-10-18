@@ -16,28 +16,31 @@ function freshGame() {
 }
 
 test('milestones are crossed once each, even when a rolled jump leaps over one', () => {
-  assert.deepEqual(milestonesCrossed(3, 4), [4]);
-  assert.deepEqual(milestonesCrossed(3, 6), [4]);
-  assert.deepEqual(milestonesCrossed(7, 12), [8, 12]);
-  assert.deepEqual(milestonesCrossed(4, 7), []);
-  assert.deepEqual(BREAKTHROUGH_LEVELS, [4, 8, 12]);
+  assert.deepEqual(milestonesCrossed(5, 6), [6]);
+  assert.deepEqual(milestonesCrossed(5, 8), [6]);
+  assert.deepEqual(milestonesCrossed(11, 18), [12, 18]);
+  assert.deepEqual(milestonesCrossed(6, 11), []);
+  assert.deepEqual(BREAKTHROUGH_LEVELS, [6, 12, 18]);
 });
 
-test('a +5 card that leaps past LV 4 and LV 8 queues both Breakthroughs, lowest first', () => {
+test('a +5 card that leaps past LV 6 and LV 12 queues both Breakthroughs, lowest first', () => {
   const g = freshGame();
   const p = g.player;
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 2 }); // LV 3
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.firerate, levelJump: 5 });      // LV 8
-  assert.deepEqual(pendingBreakthroughs(p, 'blaster'), [4, 8]);
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 5 }); // LV 6
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.multishot, levelJump: 1 });      // LV 7
+  p.breakthroughs = {};
+  p.breakthroughsOffered = {};
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.firerate, levelJump: 5 });      // LV 12
+  assert.deepEqual(pendingBreakthroughs(p, 'blaster'), [6, 12]);
   g.state = 'UPGRADE';
   g.closeUpgradeModal();
   assert.equal(g.handPhase, 'breakthrough');
-  assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 4 });
+  assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 6 });
   g.selectUpgrade(1); // ACROSS THE BOARD
-  assert.equal(g.handPhase, 'breakthrough', 'the LV 8 Breakthrough follows at once');
-  assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 8 });
+  assert.equal(g.handPhase, 'breakthrough', 'the LV 12 Breakthrough follows at once');
+  assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 12 });
   g.selectUpgrade(0);
-  assert.deepEqual(p.breakthroughs.blaster, { 4: 'boost', 8: 'transform' });
+  assert.deepEqual(p.breakthroughs.blaster, { 6: 'boost', 12: 'transform' });
   assert.equal(g.state, 'PLAYING');
   assert.deepEqual(pendingBreakthroughs(p, 'blaster'), []);
 });
@@ -46,16 +49,16 @@ test('Breakthrough cards name their weapon, show the DPS gain, and are one-shot'
   const p = freshGame().player;
   acquireWeapon(p, 'singularity');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.singularity_pull, levelJump: 3 });
-  const t = describeBreakthrough(p, 'singularity', 4, 'transform');
-  const b = describeBreakthrough(p, 'singularity', 4, 'boost');
+  const t = describeBreakthrough(p, 'singularity', 6, 'transform');
+  const b = describeBreakthrough(p, 'singularity', 6, 'boost');
   assert.equal(t.name, 'Twin Singularities');
   assert.equal(t.category, 'VORTEX SINGULARITY');
   assert.match(t.summary, /Vortex Singularity/);
   assert.match(t.headline, /\+22% DPS/);
   assert.match(b.summary, /Vortex Singularity/);
   assert.ok(Math.abs(b.dpsGain - 0.18) < 1e-6, 'Across the Board: +18% damage, plus utility ranks');
-  assert.equal(applyBreakthrough(p, 'singularity', 4, 'transform'), true);
-  assert.equal(applyBreakthrough(p, 'singularity', 4, 'boost'), false, 'one choice per milestone');
+  assert.equal(applyBreakthrough(p, 'singularity', 6, 'transform'), true);
+  assert.equal(applyBreakthrough(p, 'singularity', 6, 'boost'), false, 'one choice per milestone');
   discardWeapon(p, 'singularity');
   assert.equal(p.breakthroughs.singularity, undefined, 'a discard drops its Breakthroughs');
 });
@@ -78,7 +81,7 @@ test('every weapon runs with all three transforms in a live fight, dealing damag
     p.invuln = 1e9;
     p.hp = p.maxHp = 1e9;
     if (id !== 'blaster') { acquireWeapon(p, id); p.loadout = [id]; } // only this weapon fires
-    p.breakthroughs = { [id]: { 4: 'transform', 8: 'transform', 12: 'transform' } };
+    p.breakthroughs = { [id]: { 6: 'transform', 12: 'transform', 18: 'transform' } };
     // A dense pack right next to the ship so every weapon finds targets.
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
@@ -93,4 +96,18 @@ test('every weapon runs with all three transforms in a live fight, dealing damag
     const hurt = g.enemyManager.enemies.filter((e) => e.hp < e.maxHp).length;
     assert.ok(hurt > 0, `${id} with all transforms dealt no damage`);
   }
+});
+
+test('a milestone is offered once per run, even if its choice never recorded; a discard resets it', async () => {
+  const { markBreakthroughOffered } = await import('../js/upgrades.js');
+  const p = freshGame().player;
+  acquireWeapon(p, 'rockets');
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 5 }); // LV 6
+  assert.deepEqual(pendingBreakthroughs(p, 'rockets'), [6]);
+  markBreakthroughOffered(p, 'rockets', 6);
+  assert.deepEqual(pendingBreakthroughs(p, 'rockets'), [], 'shown once: never again this run');
+  discardWeapon(p, 'rockets');
+  acquireWeapon(p, 'rockets');
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 5 });
+  assert.deepEqual(pendingBreakthroughs(p, 'rockets'), [6], 're-equipped weapon starts fresh');
 });

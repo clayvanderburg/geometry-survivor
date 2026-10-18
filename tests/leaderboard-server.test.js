@@ -472,7 +472,7 @@ test('a store without list() (or a failing one) still serves boards, just withou
 });
 
 test('one-time purge: removes only the listed callsigns from every board, once, and keeps later runs', async () => {
-  const { store, handler } = setup({ purges: PURGES });
+  const { store, handler } = setup({ purges: [PURGES[0]] });
   assert.deepEqual(PURGES[0].names, ['MADKING', 'NOX']);
   const entry = (id, name, score) => ({ id, name, score, wave: 10, level: 15, kills: 900, multiplier: 10, time: 200, date: '2026-10-17T00:00:00.000Z', version: GAME_VERSION });
   store.put(BOARD_KEY, { version: 1, entries: [entry('a', 'MADKING', 900), entry('b', 'ACE', 800), entry('c', 'NOX', 700), entry('d', 'NOXIOUS', 600)] });
@@ -486,14 +486,26 @@ test('one-time purge: removes only the listed callsigns from every board, once, 
   assert.deepEqual(store.board(VERSION_BOARD_PREFIX + '0.9.0'), []);
   // Marker written (its count is per instance: concurrent first requests split the work).
   const marker = JSON.parse(store.blobs.get(MIGRATION_PREFIX + PURGES[0].id).body);
-  assert.deepEqual(marker.names, ['MADKING', 'NOX']);
+  assert.deepEqual(marker.rule.names, ['MADKING', 'NOX']);
 
   // After the purge, MADKING can post again and the run stays, even on a fresh function instance.
   const res = await post(handler, run({ name: 'madking' }));
   assert.equal(res.status, 201);
-  const fresh = createScoresHandler({ store: () => store, log: null, sleep: async () => {}, purges: PURGES });
+  const fresh = createScoresHandler({ store: () => store, log: null, sleep: async () => {}, purges: [PURGES[0]] });
   await get(fresh, 'all');
   assert.ok(store.board().some((e) => e.name === 'MADKING'), 'the marker stops it from running again');
+});
+
+test('one-time purge of a single run: matches its version, wave and score, nothing else', async () => {
+  const rule = PURGES.find((p) => p.id === 'purge-dev-87m-v0160-v1');
+  assert.ok(rule && !rule.names, 'matches by fingerprint, not callsign');
+  const { store, handler } = setup({ purges: [rule] });
+  const e = (id, score, wave, version) => ({ id, name: 'PILOT', score, wave, level: 30, kills: 9000, multiplier: 10, time: 900, date: '2026-10-17T00:00:00.000Z', version });
+  store.put(BOARD_KEY, { version: 1, entries: [e('x', 87100000, 36, '0.16.0'), e('y', 51000000, 71, '0.18.1'), e('z', 87100000, 37, '0.16.0'), e('w', 60000000, 36, '0.16.0')] });
+  store.put(VERSION_BOARD_PREFIX + '0.16.0', { version: 1, entries: [e('x', 87100000, 36, '0.16.0'), e('w', 60000000, 36, '0.16.0')] });
+  await get(handler, 'all');
+  assert.deepEqual(store.board().map((r) => r.id), ['y', 'z', 'w']);
+  assert.deepEqual(store.board(VERSION_BOARD_PREFIX + '0.16.0').map((r) => r.id), ['w']);
 });
 
 test('a failing purge never blocks the board', async () => {

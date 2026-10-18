@@ -92,7 +92,7 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BO
       for (const c of STAT_CARDS[id]) if (!POWER_STATS.has(c.stat)) assert.equal(boost.r[c.stat], 1, `${id} ${c.stat} +1`);
       assert.ok(near(POTENTIAL_DPS[id](boost), plain * BT_BOOST_DPS), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
     }
-    const all = POTENTIAL_DPS[id](makeBuild(id, 12, {}, { 4: 'transform', 8: 'transform', 12: 'transform' }));
+    const all = POTENTIAL_DPS[id](makeBuild(id, 12, {}, { 6: 'transform', 12: 'transform', 18: 'transform' }));
     assert.ok(near(all, lv1(id) * BT_TRANSFORM_DPS ** 3), `${id} three transforms`);
   }
 });

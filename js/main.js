@@ -12,7 +12,7 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs
+  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
@@ -242,7 +242,7 @@ export class Game {
     this.handLock = null; // { card, slot }: the locked card in the hand on screen
     this.carriedLock = null; // locked card passed over: guaranteed in the next level-up hand
     this.handPhase = null; // 'hand' (rerolls and locks allowed), 'weapon' (the NEW WEAPON pick) or 'breakthrough'
-    // Weapon milestones (LV 4 / 8 / 12) reached by a card, waiting for their BREAKTHROUGH choice, in order.
+    // Weapon milestones (LV 6 / 12 / 18) reached by a card, waiting for their BREAKTHROUGH choice, in order.
     this.breakthroughQueue = [];
     this.weaponFx = new WeaponEffects();
     this.breakthrough = null; // { weaponId, level } on screen
@@ -298,8 +298,9 @@ export class Game {
       xp: 0,
       xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
-      // Breakthroughs chosen per weapon at LV 4 / 8 / 12: { singularity: { 4: 'transform', 8: 'boost' } }.
+      // Breakthroughs chosen per weapon at LV 6 / 12 / 18: { singularity: { 6: 'transform', 12: 'boost' } }.
       breakthroughs: {},
+      breakthroughsOffered: {}, // milestones already shown, so none is ever offered twice
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
@@ -1382,7 +1383,7 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 48, 5, 0.45);
-    // A cache card that took a weapon to LV 4 / 8 / 12 opens its Breakthrough right away.
+    // A cache card that took a weapon to LV 6 / 12 / 18 opens its Breakthrough right away.
     if (this.openNextBreakthrough()) return;
     this.processPendingLevelUps();
     this.updateHUD();
@@ -2331,8 +2332,11 @@ export class Game {
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
-          this.particles.spawnFlash?.(hx, hy, b.blastRadius * 0.4, b.hue, 0.16);
-          this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 3, 0.32);
+          // Flak bursts flash hot orange, so they read apart from the bolt (and from ricochets).
+          const bh = b.blastHue ?? b.hue;
+          this.particles.spawnFlash?.(hx, hy, b.blastRadius * (b.flak ? 0.7 : 0.4), bh, b.flak ? 0.2 : 0.16);
+          this.particles.spawnShockwave(hx, hy, b.blastRadius, bh, b.flak ? 4 : 3, 0.32);
+          if (b.flak) this.particles.spawnExplosionSparks(hx, hy, 8, bh, 2, 9, 1.6);
           this.sound.playMissileImpact?.(0.75);
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
@@ -2360,9 +2364,12 @@ export class Game {
       if (next) {
         const a = Math.atan2(next.y - hy, next.x - hx);
         const speed = Math.hypot(b.vx, b.vy);
-        this.bullets.push({ x: hx, y: hy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: b.hue,
-          radius: b.radius * 0.85, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds });
-        this.particles.spawnDirectionalSparks(hx, hy, a, 0.6, 4, b.hue, 7);
+        // Ricochets glow gold (and keep Flak and Arc Rounds), so each transform stays visible on its own.
+        this.bullets.push({ x: hx, y: hy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: 48,
+          radius: b.radius * 1.1, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds,
+          blastRadius: b.flak ? b.blastRadius : 0, blastDamage: b.flak ? b.blastDamage * W.ricochetShare : 0, blastStat: b.blastStat, blastHue: b.blastHue, flak: b.flak });
+        this.particles.spawnDirectionalSparks(hx, hy, a, 0.6, 7, 48, 9);
+        this.particles.spawnLightning?.(hx, hy, hx + Math.cos(a) * 28, hy + Math.sin(a) * 28, 48, 0.6, 0.1, 0);
       }
     }
     if (b.arcRounds) {
@@ -2451,7 +2458,7 @@ export class Game {
     const damage = weaponDamage(p, 'blaster', b);
     const pierce = blasterPierce(p, b);
     // Breakthroughs: Flak Rounds burst on hit, Ricochet Rounds bounce once, Arc Rounds arc on hit.
-    const flak = b.t4 ? { blastRadius: W.flakRadius * (p.stats.areaMult ?? 1), blastDamage: damage * W.flakShare, blastStat: 'blaster', flak: true } : null;
+    const flak = b.t4 ? { blastRadius: W.flakRadius * (p.stats.areaMult ?? 1), blastDamage: damage * W.flakShare, blastStat: 'blaster', blastHue: 28, flak: true } : null;
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
@@ -3429,7 +3436,7 @@ export class Game {
     this.sound.playLevelUp();
   }
 
-  // A weapon that reached LV 4 / 8 / 12 without its Breakthrough: open the R&D pick (from a level-up
+  // A weapon that reached LV 6 / 12 / 18 without its Breakthrough: open the R&D pick (from a level-up
   // hand, a NEW WEAPON pick or a supply cache). Several milestones queue up, lowest weapon slot first.
   openNextBreakthrough() {
     const p = this.player;
@@ -3441,6 +3448,7 @@ export class Game {
       this.handPhase = 'breakthrough';
       this.handLock = null;
       this.breakthrough = { weaponId: id, level };
+      markBreakthroughOffered(p, id, level);
       this.currentChoices = ['transform', 'boost'].map((kind) => describeBreakthrough(p, id, level, kind));
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
