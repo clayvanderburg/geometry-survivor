@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.27.2',
+    date: '2026-10-18',
+    title: 'Clear Flak',
+    notes: [
+      { type: 'fix', text: 'Flak Rounds bursts are thin see-through rings now, so enemies under fire stay visible instead of vanishing into bright blobs.' }
+    ]
+  },
+  {
     version: '0.27.1',
     date: '2026-10-18',
     title: 'Wings',
