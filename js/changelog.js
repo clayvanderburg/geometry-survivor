@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.17.1',
+    date: '2026-10-18',
+    title: 'Autocannon',
+    notes: [
+      { type: 'new', text: 'Pew Pews is now called the Autocannon. Same gun, same upgrades.' },
+      { type: 'new', text: 'Wing Rockets fire where you aim (mouse, right stick or auto-aim), like the Autocannon, instead of where the ship is flying.' }
+    ]
+  },
+  {
     version: '0.17.0',
     date: '2026-10-18',
     title: 'Breakthroughs',

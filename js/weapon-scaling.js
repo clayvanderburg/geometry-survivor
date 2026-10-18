@@ -51,7 +51,7 @@ const SINGULARITY_COLLAPSE_SHARE = 0.45;
 export const TURRET_MAX_ACTIVE = 4;
 
 export const WEAPON_SCALING = {
-  // --- Pew Pews (stats: damage, prism, rate, pierce) -----------------------------------------------
+  // --- Autocannon (stats: damage, prism, rate, pierce) -----------------------------------------------
   // Plasma Charge raises bolt damage; Prism Split adds a pair of streams in the fixed PRISM_STREAMS
   // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
@@ -72,7 +72,7 @@ export const WEAPON_SCALING = {
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Wing Rockets (stats: damage, count, reload, radius) ----------------------------------------
-  // Dumbfire rockets from the outer wing tips along the hull's heading. Direct hit + a blast worth
+  // Dumbfire rockets from the outer wing tips, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
   wingRocketCooldown: (b) => 1 / rateMult(b.r.reload),
@@ -343,7 +343,7 @@ export function prismNewestGroup(count) {
   return pair >= PRISM_STREAMS.length ? `${name} x2` : name;
 }
 
-// Pew Pews numbers for a player: streams, fire rate and pierce are the player's base stats plus the
+// Autocannon numbers for a player: streams, fire rate and pierce are the player's base stats plus the
 // build's ranks (cards never touch the base stats, so tuner and Armory changes stay live).
 export const blasterStreams = (p, b = weaponBuild(p, 'blaster')) => p.stats.bulletCount + W.blasterExtraStreams(b);
 export const blasterFireRate = (p, b = weaponBuild(p, 'blaster')) => p.stats.fireRate * W.blasterRateMult(b);
@@ -352,7 +352,7 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 // Potential DPS (x base damage) per weapon build, from its counts, cooldowns and hit damage, with
 // every transform's extra attacks. Tests hold every weapon to buildBudget (DPS_TARGET(level) x its
 // Breakthrough multipliers) at every level and stat mix; the balance tool reports it alongside real runs.
-// Pew Pews is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
+// Autocannon is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
 export const POTENTIAL_DPS = {
   blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
     * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare : 0)),
@@ -455,7 +455,7 @@ export function weaponDamage(p, weapon, b) {
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;
     case 'helix': {
-      // Pulsar Helix bolts hit like Pew Pews bolts (Damage ranks and boosts), at helixDamageMult.
+      // Pulsar Helix bolts hit like Autocannon bolts (Damage ranks and boosts), at helixDamageMult.
       base = d * W.helixDamageMult * hitMult(sourceBuild(p, weapon, b));
       break;
     }

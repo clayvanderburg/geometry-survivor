@@ -27,8 +27,8 @@ const memoryStorage = () => {
 
 test('sources map to their weapons, sub-sources (DoT, collapse, evolutions) included', () => {
   for (const w of WEAPONS) for (const s of w.tagSources) assert.equal(GROUPS[s], w.id, `${s} -> ${w.id}`);
-  assert.equal(GROUPS.burn, 'blaster', 'Thermite burn ticks are Pew Pews damage');
-  assert.equal(GROUPS.helix, 'blaster', 'Pulsar Helix is a Pew Pews evolution');
+  assert.equal(GROUPS.burn, 'blaster', 'Thermite burn ticks are Autocannon damage');
+  assert.equal(GROUPS.helix, 'blaster', 'Pulsar Helix is a Autocannon evolution');
   assert.equal(GROUPS.collapse, 'singularity');
   assert.equal(GROUPS.storm, 'missiles', 'Storm Protocol chains fire from missile detonations');
   assert.equal(GROUPS.siege, 'turret');
@@ -84,7 +84,7 @@ test('a discarded weapon stops its clock; re-equipping starts a new segment', ()
   assert.equal(s.weapons.drones.lv[1][1], 0, 'damage while unequipped is not booked to a level');
   assert.equal(s.weapons.drones.dmg, 50);
   assert.deepEqual(s.weapons.drones.tl, [[0, 1], [15, 0], [40, 1]]);
-  assert.equal(s.weapons.blaster.curve, 1, 'Pew Pews levels like every other weapon');
+  assert.equal(s.weapons.blaster.curve, 1, 'Autocannon levels like every other weapon');
 });
 
 test('enemies: spawns, kills, spawn-to-death time, damage to the ship and the cause of death', () => {
@@ -344,7 +344,7 @@ test('a simulated run fills the same stats the browser uploads, matching the bal
   assert.equal(s.schema, 1);
   assert.equal(s.version, GAME_VERSION);
   assert.ok(!sanitizeRunStats(s).error, 'the sim summary passes server validation');
-  assert.ok(s.weapons.blaster.lv[1][0] > 0, 'Pew Pews time is tracked from the start');
+  assert.ok(s.weapons.blaster.lv[1][0] > 0, 'Autocannon time is tracked from the start');
   assert.ok(s.weapons.missiles?.dmg > 0, 'the equipped missiles are credited');
   const total = Object.values(s.weapons).reduce((a, w) => a + w.dmg, 0);
   const harness = Object.values(r.dealt).reduce((a, v) => a + v, 0);
