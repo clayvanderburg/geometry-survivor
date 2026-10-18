@@ -3224,6 +3224,8 @@ html, body {
 .rg-lv { color: #fff; }
 .rg-chips { display: flex; flex-wrap: wrap; gap: 3px; margin: 2px 0; }
 .rg-chip { font-size: 9.5px; padding: 1px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.06); color: #b4c6e0; }
+.rg-chip.is-new { background: color-mix(in srgb, var(--wc, #00f3ff) 28%, transparent); color: #fff; }
+.rg-auto-note { flex-basis: 100%; font-size: 9.5px; }
 .rg-ranks { margin: 2px 0; }
 .rg-bts { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
 .rg-btn.rg-bt { text-align: left; white-space: normal; }

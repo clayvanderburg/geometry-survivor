@@ -225,9 +225,13 @@ export class RangePanel {
       + btn('remove', '✕', { w: w.id, cls: 'rg-mini rg-x', title: `Remove ${info.name}` }) + '</div>';
     const mode = `<div class="rg-row"><span class="rg-label">RANKS</span>${btn('ranks-mode', w.custom ? 'CUSTOM' : 'AUTO', { w: w.id, cls: 'rg-mini', title: 'AUTO spreads the level over every stat; CUSTOM sets each stat' })}`
       + `<span class="rg-dim">${potential ? `${dps(potential)} potential DPS` : ''}</span></div>`;
+    // AUTO: the chip the current level's rank went into is lit, so an extra rocket or missile at some
+    // levels is visibly the Count/Salvo rank that level added.
+    const prev = !w.custom && lv > 1 ? autoRanks(w.id, lv - 1) : null;
     const rankRows = (STAT_CARDS[w.id] || []).map((c) => w.custom
       ? `<div class="rg-row rg-rank"><span class="rg-label">${STAT_NAMES[c.stat] || c.stat}</span>${stepper('rank', `${ranks[c.id]} / ${c.maxLevel}`, { w: w.id, v: c.id })}</div>`
-      : `<span class="rg-chip">${STAT_NAMES[c.stat] || c.stat} ${ranks[c.id]}</span>`).join('');
+      : `<span class="rg-chip${prev && ranks[c.id] > prev[c.id] ? ' is-new' : ''}">${STAT_NAMES[c.stat] || c.stat} ${ranks[c.id]}</span>`).join('');
+    const autoNote = w.custom ? '' : '<span class="rg-dim rg-auto-note">AUTO adds one rank per level, cycling through every stat (lit: this level\'s). CUSTOM picks them.</span>';
     const bt = BREAKTHROUGH_LEVELS.map((m) => {
       const locked = lv < m;
       const boost = w.bt?.[m] === 'boost';
@@ -240,7 +244,7 @@ export class RangePanel {
     const build = entryBuild(w);
     const note = build.transforms || build.atb ? '' : '<span class="rg-dim">Breakthroughs unlock at LV 6, 12 and 18.</span>';
     return `<div class="rg-weapon" style="--wc:${info.color}">${head}${mode}`
-      + `<div class="${w.custom ? 'rg-ranks' : 'rg-chips'}">${rankRows}</div><div class="rg-bts">${bt}${note}</div></div>`;
+      + `<div class="${w.custom ? 'rg-ranks' : 'rg-chips'}">${rankRows}${autoNote}</div><div class="rg-bts">${bt}${note}</div></div>`;
   }
 
   modsHtml() {
