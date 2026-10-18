@@ -18,7 +18,9 @@ export const CHANGELOG = Object.freeze([
     notes: [
       { type: 'new', text: 'Play on your phone or tablet: touch the left half of the screen to fly, the right half to aim, and tap DASH / NOVA. Without a thumb on the aim side, the turret auto-aims.' },
       { type: 'new', text: 'Touch controls switch on by themselves on touchscreens; a mouse click switches back.' },
-      { type: 'balance', text: 'Small screens (under 600 px tall) zoom out to show as much of the sector as a laptop, so enemies no longer spawn on top of you.' }
+      { type: 'new', text: 'Phone layout: a slim HUD, compact level-up cards with a MORE button, and big-button menus that open the leaderboard and armory in their own windows.' },
+      { type: 'new', text: 'GO FULLSCREEN button on the title and pause screens. On iPhone, add the game to your home screen to play full screen.' },
+      { type: 'balance', text: 'Small screens zoom out so enemies no longer spawn on top of you; on touch screens the view is zoomed out a further 30%.' }
     ]
   },
   {

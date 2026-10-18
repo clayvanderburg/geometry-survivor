@@ -6,7 +6,7 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 const element = () => ({ textContent: '', innerHTML: '', style: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild() {} });
 globalThis.document = { getElementById: element, createElement: element };
-const { stickVector, isTouchDevice, STICK_RADIUS } = await import('../js/touch-controls.js');
+const { stickVector, isTouchDevice, stripKeyHints, STICK_RADIUS } = await import('../js/touch-controls.js');
 const { viewScale, radarSize } = await import('../js/main.js');
 
 test('a stick reads 0 in its deadzone, full past its ring, and keeps its direction', () => {
@@ -34,6 +34,18 @@ test('small screens zoom out to a 600 px short side; bigger ones are untouched',
   assert.equal(viewScale(844, 390), 0.65);
   assert.equal(viewScale(390, 844), 0.65, 'portrait too');
   assert.equal(viewScale(0, 0), 1);
+  assert.equal(viewScale(844, 390, 857), 390 / 857, 'touch play zooms out a further 30%');
+});
+
+test('touch play drops keyboard hints and keeps the words', () => {
+  assert.equal(stripKeyHints('LAUNCH INTO THE SECTOR [SPACE / CLICK]'), 'LAUNCH INTO THE SECTOR');
+  assert.equal(stripKeyHints('▶ RESUME [P / ESC]'), '▶ RESUME');
+  assert.equal(stripKeyHints('📖 FIELD GUIDE [G]'), '📖 FIELD GUIDE');
+  assert.equal(stripKeyHints('🛰 SECTOR RADAR: ON [R]'), '🛰 SECTOR RADAR: ON');
+  assert.equal(stripKeyHints('CANCEL [ESC]'), 'CANCEL');
+  assert.equal(stripKeyHints('lock [Shift+1-4] / Y'), 'lock / Y');
+  assert.equal(stripKeyHints('[1]'), '');
+  assert.equal(stripKeyHints('Autocannon LV 3 [beta]'), 'Autocannon LV 3 [beta]', 'only key-shaped brackets go');
 });
 
 test('touch play shrinks the radar to leave the thumbs room', () => {

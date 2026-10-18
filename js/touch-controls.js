@@ -128,3 +128,58 @@ export class TouchControls {
     if (count && count.textContent !== String(bombs)) count.textContent = String(bombs);
   }
 }
+
+// Keyboard hints ("[P]", "[SPACE / CLICK]", "[Shift+1-4]") mean nothing on a phone. Touch play scrubs
+// them from the page's text as it renders, and puts them back when a mouse takes over.
+const KEY = String.raw`(?:Shift\+)?(?:[A-Z0-9]|[1-9]-[1-9]|SPACE|Space|ESC|Esc|CLICK|Click|ENTER|Enter|TAB|Tab|PgUp|PgDn)`;
+const KEY_HINT = new RegExp(String.raw`\s*\[${KEY}(?:\s*[/+,]\s*${KEY})*\]`, 'g');
+
+export function stripKeyHints(text) {
+  return text.replace(KEY_HINT, '');
+}
+
+export class KeyHintScrubber {
+  constructor(root) {
+    this.root = root;
+    this.originals = new Map(); // text node -> its text before scrubbing
+    this.observer = typeof MutationObserver === 'function'
+      ? new MutationObserver((records) => {
+        for (const r of records) {
+          if (r.type === 'characterData') this.scrubNode(r.target);
+          else r.addedNodes.forEach((n) => this.scrubTree(n));
+        }
+      })
+      : null;
+  }
+
+  scrubNode(node) {
+    const text = node.nodeValue;
+    if (!text || !text.includes('[')) return;
+    const clean = stripKeyHints(text);
+    if (clean === text) return;
+    if (this.originals.size > 400) {
+      for (const n of this.originals.keys()) if (!n.isConnected) this.originals.delete(n);
+    }
+    this.originals.set(node, text);
+    node.nodeValue = clean;
+  }
+
+  scrubTree(node) {
+    if (node.nodeType === 3) return this.scrubNode(node);
+    if (node.nodeType !== 1) return;
+    const walker = node.ownerDocument.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) this.scrubNode(n);
+  }
+
+  setActive(on) {
+    if (!this.root || !this.observer) return;
+    if (on) {
+      this.scrubTree(this.root);
+      this.observer.observe(this.root, { subtree: true, childList: true, characterData: true });
+    } else {
+      this.observer.disconnect();
+      for (const [node, text] of this.originals) if (node.isConnected) node.nodeValue = text;
+      this.originals.clear();
+    }
+  }
+}
