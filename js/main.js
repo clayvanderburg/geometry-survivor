@@ -63,6 +63,7 @@ import {
   baseTuning
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
+import { TouchControls, isTouchDevice } from './touch-controls.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -75,8 +76,17 @@ function loadRadarVisible() {
   try { return globalThis.localStorage?.getItem(RADAR_STORAGE_KEY) !== '0'; } catch { return true; }
 }
 // Radar side in px: 2.5x the original, but never more than 55% of the screen's short side (laptops, phones).
-export function radarSize(width, height) {
-  return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, 0.55 * Math.min(width, height)));
+// Touch play passes a smaller share: the thumbs need that corner.
+export function radarSize(width, height, shortShare = 0.55) {
+  return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
+}
+
+// Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
+// as a small laptop window: enemies spawn just off screen, so a tiny view would put them on top of the ship.
+const VIEW_MIN_SIDE = 600;
+export function viewScale(width, height) {
+  const side = Math.min(width, height);
+  return side > 0 ? Math.min(1, side / VIEW_MIN_SIDE) : 1;
 }
 
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play. A game
@@ -172,10 +182,7 @@ export class Game {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
+    this.resize();
 
     // 10x Area Sector World (~4200 x 4200 units)
     this.worldWidth = 4200;
@@ -233,6 +240,16 @@ export class Game {
     this.menuNav.onMove = () => this.sound?.playUiSelect?.();
     this.menuState = null;
     this.menuGrace = 0;
+
+    // Touch play (js/touch-controls.js): on from the start on phones and tablets, switched on by any touch
+    // and off again by a mouse click. The sticks and buttons show only while a run is live.
+    this.touchMode = isTouchDevice();
+    this.touch = new TouchControls(document.getElementById('touch-controls'), {
+      onDash: () => this.state === 'PLAYING' && this.triggerDash(),
+      onNova: () => this.state === 'PLAYING' && this.triggerSupernova(),
+      onTouch: () => this.sound.init()
+    });
+    document.body?.classList?.toggle('touch-mode', this.touchMode);
 
     this.currentChoices = [];
     // Field Guide overlay (built on first open) sits on top of the title, pause or game-over screen.
@@ -417,13 +434,36 @@ export class Game {
     this.updateHUD();
   }
 
+  // this.width / this.height are the view in world px (bigger than the window on small screens, see
+  // viewScale); draw() scales them onto the canvas by renderScale.
+  resize() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // Touch screens draw sharper (up to 1.5 device px per CSS px): phones are dense, but pay for every pixel.
+    const dpr = isTouchDevice() ? Math.min(1.5, window.devicePixelRatio || 1) : 1;
+    this.viewScale = viewScale(vw, vh);
+    this.width = vw / this.viewScale;
+    this.height = vh / this.viewScale;
+    this.renderScale = this.viewScale * dpr;
+    this.canvas.width = Math.round(vw * dpr);
+    this.canvas.height = Math.round(vh * dpr);
+    // The touch DASH / NOVA buttons sit just left of the (touch-sized) radar in the bottom-right corner.
+    const radarRoom = (radarSize(this.width, this.height, 0.36) + 18) * this.viewScale;
+    document.getElementById('touch-controls')?.style?.setProperty('--radar-room', `${Math.round(radarRoom)}px`);
+  }
+
+  setTouchMode(on) {
+    if (this.touchMode === on) return;
+    this.touchMode = on;
+    document.body?.classList?.toggle('touch-mode', on);
+    if (!on) this.touch?.reset();
+  }
+
   bindEvents() {
-    window.addEventListener('resize', () => {
-      this.width = window.innerWidth;
-      this.height = window.innerHeight;
-      this.canvas.width = this.width;
-      this.canvas.height = this.height;
-    });
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') this.setTouchMode(true);
+      else if (e.pointerType === 'mouse') this.setTouchMode(false);
+    }, true);
 
     const titleNameInput = document.getElementById('title-pilot-name');
     const goNameInput = document.getElementById('go-pilot-name');
@@ -651,8 +691,8 @@ export class Game {
     });
 
     window.addEventListener('mousemove', (e) => {
-      this.mouse.x = e.clientX;
-      this.mouse.y = e.clientY;
+      this.mouse.x = e.clientX / (this.viewScale || 1);
+      this.mouse.y = e.clientY / (this.viewScale || 1);
       // Deliberate mouse use hands aiming and menu focus back from the controller.
       if (this.gpActive && Math.abs(e.movementX ?? 0) + Math.abs(e.movementY ?? 0) > 3) {
         this.gpActive = false;
@@ -1435,6 +1475,7 @@ export class Game {
     this.mouse.down = false;
     this.gpDashLatch = false;
     this.gpBombLatch = false;
+    this.touch?.reset();
   }
 
   togglePause() {
@@ -1483,7 +1524,7 @@ export class Game {
       pauseBtn.classList.remove('active');
     }
 
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
     this.ctx.fillStyle = '#030308';
     this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -4354,6 +4395,12 @@ export class Game {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) inputX -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) inputX += 1;
 
+    const touchMove = this.touchMode ? this.touch?.move : null;
+    if (touchMove && (touchMove.x || touchMove.y)) {
+      inputX = touchMove.x;
+      inputY = touchMove.y;
+    }
+
     if (gp) {
       if (Math.abs(gp.moveX) > 0 || Math.abs(gp.moveY) > 0) {
         inputX = gp.moveX;
@@ -4413,13 +4460,18 @@ export class Game {
     const worldMouseX = this.mouse.x + this.camX;
     const worldMouseY = this.mouse.y + this.camY;
 
+    // Touch play aims with the right stick and otherwise auto-aims (there is no cursor to follow).
+    const touchAim = this.touchMode ? this.touch?.aim : null;
+    const touchAiming = !!(touchAim && (touchAim.x || touchAim.y));
     if (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)) {
       p.angle = Math.atan2(gp.aimY, gp.aimX);
-    } else if (this.autoAim) {
+    } else if (touchAiming) {
+      p.angle = Math.atan2(touchAim.y, touchAim.x);
+    } else if (this.autoAim || this.touchMode) {
       const nearest = this.findAutoAimTarget(p.x, p.y);
       if (nearest) {
         p.angle = Math.atan2(nearest.y - p.y, nearest.x - p.x);
-      } else {
+      } else if (!this.touchMode) {
         p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
       }
     } else if (!this.gpActive) {
@@ -4443,7 +4495,7 @@ export class Game {
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
 
     // 3. Primary Weapon Firing
-    const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
+    const shouldFire = this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
     if (shouldFire && ownsWeapon(p, 'blaster')) {
       this.fireAccumulator += dt * blasterFireRate(p);
       while (this.fireAccumulator >= 1) {
@@ -4739,6 +4791,7 @@ export class Game {
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
+    if (this.touchMode) this.touch?.setStatus(dashReadyPct / 100, p.bombs);
 
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
@@ -5145,7 +5198,7 @@ export class Game {
   }
 
   drawMinimap(ctx) {
-    const mapSize = radarSize(this.width, this.height);
+    const mapSize = radarSize(this.width, this.height, this.touchMode ? 0.36 : 0.55);
     const k = mapSize / RADAR_BASE_SIZE; // blips grow with the radar so they stay readable
     const pad = 18;
     const mx = this.width - mapSize - pad;
@@ -5313,7 +5366,8 @@ export class Game {
     const ctx = this.ctx;
     const beatPulse = this.sound.getBeatPulse();
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const rs = this.renderScale ?? 1;
+    ctx.setTransform(rs, 0, 0, rs, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
@@ -5644,6 +5698,7 @@ export class Game {
     this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
+    this.touch?.setVisible(this.touchMode && !this.gpActive && this.state === 'PLAYING');
     this.overview?.frame(now);
     if (this.state === 'TITLE') this.titleShip?.frame(now);
     requestAnimationFrame((t) => this.loop(t));

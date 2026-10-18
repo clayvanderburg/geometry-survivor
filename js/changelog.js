@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.29.0',
+    date: '2026-10-18',
+    title: 'Mobile Play',
+    notes: [
+      { type: 'new', text: 'Play on your phone or tablet: touch the left half of the screen to fly, the right half to aim, and tap DASH / NOVA. Without a thumb on the aim side, the turret auto-aims.' },
+      { type: 'new', text: 'Touch controls switch on by themselves on touchscreens; a mouse click switches back.' },
+      { type: 'balance', text: 'Small screens (under 600 px tall) zoom out to show as much of the sector as a laptop, so enemies no longer spawn on top of you.' }
+    ]
+  },
+  {
     version: '0.28.0',
     date: '2026-10-18',
     title: 'Game Modes',

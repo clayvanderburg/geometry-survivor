@@ -2,13 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>VEXOLITH // VOID SURVIVOR</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
+
+    <!-- Touch controls (js/touch-controls.js): left half moves, right half aims, plus DASH / NOVA -->
+    <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
+      <div class="touch-stick" data-stick="move"><div class="touch-knob"></div></div>
+      <div class="touch-stick" data-stick="aim"><div class="touch-knob"></div></div>
+      <button id="touch-dash" class="touch-btn touch-dash" tabindex="-1">DASH</button>
+      <button id="touch-nova" class="touch-btn touch-nova" tabindex="-1">NOVA<span id="touch-nova-count" class="touch-nova-count">2</span></button>
+    </div>
 
     <!-- HUD Overlay -->
     <div id="hud">
