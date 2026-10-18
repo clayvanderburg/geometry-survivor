@@ -198,6 +198,7 @@ export class Game {
     this.gpButtons = [];
     this.gpActive = false;
     this.menuNav = new MenuNavigator();
+    this.menuNav.onMove = () => this.sound?.playUiSelect?.();
     this.menuState = null;
     this.menuGrace = 0;
 
@@ -1643,7 +1644,8 @@ export class Game {
     const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
     const intensity = fx.intensity;
-    this.sound.playExplosion(intensity);
+    if (this.sound.playEnemyDeath) this.sound.playEnemyDeath(intensity);
+    else this.sound.playExplosion(intensity);
     if (fx.shake > 0) this.addShake(fx.shake);
     if (fx.hitStop > 0) this.requestHitStop(fx.hitStop);
 
@@ -1885,7 +1887,8 @@ export class Game {
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
-    this.sound.playExplosion(1.8);
+    if (this.sound.playPlayerHit) this.sound.playPlayerHit();
+    else this.sound.playExplosion(1.8);
     this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
     this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
     return p.hp <= 0;
@@ -2545,7 +2548,8 @@ export class Game {
       });
       this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
     }
-    this.sound.playLaser(0.55);
+    if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
+    else this.sound.playLaser(0.55);
   }
 
   fireSwarmMissiles(b = weaponBuild(this.player, 'missiles')) {
@@ -3453,7 +3457,8 @@ export class Game {
       for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
       this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
       this.particles.spawnShockwave(p.x, p.y, 260, 280, 5, 0.5);
-      this.sound.playLevelUp();
+      if (this.sound.playBreakthrough) this.sound.playBreakthrough();
+      else this.sound.playLevelUp();
       return true;
     }
     return false;
@@ -3477,6 +3482,7 @@ export class Game {
     const upg = this.currentChoices[index];
     if (!upg) return;
     const p = this.player;
+    this.sound?.playUiConfirm?.();
     this.runStats?.picked(upg);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
@@ -3626,7 +3632,8 @@ export class Game {
     this.state = 'GAMEOVER';
     this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
-    this.sound.playSupernova();
+    if (this.sound.playGameOver) this.sound.playGameOver();
+    else this.sound.playSupernova();
 
     const mins = Math.floor(this.elapsedTime / 60);
     const secs = Math.floor(this.elapsedTime % 60);
@@ -4184,7 +4191,8 @@ export class Game {
       if (dist < p.radius * 1.85) {
         if (g.isGold) {
           // Currency only: no XP, no multiplier.
-          this.sound.playGeomPickup(true);
+          if (this.sound.playGoldPickup) this.sound.playGoldPickup();
+          else this.sound.playGeomPickup(true);
           this.addGold(g.gold || 1);
           this.score += Math.round(10 * this.multiplier);
           this.geoms.splice(i, 1);

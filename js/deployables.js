@@ -98,6 +98,7 @@ export class Deployables {
         // Minefield Triad: three mines per drop, in a small triangle.
         const n = level.t12 ? W.triadCount : 1;
         for (let k = 0; k < n && this.mineCount < MINE_POOL; k++) this.dropMine(game.player, level, n > 1 ? k : -1);
+        game.sound?.playMineDrop?.();
         this.mineTimer = W.mineCooldown(level);
       }
     }
@@ -323,7 +324,8 @@ export class Deployables {
       }
     }
     t.flash = 1;
-    game.sound.playLaser(0.72);
+    if (game.sound.playTurretShot) game.sound.playTurretShot();
+    else game.sound.playLaser(0.72);
   }
 
   // ---- Escort Drones ----

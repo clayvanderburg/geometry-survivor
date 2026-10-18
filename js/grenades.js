@@ -203,7 +203,8 @@ export class Grenades {
     const fx = game.particles;
     fx.spawnFlash?.(p.x, p.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
     fx.spawnShockwave(p.x, p.y, 26 + Math.min(n, 7) * 2, el.hue, 2, 0.2);
-    game.sound.playLaser?.(0.42);
+    if (game.sound.playGrenadeThrow) game.sound.playGrenadeThrow();
+    else game.sound.playLaser?.(0.42);
   }
 
   land(game, g) {
@@ -255,7 +256,8 @@ export class Grenades {
     fx.spawnShockwave(g.x, g.y, r * 0.42, g.hue + 25, 2.5, 0.24);
     fx.spawnExplosionSparks(g.x, g.y, g.gravity ? 22 : 14, g.hue, 2, 10, 2);
     if (g.gravity) fx.spawnShockwave(g.x, g.y, r * 0.3, 320, 3, 0.22);
-    game.sound.playMissileImpact?.(0.8);
+    if (game.sound.playGrenadeBlast) game.sound.playGrenadeBlast(0.8);
+    else game.sound.playMissileImpact?.(0.8);
     game.damageEnemiesInRadius(g.x, g.y, r, g.damage, g.hue, 'grenade', KNOCK);
     // Lingering Cloud: a cloud of the grenade's element that hits everything inside every tick.
     if (g.cloud) {
