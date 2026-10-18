@@ -125,7 +125,7 @@ test('cards: offers vs picks, the locked card is not re-counted on a reroll, NEW
   assert.deepEqual(s.cards.new_weapon, [1, 1, 0, 0, 0]);
   assert.deepEqual(s.cards.magnet, [1, 0, 0, 0, 0]);
   assert.deepEqual(s.weaponPicks, { drones: [1, 0, 0, 0, 0], mines: [1, 1, 0, 0, 0] });
-  assert.deepEqual(s.gold, { earned: 40, spent: 25, rerolls: 1, locks: 1 });
+  assert.deepEqual(s.gold, { earned: 40, spent: 25, rerolls: 1, locks: 1, banishes: 0 });
 });
 
 test('level timeline: each level-up is stamped once, skipped levels share the time', () => {

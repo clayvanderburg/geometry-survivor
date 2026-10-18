@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.16.0',
+    date: '2026-10-18',
+    title: 'Banish',
+    notes: [
+      { type: 'new', text: 'BANISH a level-up card for 30 gold: it never comes up again this run, and a fresh card takes its slot.' },
+      { type: 'new', text: 'Banishing takes two presses so it cannot happen by accident: click the ✕ twice, press B then 1-3, or RB twice on a controller.' }
+    ]
+  },
+  {
     version: '0.15.1',
     date: '2026-10-18',
     title: 'The Swarm Is Back',

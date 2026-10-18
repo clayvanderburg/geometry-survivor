@@ -3027,3 +3027,24 @@ html, body {
 }
 .consent-check input.gp-focus,
 .consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* BANISH toggle (level-up cards): opposite corner to the LOCK toggle; red, and lit when armed. */
+.card-banish-toggle {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 70, 100, 0.65);
+  background: rgba(255, 70, 100, 0.1);
+  color: #ff8fa3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  z-index: 2;
+}
+.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.25); }
+.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; }
+.card-banish-toggle.unaffordable { opacity: 0.45; }
+.card-banish-toggle.hidden { display: none; }

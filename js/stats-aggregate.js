@@ -233,7 +233,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       score: { median: median(list.map((r) => r.score)) },
       pace
     },
-    gold: { earned: mean((r) => r.gold?.earned || 0), spent: mean((r) => r.gold?.spent || 0), rerolls: mean((r) => r.gold?.rerolls || 0), locks: mean((r) => r.gold?.locks || 0) },
+    gold: { earned: mean((r) => r.gold?.earned || 0), spent: mean((r) => r.gold?.spent || 0), rerolls: mean((r) => r.gold?.rerolls || 0), locks: mean((r) => r.gold?.locks || 0), banishes: mean((r) => r.gold?.banishes || 0) },
     weapons,
     sources,
     enemies,

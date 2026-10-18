@@ -5,7 +5,7 @@
 // A run summary (built by js/run-stats.js) holds no callsign, no IP and nothing else about the player:
 //   schema 1, version, time (s), wave, level, score, kills, died, cause (enemy kind of the fatal hit)
 //   levelTimes  [seconds at which LV 2, 3, ... were reached]
-//   gold        { earned, spent, rerolls, locks }
+//   gold        { earned, spent, rerolls, locks, banishes }
 //   loadout     [{ id, lv }] at the end of the run
 //   weapons     { group: { dmg, kills, owned?, from?, curve?, tl?: [[t, lv]], lv?: { L: [secs, dmg,
 //                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L)] } } }
@@ -77,7 +77,7 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
     levelTimes: (Array.isArray(body.levelTimes) ? body.levelTimes : []).slice(0, L.MAX_LEVEL_TIMES).map((v) => dec(v, t)),
     gold: {
       earned: int(body.gold?.earned, L.MAX_COUNT), spent: int(body.gold?.spent, L.MAX_COUNT),
-      rerolls: int(body.gold?.rerolls, 1e5), locks: int(body.gold?.locks, 1e5)
+      rerolls: int(body.gold?.rerolls, 1e5), locks: int(body.gold?.locks, 1e5), banishes: int(body.gold?.banishes, 1e5)
     },
     loadout: (Array.isArray(body.loadout) ? body.loadout : [])
       .filter((w) => isObj(w) && typeof w.id === 'string' && STAT_ID.test(w.id)).slice(0, L.MAX_LOADOUT)

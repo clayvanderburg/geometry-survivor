@@ -25,7 +25,7 @@ import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -291,6 +291,7 @@ export class Game {
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
+      banished: {}, // card ids banished with gold this run (never offered again)
       stats: {
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult,
         fireRate: TUNING.fireRate * bonuses.fireRateMult,
@@ -2745,6 +2746,8 @@ export class Game {
     this.handRerolls = 0;
     this.handLock = null;
     this.lockNote = '';
+    this.banishMode = false;
+    this.banishArmed = -1;
     // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
     this.handDrought = this.player.newWeaponDrought || 0;
     const carried = this.carriedLock;
@@ -2794,13 +2797,28 @@ export class Game {
   }
 
   // Level-up modal keys: [1]-[3] pick, Shift+[1]-[3] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play).
+  // radar toggle only during play), [B] then [1]-[3] banishes that card ([B] again or [Esc] cancels).
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
     const digit = /^(?:Digit|Numpad)([1-3])$/.exec(code);
     if (digit) {
       const idx = Number(digit[1]) - 1;
+      if (this.banishMode) {
+        this.banishMode = false;
+        return this.banishCard(idx, true);
+      }
       return shift ? this.toggleCardLock(idx) : (this.selectUpgrade(idx), true);
+    }
+    if (code === 'KeyB' && this.canEditHand()) {
+      this.banishMode = !this.banishMode;
+      this.banishArmed = -1;
+      this.renderHandControls();
+      return true;
+    }
+    if (code === 'Escape' && this.banishMode) {
+      this.banishMode = false;
+      this.renderHandControls();
+      return true;
     }
     if (code === 'KeyR') return this.rerollHand();
     return false;
@@ -2815,7 +2833,41 @@ export class Game {
       const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
       return idx >= 0 ? this.toggleCardLock(idx) : false;
     }
+    if (gp.pressed(PAD.RB)) {
+      const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
+      return idx >= 0 ? this.banishCard(idx) : false; // first RB arms, second RB on the same card banishes
+    }
     return false;
+  }
+
+  // BANISH card `index` for banishCost() gold: it never comes up again this run and a fresh card takes
+  // its slot. Two steps so a stray click or button can't spend 30 gold: the first arms the card, the
+  // second (or `confirmed`, from the keyboard's [B] + digit) banishes it. NEW WEAPON can't be banished.
+  banishCard(index, confirmed = false) {
+    if (!this.canEditHand()) return false;
+    const card = this.currentChoices[index];
+    if (!card || card.isNewWeapon) return false;
+    if (!confirmed && this.banishArmed !== index) {
+      this.banishArmed = index;
+      this.renderHandControls();
+      return true;
+    }
+    this.banishArmed = -1;
+    if (!this.spendGold(banishCost())) { this.renderHandControls(); return false; }
+    this.player.banished[card.id] = true;
+    this.runStats?.banish();
+    if (this.handLock?.card === card) this.handLock = null;
+    const inHand = new Set(this.currentChoices.map((c) => c.id));
+    const fresh = rollUpgrades(this.player, 3).find((c) => !inHand.has(c.id));
+    if (fresh) this.currentChoices[index] = fresh;
+    else this.currentChoices.splice(index, 1);
+    if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
+    this.lockNote = `✕ ${card.name.replace('SYNERGY: ', '')} banished for the rest of this run`;
+    const focusedIndex = this.focusedChoiceIndex();
+    this.renderHand();
+    if (focusedIndex >= 0) this.focusChoice(Math.min(focusedIndex, this.currentChoices.length - 1));
+    this.sound.playExplosion?.(0.6);
+    return true;
   }
 
   canEditHand() {
@@ -2843,6 +2895,7 @@ export class Game {
     if (!this.canEditHand()) return false;
     if (!this.spendGold(this.rerollPrice())) return false;
     this.handRerolls++;
+    this.banishArmed = -1;
     this.player.newWeaponDrought = this.handDrought;
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
     this.runStats?.reroll();
@@ -2904,9 +2957,11 @@ export class Game {
     const note = doc?.getElementById('hand-lock-note');
     if (note) {
       const lockedName = this.handLock?.card.name.replace('SYNERGY: ', '');
-      note.textContent = this.lockNote
+      const bc = banishCost();
+      note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[3] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
+        : this.lockNote
         || (lockedName ? `🔒 ${lockedName} is locked: pick another card and it comes back next level-up`
-          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y`);
+          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y   ✕ ${bc} ${GOLD_ICON} banishes one for the run · [B]+[1-3] / RB×2`);
       note.classList?.[this.lockNote ? 'add' : 'remove']('dropped');
     }
     (this.choiceCardEls || []).forEach((el, idx) => {
@@ -2919,6 +2974,17 @@ export class Game {
         badge.textContent = '🔒 LOCKED';
         el.appendChild(badge);
       } else if (!locked && badge) badge.remove?.();
+      const banish = el.querySelector?.('.card-banish-toggle');
+      if (banish) {
+        const bc = banishCost();
+        const armed = this.banishArmed === idx;
+        const nw = !!this.currentChoices[idx]?.isNewWeapon;
+        banish.classList?.[nw ? 'add' : 'remove']('hidden');
+        banish.classList?.[this.gold >= bc ? 'remove' : 'add']('unaffordable');
+        banish.classList?.[armed || this.banishMode ? 'add' : 'remove']('armed');
+        banish.textContent = armed ? `✕ CONFIRM ${bc} ${GOLD_ICON}` : `✕ ${bc} ${GOLD_ICON}`;
+        banish.title = this.gold >= bc ? `Banish for ${bc} gold: it never comes up again this run (click twice)` : `Need ${bc} gold to banish`;
+      }
       const toggle = el.querySelector?.('.card-lock-toggle');
       if (!toggle) return;
       const affordable = locked || this.gold >= lc;
@@ -2969,6 +3035,14 @@ export class Game {
           this.toggleCardLock(idx);
         });
         card.appendChild(lock);
+        const banish = document.createElement('div');
+        banish.className = 'card-banish-toggle';
+        banish.setAttribute?.('role', 'button');
+        banish.addEventListener('click', (e) => {
+          e.stopPropagation?.();
+          this.banishCard(idx);
+        });
+        card.appendChild(banish);
       }
       container.appendChild(card);
       this.choiceCardEls.push(card);
