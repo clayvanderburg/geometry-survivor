@@ -16,7 +16,10 @@ import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild } from './weapo
 // (size, radius, pull, reach, lifetime, spin, pierce) add no potential DPS: they are the trade-off.
 // Potential = every attack lands on a target (each missile, arc jump, mine, bolt, singularity core tick
 // + collapse, each orbit-blade pass over an enemy on the ring, and each extra attack a transform adds:
-// flak, bomblets, napalm, orbs, strikes...); splash on extra targets is not counted.
+// flak, bomblets, napalm, orbs, strikes...); splash on extra targets is not counted. Transform attacks
+// that land unlike a main hit are valued at a share measured in the Weapon Range (the *HitShare
+// constants): below 1 for bomblets and splits that catch fewer enemies, above 1 for strikes, shells and
+// pulls that catch a whole pack.
 // Breakthroughs: a transform multiplies potential by BT_TRANSFORM_DPS (its hit damage is rescaled so the
 // new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and BT_BOOST_RANKS to every UTILITY stat.
 // DPS_TARGET is the LV 1 reference (and the old level curve the balance tools still report against).
@@ -85,8 +88,8 @@ export const WEAPON_SCALING = {
   wingRocketSpeed: 8.5,
   wingRocketLife: 1.6,
   // Transforms: Tandem Warheads (a second blast after tandemDelay), Napalm Trail (a burning pool worth
-  // napalmShare of the hit, ticking every napalmTick for napalmLife), MIRV (splits into 3 after mirvTime;
-  // a rocket that hits before splitting carries all three payloads).
+  // napalmShare of the hit, ticking every napalmTick for napalmLife), MIRV (splits into 3 homing
+  // mini-rockets after mirvTime; a rocket that hits before splitting carries all three payloads).
   tandemShare: 0.5,
   tandemDelay: 0.24,
   napalmShare: 0.33,
@@ -94,7 +97,10 @@ export const WEAPON_SCALING = {
   napalmTick: 0.25,
   mirvSplit: 3,
   mirvTime: 0.24,
-  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit : 1),
+  mirvRange: 320, // mini-rockets home on the nearest enemies this far ahead of the split
+  mirvHoming: 0.12, // rad per tick
+  mirvHitShare: 0.85, // three small payloads cover no more ground than one rocket's blast: each valued at this share
+  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
   wingRocketDamageMult: (b) => lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
@@ -107,17 +113,21 @@ export const WEAPON_SCALING = {
   // missileLife s, so a salvo never chases across the whole view.
   missileRange: 460,
   missileLife: 1.6,
-  // Transforms: Cluster Bomblets (4 bomblets at 13% each), Orbital Rain (strikes from above on marked
-  // targets after rainDelay), Tactical Nuke (every 4th salvo is one nuke worth nukeUnits salvos).
+  // Transforms: Cluster Bomblets (4 bomblets at 30% each, valued at clusterHitShare), Orbital Rain
+  // (strikes from above on marked targets after rainDelay), Tactical Nuke (every 4th salvo is one nuke
+  // worth nukeUnits salvos, valued at nukeHitShare).
   clusterBomblets: 4,
-  clusterShare: 0.13,
+  clusterShare: 0.3,
   clusterDelay: 0.3,
   clusterRadiusFrac: 0.42,
+  clusterSpread: 2, // bomblets hop onto enemies up to 2 blast radii out (the rest scatter)
+  clusterHitShare: 0.3, // a bomblet catches about a third of the enemies a missile blast does: valued at this share
   rainDelay: 0.55,
   nukeEvery: 4,
   nukeUnits: 1.88,
   nukeRadiusMult: 2.2,
-  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits) / W.nukeEvery : 1),
+  nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
+  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
   missileDamageMult: (b) => lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
@@ -126,15 +136,19 @@ export const WEAPON_SCALING = {
   lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
   lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
   lightningChains: (b) => (b.t4 ? 2 : 1),
-  // Transforms: Forked Chains (2 chains), Ball Lightning (an orb worth orbShare of the cast, orbZaps
-  // zaps over orbLife), Thunderstrike (each chain ends in a strike worth strikeShare of that chain).
+  // Transforms: Forked Chains (2 chains), Ball Lightning (an orb dropped on the nearest enemy, worth
+  // orbShare of the jumps that landed, orbZaps zaps over orbLife), Thunderstrike (each chain ends in a strike worth
+  // strikeShare of that chain, valued at strikeHitShare).
   orbShare: 0.22,
   orbZaps: 10,
   orbLife: 2,
   orbRange: 160,
+  orbDrift: 0.8, // px per tick (fading) as the orb drifts on from the enemy it dropped on
   strikeShare: 0.22,
-  strikeRadius: 110,
-  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumps(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare : 0)),
+  strikeRadius: 55,
+  strikeFalloff: 0.8, // hits hard at the struck enemy, fading to 20% at the rim
+  strikeHitShare: 2, // a strike on a pack catches its neighbours too (a lone chain cannot): valued at this share
+  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumps(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
   lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
@@ -142,13 +156,13 @@ export const WEAPON_SCALING = {
   // Light per-tick core grind so packs clump, then a collapse pulse over 85% of the pull radius. The
   // pull fades hard toward the rim (gravity.js singularityPullScale) and the collapse falls to 25% at
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
-  singularityPullRadius: (b) => 175 + 25 * b.r.pull,
+  singularityPullRadius: (b) => 175 + 25 * b.r.pull + (b.t8 ? W.aftershockPull : 0),
   singularityLife: (b) => 2.6 + 0.3 * b.r.duration,
   singularityCooldown: (b) => 4 / rateMult(b.r.cooldown),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
-  // second collapse at 60% radius worth aftershockShare), Hawking Cascade (3 mini-singularities worth
+  // wider pull and a second collapse at 60% radius worth aftershockShare), Hawking Cascade (3 mini-singularities worth
   // cascadeShare in total, each grinding and collapsing like a small core).
   singularityCount: (b) => (b.t4 ? 2 : 1),
   twinPullScale: 1,
@@ -156,6 +170,7 @@ export const WEAPON_SCALING = {
   aftershockShare: 0.22,
   aftershockDelay: 0.6,
   aftershockRadiusFrac: 0.6,
+  aftershockPull: 25, // its heavier core pulls one Pull rank further, so the second implosion has a crowd to catch
   cascadeMinis: 3,
   cascadeShare: 0.22,
   cascadeLife: 1.1,
@@ -217,16 +232,17 @@ export const WEAPON_SCALING = {
   mineLifetime: (b) => 10.5 + 2 * (b?.r?.fuse || 0),
   mineTriggerRadius: () => 48,
   mineBlastRadius: (b) => 120 * (1 + 0.12 * b.r.radius), // wide, but well inside the old 2x (180)
-  // Transforms: Cluster Mines (3 bomblets at 20% each), Seeker Mines (armed mines crawl toward the
-  // nearest enemy), Minefield Triad (3 mines per drop, sharing the damage).
+  // Transforms: Cluster Mines (3 bomblets at 25% each, valued at mineClusterHitShare), Seeker Mines
+  // (armed mines crawl toward the nearest enemy), Minefield Triad (3 mines per drop, sharing the damage).
   mineClusterBomblets: 3,
-  mineClusterShare: 0.2,
+  mineClusterShare: 0.25,
   mineClusterDelay: 0.35,
+  mineClusterHitShare: 0.3, // a small bomblet catches about a third of the crowd the mine's wide blast does: valued at this share
   seekerSpeed: 1.6,
   seekerRange: 280,
   triadCount: 3,
   triadSpacing: 36,
-  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare : 0)),
+  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)),
   mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
 
   // --- Sentry Turret (stats: damage, rate, lifetime, redeploy) ------------------------------------
@@ -249,7 +265,7 @@ export const WEAPON_SCALING = {
   turretBoltSpeed: 13,
   // Transforms: Twin Barrels (2 bolts per shot), Piercing Rail (every railEvery-th shot is a rail
   // worth railUnits bolts that pierces), Mortar Battery (a shell every mortarEvery s worth 22% of the
-  // turret's bolt damage).
+  // turret's bolt damage, valued at mortarHitShare).
   turretBarrels: (b) => (b.t4 ? 2 : 1),
   railEvery: 5,
   railUnits: 2.1,
@@ -257,11 +273,13 @@ export const WEAPON_SCALING = {
   railPierce: 8,
   mortarEvery: 1.5,
   mortarShare: 0.22,
-  mortarRadius: 90,
+  mortarRadius: 60,
   mortarDelay: 0.7,
+  mortarFalloff: 0.8, // hits hard at the target, fading to 20% at the rim
+  mortarHitShare: 1.75, // a shell on a pack catches its neighbours too: valued at this share
   turretShotUnits: (b) => W.turretBarrels(b) * (b.t8 ? (W.railEvery - 1 + W.railUnits) / W.railEvery : 1),
-  turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare : 0)),
-  turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare : 0))),
+  turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare * W.mortarHitShare : 0)),
+  turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
   mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
@@ -293,7 +311,8 @@ export const WEAPON_SCALING = {
   // Transforms: Cluster Grenades (on landing, grenadeClusterBomblets bomblets worth grenadeClusterShare
   // each pop grenadeClusterDelay s later), Lingering Cloud (a cloud worth cloudShare of the blast, ticking
   // every cloudTick for cloudLife), Gravity Grenade (armed grenades pull enemies in for gravityFuse s, then
-  // blast: no extra attacks, so its rescale makes every blast hit BT_TRANSFORM_DPS harder).
+  // blast: no extra attacks; the packed blast is valued at gravityHitShare, so every blast hits
+  // BT_TRANSFORM_DPS / gravityHitShare as hard).
   grenadeClusterBomblets: 5,
   grenadeClusterShare: 0.2,
   grenadeClusterDelay: 0.45,
@@ -307,7 +326,8 @@ export const WEAPON_SCALING = {
   gravityPullRadiusMult: 1.8,
   gravityPull: 0.6,
   grenadeClusterHitShare: 0.2, // bomblets land past the blast and catch fewer enemies: valued at this share
-  grenadeUnits: (b) => 1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0),
+  gravityHitShare: 1.3, // the pull packs about a third more enemies into every blast: valued at this share
+  grenadeUnits: (b) => (1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0)) * (b.t12 ? W.gravityHitShare : 1),
   grenadeDamageMult: (b) => lv1('grenades', 'grenades', (b0) => DPS_TARGET(1) * W.grenadeCooldown(b0) / (W.grenadeCount(b0) * W.grenadeUnits(b0))) * hitMult(b) * tfScale(b, W.grenadeUnits),
   // SYNERGY: EMP Grenades (Plasma Grenades + Tesla Arc): each blast arcs into empArcs enemies within
   // empRange x the blast radius for empShare of the blast damage each. Off the DPS curve, like Storm Protocol.
@@ -408,16 +428,16 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 export const POTENTIAL_DPS = {
   blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
     * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
-  rockets: (b) => W.wingRocketCount(b) * (b.t12 ? W.mirvSplit : 1) * W.wingRocketDamageMult(b)
+  rockets: (b) => W.wingRocketCount(b) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1) * W.wingRocketDamageMult(b)
     * (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) / W.wingRocketCooldown(b),
   missiles: (b) => {
-    const salvo = W.missileSalvo(b) * W.missileDamageMult(b) * (1 + (b.t4 ? W.clusterBomblets * W.clusterShare : 0));
-    const avg = b.t12 ? ((W.nukeEvery - 1) * salvo + W.nukeUnits * salvo) / W.nukeEvery : salvo;
+    const salvo = W.missileSalvo(b) * W.missileDamageMult(b) * (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)); // bomblets valued at their hit share
+    const avg = b.t12 ? ((W.nukeEvery - 1) * salvo + W.nukeUnits * W.nukeHitShare * salvo) / W.nukeEvery : salvo; // the nuke at its hit share
     return avg / W.missileCooldown(b);
   },
   lightning: (b) => {
     const chains = W.lightningChains(b) * W.lightningJumps(b) * W.lightningDamageMult(b);
-    const strikes = b.t12 ? W.strikeShare * chains : 0;
+    const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;
     const orb = b.t8 ? W.orbShare * chains : 0;
     return (chains + strikes + orb) / W.lightningCooldown(b);
   },
@@ -430,15 +450,15 @@ export const POTENTIAL_DPS = {
   orbitals: (b) => W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
     + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
-  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare : 0)) / W.mineCooldown(b),
+  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
   turret: (b) => W.turretAverageActive(b) * (W.turretFireRate(b) * W.turretShotUnits(b) * W.turretDamageMult(b)
-    + (b.t12 ? W.mortarDamageMult(b) / W.mortarEvery : 0)),
+    + (b.t12 ? W.mortarDamageMult(b) * W.mortarHitShare / W.mortarEvery : 0)),
   drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
-    return W.grenadeCount(b) * (blast + bomblets + cloud) / W.grenadeCooldown(b);
+    return W.grenadeCount(b) * (blast + bomblets + cloud) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
   }
 };
 

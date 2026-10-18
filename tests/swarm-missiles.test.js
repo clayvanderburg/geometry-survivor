@@ -75,3 +75,17 @@ test('Swarm Missiles are orange-gold, and turn pink with Storm Protocol', () => 
   g.fireSwarmMissiles();
   assert.ok(g.missiles.every((m) => m.hue === 325));
 });
+
+test('Cluster Bomblets hop onto enemies past the blast, one each, and scatter the rest', () => {
+  const g = fight([[0, 0], [130, 0], [-130, 0], [0, 400]]);
+  const [hub, east, west] = g.enemyManager.enemies;
+  const blast = 75;
+  g.weaponFx.hop(g, hub.x, hub.y, W.clusterBomblets, blast * 0.75, blast * W.clusterSpread, 32, 10, W.clusterDelay, 40, 'missile');
+  const pops = g.weaponFx.events;
+  const on = (e) => pops.filter((ev) => ev.x === e.x && ev.y === e.y).length;
+  assert.equal(pops.length, W.clusterBomblets);
+  assert.equal(on(east), 1, 'one bomblet on the enemy east of the blast');
+  assert.equal(on(west), 1, 'one on the enemy west of it');
+  assert.equal(on(hub), 0, 'none on the enemy the blast already hit');
+  assert.ok(pops.every((ev) => Math.hypot(ev.x - hub.x, ev.y - hub.y) <= blast * W.clusterSpread + 1e-9), 'the far enemy is out of reach; the rest scatter nearby');
+});

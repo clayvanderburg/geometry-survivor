@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.0',
+    date: '2026-10-18',
+    title: 'Breakthrough Balance',
+    notes: [
+      { type: 'balance', text: 'Cluster Bomblets hop onto nearby enemies and hit harder; Cluster Mines bomblets hit harder too.' },
+      { type: 'balance', text: 'MIRV mini-rockets home on their own targets. Ball Lightning drops its orb on the nearest enemy.' },
+      { type: 'balance', text: 'Aftershock Collapse pulls from further out, so the second implosion catches a crowd.' },
+      { type: 'balance', text: 'Thunderstrike and Mortar Battery hit a tighter area; Tactical Nuke and Gravity Grenade hit a little softer.' }
+    ]
+  },
+  {
     version: '0.21.3',
     date: '2026-10-18',
     title: 'Rocket Pods',
