@@ -18,7 +18,7 @@ function convexHull(points) {
   return lower.slice(0, -1).concat(upper.slice(0, -1));
 }
 
-// Ship-local silhouette the shield hugs: drill claws, carapace wings, leg tips and tail.
+// Ship-local silhouette the shield hugs (in the hull's frame): drill claws, carapace, wing tips and tail.
 // Claw growth from upgrades is capped so bigger drills poke through instead of inflating the hitbox.
 const hullCache = new Map();
 function shipHull(r, drillScale) {
@@ -32,8 +32,7 @@ function shipHull(r, drillScale) {
         [r * 1.42 + 18 * ds, s * r * 0.5],        // drill-claw tips
         [r * 1.42 + 2, s * (r * 0.78 + 8.5 * ds)], // pincer jaws
         [r * 1.15, s * r * 1.12],                  // claw elbows
-        [-r * 0.15, s * r * 1.72],                 // leg tips
-        [-r * 0.84, s * r * 1.62],                 // rear leg tips
+        [-r * 0.95, s * r * 1.76],                 // wings (the tips poke just past, like big drills)
         [-r * 0.92, s * r * 0.88]                  // rear carapace corners
       );
     }
@@ -43,6 +42,9 @@ function shipHull(r, drillScale) {
   }
   return hull;
 }
+
+// Hull heading (body, wings, shield): hullAngle, else the older single drillAngle heading, else the aim.
+const hullHeading = (p) => p.hullAngle ?? p.drillAngle ?? p.angle ?? 0;
 
 // The hull grown outward by `pad` with rounded corners, sampled as a closed polyline.
 function shieldOutline(hull, pad) {
@@ -69,7 +71,7 @@ function shieldPad(p, tuning) {
 // Contact test against the drawn shield shape: true when a circle at (x, y) touches it.
 export function shieldTouches(p, tuning, x, y, radius) {
   const hull = shipHull(p.radius, p.stats?.drillScale);
-  const a = -(p.drillAngle ?? p.angle ?? 0);
+  const a = -hullHeading(p);
   const dx = x - p.x, dy = y - p.y;
   const lx = dx * Math.cos(a) - dy * Math.sin(a);
   const ly = dx * Math.sin(a) + dy * Math.cos(a);
@@ -131,7 +133,7 @@ export function drawPlayerShield(ctx, p, beatPulse, tuning, shieldRotation = 0, 
 
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.rotate(p.drillAngle ?? p.angle ?? 0);
+    ctx.rotate(hullHeading(p));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
@@ -203,31 +205,39 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.translate(p.x, p.y);
     ctx.globalAlpha = flashAlpha;
 
-    // 1. Rotate Crab Body, Legs & Twin Drill-Claws along p.drillAngle
+    // 1. Hull (carapace + wings) along the hull heading
     ctx.save();
-    ctx.rotate(p.drillAngle ?? p.angle);
+    ctx.rotate(hullHeading(p));
 
-    // 1a. Six Geometric Scuttling Crab Legs (3 Left, 3 Right)
-    const legOffsets = [-0.42, 0.0, 0.42];
-    ctx.strokeStyle = carapaceCol;
-    ctx.lineWidth = 2.2;
+    // 1a. Swept-back wings off the flanks, with a wing-tip running light that pulses with speed
+    const speed = Math.min(1, Math.hypot(p.vx || 0, p.vy || 0) / 5);
     for (let side = -1; side <= 1; side += 2) {
-      for (let l = 0; l < 3; l++) {
-        const scutt = Math.sin((p.walkCycle || 0) + l * 2.1 + (side > 0 ? Math.PI : 0)) * 2.4;
-        const baseX = legOffsets[l] * r * 0.85;
-        const baseY = side * r * 0.88;
-        const kneeX = baseX - r * 0.15 + scutt * 0.6;
-        const kneeY = side * r * 1.42;
-        const tipX = baseX - r * 0.48 + scutt;
-        const tipY = side * r * 1.72;
-
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
+        ctx.globalAlpha = (pass === 0 ? 0.55 : 0.95) * flashAlpha;
+        ctx.lineWidth = pass === 0 ? 5 : 1.8;
         ctx.beginPath();
-        ctx.moveTo(baseX, baseY);
-        ctx.lineTo(kneeX, kneeY);
-        ctx.lineTo(tipX, tipY);
+        ctx.moveTo(r * 0.12, side * r * 0.95);     // wing root, leading edge
+        ctx.lineTo(-r * 1.02, side * r * 2.0);     // swept leading edge out to the tip
+        ctx.lineTo(-r * 1.08, side * r * 1.72);    // clipped tip
+        ctx.lineTo(-r * 0.74, side * r * 0.86);    // wing root, trailing edge
         ctx.stroke();
       }
+      // Inner wing rib
+      ctx.globalAlpha = 0.8 * flashAlpha;
+      ctx.strokeStyle = innerCol;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.25, side * r * 1.02);
+      ctx.lineTo(-r * 0.9, side * r * 1.72);
+      ctx.stroke();
+      ctx.globalAlpha = (0.55 + 0.45 * speed) * flashAlpha;
+      ctx.fillStyle = innerCol;
+      ctx.beginPath();
+      ctx.arc(-r * 1.04, side * r * 1.88, 1.6 + speed * 1.2, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.globalAlpha = flashAlpha;
 
     // 1b. Wide Geometric Crab Carapace (Hexagonal Armored Shell)
     for (let pass = 0; pass < 2; pass++) {
@@ -261,7 +271,12 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.closePath();
     ctx.stroke();
 
-    // 1c. Twin Front Crab Pincer Arms + Spinning Conical Rotary Drills!
+    ctx.restore(); // End hull orientation
+
+    // 1c. Twin Pincer Arms + Spinning Conical Rotary Drills, on their own heading (p.drillAngle): they
+    // swing round the hull toward the rock being drilled.
+    ctx.save();
+    ctx.rotate(p.drillAngle ?? hullHeading(p));
     const drillSpin = p.drillSpin || 0;
     const drillColor = drilling ? drillActiveCol : drillIdleCol;
     const drillCoreColor = drilling ? '#ffffff' : '#b8fff0';
@@ -337,7 +352,7 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.restore();
     }
 
-    ctx.restore(); // End Crab Body & Drill-Claw orientation
+    ctx.restore(); // End drill-arm orientation
 
     // 2. Central 360° Rotating Plasma Blaster Turret (aims toward p.angle)
     ctx.save();

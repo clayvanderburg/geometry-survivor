@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.27.1',
+    date: '2026-10-18',
+    title: 'Wings',
+    notes: [
+      { type: 'new', text: 'The ship trades its crab legs for swept wings with running lights.' },
+      { type: 'fix', text: 'Mining no longer spins the whole ship: the hull keeps facing where you fly and only the drill arms swing to the rock.' }
+    ]
+  },
+  {
     version: '0.27.0',
     date: '2026-10-18',
     title: 'Balanced Volume',

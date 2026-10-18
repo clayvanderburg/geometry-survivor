@@ -31,10 +31,10 @@ export function previewShip(player, t, tuning = {}) {
     ship: {
       x: 0, y: 0, radius, hp, maxHp, invuln: 0, shieldFlash: 0,
       drillAngle: heading,
+      hullAngle: heading,
       angle: heading + Math.sin(t * 0.9) * 0.7, // the turret sweeps independently of the hull
-      // Drill threads spin at the game's idle / drilling rpm (11 / 34), legs at an idle scuttle.
+      // Drill threads spin at the game's idle / drilling rpm (11 / 34).
       drillSpin: t * 11 + bitten * 23,
-      walkCycle: t * 3.2,
       stats: { drillScale }
     }
   };

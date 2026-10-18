@@ -92,6 +92,14 @@ const SINGULARITY_IMPLODE_TIME = 0.35;
 const BLACKHOLE_GRID_DEPTH = 290;
 // Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
 const ROCKET_CONVERGE = 320;
+// `from` eased by `rate` of the shortest turn toward `to` (radians), for smoothly turning headings.
+function turnToward(from, to, rate) {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return from + d * rate;
+}
+
 // Autocannon tracers are drawn at this share of the shared bolt thickness (the hitbox is unchanged).
 const AUTOCANNON_DRAW_WIDTH = 0.6;
 // Music / SFX level sliders read as a percentage (TUNING level 1 = 100%), like MASTER VOLUME.
@@ -297,9 +305,9 @@ export class Game {
       vx: 0,
       vy: 0,
       angle: 0,
-      drillAngle: 0,
+      drillAngle: 0, // drill arms (point at the rock being drilled)
+      hullAngle: 0, // hull, wings and rocket pods (face the direction of flight)
       drillSpin: 0,
-      walkCycle: 0,
       radius: TUNING.shipRadius,
       invuln: 0,
       dashTimer: 0,
@@ -2781,7 +2789,7 @@ export class Game {
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
-    const heading = p.drillAngle ?? p.angle; // hull heading: where the flank pods are
+    const heading = p.hullAngle ?? p.drillAngle ?? p.angle; // hull heading: where the wing pods are
     const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
     const mirv = b.t12 ? W.mirvSplit : 1;
@@ -4299,25 +4307,21 @@ export class Game {
       p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
     } // On a controller with the right stick released, the turret holds its last heading.
 
-    // Orient Crab Carapace & Twin Drill-Claws toward movement direction (or nearest rock being drilled)
+    // The hull (and its wings and rocket pods) faces where the ship flies; only the drill arms swing round
+    // to the rock being drilled, and otherwise point along the hull.
     const speedMag = Math.hypot(p.vx, p.vy);
-    let targetDrillAngle = p.angle;
+    if (speedMag > 0.35) p.hullAngle = turnToward(p.hullAngle ?? p.angle, Math.atan2(p.vy, p.vx), 0.22);
+    p.hullAngle ??= p.angle;
+    let targetDrillAngle = p.hullAngle;
     if (this.asteroidManager.isDrilling && this.asteroidManager.drillingRocks.length > 0) {
       const rk = this.asteroidManager.drillingRocks[0];
       targetDrillAngle = Math.atan2(rk.y - p.y, rk.x - p.x);
-    } else if (speedMag > 0.35) {
-      targetDrillAngle = Math.atan2(p.vy, p.vx);
     }
+    p.drillAngle = turnToward(p.drillAngle ?? p.hullAngle, targetDrillAngle, 0.22);
 
-    let angleDiff = targetDrillAngle - (p.drillAngle || 0);
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    p.drillAngle = (p.drillAngle || 0) + angleDiff * 0.22;
-
-    // Spin the Twin Rotary Claw Drills & animate crab legs
+    // Spin the Twin Rotary Claw Drills
     const rpm = this.asteroidManager.isDrilling ? 34 : 11;
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
-    p.walkCycle = (p.walkCycle || 0) + dt * (2.5 + speedMag * 2.2);
 
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));

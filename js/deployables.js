@@ -365,7 +365,7 @@ export class Deployables {
     const n = this.droneCount;
     if (n === 0) return;
 
-    const heading = p.drillAngle ?? p.angle;
+    const heading = p.hullAngle ?? p.drillAngle ?? p.angle;
     const spacing = TUNING.droneFormationRadius ?? 54;
     const range = W.droneRange(level);
     const rate = W.droneFireRate(level);
