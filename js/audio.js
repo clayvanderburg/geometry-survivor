@@ -1015,6 +1015,33 @@ export class SoundEngine {
     osc.stop(t + 0.15);
   }
 
+  // Supply cache fanfare: a bright rising major arpeggio, a held triumphant chord and a sparkle on top.
+  // (It used to reuse the Supernova blast, which sounded like taking a big hit.)
+  playCacheFanfare(jackpot = false) {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const tone = (f, start, dur, vol, type = 'triangle') => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f, t + start);
+      gain.gain.setValueAtTime(0.0001, t + start);
+      gain.gain.exponentialRampToValueAtTime(vol, t + start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t + start);
+      osc.stop(t + start + dur + 0.02);
+    };
+    // C major run up (G4 C5 E5 G5), then a C major chord with an octave on top.
+    [392.0, 523.25, 659.25, 783.99].forEach((f, i) => tone(f, i * 0.07, 0.22, 0.16));
+    const hit = 0.3;
+    for (const f of [523.25, 659.25, 783.99, 1046.5]) tone(f, hit, 0.9, 0.11, 'sawtooth');
+    for (const f of [523.25, 1046.5]) tone(f, hit, 1.1, 0.12);
+    // Sparkle: quick high pings.
+    [2093, 2637, 3136, 2637, 3136, 4186].slice(0, jackpot ? 6 : 4).forEach((f, i) => tone(f, hit + 0.08 + i * 0.06, 0.18, 0.05, 'sine'));
+  }
+
   playLevelUp() {
     if (!this.enabled || !this.ctx) return;
     const t = this.ctx.currentTime;

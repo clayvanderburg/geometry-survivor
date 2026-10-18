@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.16.1',
+    date: '2026-10-18',
+    title: 'Cache Fanfare',
+    notes: [
+      { type: 'fix', text: 'Opening a supply cache plays a victory fanfare instead of a blast that sounded like taking damage.' },
+      { type: 'balance', text: 'Rotary Claw Overclock is much smaller: +12% mining speed per level (was +50%, plus reach and claw size). One lucky roll no longer turns asteroids into paper.' }
+    ]
+  },
+  {
     version: '0.16.0',
     date: '2026-10-18',
     title: 'Banish',
