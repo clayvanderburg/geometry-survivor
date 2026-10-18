@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.18.1',
+    date: '2026-10-18',
+    title: 'Weapon Tune-Up',
+    notes: [
+      { type: 'balance', text: 'Swarm Missiles lock targets within about half a screen and no longer chase across the whole view. Each missile picks its own enemy.' },
+      { type: 'fix', text: 'Swarm Missiles burst on asteroids instead of flying over them, and missiles caught in a blast go off with it.' },
+      { type: 'fix', text: 'Swarm Missiles are orange-gold again and turn pink with Storm Protocol (it was the other way round).' },
+      { type: 'balance', text: 'Tesla Arc, Sentry Turret and Escort Drones reach 40% further. Proximity Mine blasts are smaller (they were doubled by mistake).' },
+      { type: 'new', text: 'You carry 3 Sentry Turrets: standing still you plant them all at once, on the move one at a time. New card: Sentry Turret Count.' }
+    ]
+  },
+  {
     version: '0.18.0',
     date: '2026-10-18',
     title: 'Plasma Grenades',

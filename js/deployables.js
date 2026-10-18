@@ -28,7 +28,7 @@ const TURRET_MUZZLE = TURRET_MUZZLE_UNIT * TURRET_SCALE; // world px from the tu
 const TURRET_BOLT_RADIUS = 3.3;
 export const TURRET_BASE = 14 * TURRET_SCALE;    // base hex radius plus a little clearance from rock surfaces
 export const TURRET_SPACING = 34 * TURRET_SCALE; // a new turret never sits closer than this to a live one
-const SIDESTEPS = [38, -38, 76, -76].map((v) => v * TURRET_SCALE); // sideways offsets tried when the ship's spot is taken
+const SIDESTEPS = [38, -38, 76, -76, 114, -114].map((v) => v * TURRET_SCALE); // sideways offsets tried when the ship's spot is taken
 const DRONE_BOLT_RADIUS = 2.6;
 const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
@@ -66,7 +66,9 @@ export class Deployables {
     for (const t of this.turrets) t.target = null;
     for (const d of this.drones) { d.target = null; d.trailCount = 0; }
     this.mineTimer = 0.5;
-    this.turretTimer = 0.8;
+    this.turretTimer = 0.8; // first plant of a run
+    // Recharge timers of turret slots whose turret expired (a slot is ready again when its timer ends).
+    this.turretRecharge = [];
     this.time = 0;
     this.maxRock = -1;
   }
@@ -183,10 +185,17 @@ export class Deployables {
     const p = game.player;
     if (level) {
       this.turretTimer -= dt;
-      if (this.turretTimer <= 0 && this.turretCount < Math.min(TURRET_POOL, W.turretMaxActive(level)) &&
-          this.anyTargetNear(game, p.x, p.y, W.turretRange(level) * 1.5)) {
+      for (let k = this.turretRecharge.length - 1; k >= 0; k--) {
+        this.turretRecharge[k] -= dt;
+        if (this.turretRecharge[k] <= 0) this.turretRecharge.splice(k, 1);
+      }
+      // Ready turrets: the carried total minus those planted and those still recharging. Parked, they go
+      // down in quick succession; on the move, one every turretDropMoving s.
+      const ready = Math.min(TURRET_POOL, W.turretMaxActive(level)) - this.turretCount - this.turretRecharge.length;
+      if (this.turretTimer <= 0 && ready > 0 && this.anyTargetNear(game, p.x, p.y, W.turretRange(level) * 1.5)) {
         this.deployTurret(game, level);
-        this.turretTimer = W.turretCooldown(level);
+        const moving = Math.hypot(p.vx || 0, p.vy || 0) > 0.6;
+        this.turretTimer = moving ? W.turretDropMoving : W.turretDropStill;
       }
     }
     // Live turrets fire at the player's current turret level, so an upgrade improves them at once.
@@ -201,6 +210,7 @@ export class Deployables {
         t.target = null;
         this.turrets[i] = this.turrets[this.turretCount - 1];
         this.turrets[--this.turretCount] = t;
+        this.turretRecharge.push(W.turretCooldown(lv)); // its slot recharges before it can be planted again
         game.particles.spawnShockwave(t.x, t.y, 34 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2, 0.22, true);
         game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
         continue;

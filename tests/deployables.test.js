@@ -120,10 +120,11 @@ test('turret line of sight uses the bolt width, so it never fires forever into a
   const rock = { x: 2100, y: 2022, radius: 20, hp: 100 };
   const g = arena({ enemies: [grazed, clear], rocks: [rock] });
   g.player.weapons.turret = 1;
-  tick(g, 1.3);
+  tick(g, 0.9);
   const d = g.deployables;
   assert.equal(d.turretCount, 1);
   assert.equal(d.turrets[0].target, clear);
+  d.turretTimer = 99; // just this turret: the other two would plant elsewhere with a clear line
   for (let t = 0; t < 60; t++) { d.update(DT, g); g.updateBullets(DT); }
   assert.ok(clear.hp < clear.maxHp, 'the visible target takes the bolts');
   assert.equal(grazed.hp, grazed.maxHp);
@@ -249,9 +250,9 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   applyUpgradeLevels(p, byId('turret'));
   // A stat card shows only its own stat.
   const life = describeUpgrade(p, byId('turret_lifetime'));
-  assert.equal(life.headline, '+1.0s TURRET LIFETIME');
+  assert.equal(life.headline, '+1.5s TURRET LIFETIME');
   assert.deepEqual(life.rows.map((r) => r.id), ['turretDuration']);
-  assert.deepEqual(life.rows[0], { id: 'turretDuration', label: 'Turret lifetime', before: '6.0s', after: '7.0s' });
+  assert.deepEqual(life.rows[0], { id: 'turretDuration', label: 'Turret lifetime', before: '10.0s', after: '11.5s' });
   applyUpgradeLevels(p, byId('drones'));
   assert.equal(describeUpgrade(p, byId('drones_wingmen')).headline, '+1 ESCORT DRONE');
   for (const id of ['mines', 'turret', 'drones', 'evo_siege']) {
@@ -326,17 +327,17 @@ test('the sentry turret is twice its old size: body, placement clearance and muz
   assert.equal(g2.deployables.turretSpotClear(g2, 2000, 2000, 0), true);
 });
 
-test('a live turret fires its doubled rate of half-damage bolts', () => {
+test('three turrets out fire at the base rate each, and their bolts carry the card damage', () => {
   const target = enemy(2200, 2000);
   const g = arena({ enemies: [target] });
   g.player.weapons.turret = 1;
-  tick(g, 0.8);
-  assert.equal(g.deployables.turretCount, 1);
+  tick(g, 1.6);
+  assert.equal(g.deployables.turretCount, 3);
   g.bullets = [];
   tick(g, 2);
   const bolts = g.bullets.filter((b) => b.source === 'turret');
-  // 2 s at 6.1 bolts/s (was 3.05/s): about 12 bolts, each half the old damage.
-  assert.ok(Math.abs(bolts.length - 2 * W.turretFireRate(L('turret'))) <= 1, `${bolts.length} bolts in 2 s`);
+  // 3 turrets x 2 s x 6.1 bolts/s.
+  assert.ok(Math.abs(bolts.length - 3 * 2 * W.turretFireRate(L('turret'))) <= 3, `${bolts.length} bolts in 2 s`);
   for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(L('turret')));
 });
 
@@ -347,4 +348,33 @@ test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
   g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
   g.updateBullets(DT);
   assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
+});
+
+test('Sentry Turrets: carry 3; parked you plant them in quick succession, moving one at a time; slots recharge', () => {
+  const lv = L('turret');
+  assert.equal(W.turretMaxActive(lv), 3);
+  const target = enemy(2300, 2000);
+  const parked = arena({ enemies: [target] });
+  parked.player.weapons.turret = 1;
+  tick(parked, 0.8 + 2 * W.turretDropStill + 0.05);
+  assert.equal(parked.deployables.turretCount, 3, 'parked: all three down within about half a second');
+  tick(parked, 1);
+  assert.equal(parked.deployables.turretCount, 3, 'never more than carried');
+
+  const moving = arena({ enemies: [enemy(2300, 2000)] });
+  moving.player.weapons.turret = 1;
+  moving.player.vx = 3;
+  tick(moving, 0.85);
+  assert.equal(moving.deployables.turretCount, 1);
+  tick(moving, W.turretDropMoving * 0.9);
+  assert.equal(moving.deployables.turretCount, 1, 'on the move the next waits turretDropMoving');
+  tick(moving, W.turretDropMoving * 0.2);
+  assert.equal(moving.deployables.turretCount, 2);
+
+  // Expired turrets recharge before they can be planted again.
+  const d = parked.deployables;
+  tick(parked, W.turretDuration(lv));
+  assert.ok(d.turretCount === 0 && d.turretRecharge.length === 3, 'all expired and recharging');
+  tick(parked, W.turretCooldown(lv) + 1);
+  assert.equal(d.turretCount, 3, 'recharged and planted again');
 });

@@ -87,6 +87,8 @@ const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 220;
 const SINGULARITY_GRID_DEPTH = 260;
+// Swarm Missile colour: orange-gold, turning pink once Storm Protocol charges them with lightning.
+const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 
 // Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
@@ -2552,7 +2554,7 @@ export class Game {
     const salvo = W.missileSalvo(b);
     const damage = weaponDamage(p, 'missile', b);
     const blastRadius = missileBlastRadius(p, b);
-    const hue = p.weapons.stormProtocol ? 52 : 325;
+    const hue = missileHue(p);
     const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, delay: W.clusterDelay } : null;
     // Tactical Nuke: every nukeEvery-th salvo is one huge missile carrying nukeUnits salvos of damage.
     this.missileSalvos = (this.missileSalvos || 0) + 1;
@@ -2562,7 +2564,7 @@ export class Game {
     const radius = nuke ? blastRadius * W.nukeRadiusMult : blastRadius;
     if (b.t8) {
       // Orbital Rain: the salvo leaves the screen; each warhead crashes down on a marked target.
-      const targets = this.rainTargets(p, count);
+      const targets = this.missileTargets(p, count);
       for (let i = 0; i < count; i++) {
         const t = targets[i % Math.max(1, targets.length)];
         const jitter = targets.length ? 18 : 260;
@@ -2577,9 +2579,16 @@ export class Game {
       this.sound.playMissileLaunch?.(count);
       return;
     }
+    // Each missile locks its own target: the nearest enemies in range, one each, doubling up only when
+    // there are fewer enemies than missiles.
+    const targets = this.missileTargets(p, count);
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
+      const target = targets.length ? targets[i % targets.length] : null;
       this.missiles.push({
+        target,
+        aimX: target ? target.x : p.x + Math.cos(p.angle) * W.missileRange,
+        aimY: target ? target.y : p.y + Math.sin(p.angle) * W.missileRange,
         x: p.x,
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
@@ -2589,7 +2598,7 @@ export class Game {
         blastRadius: radius,
         hue: nuke ? 30 : hue,
         trail: [],
-        life: nuke ? 4 : 3.2,
+        life: nuke ? W.missileLife * 1.25 : W.missileLife,
         source: 'missile',
         nuke,
         cluster
@@ -2598,13 +2607,15 @@ export class Game {
     this.missileSalvoFx(p, count);
   }
 
-  // Orbital Rain targets: the nearest enemies (one per warhead, repeating when there are fewer).
-  rainTargets(p, count) {
+  // Swarm Missile targets: the nearest `count` enemies within W.missileRange of the ship (missiles and
+  // Orbital Rain warheads take one each, repeating when there are fewer).
+  missileTargets(p, count) {
     const list = [];
+    const range = W.missileRange;
     for (const e of this.enemyManager.enemies) {
       if (e.dead || e.type === 'blackhole') continue;
       const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
-      if (d < 900 * 900) list.push([d, e]);
+      if (d < range * range) list.push([d, e]);
     }
     list.sort((a, b) => a[0] - b[0]);
     return list.slice(0, count).map((x) => x[1]);
@@ -2617,7 +2628,7 @@ export class Game {
     const back = p.angle + Math.PI;
     const rx = p.x + Math.cos(back) * (p.radius * 0.8);
     const ry = p.y + Math.sin(back) * (p.radius * 0.8);
-    const hue = p.weapons.stormProtocol ? 52 : 325;
+    const hue = missileHue(p);
     fx.spawnFlash?.(rx, ry, 24 + Math.min(count, 8) * 2, hue, 0.2);
     fx.spawnShockwave(rx, ry, 34 + Math.min(count, 8) * 3, hue, 3, 0.3);
     fx.spawnDirectionalSparks(rx, ry, back, 1.9, Math.min(20, 3 * count), hue, 7);
@@ -3964,7 +3975,7 @@ export class Game {
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
       this.missileTimer -= dt;
-      if (this.missileTimer <= 0 && this.enemyManager.enemies.length > 0) {
+      if (this.missileTimer <= 0 && this.missileTargets(p, 1).length > 0) {
         const b = weaponBuild(p, 'missiles');
         this.fireSwarmMissiles(b);
         this.missileTimer = W.missileCooldown(b);
@@ -4006,9 +4017,14 @@ export class Game {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.life -= dt;
-      const target = this.findNearestEnemy(m.x, m.y);
-      if (target) {
-        const desiredAngle = Math.atan2(target.y - m.y, target.x - m.x);
+      // Home on the locked target; if it dies first, fly on to where it was and burst there (no
+      // retargeting, so a salvo spends itself on the targets it launched at).
+      if (m.target && !m.target.dead) {
+        m.aimX = m.target.x;
+        m.aimY = m.target.y;
+      }
+      {
+        const desiredAngle = Math.atan2(m.aimY - m.y, m.aimX - m.x);
         const curAngle = Math.atan2(m.vy, m.vx);
         let diff = desiredAngle - curAngle;
         while (diff > Math.PI) diff -= Math.PI * 2;
@@ -4023,12 +4039,17 @@ export class Game {
       m.trail.push({ x: m.x, y: m.y });
       if (m.trail.length > MISSILE_TRAIL_LEN) m.trail.shift();
 
-      let detonated = m.life <= 0;
-      for (const e of [...enemies].reverse()) {
-        if (e.dead) continue;
-        if (Math.hypot(e.x - m.x, e.y - m.y) <= e.radius + 10) {
-          detonated = true;
-          break;
+      let detonated = m.life <= 0 || m.chain || (m.target?.dead && (m.aimX - m.x) ** 2 + (m.aimY - m.y) ** 2 < 20 * 20);
+      for (let j = enemies.length - 1; !detonated && j >= 0; j--) {
+        const e = enemies[j];
+        if (!e.dead && Math.hypot(e.x - m.x, e.y - m.y) <= e.radius + 10) detonated = true;
+      }
+      // Asteroids stop missiles: they burst on the rock face instead of flying over it.
+      if (!detonated) {
+        const rocks = this.asteroidManager.getNearbyAsteroids(m.x, m.y, 1);
+        for (let j = 0; j < rocks.length; j++) {
+          const r = rocks[j];
+          if (r.hp > 0 && (r.x - m.x) ** 2 + (r.y - m.y) ** 2 <= (r.radius + 3) ** 2) { detonated = true; break; }
         }
       }
 
@@ -4048,6 +4069,11 @@ export class Game {
           this.fireChainLightning(W.stormChainLevel, m.x, m.y, 'storm');
         }
 
+        // Sympathetic detonation: other missiles caught in this blast go off where they are.
+        for (let j = 0; j < this.missiles.length; j++) {
+          const o = this.missiles[j];
+          if (o !== m && !o.chain && (o.x - m.x) ** 2 + (o.y - m.y) ** 2 <= blast * blast) o.chain = true;
+        }
         this.missiles.splice(i, 1);
       }
     }
