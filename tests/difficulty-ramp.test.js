@@ -21,7 +21,7 @@ const fieldGuide = await import('../js/field-guide.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 const RAMP_KEYS = [
-  'waveLength', 'waveHpStart', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'spawnIntervalStart', 'spawnIntervalPerWave', 'spawnIntervalMin',
+  'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'spawnIntervalStart', 'spawnIntervalPerWave', 'spawnIntervalMin',
   'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
   'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'xpPerWave'
 ];
@@ -161,4 +161,26 @@ test('kill XP grows with xpPerWave', () => {
   assert.equal(dropped({ xpPerWave: 0 }, 11), 4);
   assert.equal(dropped({ xpPerWave: 0.1 }, 11), 8);
   withTuning({ xpPerWave: 0.05 }, () => assert.ok(Math.abs(xpScaleAt(21) - 2) < 1e-9));
+});
+
+test('light swarm fodder keeps the light HP start; tougher hulls get the extra early HP', async () => {
+  const { LIGHT_ENEMY_TYPES } = await import('../js/enemies.js');
+  for (const t of ['swarmer', 'pinwheel', 'weaver', 'mini_splitter']) assert.ok(LIGHT_ENEMY_TYPES.has(t), t);
+  for (const t of ['splitter', 'bruiser', 'gunner', 'shielder', 'blinker', 'conduit', 'boss']) assert.ok(!LIGHT_ENEMY_TYPES.has(t), t);
+  withTuning({ waveHpStart: 2.5, waveHpStartLight: 1, waveHpPerWave: 0.25, waveHpGrowth: 1.065, waveHpGrowthFrom: 25 }, () => {
+    assert.equal(waveScaleAt(1, { light: true }), 1);
+    assert.equal(waveScaleAt(1), 2.5);
+    const g = Object.create(Game.prototype);
+    g.wave = 1;
+    assert.equal(g.getWaveScale('swarmer'), 1);
+    assert.equal(g.getWaveScale('bruiser'), 2.5);
+    assert.equal(g.getWaveScale(), 2.5);
+  });
+});
+
+test('spawn density is back to the pre-0.13 amounts', () => {
+  assert.equal(DEFAULT_TUNING.spawnIntervalStart, 2.6);
+  assert.equal(DEFAULT_TUNING.spawnIntervalPerWave, 0.14);
+  assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.75);
+  assert.equal(DEFAULT_TUNING.packSizeMult, 1);
 });
