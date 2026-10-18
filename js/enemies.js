@@ -20,8 +20,17 @@ export const SPAWN_HOLD_MAX = 1.5;
 export const LIEUTENANT_MAX_SHIP_SHARE = 0.9;
 
 // --- Difficulty ramp (TUNING "Difficulty Ramp" group) ------------------------------------------
+// Eases a ramp in: 0 up to x = 0, then a quadratic that meets the straight line x − r/2 at x = r, so
+// the rate grows smoothly from 0 to 1 per step over r steps instead of switching on at once.
+export function easeIn(x, r) {
+  if (x <= 0) return 0;
+  if (!(r > 0)) return x;
+  return x < r ? (x * x) / (2 * r) : x - r / 2;
+}
+
 // Enemy HP scale of a wave (bosses and lieutenants included; speed caps also read it):
-// (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), compounding only past that wave.
+// (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^easeIn(w − waveHpGrowthFrom, waveHpGrowthRamp): the
+// compounding phases in past that wave.
 // Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
 // with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
 export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter']);
@@ -30,13 +39,14 @@ export function waveScaleAt(wave, { light = false } = {}) {
   const perWave = TUNING.waveHpPerWave ?? 0.25;
   const growth = TUNING.waveHpGrowth ?? 1.09;
   const from = TUNING.waveHpGrowthFrom ?? 6;
-  return (start + (wave - 1) * perWave) * Math.pow(growth, Math.max(0, wave - from));
+  return (start + (wave - 1) * perWave) * Math.pow(growth, easeIn(wave - from, TUNING.waveHpGrowthRamp ?? 0));
 }
 
 // Contact and plasma-orb damage multiplier of a wave: damageRampBase, plus damageRampPerWave per wave
-// after damageRampFrom.
+// after damageRampFrom, eased in over damageRampSmooth waves.
 export function damageRampAt(wave) {
-  return (TUNING.damageRampBase ?? 1) + Math.max(0, wave - (TUNING.damageRampFrom ?? 5)) * (TUNING.damageRampPerWave ?? 0.08);
+  const past = easeIn(wave - (TUNING.damageRampFrom ?? 5), TUNING.damageRampSmooth ?? 0);
+  return (TUNING.damageRampBase ?? 1) + past * (TUNING.damageRampPerWave ?? 0.08);
 }
 
 // XP carried by a kill at a given wave: the enemy's base XP × (1 + xpPerWave·(w−1)).
@@ -44,9 +54,12 @@ export function xpScaleAt(wave) {
   return 1 + Math.max(0, wave - 1) * (TUNING.xpPerWave ?? 0);
 }
 
-// Seconds between wave packs: spawnIntervalStart − spawnIntervalPerWave·w, never below spawnIntervalMin.
+// Seconds between wave packs: eases from spawnIntervalStart toward spawnIntervalMin, closing 63% of the
+// gap every spawnIntervalTau waves (an exponential approach, so there is no hard corner at the floor).
 export function spawnIntervalAt(wave) {
-  return Math.max(TUNING.spawnIntervalMin ?? 0.75, (TUNING.spawnIntervalStart ?? 2.6) - wave * (TUNING.spawnIntervalPerWave ?? 0.14));
+  const min = TUNING.spawnIntervalMin ?? 0.75;
+  const start = TUNING.spawnIntervalStart ?? 2.6;
+  return min + Math.max(0, start - min) * Math.exp(-Math.max(0, wave) / Math.max(0.1, TUNING.spawnIntervalTau ?? 7));
 }
 
 // Head count of a wave pack after the global pack-size multiplier (at least one).

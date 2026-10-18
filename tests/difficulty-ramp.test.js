@@ -15,15 +15,15 @@ const fakeElement = () => ({
 globalThis.document = { getElementById: fakeElement, createElement: fakeElement, querySelectorAll: () => [], activeElement: null };
 
 const { Game } = await import('../js/main.js');
-const { EnemyManager, waveScaleAt, damageRampAt, xpScaleAt, spawnIntervalAt, packSize, contactDamageAt } = await import('../js/enemies.js');
+const { EnemyManager, waveScaleAt, damageRampAt, xpScaleAt, spawnIntervalAt, packSize, contactDamageAt, easeIn } = await import('../js/enemies.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const fieldGuide = await import('../js/field-guide.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 const RAMP_KEYS = [
-  'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'spawnIntervalStart', 'spawnIntervalPerWave', 'spawnIntervalMin',
+  'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'waveHpGrowthRamp', 'spawnIntervalStart', 'spawnIntervalTau', 'spawnIntervalMin',
   'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
-  'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'xpPerWave'
+  'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {
@@ -64,7 +64,7 @@ test('every Difficulty Ramp key is in the tuner group with an in-range default',
 });
 
 test('enemy HP scale follows the linear and compound ramp terms, for the game and the Field Guide', () => {
-  withTuning({ waveHpStart: 2, waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4 }, () => {
+  withTuning({ waveHpStart: 2, waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4, waveHpGrowthRamp: 0 }, () => {
     for (const wave of [1, 4, 5, 12, 40]) {
       const expected = (2 + (wave - 1) * 0.5) * Math.pow(1.1, Math.max(0, wave - 4));
       assert.ok(Math.abs(waveScaleAt(wave) - expected) < 1e-9, `wave ${wave}`);
@@ -104,14 +104,14 @@ test('waves advance every waveLength seconds and bosses stay on every third wave
 });
 
 test('pack cadence reads the spawn-interval ramp', () => {
-  withTuning({ spawnIntervalStart: 3, spawnIntervalPerWave: 0.1, spawnIntervalMin: 1.2 }, () => {
-    assert.ok(Math.abs(spawnIntervalAt(5) - 2.5) < 1e-9);
-    assert.equal(spawnIntervalAt(30), 1.2, 'floored');
+  withTuning({ spawnIntervalStart: 3, spawnIntervalTau: 5, spawnIntervalMin: 1.2 }, () => {
+    assert.ok(Math.abs(spawnIntervalAt(5) - (1.2 + 1.8 / Math.E)) < 1e-9, 'one tau closes 63% of the gap');
+    assert.ok(spawnIntervalAt(60) > 1.2 && spawnIntervalAt(60) - 1.2 < 0.001, 'approaches the floor without a corner');
     const g = rampGame({ wave: 5 });
     g.spawnCooldown = 0;
     g.spawnWavePack = () => {};
     g.update(1 / 60);
-    assert.ok(Math.abs(g.spawnCooldown - 2.5) < 1e-9);
+    assert.ok(Math.abs(g.spawnCooldown - spawnIntervalAt(5)) < 1e-9);
   });
 });
 
@@ -135,7 +135,7 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
 });
 
 test('contact and plasma-orb damage share the damage ramp', () => {
-  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.2 }, () => {
+  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.2, damageRampSmooth: 0 }, () => {
     assert.equal(damageRampAt(10), 1);
     assert.ok(Math.abs(damageRampAt(15) - 2) < 1e-9);
     const g = rampGame({ wave: 15 });
@@ -143,7 +143,7 @@ test('contact and plasma-orb damage share the damage ramp', () => {
     assert.ok(Math.abs(contactDamageAt({ isBoss: true }, 15) - 76) < 1e-9);
     assert.ok(Math.abs(g.enemyBulletDamage({ damage: 12 }) - 24) < 1e-9);
   });
-  withTuning({ damageRampBase: 0.5, damageRampFrom: 10, damageRampPerWave: 0.1 }, () => {
+  withTuning({ damageRampBase: 0.5, damageRampFrom: 10, damageRampPerWave: 0.1, damageRampSmooth: 0 }, () => {
     assert.equal(damageRampAt(3), 0.5);
     assert.ok(Math.abs(contactDamageAt({ contactMult: 1 }, 20) - 18 * 1.5) < 1e-9);
   });
@@ -180,7 +180,22 @@ test('light swarm fodder keeps the light HP start; tougher hulls get the extra e
 
 test('spawn density is back to the pre-0.13 amounts', () => {
   assert.equal(DEFAULT_TUNING.spawnIntervalStart, 2.6);
-  assert.equal(DEFAULT_TUNING.spawnIntervalPerWave, 0.14);
+  assert.equal(DEFAULT_TUNING.spawnIntervalTau, 7);
   assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.75);
   assert.equal(DEFAULT_TUNING.packSizeMult, 1);
+});
+
+test('the difficulty ramps ease in: no corner where HP compounding, damage ramp or spawn floor switch on', () => {
+  // easeIn: 0 at the start, slope rising smoothly to 1, then a straight line.
+  assert.equal(easeIn(-3, 10), 0);
+  assert.ok(Math.abs(easeIn(10, 10) - 5) < 1e-9 && Math.abs(easeIn(20, 10) - 15) < 1e-9);
+  withTuning({}, () => {
+    // The per-wave growth of every ramp changes gradually: no wave jumps far above its neighbours.
+    const growth = (f, w) => f(w + 1) / f(w);
+    for (let w = 2; w < 80; w++) {
+      assert.ok(Math.abs(growth(waveScaleAt, w + 1) - growth(waveScaleAt, w)) < 0.01, `HP growth eases at wave ${w}`);
+      assert.ok(Math.abs((damageRampAt(w + 2) - damageRampAt(w + 1)) - (damageRampAt(w + 1) - damageRampAt(w))) < 0.006, `damage ramp eases at wave ${w}`);
+      assert.ok(spawnIntervalAt(w + 1) < spawnIntervalAt(w), `packs keep tightening at wave ${w}`);
+    }
+  });
 });

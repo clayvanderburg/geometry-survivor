@@ -355,13 +355,14 @@ test('every weapon levels 1 to 18 through its stat cards (11 ranks per card at m
   assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Autocannon cards past LV 18');
 });
 
-test('the XP curve is a stepped line, driven by TUNING', () => {
+test('the XP curve is a line that bends smoothly upward, driven by TUNING', () => {
   assert.equal(xpToNextLevel(1), DEFAULT_TUNING.xpCurveBase);
   for (let l = 2; l < 120; l++) assert.ok(xpToNextLevel(l) > xpToNextLevel(l - 1), `LV ${l}`);
-  // Linear inside each band; the step changes at LV 20 and LV 40.
+  // Linear up to the bend, then each level's extra cost grows steadily: no sudden step (the old curve
+  // jumped from +16 to +150 per level at LV 20).
   const step = (l) => xpToNextLevel(l + 1) - xpToNextLevel(l);
   assert.equal(step(5), step(10));
-  assert.ok(step(25) > step(10) && step(45) > step(10) && step(45) !== step(25), 'steps change at LV 20 and LV 40');
+  for (let l = 15; l < 80; l++) assert.ok(step(l + 1) >= step(l) && step(l + 1) - step(l) <= 2 * DEFAULT_TUNING.xpCurveAccel + 1, `LV ${l} bends smoothly`);
   // The old exponential curve (12, then x1.32 + 6 per level) priced LV 40 out of reach.
   let old = 0;
   for (let l = 1, need = 12; l < 40; l++, need = Math.round(need * 1.32 + 6)) old += need;
@@ -369,7 +370,7 @@ test('the XP curve is a stepped line, driven by TUNING', () => {
   assert.ok(xpToNextLevel(1) <= 40 && xpToNextLevel(10) < 250, 'early levels come quickly');
   withTuning({ xpCurveBase: 20 }, () => assert.equal(xpToNextLevel(1), 20));
   const keys = TUNING_SCHEMA.flatMap((grp) => grp.items).map((i) => i.key);
-  for (const k of ['xpCurveBase', 'xpCurveStep', 'xpCurveStepMid', 'xpCurveStepLate', 'weaponSlots', 'newWeaponChanceBy1', 'newWeaponPity', 'weaponLevelWeight']) {
+  for (const k of ['xpCurveBase', 'xpCurveStep', 'xpCurveAccel', 'xpCurveAccelFrom', 'weaponSlots', 'newWeaponChanceBy1', 'newWeaponPity', 'weaponLevelWeight']) {
     assert.ok(keys.includes(k) && k in DEFAULT_TUNING, k);
   }
 });
