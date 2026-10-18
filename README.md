@@ -115,6 +115,14 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
    - The side panel (top left; docked along the bottom on narrow screens, collapsible) has three tabs. **LOADOUT**: up to 6 weapons, each LV 1–18 with AUTO ranks (dealt round-robin over its stat cards) or CUSTOM ranks per stat, and a TRANSFORM / ACROSS THE BOARD toggle at LV 6, 12 and 18. **MODS**: damage types, synergies (only once their weapons are equipped) and general cards. **DUMMIES**: target hull (or MIXED), count, formation (ring, close ring, pack, line, scatter), SPAWN / CLEAR, and live settings for every dummy: infinite (refilled every tick) or wave-N HP, stationary or normal AI, respawn kills.
    - The readout shows rolling 5 s DPS per damage source (damage-number colours) and in total, damage since RESET, and each weapon's live DPS against its potential DPS (`weaponPotentialDps`, one target). Edits apply live; the config is remembered in `localStorage` (`vexolith_weapon_range`) when storage allows. Controller: **Back** hands the pad to the panel (the sim holds), **B** returns to flying.
 
+
+12. **Pause menu run overview, main menu and view hotkeys (`js/run-overview.js`, `js/ship-preview.js`)**
+   - **Pause** (`[P]` / `[Esc]` / controller Start) opens a run overview: your ship drawn large and idling (the real `drawCrabShip` art in its own canvas, drill-claws spinning; drill size follows *Tectonic Claw Bore*), a run summary (wave, time, score, multiplier, level, kills, damage, shield, gold, Void Cores, version) and four tabs (`[1]`–`[4]`, controller LB / RB): **LOADOUT** (slots with level, stat-card ranks, Breakthroughs, potential DPS, damage dealt this run and DISCARD; damage this run by source), **STATS** (every ship stat as BASE / PERMANENT / THIS RUN / TOTAL), **UPGRADES** (every non-weapon upgrade: evolutions, damage types, specialists, ship systems and passives) and **SETTINGS** (volume sliders and toggles).
+   - Stat split: BASE is a fresh ship with no Void Armory ranks (`runStartPlayer({})` in `js/upgrades.js`, the same builder `resetRun` uses), PERMANENT is the run-start snapshot against BASE (Void Armory), THIS RUN is the ship now against the run start (cards). Multiplied stats show % changes, added stats show the amount added.
+   - The in-run HUD shows only the weapon slots under the XP bar; the level-up screen (hands, NEW WEAPON picks and Breakthroughs) shows a compact strip of your weapons and picked upgrades under the cards.
+   - **⌂ MAIN MENU** in the pause menu asks *ABANDON RUN?* first (CONFIRM / CANCEL; Esc or B cancels): an abandoned run is not recorded anywhere (no local high score, no global board, no run stats; Void Cores already looted stay banked). On the game-over screen MAIN MENU goes straight to the title (the run was already recorded).
+   - **`[H]`** hides every HUD overlay (bars, slots, buttons, radar, edge arrows) for a clean view, with a faint *[H] SHOW HUD* hint to bring it back (session only). **`[V]`** toggles fullscreen (Fullscreen API, WebKit fallback; the button hides where element fullscreen isn't supported). Both have HUD buttons (top right) and pause SETTINGS toggles, so controllers can reach them too.
+
 ---
 
 ## Global leaderboard
@@ -223,7 +231,9 @@ Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created o
 - `js/config.js` — Centralized `TUNING` state, `DEFAULT_TUNING`, `TUNING_SCHEMA`, `localStorage` persistence, and `BroadcastChannel` sync.
 - `js/main.js` — Core `Game` loop, Minimap (`drawMinimap`), weapons, and live tuning integration.
 - `js/ship-renderer.js` — Crab Ship renderer (`drawCrabShip`), shield renderer and shield hitbox, shared by game and Studio.
-- `js/gamepad.js` — Controller snapshots and d-pad/stick menu navigation. Full controller play: L-stick move, R-stick aim/fire, A dash, B supernova, X/Y auto-fire/auto-aim, Start pause; menus use d-pad + A, Start confirms, B resumes. Elements marked `data-gp-nav` (Field Guide entries) are extra focus stops.
+- `js/ship-preview.js` — The large idling ship on the title screen and in the pause menu (`ShipPreview`, drawn with `drawCrabShip` into its own canvas).
+- `js/run-overview.js` — Pause-menu run overview (`RunOverview`): BASE / PERMANENT / THIS RUN / TOTAL stat split, upgrades list, run summary, damage by source, weapon readouts, the HUD slot chips and the level-up loadout strip.
+- `js/gamepad.js` — Controller snapshots and d-pad/stick menu navigation. Full controller play: L-stick move, R-stick aim/fire, A dash, B supernova, X/Y auto-fire/auto-aim, Start pause; menus use d-pad + A, Start confirms, B resumes (LB / RB switch the pause menu tabs). Elements marked `data-gp-nav` (Field Guide entries) are extra focus stops.
 - `js/asteroids.js` — Procedural asteroid cluster generation, spatial hash grid, dedicated Twin Crab-Claw rotary drilling physics, and elite rock grinding.
 - `js/enemies.js` — Enemy spawning/update loop, Boids flocking, Weaver bullet-dodging, and boss behaviors.
 - `js/spawn-placement.js` — Where hostiles appear: the off-screen ring around the camera, heading bias, arena/rock checks and the on-screen fallback.

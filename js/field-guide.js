@@ -209,8 +209,8 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'controls', icon: '⌨', title: 'CONTROLS',
     body: () => [
-      'Keyboard: WASD move (and drill rock with the claws) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause · N damage numbers · G field guide · T tuner.',
-      'Controller: left stick move · right stick aim and fire · A dash · B Supernova · X / Y auto-fire / auto-aim · Start pause. Menus: d-pad + A, B back; in this guide LB / RB switch tabs.',
+      'Keyboard: WASD move (and drill rock with the claws) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause (1-4 tabs) · N damage numbers · G field guide · H hide HUD · V fullscreen · T tuner.',
+      'Controller: left stick move · right stick aim and fire · A dash · B Supernova · X / Y auto-fire / auto-aim · Start pause. Menus: d-pad + A, B back; in the pause menu and this guide LB / RB switch tabs.',
       'Level-up cards: 1 / 2 / 3 or A picks · R or X rerolls (gold) · Shift+1 / 2 / 3 or Y locks a card (gold).'
     ]
   },

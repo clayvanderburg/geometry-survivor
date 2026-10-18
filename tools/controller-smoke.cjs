@@ -1,9 +1,9 @@
 // Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. gold reroll / lock and a NEW WEAPON pick),
-// pause (sliders, damage-number toggle, loadout discard with confirm), Field Guide, Patch Notes, chest and game over.
+// pause (tabs, sliders, toggles, loadout discard with confirm, MAIN MENU with its abandon confirm), Field Guide, Patch Notes, chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
 const fs = require('node:fs/promises'), path = require('node:path');
-const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
+const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
@@ -153,12 +153,27 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await expect('PLAYING', 'A equips the focused weapon');
     if ((await page.evaluate(() => __game.player.loadout.length)) !== slotsBefore + 1) throw Error("weapon was not equipped");
 
+    // Pause menu (the run overview): LB / RB switch tabs and focus follows; sliders and toggles live on
+    // SETTINGS, discards on LOADOUT; Resume, the Field Guide, Patch Notes, Restart and MAIN MENU sit under the ship.
+    const pauseFocus = () => page.evaluate(() => {
+      const el = document.querySelector('#pause-modal .gp-focus');
+      return el ? el.id || (el.dataset.pauseTab ? `tab:${el.dataset.pauseTab}` : '') : null;
+    });
+    const walkTo = async (want, dir, max = 8) => {
+      for (let k = 0; k < max && (await pauseFocus()) !== want; k++) await press(dir);
+      const got = await pauseFocus();
+      if (got !== want) throw Error(`the d-pad should reach ${want}, got ${got}`);
+    };
     await press(START);
     await expect('PAUSED', 'Start pauses');
     await page.waitForTimeout(400);
-    await press(UP);
-    const slider = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
-    if (!slider?.includes('slider')) throw Error(`Up from Resume should reach a slider, got ${slider}`);
+    if (await pauseFocus() !== 'btn-resume-game') throw Error(`focus should start on Resume, got ${await pauseFocus()}`);
+    if (!(await page.evaluate(() => __game.overview.tab === 'loadout' && document.getElementById('pause-ship-canvas').width > 0))) throw Error('pause should open on LOADOUT with the ship drawn');
+    await press(LB);
+    if (await pauseFocus() !== 'tab:settings') throw Error(`LB should wrap to SETTINGS and focus it, got ${await pauseFocus()}`);
+    await press(DOWN);
+    const slider = await pauseFocus();
+    if (!slider?.includes('slider')) throw Error(`Down from the SETTINGS tab should reach a slider, got ${slider}`);
     const before = await page.evaluate(id => Number(document.getElementById(id).value), slider);
     await press(RIGHT);
     const after = await page.evaluate(id => Number(document.getElementById(id).value), slider);
@@ -166,28 +181,40 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await press(B);
     await expect('PLAYING', 'B resumes');
 
-    // Damage-number toggle sits under Resume: d-pad down + A flips it and persists the choice.
+    // Damage-number toggle on SETTINGS (the tab is remembered): d-pad + A flips it and persists the choice.
     await press(START);
     await expect('PAUSED', 'Start pauses again');
     await page.waitForTimeout(400);
-    await press(DOWN);
-    const toggleId = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
-    if (toggleId !== 'btn-pause-dmgnums') throw Error(`Down from Resume should reach the damage-number toggle, got ${toggleId}`);
+    if (!(await page.evaluate(() => __game.overview.tab === 'settings'))) throw Error('the pause menu should remember its tab');
+    await press(LB);
+    await press(RB);
+    if (await pauseFocus() !== 'tab:settings') throw Error(`LB then RB should come back to SETTINGS, got ${await pauseFocus()}`);
+    await walkTo('btn-pause-dmgnums', DOWN);
     await press(A);
     const toggled = await page.evaluate(() => ({ on: __game.damageNumbers.enabled, saved: localStorage.getItem('vexolith_damage_numbers'), label: document.getElementById('btn-pause-dmgnums').textContent }));
     if (toggled.on || toggled.saved !== '0' || !toggled.label.includes('OFF')) throw Error(`A should turn damage numbers off and persist it: ${JSON.stringify(toggled)}`);
     await press(A);
     if (!(await page.evaluate(() => __game.damageNumbers.enabled))) throw Error('A again should turn damage numbers back on');
+    await walkTo('btn-pause-hud', DOWN);
+    await press(A);
+    if (!(await page.evaluate(() => __game.hudHidden && document.body.classList.contains('hud-hidden')))) throw Error('A on the HUD toggle should hide the HUD');
+    await press(A);
+    if (await page.evaluate(() => __game.hudHidden)) throw Error('A again should show the HUD');
     await press(B);
     await expect('PLAYING', 'B resumes after toggling');
 
-    // Loadout: left from Resume reaches a DISCARD button; A asks to confirm (focus on KEEP), confirm discards.
+    // Loadout: RB wraps to LOADOUT, Down reaches a DISCARD button; A asks to confirm (focus on KEEP), confirm discards.
     await press(START);
     await expect('PAUSED', 'Start pauses for the loadout');
     await page.waitForTimeout(400);
-    await press(LEFT);
-    const discardBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.getAttribute('data-discard'));
-    if (!discardBtn) throw Error('Left from Resume should reach a loadout DISCARD button');
+    await press(RB);
+    if (await pauseFocus() !== 'tab:loadout') throw Error(`RB should wrap to LOADOUT, got ${await pauseFocus()}`);
+    let discardBtn = null;
+    for (let k = 0; k < 4 && !discardBtn; k++) {
+      await press(DOWN);
+      discardBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.getAttribute('data-discard'));
+    }
+    if (!discardBtn) throw Error('Down from the LOADOUT tab should reach a loadout DISCARD button');
     await press(A);
     const keep = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.getAttribute('data-discard-cancel'));
     if (keep !== discardBtn) throw Error(`DISCARD should move focus to KEEP for ${discardBtn}, got ${keep}`);
@@ -199,15 +226,13 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await press(B);
     await expect('PLAYING', 'B resumes after discarding');
 
-    // Field Guide from pause: Down twice reaches its button, A opens it, RB switches tabs, the d-pad
+    // Field Guide from pause: Down (and Left) from Resume reaches its button, A opens it, RB switches tabs, the d-pad
     // walks focus into the entries (scrolling the list), B backs out to the pause menu.
     await press(START);
     await expect('PAUSED', 'Start pauses for the guide');
     await page.waitForTimeout(400);
     await press(DOWN);
-    await press(DOWN);
-    const guideBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
-    if (guideBtn !== 'btn-pause-guide') throw Error(`Down twice from Resume should reach the Field Guide button, got ${guideBtn}`);
+    await walkTo('btn-pause-guide', LEFT, 2); // Down from Resume lands on the Field Guide / Patch Notes row
     await press(A);
     if (!(await page.evaluate(() => __game.guideOpen && !document.getElementById('guide-modal').classList.contains('hidden')))) throw Error('A should open the Field Guide');
     await page.waitForTimeout(400);
@@ -225,15 +250,14 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await press(B);
     await expect('PLAYING', 'B resumes after the guide');
 
-    // Patch notes from pause: Down three times reaches PATCH NOTES (wearing its NEW badge), A opens them with the
+    // Patch notes from pause: Down (and Right) from Resume reaches PATCH NOTES (wearing its NEW badge), A opens them with the
     // newest version expanded, the d-pad walks into the list, A on an older version expands it, B backs out.
     await press(START);
     await expect('PAUSED', 'Start pauses for the patch notes');
     await page.waitForTimeout(400);
     if (await page.evaluate(() => document.querySelector('#btn-pause-notes [data-notes-badge]').classList.contains('hidden'))) throw Error('PATCH NOTES should wear a NEW badge before they are read');
-    for (let k = 0; k < 3; k++) await press(DOWN);
-    const notesBtn = await page.evaluate(() => document.querySelector('#pause-modal .gp-focus')?.id);
-    if (notesBtn !== 'btn-pause-notes') throw Error(`Down three times from Resume should reach PATCH NOTES, got ${notesBtn}`);
+    await press(DOWN);
+    await walkTo('btn-pause-notes', RIGHT, 2);
     await press(A);
     const opened = await page.evaluate(() => ({
       open: __game.notesOpen && !document.getElementById('notes-modal').classList.contains('hidden'),
@@ -284,7 +308,40 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'controller-gameplay.png' });
 
+    // MAIN MENU from pause: Down twice (and Right) reach it, A asks ABANDON RUN? (focus on CANCEL), B backs
+    // out (still paused), A again then Left + A confirms: the title, with nothing recorded.
+    const runsBefore = await page.evaluate(() => __game.progression.data.totalRuns);
+    await press(START);
+    await expect('PAUSED', 'Start pauses for MAIN MENU');
+    await page.waitForTimeout(400);
+    await press(DOWN);
+    await press(DOWN);
+    await walkTo('btn-pause-menu', RIGHT, 2);
+    await press(A);
+    if (await pauseFocus() !== 'btn-quit-cancel' || !(await page.evaluate(() => __game.quitConfirm))) throw Error('A on MAIN MENU should ask to confirm, focus on CANCEL');
+    await press(B);
+    await expect('PAUSED', 'B backs out of the confirm without resuming');
+    if (await pauseFocus() !== 'btn-pause-menu' || await page.evaluate(() => __game.quitConfirm)) throw Error('B should close the confirm and refocus MAIN MENU');
+    await press(A);
+    await press(LEFT);
+    if (await pauseFocus() !== 'btn-quit-confirm') throw Error(`Left from CANCEL should reach CONFIRM, got ${await pauseFocus()}`);
+    await press(A);
+    await expect('TITLE', 'CONFIRM abandons the run to the title');
+    if ((await page.evaluate(() => __game.progression.data.totalRuns)) !== runsBefore) throw Error('an abandoned run must not be recorded');
+
+    // MAIN MENU after a game over: Right from RELAUNCH reaches it, A goes to the title.
+    await page.waitForTimeout(400);
+    await press(A);
+    await expect('PLAYING', 'A on title launches another run');
+    await page.evaluate(() => __game.triggerGameOver());
+    await expect('GAMEOVER', 'second run ends');
+    await page.waitForTimeout(400);
+    await press(RIGHT);
+    if ((await page.evaluate(() => document.querySelector('#gameover-modal .gp-focus')?.id)) !== 'btn-go-menu') throw Error('Right from RELAUNCH should reach MAIN MENU');
+    await press(A);
+    await expect('TITLE', 'MAIN MENU after a game over goes to the title');
+
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause + slider + damage-number toggle + resume, loadout discard + confirm, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
+    console.log('Controller smoke PASS: title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

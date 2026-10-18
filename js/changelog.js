@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.23.0',
+    date: '2026-10-18',
+    title: 'Run Overview',
+    notes: [
+      { type: 'new', text: 'The pause menu is a full run overview: your ship up close, a run summary, your loadout, every stat (base, permanent, this run) and your upgrades.' },
+      { type: 'new', text: 'MAIN MENU in the pause menu and on the game-over screen. Leaving mid-run asks first; an abandoned run is not recorded.' },
+      { type: 'new', text: 'Hotkeys: [H] hides the HUD, [V] toggles fullscreen. Your ship now shows on the title screen.' },
+      { type: 'fix', text: 'The upgrade list moved off the top of the HUD into the pause menu and the level-up screen.' }
+    ]
+  },
+  {
     version: '0.22.5',
     date: '2026-10-18',
     title: 'Quiet Crits',
