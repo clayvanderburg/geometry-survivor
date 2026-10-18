@@ -6,6 +6,7 @@
 //   CONDUIT  — support: beams link nearby allies (less damage taken, more speed). Kill it first.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { TUNING } from './config.js';
+import { enemyKind } from './run-stats.js';
 
 // Introduced progressively: a type never spawns before its unlock wave (the first spawn shows an intel card).
 export const ARCHETYPE_INFO = {
@@ -250,7 +251,8 @@ function fireGunner(e, m) {
   const muzzle = e.radius * 1.5;
   for (let k = 0; k < n; k++) {
     const a = e.aimAngle + (k - (n - 1) / 2) * GUNNER.volleySpread;
-    pool.spawn(e.x + Math.cos(e.aimAngle) * muzzle, e.y + Math.sin(e.aimAngle) * muzzle, Math.cos(a) * speed, Math.sin(a) * speed, dmg, e.isLieutenant ? 9 : 7.5);
+    const b = pool.spawn(e.x + Math.cos(e.aimAngle) * muzzle, e.y + Math.sin(e.aimAngle) * muzzle, Math.cos(a) * speed, Math.sin(a) * speed, dmg, e.isLieutenant ? 9 : 7.5);
+    if (b) b.from = enemyKind(e); // run stats: who shot the ship
   }
   e.knockX -= Math.cos(e.aimAngle) * 1.2; // recoil
   e.knockY -= Math.sin(e.aimAngle) * 1.2;

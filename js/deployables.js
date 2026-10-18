@@ -254,6 +254,7 @@ export class Deployables {
     if (p.weapons.siegeBattery) {
       b.blastRadius = siegeShellRadius(p);
       b.blastDamage = weaponDamage(p, 'siege', level);
+      b.blastStat = 'siege'; // run stats: shell bursts are Siege Battery damage
       b.hue = 24; // amber-hot shells read as explosive
     }
     t.flash = 1;

@@ -465,3 +465,22 @@ test('renderVersionOptions: focusable buttons built once, active mark moves with
   assert.equal(meta.children[0].textContent, LEGACY_VERSION_LABEL);
   assert.equal(meta.children[0].classes.has('legacy'), true);
 });
+
+test('unchecking "Post my runs to the public GLOBAL leaderboard" keeps runs local', async () => {
+  const { readPostGlobal, writePostGlobal, POST_GLOBAL_KEY } = await import('../js/stats-client.js');
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  assert.equal(readPostGlobal(storage), true, 'checked by default');
+  writePostGlobal(storage, false);
+  assert.equal(store.get(POST_GLOBAL_KEY), '0');
+  assert.equal(readPostGlobal(storage), false, 'the choice is remembered');
+  assert.equal(readPostGlobal({ getItem() { throw Error('blocked'); } }), true, 'blocked storage reads as the default');
+
+  let submitted = 0;
+  const fake = { postGlobal: false, runTainted: false, globalBoard: { submit: async () => { submitted++; return { ok: true }; } }, renderBoards() {} };
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(submitted, 0, 'nothing is sent');
+  assert.deepEqual(fake.globalSubmit, { reason: 'optout' });
+  assert.deepEqual(describeSubmit(fake.globalSubmit), { text: 'GLOBAL POSTING OFF // RUN SAVED LOCALLY', tone: 'dim' });
+});

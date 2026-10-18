@@ -126,7 +126,7 @@ function installInstrumentation(game, metrics) {
     return source;
   };
 
-  game.hitEnemy = function (e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+  game.hitEnemy = function (e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const before = Math.max(0, e.hp);
     const src = attribute(source);
     if (e.firstHitAt === undefined) e.firstHitAt = game.elapsedTime;
@@ -134,7 +134,7 @@ function installInstrumentation(game, metrics) {
     hitDepth++;
     e.lastHitSource = src;
     try {
-      proto.hitEnemy.call(this, e, dmg, source, kx, ky, flash);
+      proto.hitEnemy.call(this, e, dmg, source, kx, ky, flash, stat);
     } finally {
       hitDepth--;
     }
@@ -182,10 +182,10 @@ function installInstrumentation(game, metrics) {
   }
 
   // Storm Protocol detonations call fireChainLightning with an explicit origin.
-  game.fireChainLightning = function (level, ox, oy) {
+  game.fireChainLightning = function (level, ox, oy, stat) {
     const storm = ox !== undefined;
     if (storm) ctxStack.push('storm');
-    try { return proto.fireChainLightning.call(this, level, ox, oy); } finally { if (storm) ctxStack.pop(); }
+    try { return proto.fireChainLightning.call(this, level, ox, oy, stat); } finally { if (storm) ctxStack.pop(); }
   };
 
   // Pulsar Helix arms share the blaster's source; tag them at launch.
@@ -533,7 +533,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     game.state = 'PLAYING';
     game.spawnWavePack();
     // God mode: hits still land (knockback, multiplier loss) but never take the last point of shield.
-    if (god) game.damagePlayer = function (dmg, shake) { return Game.prototype.damagePlayer.call(this, Math.min(dmg, this.player.hp - 1), shake); };
+    if (god) game.damagePlayer = function (dmg, shake, by) { return Game.prototype.damagePlayer.call(this, Math.min(dmg, this.player.hp - 1), shake, by); };
 
     const maxTicks = Math.round(maxSeconds * 60);
     let lastWave = 1;
@@ -585,6 +585,9 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     }
 
     const died = game.state === 'GAMEOVER';
+    // The game's own run summary (js/run-stats.js): the format players upload to /api/stats, so
+    // --stats-out aggregates simulated runs exactly like the server aggregates real ones.
+    const stats = game.lastRunSummary || game.finishRunStats();
     return {
       strategy: strategy.name,
       seed,
@@ -622,6 +625,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       ttk: metrics.ttk,
       levels: metrics.levels,
       perWave: metrics.perWave.map((r, w) => r && { wave: w, taken: r.taken, kills: r.kills, hpEnd: r.hpEnd, levelEnd: r.levelEnd, enemiesAvg: r.samples ? r.enemies / r.samples : 0 }).filter(Boolean),
+      stats,
       ticks
     };
   });

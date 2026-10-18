@@ -78,6 +78,8 @@ export class EnemyManager {
     this.view = null;
     // (indicator) => { x, y, onScreen } | null: a new place for a guarded spawn the ship is camping on.
     this.relocateSpawn = null;
+    // (enemy) => void, called as each enemy materializes (the game's run stats); null in unit tests.
+    this.onSpawn = null;
     this.tick = 0;
     this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
@@ -328,6 +330,7 @@ export class EnemyManager {
           detourY: 0
         };
         this.enemies.push(spawned);
+        this.onSpawn?.(spawned); // run stats (Game sets it): spawn time and per-type spawn counts
         if (spawned.isBoss) this.bossArrivals.push(spawned);
         else if (spawned.isLieutenant) this.lieutenantArrivals.push(spawned);
         grid.applyImpulse(sp.x, sp.y, 12, 65, c.hue);

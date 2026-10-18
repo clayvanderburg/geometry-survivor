@@ -2797,3 +2797,169 @@ html, body {
   letter-spacing: 1px;
   box-shadow: 0 0 14px rgba(255, 204, 0, 0.7);
 }
+
+/* RUN REPORT (game over, left panel tab; js/run-report.js): headline numbers, damage by weapon as bars
+   with % share and DPS, and the enemies that hurt the ship most. Rows are [data-gp-nav] so the
+   controller can walk and scroll them. */
+.go-left-panel { justify-content: flex-start; }
+.go-left-panel .panel-header { align-items: center; }
+.run-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 243, 255, 0.4) transparent;
+  padding-right: 2px;
+}
+.rr-headline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.rr-head {
+  background: rgba(16, 22, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+.rr-head-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+.rr-head-val {
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.rr-section-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+}
+.rr-section-title span {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.rr-bars, .rr-killers { display: flex; flex-direction: column; gap: 5px; }
+.rr-bar-row {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  outline: none;
+}
+.rr-bar-row:hover, .rr-bar-row.gp-focus, .rr-killer:hover, .rr-killer.gp-focus {
+  border-color: rgba(0, 243, 255, 0.55);
+  background: rgba(0, 243, 255, 0.06);
+}
+.rr-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.rr-name {
+  font-weight: 800;
+  color: #fff;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-lv {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.rr-nums {
+  flex-shrink: 0;
+  color: #b4c6e0;
+  font-variant-numeric: tabular-nums;
+}
+.rr-nums b { color: #fff; }
+.rr-track {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.rr-fill {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--rc, var(--cyan));
+  box-shadow: 0 0 10px var(--rc, var(--cyan));
+}
+.rr-killer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: rgba(16, 24, 46, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+.rr-killer.fatal { border-color: rgba(255, 42, 85, 0.6); background: rgba(255, 42, 85, 0.1); }
+.rr-killer-name { font-weight: 800; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-killer.fatal .rr-killer-name { color: #ff8aa3; }
+.rr-killer-val { flex-shrink: 0; color: #b4c6e0; font-variant-numeric: tabular-nums; }
+.rr-empty { font-size: 11px; color: var(--text-dim); padding: 4px 6px; }
+.rr-upload {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+@media (max-width: 480px) {
+  .rr-headline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rr-section-title span { display: none; }
+  .go-left-panel .panel-header { flex-wrap: wrap; }
+}
+
+/* Title-screen consent checkboxes (both start checked): GLOBAL posting and anonymous stats */
+.consent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -4px 0 10px;
+  padding: 0 4px;
+}
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(214, 230, 255, 0.78);
+  cursor: pointer;
+}
+.consent-check b { color: var(--cyan); font-weight: 800; }
+.consent-check i { color: rgba(214, 230, 255, 0.5); font-style: normal; }
+.consent-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 0;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.consent-check input.gp-focus,
+.consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
