@@ -828,10 +828,9 @@ export function weaponUpgradeLines(player, id) {
 export function xpToNextLevel(level) {
   const l = Math.max(1, Math.floor(level));
   const base = TUNING.xpCurveBase ?? 25;
-  const early = TUNING.xpCurveStep ?? 16;
-  const mid = TUNING.xpCurveStepMid ?? 100;
-  const late = TUNING.xpCurveStepLate ?? 60;
-  return Math.round(base + early * (Math.min(l, 20) - 1) + mid * Math.max(0, Math.min(l, 40) - 20) + late * Math.max(0, l - 40));
+  const step = TUNING.xpCurveStep ?? 16;
+  const bend = Math.max(0, l - (TUNING.xpCurveAccelFrom ?? 15));
+  return Math.round(base + step * (l - 1) + (TUNING.xpCurveAccel ?? 3.6) * bend * bend);
 }
 
 // Total XP needed to reach `level` from level 1.

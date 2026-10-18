@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.26.0',
+    date: '2026-10-18',
+    title: 'Smoother Curves',
+    notes: [
+      { type: 'balance', text: 'Leveling bends up smoothly instead of jumping at LV 20 and LV 40; late levels come about 25% sooner.' },
+      { type: 'balance', text: 'Enemy toughness, spawn pace and contact damage ease in gradually instead of switching on at set waves; the late wall is about 20% gentler.' }
+    ]
+  },
+  {
     version: '0.25.0',
     date: '2026-10-18',
     title: 'Soundtrack',

@@ -158,8 +158,10 @@ export const DEFAULT_TUNING = {
   // hand weights are relative: general upgrades weigh 1)
   xpCurveBase: 25,
   xpCurveStep: 16,
-  xpCurveStepMid: 150,
-  xpCurveStepLate: 500,
+  // Past LV xpCurveAccelFrom each level also costs xpCurveAccel·(LV − from)² more: one smooth bend
+  // instead of the old LV 20 / LV 40 steps (+150 / +500 per level).
+  xpCurveAccel: 3.6,
+  xpCurveAccelFrom: 15,
   weaponSlots: 6,
   newWeaponChanceBy1: 0.8,
   newWeaponChanceBy2: 0.7,
@@ -174,15 +176,19 @@ export const DEFAULT_TUNING = {
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
-  // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
+  // HP scale = (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^ease(w − waveHpGrowthFrom), bosses and lieutenants
+  // included; ease() phases the compounding in over waveHpGrowthRamp waves instead of switching it on at once)
   waveLength: 22,
   waveHpStart: 2.5,
   waveHpStartLight: 1,
   waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
-  waveHpGrowth: 1.065,
-  waveHpGrowthFrom: 25,
+  waveHpGrowth: 1.06,
+  waveHpGrowthFrom: 18,
+  waveHpGrowthRamp: 14,
+  // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
+  // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
   spawnIntervalStart: 2.6,
-  spawnIntervalPerWave: 0.14,
+  spawnIntervalTau: 7,
   spawnIntervalMin: 0.75,
   packSizeMult: 1.0,
   swarmPackPerWave: 2,
@@ -193,8 +199,9 @@ export const DEFAULT_TUNING = {
   splitterPackMax: 10,
   bossHpMult: 0.5,
   damageRampBase: 0.5,
-  damageRampFrom: 15,
+  damageRampFrom: 10,
   damageRampPerWave: 0.04,
+  damageRampSmooth: 10, // waves over which the ramp eases in to its full per-wave rate
   xpPerWave: 0,
 
   // 14. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
@@ -383,8 +390,8 @@ export const TUNING_SCHEMA = [
     items: [
       { key: 'xpCurveBase', label: 'XP for Level 2', type: 'range', min: 2, max: 200, step: 1, unit: '' },
       { key: 'xpCurveStep', label: 'XP Step / Level (LV 1-19)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
-      { key: 'xpCurveStepMid', label: 'XP Step / Level (LV 20-39)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
-      { key: 'xpCurveStepLate', label: 'XP Step / Level (LV 40+)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
+      { key: 'xpCurveAccel', label: 'XP Curve Bend (× (LV − from)²)', type: 'range', min: 0, max: 20, step: 0.1, unit: '' },
+      { key: 'xpCurveAccelFrom', label: 'XP Curve Bends From LV', type: 'range', min: 1, max: 60, step: 1, unit: '' },
       { key: 'weaponSlots', label: 'Weapon Slots', type: 'range', min: 2, max: 10, step: 1, unit: '' },
       { key: 'newWeaponChanceBy1', label: 'NEW WEAPON Chance / Hand (1 Weapon Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponChanceBy2', label: 'NEW WEAPON Chance / Hand (2 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
@@ -408,8 +415,9 @@ export const TUNING_SCHEMA = [
       { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },
       { key: 'waveHpGrowth', label: 'Enemy HP: Compound Growth / Wave', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
       { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
+      { key: 'waveHpGrowthRamp', label: 'Enemy HP: Waves to Reach Full Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
-      { key: 'spawnIntervalPerWave', label: 'Pack Spawn Interval Drop / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 's' },
+      { key: 'spawnIntervalTau', label: 'Pack Spawn Interval: Waves to Close 63% of the Gap', type: 'range', min: 1, max: 30, step: 0.5, unit: '' },
       { key: 'spawnIntervalMin', label: 'Pack Spawn Interval Floor', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 's' },
       { key: 'packSizeMult', label: 'Pack Size Multiplier (all packs)', type: 'range', min: 0.25, max: 3, step: 0.05, unit: 'x' },
       { key: 'swarmPackPerWave', label: 'Boid Swarm: Extra Boids / Wave', type: 'range', min: 0, max: 6, step: 0.1, unit: '' },
@@ -422,6 +430,7 @@ export const TUNING_SCHEMA = [
       { key: 'damageRampBase', label: 'Contact/Orb Damage Before the Ramp', type: 'range', min: 0.2, max: 3, step: 0.05, unit: 'x' },
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
+      { key: 'damageRampSmooth', label: 'Contact/Orb Damage Ramp Ease-In', type: 'range', min: 0, max: 30, step: 1, unit: 'waves' },
       { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
     ]
   },
