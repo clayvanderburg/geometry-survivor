@@ -5,6 +5,7 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 const { Game } = await import('../js/main.js');
 const { EnemyManager } = await import('../js/enemies.js');
+const { TUNING } = await import('../js/config.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 function cappedWaveGame() {
@@ -17,7 +18,7 @@ function cappedWaveGame() {
     asteroidManager: { asteroids: Array.from({ length: 400 }, () => ({ radius: 1 })), isDrilling: false, drillingRocks: [], cellSize: 140, getNearbyAsteroids() { return []; }, update() {} },
     player: { x: 2000, y: 2000, vx: 0, vy: 0, radius: 15, angle: 0, hp: 100, maxHp: 100, invuln: 100, dashTimer: 0, dashCooldown: 0, stats: { moveSpeed: 5, luck: 1, xpMultiplier: 1, magnetRadius: 145 }, weapons: {} },
     grid: silent, particles: silent, sound: silent, progression: { addCores() {} },
-    state: 'PLAYING', pendingBossSpawns: [], wave: 2, waveTimer: 22, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
+    state: 'PLAYING', pendingBossSpawns: [], wave: 2, waveTimer: TUNING.waveLength, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
     camX: 0, camY: 0, worldWidth: 4200, worldHeight: 4200, width: 1280, height: 720,
     keys: {}, mouse: { x: 640, y: 360, down: false }, autoFire: false, autoAim: false,
     bullets: [], missiles: [], singularities: [], chests: [], geoms: [],
@@ -44,7 +45,7 @@ test('multiple delayed bosses retain FIFO wave scaling, announce only admission,
   const wave3Scale = g.getWaveScale();
   assert.deepEqual(g.pendingBossSpawns.map(request => request.wave), [3]);
   assert.equal(warnings, 0);
-  g.wave = 5; g.waveTimer = 22;
+  g.wave = 5; g.waveTimer = TUNING.waveLength;
   g.update(1 / 60);
   const wave6Scale = g.getWaveScale();
   assert.deepEqual(g.pendingBossSpawns.map(request => request.wave), [3, 6]);
@@ -52,7 +53,7 @@ test('multiple delayed bosses retain FIFO wave scaling, announce only admission,
   g.update(1 / 60);
   const bosses = g.enemyManager.spawnIndicators.filter(spawn => spawn.type === 'boss');
   assert.equal(bosses.length, 2);
-  assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale, 650 * wave6Scale]);
+  assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale * TUNING.bossHpMult, 650 * wave6Scale * TUNING.bossHpMult]);
   assert.equal(g.pendingBossSpawns.length, 0);
   assert.equal(g.enemyManager.enemies.length + g.enemyManager.spawnIndicators.length, 200);
   assert.equal(warnings, 2);

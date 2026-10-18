@@ -31,7 +31,7 @@ globalThis.document = {
 };
 
 const { Game } = await import('../js/main.js');
-const { EnemyManager, contactDamageAt } = await import('../js/enemies.js');
+const { EnemyManager, contactDamageAt, damageRampAt } = await import('../js/enemies.js');
 const { ProgressionManager, normalizeSave, normalizeGuide } = await import('../js/progression.js');
 const {
   HOSTILE_ENTRIES, HOSTILE_IDS, MECHANIC_ENTRIES, hostileStats, hostileStatRows, detectEncounters, guideIdsFor, weaponGuide, resolveText, waveScaleAt
@@ -188,20 +188,20 @@ test('guide stats come from the real spawn config and game formulas', () => {
   resetTuning();
   const em = new EnemyManager();
   for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && id !== 'boss')) {
-    const cfg = em.getArchetype(id, 1);
+    const cfg = em.getArchetype(id, waveScaleAt(1));
     const s = hostileStats(id);
     assert.equal(s.hp, Math.round(cfg.maxHp), `${id} HP`);
     assert.equal(s.speed, Math.round(cfg.speed * 60), `${id} speed`);
     assert.equal(s.contact, Math.round(contactDamageAt(cfg, 1)), `${id} contact`);
   }
-  assert.equal(hostileStats('bruiser').contact, 27);
-  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3)));
+  assert.equal(hostileStats('bruiser').contact, Math.round(18 * 1.5 * damageRampAt(1)));
+  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult));
   assert.equal(hostileStats('gunner').unlockWave, ARCHETYPE_INFO.gunner.unlockWave);
   const g = Object.assign(Object.create(Game.prototype), { wave: 9 });
   assert.equal(g.contactDamage({ contactMult: 1.5 }), contactDamageAt({ contactMult: 1.5 }, 9), 'one contact formula');
   assert.equal(waveScaleAt(8), Game.prototype.getWaveScale.call({ wave: 8 }));
   TUNING.enemyHpMult = 2;
-  assert.equal(hostileStats('swarmer').hp, 20, 'the tuner HP multiplier shows in the guide');
+  assert.equal(hostileStats('swarmer').hp, Math.round(20 * waveScaleAt(1)), 'the tuner HP multiplier shows in the guide');
   resetTuning();
 });
 

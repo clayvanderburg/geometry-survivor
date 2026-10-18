@@ -49,11 +49,12 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     // A plain hand (no NEW WEAPON card this time) so A applies an upgrade straight away.
     await page.evaluate(async () => {
       const { TUNING } = await import('/js/config.js');
-      const chance = TUNING.newWeaponChance;
-      TUNING.newWeaponChance = 0;
+      const keys = Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance'));
+      const saved = keys.map(k => TUNING[k]);
+      keys.forEach(k => { TUNING[k] = 0; });
       __game.player.newWeaponDrought = 0;
       __game.triggerLevelUp();
-      TUNING.newWeaponChance = chance;
+      keys.forEach((k, i) => { TUNING[k] = saved[i]; });
     });
     await page.waitForTimeout(450);
     await press(RIGHT);
@@ -67,13 +68,26 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
 
     // Gold: Y locks the focused card (5), X rerolls the rest (20), the focusable REROLL button rerolls
     // again (40); picking another card carries the locked one into the next hand, where A takes it.
+    // NEW WEAPON cards stay off for this whole section (rerolls roll real hands, and A on a NEW WEAPON
+    // card opens the weapon pick); the odds are restored before the NEW WEAPON section below.
+    const oddsOff = () => page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      window.__savedOdds = Object.fromEntries(Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance')).map(k => [k, TUNING[k]]));
+      for (const k of Object.keys(window.__savedOdds)) TUNING[k] = 0;
+    });
+    const oddsBack = () => page.evaluate(async () => {
+      const { TUNING } = await import('/js/config.js');
+      Object.assign(TUNING, window.__savedOdds || {});
+    });
+    await oddsOff();
     const plainHand = () => page.evaluate(async () => {
       const { TUNING } = await import('/js/config.js');
-      const chance = TUNING.newWeaponChance;
-      TUNING.newWeaponChance = 0;
+      const keys = Object.keys(TUNING).filter(k => k.startsWith('newWeaponChance'));
+      const saved = keys.map(k => TUNING[k]);
+      keys.forEach(k => { TUNING[k] = 0; });
       __game.player.newWeaponDrought = 0;
       __game.triggerLevelUp();
-      TUNING.newWeaponChance = chance;
+      keys.forEach((k, i) => { TUNING[k] = saved[i]; });
     });
     await page.evaluate(() => { __game.gold = 100; __game.updateHUD(); });
     await plainHand();
@@ -106,6 +120,7 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
     await press(A);
     await expect('PLAYING', 'A takes the carried locked card');
     if (await page.evaluate(() => __game.carriedLock)) throw Error('Taking the locked card should use up the lock');
+    await oddsBack();
 
     // NEW WEAPON: walk to the card, A opens the weapon pick, A on the focused weapon equips it.
     await page.evaluate(() => { __game.player.newWeaponDrought = 99; __game.triggerLevelUp(); });

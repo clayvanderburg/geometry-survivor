@@ -221,6 +221,21 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
         Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' ') || '—', weaponLevels.toFixed(1)];
     })));
 
+    // Upgrade exhaustion: when the slots fill, when hands first run short, and when level-ups find
+    // nothing left (the ALL SYSTEMS MAXED full-shield-repair fallback).
+    const stamp = (rs, key) => {
+      const hits = rs.filter(r => r[key]);
+      if (!hits.length) return '—';
+      const label = `${mmss(median(hits.map(r => r[key].time)))} · L${median(hits.map(r => r[key].level))}`;
+      return hits.length === rs.length ? label : `${label} (${hits.length}/${rs.length})`;
+    };
+    out.push('\n## Upgrade exhaustion (median time · level, among runs that got there)');
+    out.push(table(['strategy', 'NEW WEAPON in hands (slot free)', 'all slots filled', 'first hand < 3 cards', 'first empty hand (MAXED)', 'MAXED level-ups / run'], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      const hands = sumBy(rs, r => r.handsWithFreeSlot || 0);
+      return [s.name, hands ? `${pct(sumBy(rs, r => r.newWeaponHands || 0) / hands)} of ${hands}` : '—', stamp(rs, 'slotsFullAt'), stamp(rs, 'thinHandAt'), stamp(rs, 'maxedAt'), mean(rs.map(r => r.maxedCount || 0)).toFixed(1)];
+    })));
+
     // Difficulty curve per wave, pooled across strategies.
     const maxWave = Math.max(...runs.map(r => r.wave));
     const rows = [];
@@ -231,7 +246,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const finished = rowsW.filter(p => p.hpEnd !== null);
       rows.push([w, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
     }
-    out.push('\n## Difficulty curve per wave (all strategies pooled; waves are 22 s, bosses every 3rd)');
+    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 3rd)`);
     out.push(table(['wave', 'runs alive', 'deaths', 'HP lost', 'kills', 'enemies on field', 'shield at end', 'level at end'], rows));
 
     // Time-to-kill per enemy type per wave bucket.
@@ -313,6 +328,7 @@ async function main() {
   const h = await import('./balance/harness.mjs');
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
+  opts.waveLength = h.DEFAULT_TUNING.waveLength;
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 

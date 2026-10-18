@@ -12,6 +12,19 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.13.0',
+    date: '2026-10-18',
+    title: 'The Long Run',
+    notes: [
+      { type: 'balance', text: 'Runs are paced for the long haul: a strong run now lasts around 30 minutes and climbs past level 50, instead of hitting a wall around wave 30.' },
+      { type: 'balance', text: 'Enemies are about 2.5× tougher from the start but come in fewer, smaller packs, so burn, chill and corrosion have time to work.' },
+      { type: 'balance', text: 'Contact and plasma orb hits start at half damage and only ramp up from wave 15, more gently than before.' },
+      { type: 'balance', text: 'Late waves still get much tougher, so every run ends eventually. Bosses grow more slowly than before.' },
+      { type: 'balance', text: 'NEW WEAPON cards depend on how many weapons you carry: 80% of hands with one (and never two hands in a row without), then 70%, 60%, 40% and 30%.' },
+      { type: 'balance', text: 'Levels after 20 need more XP, and much more after 40, so upgrades keep coming through a long run.' }
+    ]
+  },
+  {
     version: '0.12.2',
     date: '2026-10-18',
     title: 'Scores Fixed',
