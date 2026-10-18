@@ -3968,7 +3968,7 @@ body.touch-mode .hud-top { gap: 10px; grid-template-columns: 1fr 1.6fr 1fr; }
 body.touch-mode .left-badges,
 body.touch-mode #active-weapons-bar,
 body.touch-mode .ability-group,
-body.touch-mode .quick-toggles > :not(#btn-pause),
+body.touch-mode .quick-toggles > :not(#btn-pause):not(#btn-fullscreen),
 body.touch-mode #lt-card,
 body.touch-mode #guide-toast,
 body.touch-mode #center-banner,
@@ -3976,7 +3976,9 @@ body.touch-mode #boss-card,
 body.touch-mode #hud-hidden-hint { display: none !important; }
 body.touch-mode .stat-label { font-size: 9px; letter-spacing: 2px; }
 body.touch-mode .stat-value { font-size: 20px; }
-body.touch-mode .wave-row { font-size: 12px; margin-bottom: 3px; }
+body.touch-mode .wave-row { font-size: 12px; margin: 3px 0 0; }
+/* XP bar on top, level with the shield bar; the wave and timer sit under it. */
+body.touch-mode .xp-bar-container { order: -1; margin-top: 2px; }
 body.touch-mode .xp-bar-container { height: 9px; }
 body.touch-mode #level-display { font-size: 8px; }
 body.touch-mode .bars-wrapper { gap: 4px; }
@@ -3985,7 +3987,7 @@ body.touch-mode .bar-label { font-size: 9px; letter-spacing: 1px; }
 body.touch-mode .hp-bar-outer { height: 9px; width: 120px; }
 body.touch-mode #hp-text { font-size: 10px; }
 body.touch-mode .quick-toggles { margin-top: 6px; justify-content: flex-end; }
-body.touch-mode #btn-pause { font-size: 11px; padding: 6px 12px; pointer-events: auto; }
+body.touch-mode :is(#btn-pause, #btn-fullscreen) { font-size: 11px; padding: 6px 12px; pointer-events: auto; }
 
 /* Boss: one thin bar under the wave, no title card. */
 /* Hugs the XP bar: pinned under the centre column instead of in a row below the tall right column. */
