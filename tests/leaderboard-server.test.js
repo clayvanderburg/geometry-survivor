@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createScoresHandler, LIMITS, BOARD_KEY, VERSION_BOARD_PREFIX, RATE_PREFIX, CENSORED_NAME, containsProfanity, checkPlausibility,
-  validateRun, rankEntries, maxScoreFor, boardKey, checkVersion
+  validateRun, rankEntries, maxScoreFor, boardKey, checkVersion, PURGES, MIGRATION_PREFIX
 } from '../netlify/lib/leaderboard.mjs';
 import { sanitizeCallsign, BOARD_VERSIONS } from '../js/leaderboard-rules.js';
 import { GAME_VERSION } from '../js/version.js';
@@ -61,6 +61,7 @@ function setup(overrides = {}, storeOptions) {
     sleep: async () => {},
     newId: () => `run-${++ids}`,
     log: null,
+    purges: [], // one-time cleanups have their own test
     ...overrides
   });
   return { store, handler, advance: (ms) => { clock += ms; } };
@@ -468,4 +469,40 @@ test('a store without list() (or a failing one) still serves boards, just withou
   broken.store.list = async () => { throw new Error('list down'); };
   await post(broken.handler, run());
   assert.deepEqual((await body(await get(broken.handler))).versions, []);
+});
+
+test('one-time purge: removes only the listed callsigns from every board, once, and keeps later runs', async () => {
+  const { store, handler } = setup({ purges: PURGES });
+  assert.deepEqual(PURGES[0].names, ['MADKING', 'NOX']);
+  const entry = (id, name, score) => ({ id, name, score, wave: 10, level: 15, kills: 900, multiplier: 10, time: 200, date: '2026-10-17T00:00:00.000Z', version: GAME_VERSION });
+  store.put(BOARD_KEY, { version: 1, entries: [entry('a', 'MADKING', 900), entry('b', 'ACE', 800), entry('c', 'NOX', 700), entry('d', 'NOXIOUS', 600)] });
+  store.put(CURRENT_KEY, { version: 1, gameVersion: GAME_VERSION, entries: [entry('a', 'MADKING', 900), entry('b', 'ACE', 800)] });
+  store.put(VERSION_BOARD_PREFIX + '0.9.0', { version: 1, entries: [entry('e', 'NOX', 500)] });
+
+  // Two first requests at once: both may run the purge, it is idempotent.
+  await Promise.all([get(handler, 'all'), get(handler, GAME_VERSION)]);
+  assert.deepEqual(store.board().map((e) => e.name), ['ACE', 'NOXIOUS'], 'exact callsigns only; other pilots stay');
+  assert.deepEqual(store.board(CURRENT_KEY).map((e) => e.name), ['ACE']);
+  assert.deepEqual(store.board(VERSION_BOARD_PREFIX + '0.9.0'), []);
+  // Marker written (its count is per instance: concurrent first requests split the work).
+  const marker = JSON.parse(store.blobs.get(MIGRATION_PREFIX + PURGES[0].id).body);
+  assert.deepEqual(marker.names, ['MADKING', 'NOX']);
+
+  // After the purge, MADKING can post again and the run stays, even on a fresh function instance.
+  const res = await post(handler, run({ name: 'madking' }));
+  assert.equal(res.status, 201);
+  const fresh = createScoresHandler({ store: () => store, log: null, sleep: async () => {}, purges: PURGES });
+  await get(fresh, 'all');
+  assert.ok(store.board().some((e) => e.name === 'MADKING'), 'the marker stops it from running again');
+});
+
+test('a failing purge never blocks the board', async () => {
+  const { store, handler } = setup({ purges: [{ id: 'boom', names: ['ACE'] }] });
+  store.put(BOARD_KEY, { version: 1, entries: [] });
+  const realList = store.list;
+  store.list = async () => { throw new Error('list down'); };
+  const res = await get(handler, 'all');
+  assert.equal(res.status, 200);
+  assert.equal(store.blobs.has(MIGRATION_PREFIX + 'boom'), false, 'no marker, so it retries later');
+  store.list = realList;
 });

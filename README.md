@@ -138,6 +138,8 @@ The title and game-over boards share scores between all players through a **Netl
 
 **Moderating / resetting the board** (there is deliberately no delete endpoint):
 
+- *One-time callsign purge*: add `{ id, names }` to `PURGES` in `netlify/lib/leaderboard.mjs`. The first `/api/scores` request after it deploys removes those callsigns from every board, then writes a `migrations/<id>` marker so it never runs again (later runs under those names are kept). `purge-madking-nox-v1` cleared the developer's test runs.
+
 - *Netlify UI*: open the project, go to **Blobs**, pick the `leaderboard` store, and delete `board-v1@<version>` to wipe one version's board or `board-v1` to wipe the all-time board (each is recreated by the next run). `ratelimit/…` entries are disposable and can be deleted at any time.
 - *Netlify CLI* (`npx netlify link` first):
   - reset one version: `npx netlify blobs:delete leaderboard board-v1@0.9.0` (all-time: `board-v1`)

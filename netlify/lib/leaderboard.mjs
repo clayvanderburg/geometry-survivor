@@ -22,6 +22,15 @@ export const STORE_NAME = 'leaderboard';
 export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
 export const VERSION_BOARD_PREFIX = 'board-v1@';
 export const RATE_PREFIX = 'ratelimit/';
+export const MIGRATION_PREFIX = 'migrations/';
+
+// One-time board cleanups. Each runs once per store: the first /api/scores request after it deploys
+// removes every entry under these callsigns from every board (all-time and per version), then writes
+// a marker blob so it never runs again. Runs submitted under these names afterwards are kept.
+export const PURGES = Object.freeze([
+  // The developer's test runs, cleared for a fresh start with the rebuilt Void Armory.
+  { id: 'purge-madking-nox-v1', names: ['MADKING', 'NOX'] }
+]);
 
 // Blob key of a board: 'all' -> the all-time board, '0.9.0' -> board-v1@0.9.0.
 export function boardKey(version) {
@@ -240,6 +249,7 @@ export function createScoresHandler({
   limits = LIMITS,
   versions = BOARD_VERSIONS,
   currentVersion = GAME_VERSION,
+  purges = PURGES,
   log = console
 } = {}) {
   async function getBoard(blobs, key) {
@@ -353,10 +363,54 @@ export function createScoresHandler({
     });
   }
 
+  // Removes `names` from one board, compare-and-swap like insertEntry. Resolves the number removed.
+  async function purgeBoard(blobs, key, names) {
+    for (let attempt = 0; attempt < limits.WRITE_ATTEMPTS; attempt++) {
+      const result = await blobs.getWithMetadata(key, { type: 'json' });
+      if (!result) return 0;
+      const entries = readBoard(result.data);
+      const kept = entries.filter((e) => !names.has(sanitizeCallsign(e.name)));
+      if (kept.length === entries.length) return 0;
+      const write = await blobs.setJSON(key, { ...result.data, entries: kept }, writeConditions(result));
+      if (write.modified) return entries.length - kept.length;
+      await sleep(Math.floor(Math.random() * Math.min(400, 25 * 2 ** attempt)));
+    }
+    throw new Error(`purge: ${key} stayed busy`);
+  }
+
+  // Runs any PURGES whose marker is missing. Idempotent (a second concurrent run finds nothing left to
+  // remove), and the marker is written last, so a crash midway just retries on the next request.
+  // Never blocks the request: a failure is logged and the board is served as it is.
+  const purgesDone = new Set();
+  async function runPurges(blobs) {
+    for (const purge of purges) {
+      if (purgesDone.has(purge.id)) continue;
+      try {
+        const marker = MIGRATION_PREFIX + purge.id;
+        if (await blobs.getWithMetadata(marker, { type: 'json' })) { purgesDone.add(purge.id); continue; }
+        const names = new Set(purge.names.map((n) => sanitizeCallsign(n)));
+        const keys = [BOARD_KEY];
+        if (typeof blobs.list === 'function') {
+          const listing = await blobs.list({ prefix: VERSION_BOARD_PREFIX });
+          for (const b of listing?.blobs || []) keys.push(String(b.key));
+        }
+        let removed = 0;
+        for (const key of keys) removed += await purgeBoard(blobs, key, names);
+        await blobs.setJSON(marker, { id: purge.id, names: [...names], removed, done: new Date(now()).toISOString() });
+        purgesDone.add(purge.id);
+        log?.info?.(`[scores] ${purge.id}: removed ${removed} entries`);
+      } catch (err) {
+        log?.warn?.(`[scores] ${purge.id} failed, will retry`, err);
+      }
+    }
+  }
+
   return async function handler(req, context) {
     try {
-      if (req.method === 'GET' || req.method === 'HEAD') return await handleGet(req, store());
-      if (req.method === 'POST') return await handlePost(req, context, store());
+      const blobs = req.method === 'GET' || req.method === 'HEAD' || req.method === 'POST' ? store() : null;
+      if (blobs) await runPurges(blobs);
+      if (req.method === 'GET' || req.method === 'HEAD') return await handleGet(req, blobs);
+      if (req.method === 'POST') return await handlePost(req, context, blobs);
       return json(405, { error: 'method not allowed' }, { allow: 'GET, HEAD, POST' });
     } catch (err) {
       log?.error?.('[scores]', err);
