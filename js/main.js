@@ -1280,8 +1280,7 @@ export class Game {
   openRelicChest(chest) {
     this.state = 'CHEST';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
-    this.sound.playSupernova();
-    this.sound.playLevelUp();
+    this.sound.playCacheFanfare?.(!!chest.guaranteedSuper);
 
     const luck = this.player.stats.luck || 1.0;
     const roll = Math.random();
