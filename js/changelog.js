@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.16.2',
+    date: '2026-10-18',
+    title: 'Grand Entrances',
+    notes: [
+      { type: 'new', text: 'Lieutenants and bosses now arrive on screen, away from your ship: space folds in, a rift tears open and they push through with a rising rumble.' },
+      { type: 'new', text: 'Elites emerge slowly: they crawl out of the rift and only reach full speed after a moment, so you can size them up.' },
+      { type: 'balance', text: 'Ordinary enemies still spawn just off screen.' }
+    ]
+  },
+  {
     version: '0.16.1',
     date: '2026-10-18',
     title: 'Cache Fanfare',

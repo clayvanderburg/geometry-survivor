@@ -92,6 +92,7 @@ export function lieutenantModLabels(e) {
 // Materializing lieutenant: four silver brackets close in on the point (distinct from boss hazard rings).
 export function drawLieutenantTelegraph(ctx, sp) {
   const t = Math.max(0, Math.min(1, 1 - sp.timer / sp.maxTimer));
+  if (sp.onScreen) drawEliteRift(ctx, sp, t, sp.config.hue);
   const r = sp.config.radius * (3.2 - t * 1.9);
   const spin = t * 2.2;
   ctx.strokeStyle = `rgba(235, 240, 255, ${0.3 + t * 0.6})`;
@@ -104,6 +105,41 @@ export function drawLieutenantTelegraph(ctx, sp) {
   ctx.beginPath();
   ctx.arc(sp.x, sp.y, sp.config.radius * (1.6 - t * 0.6), 0, Math.PI * 2);
   ctx.stroke();
+}
+
+// The rift an elite tears open while it materializes on screen: energy spokes converging on the point,
+// a slowly opening vertical tear and a white-hot core that swells toward arrival. Sim-timer driven.
+export function drawEliteRift(ctx, sp, t, hue) {
+  const R = sp.config.radius * 5.5;
+  const spin = (1 - t) * 3 + sp.timer * 0.6;
+  // Converging spokes: each streak runs from far out toward the core, closer as arrival nears.
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = `hsla(${hue}, 100%, 70%, ${0.25 + t * 0.55})`;
+  ctx.beginPath();
+  for (let k = 0; k < 12; k++) {
+    const a = spin + (k * Math.PI * 2) / 12;
+    const phase = ((sp.timer * 2.2 + k * 0.37) % 1);
+    const r0 = R * (1 - phase) + sp.config.radius * 0.6;
+    const r1 = r0 * (0.55 + 0.2 * t);
+    ctx.moveTo(sp.x + Math.cos(a) * r0, sp.y + Math.sin(a) * r0);
+    ctx.lineTo(sp.x + Math.cos(a + 0.12) * r1, sp.y + Math.sin(a + 0.12) * r1);
+  }
+  ctx.stroke();
+  // The tear: a tall thin ellipse that opens wider as the elite pushes through.
+  const h = sp.config.radius * (1.2 + 2.4 * t);
+  const w = sp.config.radius * (0.08 + 0.9 * t * t);
+  ctx.fillStyle = `hsla(${hue}, 100%, 55%, ${0.12 + t * 0.3})`;
+  ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${0.4 + t * 0.6})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(sp.x, sp.y, w, h, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // White-hot core.
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.15 + t * 0.7})`;
+  ctx.beginPath();
+  ctx.arc(sp.x, sp.y, 3 + sp.config.radius * 0.35 * t, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // L-shaped corner bracket centred on angle `a` at radius `r`.
