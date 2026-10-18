@@ -2527,11 +2527,16 @@ export class Game {
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
-          // Flak bursts flash hot orange, so they read apart from the bolt (and from ricochets).
+          // Flak bursts read as a thin hot-orange ring and a few sparks thrown outward, with no filled flash:
+          // at a high fire rate the flash discs piled up into bright blobs that hid the enemies under them.
           const bh = b.blastHue ?? b.hue;
-          this.particles.spawnFlash?.(hx, hy, b.blastRadius * (b.flak ? 0.7 : 0.4), bh, b.flak ? 0.2 : 0.16);
-          this.particles.spawnShockwave(hx, hy, b.blastRadius, bh, b.flak ? 4 : 3, 0.32);
-          if (b.flak) this.particles.spawnExplosionSparks(hx, hy, 8, bh, 2, 9, 1.6);
+          if (b.flak) {
+            this.particles.spawnShockwave(hx, hy, b.blastRadius, bh, 1.6, 0.26);
+            this.particles.spawnExplosionSparks(hx, hy, 4, bh, 2, 9, 1.4);
+          } else {
+            this.particles.spawnFlash?.(hx, hy, b.blastRadius * 0.4, bh, 0.16);
+            this.particles.spawnShockwave(hx, hy, b.blastRadius, bh, 3, 0.32);
+          }
           this.sound.playMissileImpact?.(0.75);
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
