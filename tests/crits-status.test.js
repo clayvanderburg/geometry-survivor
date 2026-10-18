@@ -70,7 +70,7 @@ test('crits multiply damage, print a gold "!" number with a burst, and flare on 
   assert.equal(g.crits.length, 1);
   const n = g.damageNumbers.pool[0];
   assert.equal(n.crit, true);
-  assert.equal(n.text, '30!');
+  assert.equal(n.text, '30', 'crits read by size and colour, with no "!"');
   assert.ok(n.size > 20, 'crits print bigger than a plain 30');
   assert.equal(CRIT_COLOR, '#ffd84a');
 

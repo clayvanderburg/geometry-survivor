@@ -231,7 +231,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'crits', icon: '✦', title: 'CRITICAL HITS',
     body: () => [
-      `Every weapon hit rolls a crit: base ${pct(TUNING.baseCritChance ?? 0.05)} chance for ${TUNING.baseCritDamage ?? 1.5}× damage. Crits flash a gold star, shove harder and show a big white-gold number with a "!".`,
+      `Every weapon hit rolls a crit: base ${pct(TUNING.baseCritChance ?? 0.05)} chance for ${TUNING.baseCritDamage ?? 1.5}× damage. Crits flash a gold star, shove harder and show a big white-gold number.`,
       'Deadeye Targeting Lattice raises the chance, Overkill Resonator the multiplier. Burn ticks never crit.'
     ]
   },
@@ -316,7 +316,7 @@ export const MECHANIC_ENTRIES = [
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
       'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, burn red-orange, everything else white.',
-      'Rapid hits on one enemy merge into one rising total. Crits are bigger, white-gold, with a "!". Toggle with N or in the pause menu.'
+      'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
   {
