@@ -208,3 +208,32 @@ Survival for the average bot is about where it was (median 2:42–5:03 by strate
 - **Sentry Turret: double rate, half damage, double size.** Fire rate `2.6 + 0.45·L` → `5.2 + 0.9·L` bolts/s per turret (LV 1 3.05 → 6.10, LV 8 6.20 → 12.40); damage per bolt halves (LV 1 1.31 → 0.66×, LV 8 4.63 → 2.32×), so potential DPS is unchanged. Siege Battery shells scale off the bolt, so they fire twice as often at half the burst damage (same DPS). The turret is drawn at 2× (`TURRET_SCALE`; lifetime ring 19 → 38 px, hex 11 → 22 px), and every distance that depends on its size doubles too: muzzle 17 → 34 px, rock clearance 14 → 28 px, turret spacing 34 → 68 px, sidesteps 38/76 → 76/152 px, view pad and deploy/expire rings.
 - **Escort Drones: 4× fire rate, ¼ damage per bolt.** Fire rate `1.6 + 0.3·L` → `6.4 + 1.2·L` bolts/s per drone (LV 1 1.9 → 7.6, LV 8 4.0 → 16.0); per-bolt damage comes from `DPS_TARGET` so it drops to a quarter and potential DPS is unchanged. Purely a feel change: a steadier, busier stream to watch. The drone shot sound is voice-limited (70 ms gap), so it doesn't get noisier.
 - `tests/weapon-balance.test.js` pins both retunes to the old curve (0.8× missile cooldown and damage; 2× turret rate, 0.5× damage) and to `DPS_TARGET`. `tests/deployables.test.js` checks turret size, placement and the live bolt rate. `tests/loadout.test.js` covers the passive's offer, gating, panel and Field Guide text.
+
+## Void Armory rebuild (v0.15.0)
+
+20 single-stat upgrades; rank n costs `round(baseCost × growth^n)`. Income baseline from the balance sim (no armory, average pilot): ~140 Void Cores per 12-minute run, ~12/min, ~700/hour.
+
+| upgrade | per rank | ranks | first cost | last cost | total |
+|---|---|---:|---:|---:|---:|
+| Plasma Overcharge | +1.5% damage | 40 | 9 | 747 | ~6.9k |
+| Chronos Capacitor | +1% Pew Pews fire rate | 30 | 12 | 415 | ~3.5k |
+| Deadeye Lattice | +0.4 pts crit chance | 25 | 15 | 430 | ~3.2k |
+| Fracture Rounds | +2% crit damage | 25 | 15 | 430 | ~3.2k |
+| Field Expander | +1% area | 25 | 18 | 516 | ~3.8k |
+| Aegis Shield Matrix | +4 max shield | 40 | 8 | 470 | ~4.7k |
+| Ablative Plating | -0.5% damage taken | 30 | 18 | 804 | ~6.4k |
+| Phase Buffer | +0.02 s post-hit invulnerability | 15 | 22 | 223 | ~1.3k |
+| Vector Thrusters | +0.8% move speed | 25 | 12 | 279 | ~2.2k |
+| Blink Coils | -1% dash cooldown | 25 | 15 | 348 | ~2.7k |
+| Deep-Core Extractor | +2% Void Core gain | 40 | 15 | 1247 | ~11.5k |
+| Geom Resonator | +1% XP | 30 | 12 | 415 | ~3.5k |
+| Gold Assayer | +4% gold per vein | 20 | 15 | 213 | ~1.5k |
+| Prospector Stake | +2 starting gold | 15 | 18 | 162 | ~1.0k |
+| Rotary Claw Drive | +3% mining speed | 25 | 9 | 169 | ~1.4k |
+| Quantum Fortune | +0.02 luck | 25 | 15 | 430 | ~3.2k |
+| Vacuum Array | +2% pickup radius | 25 | 9 | 169 | ~1.4k |
+| Probability Engine | -2% reroll cost | 15 | 22 | 198 | ~1.3k |
+| Extended Claws | +2% drill reach | 15 | 12 | 85 | ~0.6k |
+| Supernova Reserve | +1 starting bomb | 3 | 400 | 3600 | 5.2k |
+
+Total ~68k cores. Rough time to complete at ~700 cores/hour (rising to ~1,200/hour with Deep-Core Extractor maxed): 25% in ~8 h, 50% in ~25 h, 100% in ~70–95 h. Early ranks cost 8–22 cores, so a first run buys something.

@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.15.0',
+    date: '2026-10-18',
+    title: 'Void Armory Rebuilt',
+    notes: [
+      { type: 'new', text: 'The Void Armory now has 20 permanent upgrades across Offense, Defense, Mobility, Economy and Utility. Each one improves a single stat.' },
+      { type: 'balance', text: 'Upgrades are smaller per rank but go much further (up to 40 ranks), and every rank costs a bit more than the last. It is a long grind now.' },
+      { type: 'balance', text: "Everyone's armory ranks and Void Cores have been reset. Your callsign, high scores and Field Guide progress are kept." },
+      { type: 'new', text: 'New armory stats include crit chance and damage, area size, damage reduction, dash cooldown, gold gain, starting gold and cheaper rerolls.' },
+      { type: 'fix', text: "Cleared the developer's test scores from the global leaderboard." }
+    ]
+  },
+  {
     version: '0.14.0',
     date: '2026-10-18',
     title: 'Run Report',
