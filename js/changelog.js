@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-18',
     title: 'Tougher Still',
     notes: [
-      { type: 'balance', text: 'Enemies again: +20% health (was +10%), +8% speed, bigger and faster packs, harder hits, and late waves toughen up faster.' },
+      { type: 'balance', text: 'Enemies again: +20% health (was +10%), +8% speed, bigger and faster packs, harder hits, and the late waves toughen up and hit harder much faster.' },
       { type: 'balance', text: 'Your ship again: base shield 85, base damage 9.5, damage cards +42% per rank.' },
       { type: 'new', text: 'Fresh leaderboards: every board in every mode was wiped. Version tabs start at this version.' }
     ]

@@ -187,7 +187,7 @@ export const DEFAULT_TUNING = {
   waveHpStart: 2.5,
   waveHpStartLight: 1,
   waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
-  waveHpGrowth: 1.065, // 1.06 before v0.31
+  waveHpGrowth: 1.07, // 1.06 before v0.31 (late waves toughen faster)
   waveHpGrowthFrom: 18,
   waveHpGrowthRamp: 14,
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
@@ -205,7 +205,7 @@ export const DEFAULT_TUNING = {
   bossHpMult: 0.5,
   damageRampBase: 0.6, // 0.5 before v0.29, 0.55 before v0.31
   damageRampFrom: 10,
-  damageRampPerWave: 0.048, // 0.04 before v0.29, 0.044 before v0.31
+  damageRampPerWave: 0.05, // 0.04 before v0.29, 0.044 before v0.31
   damageRampSmooth: 10, // waves over which the ramp eases in to its full per-wave rate
   xpPerWave: 0,
 
