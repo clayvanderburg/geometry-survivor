@@ -40,7 +40,7 @@ test('audio engine no-ops without an AudioContext', async () => {
   assert.equal(engine.ctx, null);
   engine.loadSamples();
   assert.equal(engine.sampleLoadStarted, false);
-  assert.equal(engine.playSample('autocannon_shot'), false);
+  assert.equal(engine.playSample('turret_shot'), false);
   for (const method of playMethods) assert.doesNotThrow(() => engine[method](), method);
   engine.setMusicState({ intensity: 0.9, muffled: true, boss: 2 });
   engine.startMusic();
@@ -74,21 +74,25 @@ function engineWithSamples(names) {
 }
 
 test('rapid samples are voice-capped and throttled instead of stacking', () => {
-  const engine = engineWithSamples(['autocannon_shot', 'drone_shot', 'enemy_hit']);
-  for (let i = 0; i < 40; i++) engine.playLaser();
+  const engine = engineWithSamples(['turret_shot', 'enemy_hit']);
+  for (let i = 0; i < 40; i++) engine.playTurretShot();
   assert.equal(engine.ctx.counts.sources, 1, 'a burst inside the min interval plays once');
   assert.equal(engine.ctx.counts.oscillators, 0, 'a throttled sample never falls back to procedural');
 
   // Past the gap but with every voice still ringing: capped at maxVoices.
-  const voices = engine.weaponVoices['sample:autocannon_shot'];
-  for (let i = 0; i < 20; i++) { voices.last = -Infinity; engine.playLaser(); }
-  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.autocannon_shot.maxVoices);
+  const voices = engine.weaponVoices['sample:turret_shot'];
+  for (let i = 0; i < 20; i++) { voices.last = -Infinity; engine.playTurretShot(); }
+  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.turret_shot.maxVoices);
 
   // Once the audio clock passes their end, voices free up again.
   engine.ctx.currentTime += 5;
   voices.last = -Infinity;
-  engine.playLaser();
-  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.autocannon_shot.maxVoices + 1);
+  engine.playTurretShot();
+  assert.equal(engine.ctx.counts.sources, SFX_SAMPLES.turret_shot.maxVoices + 1);
+});
+
+test('the Autocannon and Escort Drone shots stay procedural (their samples were rolled back)', () => {
+  assert.ok(!('autocannon_shot' in SFX_SAMPLES) && !('drone_shot' in SFX_SAMPLES));
 });
 
 test('missing samples fall back to the procedural sounds', () => {
@@ -108,7 +112,7 @@ test('missing samples fall back to the procedural sounds', () => {
 });
 
 test('muted engine plays no samples', () => {
-  const engine = engineWithSamples(['autocannon_shot']);
+  const engine = engineWithSamples(['turret_shot']);
   engine.toggle();
   engine.playLaser();
   assert.equal(engine.ctx.counts.sources, 0);

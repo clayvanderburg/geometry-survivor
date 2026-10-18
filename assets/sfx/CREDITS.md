@@ -8,7 +8,6 @@ Per-sound playback level, pitch variation and voice limits live in `SFX_SAMPLES`
 
 | File | Prompt | Notes |
 | --- | --- | --- |
-| `autocannon_shot.mp3` | Short punchy retro arcade blaster shot, bright synth pew with a crisp click attack, very short | cut to 0.30 s |
 | `rocket_launch.mp3` | Small rocket launching, short bright whoosh with an ignition pop, retro sci-fi arcade | |
 | `missile_launch.mp3` | Quick homing missile launch, airy rising whoosh with a soft low thump, sci-fi arcade, short | |
 | `explosion_small.mp3` | Small punchy retro arcade explosion, crunchy noise burst with a short low thump | |
@@ -16,7 +15,6 @@ Per-sound playback level, pitch variation and voice limits live in `SFX_SAMPLES`
 | `missile_impact.mp3` | Tight missile impact, short crunchy blast with a sharp crack transient and quick decay | cut to 0.70 s |
 | `arc_zap.mp3` | Short electric arc zap, crackling high voltage tesla discharge, bright and snappy | first burst only |
 | `blade_hit.mp3` | Short metallic energy blade slice hit, bright ringing shing with a sharp attack | cut to 0.45 s |
-| `drone_shot.mp3` | Tiny high pitched synth laser blip, very short and soft, retro arcade | first blip of a longer take |
 | `turret_shot.mp3` | Mechanical sci-fi turret firing a single heavy laser bolt, punchy synth zap with a metallic clack | |
 | `mine_drop.mp3` | Small metal mine dropping onto a hard floor with a clank, then a quick rising electronic arming beep | |
 | `grenade_throw.mp3` | Quick short whoosh of a small glowing grenade being thrown, light electronic hum, sci-fi | |
