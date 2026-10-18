@@ -274,10 +274,10 @@ test('music drops out during a boss warning and adds the boss riff while one is 
   const fight = [...bar()];
   assert.equal(count(fight, 'playBossStab'), 6);
 
-  // Pausing (no explicit stage) keeps the stage but muffles the boss layers.
+  // Pausing (no explicit stage) keeps the stage and the boss riff; only the bus low-pass softens.
   engine.setMusicState({ intensity: 1, muffled: true });
   assert.equal(engine.bossStage, 2);
-  assert.equal(count(bar(), 'playBossStab'), 0);
+  assert.equal(count(bar(), 'playBossStab'), 6);
 });
 
 test('an off-screen boss arrow above the player sits just under the measured HUD, not on the ship', () => {

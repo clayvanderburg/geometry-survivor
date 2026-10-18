@@ -127,6 +127,9 @@ export const SONGS = Object.freeze([
 // Intensity layer gates (with hysteresis on the way down): below DRUMS_AT the score is pads + bass,
 // drums join at DRUMS_AT (a run reaches it as the first enemies arrive), lead + extra percussion at HIGH_AT.
 const DRUMS_AT = 0.36;
+// Menu softening: the music bus low-pass while a menu is open, and the glide time constant (s) in/out.
+const MUFFLE_CUTOFF = 2400;
+const MUFFLE_GLIDE = 0.4;
 const HIGH_AT = 0.6;
 
 // Live boss fight: a darker Phrygian turn (i - bII - i - bVII, then i - bVI - bII - V) in the song's key.
@@ -316,11 +319,15 @@ export class SoundEngine {
     }
     if (this.musicFilter && this.ctx) {
       // A boss warning sweeps the mix down into a tense drop; the arrival snaps it wide open.
-      const raw = muffled ? 750 : boss === 1 ? 1000 : boss === 2 ? 16000 : 5500 + this.intensity * 10500;
+      // Menus (pause, level-up) only soften the same song: a gentle low-pass that glides in and out
+      // (MUFFLE_CUTOFF over MUFFLE_GLIDE s), never a different arrangement that snaps in.
+      const raw = muffled ? MUFFLE_CUTOFF : boss === 1 ? 1000 : boss === 2 ? 16000 : 5500 + this.intensity * 10500;
       const target = Math.round(raw / 250) * 250;
       if (target !== this.lastFilterTarget) {
         this.lastFilterTarget = target;
-        this.musicFilter.frequency.setTargetAtTime(target, this.ctx.currentTime, boss === 1 && !muffled ? 0.35 : 0.1);
+        const glide = muffled !== this.lastMuffled ? MUFFLE_GLIDE : boss === 1 ? 0.35 : 0.1;
+        this.lastMuffled = muffled;
+        this.musicFilter.frequency.setTargetAtTime(target, this.ctx.currentTime, glide);
       }
     }
   }
@@ -644,7 +651,8 @@ export class SoundEngine {
 
   // One 16th step. calm: pads + bass; mid (drums layer): kick, gated snare, hats, rolling 16th bass;
   // high: lead arpeggio, 16th hats, claps, crash + tom fills; boss warning: kick + bass only;
-  // boss fight: the dark boss section with the square-stab riff; muffled: hats drop and the bus low-passes.
+  // boss fight: the dark boss section with the square-stab riff. A menu (muffled) keeps the arrangement
+  // as it is; setMusicState only glides the bus low-pass down.
   triggerStep(step, time, stepDur) {
     if (!this.enabled) return;
     const s = step % 16;
@@ -655,7 +663,7 @@ export class SoundEngine {
     const warning = this.bossStage === 1 && !muffled;
     const boss = this.bossStage === 2;
     const drums = boss || warning || this.layerDrums;
-    const high = !muffled && !warning && (boss || this.layerHigh);
+    const high = !warning && (boss || this.layerHigh);
 
     // Beat: kick (when drums play) and the sidechain pump; the visual beat pulse always follows the beat.
     if (s % 4 === 0) {
@@ -681,14 +689,12 @@ export class SoundEngine {
     }
 
     if (drums) {
-      if (s === 4 || s === 12) this.playSnare(time, muffled ? 0.22 : 0.46 + this.intensity * 0.12, high);
-      if (!muffled) {
-        if (high) {
-          const open = s % 4 === 2;
-          this.playHiHat(time, open ? 0.2 : 0.035, open ? 0.12 : s % 2 === 0 ? 0.07 : 0.045);
-        } else if (s % 2 === 0) {
-          this.playHiHat(time, s % 4 === 2 ? 0.09 : 0.035, s % 4 === 2 ? 0.1 : 0.05);
-        }
+      if (s === 4 || s === 12) this.playSnare(time, 0.46 + this.intensity * 0.12, high);
+      if (high) {
+        const open = s % 4 === 2;
+        this.playHiHat(time, open ? 0.2 : 0.035, open ? 0.12 : s % 2 === 0 ? 0.07 : 0.045);
+      } else if (s % 2 === 0) {
+        this.playHiHat(time, s % 4 === 2 ? 0.09 : 0.035, s % 4 === 2 ? 0.1 : 0.05);
       }
     }
 
@@ -703,7 +709,7 @@ export class SoundEngine {
     }
 
     // Boss fight riff: syncopated square stabs (3-3-2 feel) an octave over the bass root.
-    if (boss && !muffled && BOSS_RIFF_STEPS.includes(s)) {
+    if (boss && BOSS_RIFF_STEPS.includes(s)) {
       this.playBossStab(time, this.midiToFreq(root + 24 + (s === 14 ? 7 : 0)), stepDur * 1.6);
     }
   }
