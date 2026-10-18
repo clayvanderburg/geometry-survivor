@@ -144,6 +144,46 @@ The title and game-over boards share scores between all players through a **Netl
   - remove one cheater: `npx netlify blobs:get leaderboard board-v1@0.9.0 > board.json`, delete their entries from `entries`, then `npx netlify blobs:set leaderboard board-v1@0.9.0 --input board.json`; do the same for `board-v1` (their runs are on both)
   - inspect: `npx netlify blobs:list leaderboard`
 
+## Gameplay stats (RUN REPORT + anonymous balance data)
+
+Every run is measured in-game (`js/run-stats.js`, a few counters per hit) so balance decisions can rest on data: is a weapon underperforming the others at the same level, which enemies kill players, which cards nobody picks.
+
+**What is tracked** (per run, in the browser)
+
+- **Weapons:** effective damage (overkill excluded) and kills per weapon, with sub-sources kept attributable: `burn` (Thermite) and `helix` (Pulsar Helix) count for Pew Pews, `collapse` for the Vortex Singularity, `storm` (Storm Protocol chains) for Swarm Missiles, `siege` shell bursts for the Sentry Turret. Non-weapon damage has its own groups (`shrapnel`, `nova`, `tectonic`, `supernova`, `hazard` = a dying Vortex's burst, `ram` = enemies popping on the shield). The mapping comes from each weapon's `tagSources` in `js/loadout.js`, so a new weapon is attributed with no stats change; an unknown source id is its own group. Time owned, the weapon's level timeline and, **per weapon level**, seconds at that level, damage, damage in units of base damage, the damage and kills of *all* sources in the same window (share while at that level) and `DPS_TARGET(level)` from `js/weapon-scaling.js`.
+- **Enemies, per type** (`boss` and `lieutenant` are their own kinds): spawned, killed, spawn → death time, damage dealt to the ship, hits, and the kind that landed the fatal hit.
+- **Cards:** offered vs picked per card id (a locked card is counted once per hand), rerolls, locks, NEW WEAPON offers vs picks and which weapon was chosen.
+- **Run:** game version, duration, wave, level, score, kills, the time of every level-up, gold earned/spent, final loadout with levels.
+
+**RUN REPORT**: the game-over screen opens on a RUN REPORT tab (next to ARMORY): headline numbers, damage by weapon as bars with % share and DPS while equipped, and the top threats with the final blow marked. Rows are controller focus stops; the panel stacks at phone width.
+
+**Privacy and the upload** (`js/stats-client.js` → `POST /api/stats`, `netlify/functions/stats.mjs` + `netlify/lib/stats.mjs`)
+
+- The summary holds no callsign, no IP, no device or account data: only the numbers above. The server re-validates it (`js/stats-rules.js`: known fields only, ids `[a-z0-9_:.-]`, every number clamped, list sizes capped, body ≤ 16 KB, the version must be in `js/changelog.js`) and stores it as one blob per run.
+- Rate limit: one upload per client every 15 s, keyed on `ratelimit/<sha256(salt:ip)>` exactly like `/api/scores` (same optional `LEADERBOARD_SALT`). Raw IPs are never stored.
+- Not sent: runs flown with the dev tuner/sandbox (the leaderboard's *tainted* rule), runs under 20 s, and anything while the player has **SHARE ANONYMOUS STATS: OFF** (pause menu; stored as `vexolith_share_stats` in localStorage, default ON; blocked storage just means the default each session). The report's last line says what happened (SENT / OFF / SHORT RUN / DEV TUNER / OFFLINE). Offline, on `npm start` (no function) or on a timeout nothing blocks or throws.
+
+**Endpoints and storage** (Netlify Blobs store `stats`)
+
+- `POST /api/stats` → `201 { accepted }`; `400` malformed, `413` > 16 KB, `415` not JSON, `422` unknown version / run under 20 s, `429` cooldown.
+- `GET /api/stats/summary?version=<v>|all` → the aggregate (`js/stats-aggregate.js`), plus `versions` (versions with runs), `knownVersions`, `stored`/`scanned`/`truncated` and `computedAt`.
+- `runs/<version>/<yyyy-mm-dd>/<random id>.json`: one blob per run, never rewritten, so there are no write conflicts.
+- `summary/<version|all>.json`: the cached aggregate, recomputed on a GET once it is older than 10 minutes. A recompute follows `list()` pages (up to 20,000 keys) and reads only the newest 1,500 runs, 24 at a time, so it stays inside the function time limit.
+- `ratelimit/<hash>`: disposable cooldown stamps.
+
+**The summary** has, per weapon and level, mean DPS, damage share and kill share while at that level, `vsTarget` and the sample size (runs and seconds); per weapon a time-weighted `vsTarget`, `index` and `flag`; per enemy type kill time, shield damage share, damage per spawn and deaths caused (the top three are `deadly`); card and weapon pick rates; and the run shape: median / p90 run length and level, % of runs reaching **LV 50** and **30 minutes** (the targets), median time to LV 10/20/30/40/50, histograms, deaths by cause, gold per run.
+
+**Reading the dashboard**: `stats.html` (published next to the game, `noindex`, linked only from the hidden tuner drawer, Shift+Alt+T → 📊 STATS DASHBOARD). It has two dataset slots, **A** and **B**: each is a live version (`all` or one game version) or a local JSON file, either a summary (`npm run balance -- --no-bench --stats-out sim-stats.json`, or a saved `/api/stats/summary` answer) or a `--json` sim output / array of run summaries (aggregated in the page). Put players in A and the sim in B to compare them side by side.
+
+- *Weapon balance*: the design rule is that every weapon has the same **potential** DPS at the same level, `DPS_TARGET(lv) = 3 · lv^1.5` × base damage. `vs target` is the share of that potential a weapon actually realized. Real fights never land every attack, so all weapons realize only part of it; the rule says they should realize the **same** part. `index = vs target ÷ median(vs target of the curve weapons at that level)`: above **1.2** → **⬇ NEEDS NERF**, below **0.8** → **⬆ NEEDS BUFF**. Levels with fewer than 3 runs or 60 s of data are LOW SAMPLE and never flagged. Pew Pews has no own level (its stats level is 1 + its upgrade levels) and is not on the curve, so it is shown but not flagged.
+- Damage share by weapon (and the sub-sources), enemies (☠ DEADLY = top three by deaths caused), card pick rates, NEW WEAPON choices, run length / level histograms and level pace.
+- Caveats: index compares weapons at the same level, but a weapon picked late meets denser waves; tag cards and crits boost weapons unequally; the balance sim's bot does not play like people. Treat a flag as "look here", backed by enough runs.
+
+**Resetting the data** (there is no delete endpoint):
+
+- *Netlify UI*: project → **Blobs** → store `stats`; delete `runs/<version>/…` blobs to drop runs (e.g. all of a broken version), and `summary/…` to force a recompute on the next GET.
+- *Netlify CLI* (`npx netlify link` first): list with `npx netlify blobs:list stats --prefix runs/0.13.0/`, delete one blob with `npx netlify blobs:delete stats <key>` (loop over the listing to clear a version), and `npx netlify blobs:delete stats summary/all.json` to refresh the cached aggregate.
+
 ---
 
 ## File Map (For Multi-Agent Handoffs)
@@ -175,6 +215,13 @@ The title and game-over boards share scores between all players through a **Netl
 - `js/patch-notes.js` — PATCH NOTES screen (`#notes-modal`): HTML builders, NEW badge / last-seen version, expand/collapse.
 - `netlify/functions/scores.mjs` — The `/api/scores` Netlify Function (wires `@netlify/blobs` `getStore` into the handler).
 - `netlify/lib/leaderboard.mjs` — Leaderboard handler: per-version + all-time boards, version validation, plausibility envelope, profanity filter, IP rate limit, ETag compare-and-swap writes.
+- `js/run-stats.js` — In-run stats tracker (`RunStats`): damage/kills per weapon and sub-source, per-level DPS windows, enemies, cards, level timeline; `finish()` returns the run summary.
+- `js/run-report.js` — RUN REPORT view model and HTML (game-over tab).
+- `js/stats-rules.js` — Run-summary schema, validation/clamping (`sanitizeRunStats`), size fitting and the skip rules; shared with the stats function.
+- `js/stats-client.js` — `/api/stats` upload with timeout and the SHARE ANONYMOUS STATS setting.
+- `js/stats-aggregate.js` — `aggregateRuns`: the balance summary (DPS vs target, peer index, outlier flags, enemies, pick rates, run shape) used by the server, the sim and the dashboard.
+- `stats.html` + `js/stats-dashboard.js` — Developer balance dashboard (unlisted, `noindex`).
+- `netlify/functions/stats.mjs` / `netlify/lib/stats.mjs` — The `/api/stats` and `/api/stats/summary` function: validation, salted-IP rate limit, one blob per run, cached bounded aggregate.
 - `js/field-guide.js` — Field Guide data: hostile entries (text, tips, exact stats from the real config), mechanics, the weapons adapter over `UPGRADE_POOL`, and encounter detection (`detectEncounters`).
 - `js/field-guide-scenes.js` — Animated hostile previews (`GuidePreview`) built on the real enemy AI/draw code, plus locked silhouettes.
 - `js/field-guide-ui.js` — Field Guide screen: tab HTML builders, NEW badges, visible-only preview loop.
@@ -203,6 +250,6 @@ See [ENGINEERING_FIXES.md](ENGINEERING_FIXES.md) for scope and validation limits
 
 Runs also report **level by minute**, **XP collected per minute**, the **gold economy** (rocks and gold veins mined per minute, gold per minute and per level-up, rerolls per run: the bot buys one reroll in any hand it can afford at the base cost) and the **loadout at the end of the run**. The `prospector` strategy picks cards at random but drills toward nearby gold veins when calm (a regular gold miner); `mining` is a full mining build. Strategies take NEW WEAPON cards and equip their preferred weapons (`weapons` in `tools/balance/strategies.mjs`); `focus:<weapon>` takes NEW WEAPON until that weapon is offered. `--god` keeps the ship alive to measure XP and level pacing over a long run (pacing only; survival numbers are meaningless with it).
 
-Useful flags: `--runs N`, `--focus` (adds a `focus:<id>` strategy for every upgrade), `--strategies a,b`, `--skill expert|average|novice`, `--meta R` (Armory ranks), `--max-minutes M`, `--tune key=value` (A/B any `DEFAULT_TUNING` value), `--weapon key=expr` (A/B any `WEAPON_SCALING` entry, e.g. `"orbitalRadius=lv => 80 + lv * 8"`), `--seed S`, `--no-bench`, `--bench-only`, `--json out.json`. Example: `npm run balance -- --runs 10 --focus --no-bench`. Files: `tools/balance-sim.mjs` (CLI, worker pool, report), `tools/balance/harness.mjs` (headless game, bot, metrics, bench), `tools/balance/strategies.mjs` (build strategies). Findings and the first tuning pass are in [docs/BALANCE_REPORT.md](docs/BALANCE_REPORT.md).
+Useful flags: `--runs N`, `--focus` (adds a `focus:<id>` strategy for every upgrade), `--strategies a,b`, `--skill expert|average|novice`, `--meta R` (Armory ranks), `--max-minutes M`, `--tune key=value` (A/B any `DEFAULT_TUNING` value), `--weapon key=expr` (A/B any `WEAPON_SCALING` entry, e.g. `"orbitalRadius=lv => 80 + lv * 8"`), `--seed S`, `--no-bench`, `--bench-only`, `--json out.json`, `--stats-out stats.json` (the runs' gameplay stats in the `/api/stats/summary` format, for `stats.html`; the report also gets a *Weapon DPS vs DPS_TARGET* table). Example: `npm run balance -- --runs 10 --focus --no-bench`. Files: `tools/balance-sim.mjs` (CLI, worker pool, report), `tools/balance/harness.mjs` (headless game, bot, metrics, bench), `tools/balance/strategies.mjs` (build strategies). Findings and the first tuning pass are in [docs/BALANCE_REPORT.md](docs/BALANCE_REPORT.md).
 
 Extended checks (optional Playwright dependency): `node tools/soak-validate.cjs <playwright-module-path>` runs a seeded ten-minute accelerated simulation plus crowded 720p/4K draw checks. `node tools/audio-validate.cjs <playwright-module-path> audio-validation.json` renders actual Web Audio buffers and checks finite/non-silent output, mute, output headroom and clock recovery. Set `BROWSER_EXECUTABLE` to an installed Chromium browser if needed. Raw machine measurements and screenshots are ignored by Git. See [VALIDATION.md](VALIDATION.md).

@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.13.0',
+    date: '2026-10-18',
+    title: 'Run Report',
+    notes: [
+      { type: 'new', text: 'RUN REPORT on the game-over screen: how much of your damage each weapon dealt (with its DPS), which enemies hurt you most and what landed the final blow.' },
+      { type: 'new', text: 'Runs now send anonymous stats (weapons, enemies, cards; never your callsign) so we can spot weapons that need a buff or a nerf. Runs under 20 seconds are not sent.' },
+      { type: 'new', text: 'Turn it off any time: SHARE ANONYMOUS STATS: ON/OFF in the pause menu. Your choice is remembered.' }
+    ]
+  },
+  {
     version: '0.12.2',
     date: '2026-10-18',
     title: 'Scores Fixed',
