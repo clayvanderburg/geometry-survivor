@@ -88,6 +88,8 @@ function statsWeaponLevel(p, id) {
 const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 220;
+// Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
+const ROCKET_CONVERGE = 320;
 // Autocannon tracers are drawn at this share of the shared bolt thickness (the hitbox is unchanged).
 const AUTOCANNON_DRAW_WIDTH = 0.6;
 // Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
@@ -2664,17 +2666,23 @@ export class Game {
     const damage = weaponDamage(p, 'rocket', b) * mirv;
     const blastRadius = wingRocketBlastRadius(p, b);
     const count = W.wingRocketCount(b);
+    // The flank pods converge on the aim line: at the nearest enemy when it sits near the aim, otherwise
+    // ROCKET_CONVERGE px out, so a lone target dead ahead isn't straddled by both rockets.
+    const t = this.findNearestEnemy(p.x, p.y);
+    const tTurn = t ? Math.abs(((Math.atan2(t.y - p.y, t.x - p.x) - aim) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI) : Infinity;
+    const converge = tTurn < 0.35 ? Math.min(600, Math.max(90, Math.hypot(t.x - p.x, t.y - p.y))) : ROCKET_CONVERGE;
+    const cx = p.x + Math.cos(aim) * converge, cy = p.y + Math.sin(aim) * converge;
     for (let i = 0; i < count; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const tier = Math.floor(i / 2);
-      const a = aim + side * tier * 0.07;
-      const fx = Math.cos(a), fy = Math.sin(a);
       const hx = Math.cos(heading), hy = Math.sin(heading);
       // Pod mount in hull space: (0.25r forward, 1.12r out), the tips of drawCrabShip's carapace flanks.
       const fwd = p.radius * 0.25 - tier * 7;
       const out = p.radius * 1.12 + tier * 3;
       const wx = p.x + hx * fwd - hy * side * out;
       const wy = p.y + hy * fwd + hx * side * out;
+      const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
+      const fx = Math.cos(a), fy = Math.sin(a);
       this.bullets.push({
         x: wx,
         y: wy,
