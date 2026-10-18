@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.28.0',
+    date: '2026-10-18',
+    title: 'Game Modes',
+    notes: [
+      { type: 'new', text: 'HARDCORE mode: no shield regen, no shield cards, no repairs, no Aegis Shield Matrix. When the shield is gone, so are you.' },
+      { type: 'new', text: 'BLITZ mode: short waves, fast levels and a steep ramp, so a run plays out in under 10 minutes.' },
+      { type: 'new', text: 'Pick the mode next to LAUNCH (keys 1-3, or LB / RB). Each mode has its own global board and MY RUNS list.' }
+    ]
+  },
+  {
     version: '0.27.4',
     date: '2026-10-18',
     title: 'Mobile Sentries',
