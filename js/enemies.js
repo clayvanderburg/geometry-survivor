@@ -334,6 +334,7 @@ export class EnemyManager {
           emergeT: (c.isBoss || c.isLieutenant) && sp.onScreen ? (TUNING.eliteEmergeTime ?? 1.2) : 0,
           emergeMax: TUNING.eliteEmergeTime ?? 1.2,
           mods: c.mods || null,
+          tag: c.tag || null, // set on the spawn config by its spawner (Weapon Range dummies)
           pace: c.pace || 1, // movement multiplier on top of steering (lieutenants: lieutenantSpeedMult)
           detourRock: null,
           detourSide: 0,

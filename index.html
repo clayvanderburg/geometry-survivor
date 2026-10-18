@@ -133,6 +133,9 @@
 
     </div>
 
+    <!-- Weapon Range panel (js/weapon-range-ui.js): loadout, mods, dummies and the live DPS readout -->
+    <aside id="range-panel" class="range-panel hidden" aria-label="Weapon Range"></aside>
+
     <!-- Pause Modal Overlay -->
     <div id="pause-modal" class="modal-overlay hidden">
       <div class="modal-card upgrade-card pause-card">
@@ -172,6 +175,7 @@
 
         <div class="title-actions" style="display:flex; flex-direction:column; gap:12px; margin-top:18px;">
           <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME MISSION [P / ESC]</button>
+          <button id="btn-pause-exit-range" class="neon-btn range-exit-btn">◀ EXIT WEAPON RANGE</button>
           <button id="btn-pause-dmgnums" class="neon-btn pause-toggle-btn active" aria-pressed="true">🔢 DAMAGE NUMBERS: ON [N]</button>
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
           <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
@@ -325,6 +329,7 @@
 
         <div class="title-actions" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
           <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
+          <button id="btn-weapon-range" class="neon-btn range-open-btn" title="Test any weapon build on target dummies: nothing is recorded">🎯 WEAPON RANGE</button>
         </div>
       </div>
     </div>
