@@ -1298,8 +1298,7 @@ export class Game {
   openRelicChest(chest) {
     this.state = 'CHEST';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
-    this.sound.playSupernova();
-    this.sound.playLevelUp();
+    this.sound.playCacheFanfare?.(!!chest.guaranteedSuper);
 
     const luck = this.player.stats.luck || 1.0;
     const roll = Math.random();
@@ -1797,8 +1796,15 @@ export class Game {
   }
 
   // A deliberately visible spawn (sandbox buttons): inside the view, at least spawnMinDist from the ship.
-  spawnPointOnscreen(pad = 0) {
-    return pickOnscreenSpawn(this, { pad });
+  spawnPointOnscreen(pad = 0, minDist = null) {
+    return pickOnscreenSpawn(this, { pad, minDist });
+  }
+
+  // Elites (lieutenants and bosses) make an entrance: on screen, well clear of the ship, where the
+  // player can watch them materialize. eliteOnscreen 0 sends them through the off-screen ring instead.
+  eliteSpawnPoint(pad, warmup) {
+    if (!(TUNING.eliteOnscreen ?? 1)) return this.spawnPoint(pad, warmup);
+    return this.spawnPointOnscreen(pad, TUNING.eliteSpawnMinDist ?? 380);
   }
 
   // queueSpawn extras for a placed point: every placed spawn holds off materializing while the ship
@@ -1837,7 +1843,7 @@ export class Game {
   processPendingBossSpawns() {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
-      const bp = this.spawnPoint(40, TUNING.bossWarningTime ?? 3);
+      const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3);
       if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
       this.pendingBossSpawns.shift();
     }
@@ -1911,8 +1917,9 @@ export class Game {
 
   spawnLieutenant(type = null, onScreen = false) {
     const lt = rollLieutenant(this.wave, lieutenantTypes(this.wave), Math.random, type);
-    const pos = onScreen ? this.spawnPointOnscreen(40) : this.spawnPoint(40, LIEUTENANT_WARMUP);
-    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), this.placedSpawn(pos, { warmup: LIEUTENANT_WARMUP, lieutenant: lt }));
+    const warmup = (TUNING.eliteOnscreen ?? 1) ? (TUNING.eliteEntranceTime ?? 2.6) : LIEUTENANT_WARMUP;
+    const pos = onScreen ? this.spawnPointOnscreen(40) : this.eliteSpawnPoint(40, warmup);
+    return this.enemyManager.queueSpawn(lt.type, pos.x, pos.y, this.getWaveScale(), this.placedSpawn(pos, { warmup, lieutenant: lt }));
   }
 
   showLieutenantCard(kind, kicker, name, epithet, detail, link = '') {
@@ -2879,6 +2886,28 @@ export class Game {
       const sg = this.singularities[i];
       this.grid.applyWell(sg.x, sg.y, SINGULARITY_GRID_DEPTH, sg.pullRadius, sg.hue, 0.35);
       if (onScreen(sg.x, sg.y)) this.particles.spawnInfall(sg, sg.pullRadius * 0.9, sg.hue, 2);
+    }
+    this.updateEliteEntrances(onScreen);
+  }
+
+  // An elite materializing on screen: space folds in toward the point (a deepening grid funnel and
+  // energy streaming in), a rising charge sound when it starts, and the ground shaking as it lands.
+  updateEliteEntrances(onScreen) {
+    const spawns = this.enemyManager.spawnIndicators;
+    for (let i = 0; i < spawns.length; i++) {
+      const sp = spawns[i];
+      const c = sp.config;
+      if (!sp.onScreen || !(c.isBoss || c.isLieutenant)) continue;
+      const t = Math.max(0, Math.min(1, 1 - sp.timer / sp.maxTimer));
+      const hue = c.isBoss ? 48 : c.hue;
+      const reach = c.isBoss ? 420 : 260;
+      if (!sp.chargeCued) {
+        sp.chargeCued = true;
+        this.sound.playEliteCharge?.(sp.maxTimer, c.isBoss);
+      }
+      this.grid.applyWell(sp.x, sp.y, (c.isBoss ? 220 : 140) * (0.25 + 0.75 * t), reach, hue, 0.3 + t * 0.4);
+      if (onScreen(sp.x, sp.y) && Math.random() < 0.5 + t) this.particles.spawnInfall(sp, reach * (0.9 - t * 0.4), hue, 1 + Math.floor(t * 3));
+      if (t > 0.75) this.shake = Math.max(this.shake, (c.isBoss ? 6 : 3) * (t - 0.75) * 4 * (TUNING.screenShakeMult ?? 1));
     }
   }
 

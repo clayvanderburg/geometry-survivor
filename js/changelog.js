@@ -24,6 +24,25 @@ export const CHANGELOG = Object.freeze([
     ]
   },
   {
+    version: '0.16.2',
+    date: '2026-10-18',
+    title: 'Grand Entrances',
+    notes: [
+      { type: 'new', text: 'Lieutenants and bosses now arrive on screen, away from your ship: space folds in, a rift tears open and they push through with a rising rumble.' },
+      { type: 'new', text: 'Elites emerge slowly: they crawl out of the rift and only reach full speed after a moment, so you can size them up.' },
+      { type: 'balance', text: 'Ordinary enemies still spawn just off screen.' }
+    ]
+  },
+  {
+    version: '0.16.1',
+    date: '2026-10-18',
+    title: 'Cache Fanfare',
+    notes: [
+      { type: 'fix', text: 'Opening a supply cache plays a victory fanfare instead of a blast that sounded like taking damage.' },
+      { type: 'balance', text: 'Rotary Claw Overclock is much smaller: +12% mining speed per level (was +50%, plus reach and claw size). One lucky roll no longer turns asteroids into paper.' }
+    ]
+  },
+  {
     version: '0.16.0',
     date: '2026-10-18',
     title: 'Banish',

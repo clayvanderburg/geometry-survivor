@@ -24,7 +24,7 @@ globalThis.document = {
 };
 
 const { Game } = await import('../js/main.js');
-const { EnemyManager, damageRampAt } = await import('../js/enemies.js');
+const { EnemyManager, damageRampAt, emergeFactor } = await import('../js/enemies.js');
 const { EnemyBulletPool } = await import('../js/enemy-bullets.js');
 const { DamageNumbers } = await import('../js/damage-numbers.js');
 const {
@@ -366,7 +366,10 @@ test('one lieutenant per non-boss wave, after the delay, behind any pending boss
   game.updateLieutenantSchedule();
   game.updateLieutenantSchedule();
   assert.equal(lieutenantsQueued(), 1, 'exactly one per wave');
-  assert.equal(manager.spawnIndicators[0].maxTimer, LIEUTENANT_WARMUP);
+  // Elites make an entrance: on screen, well clear of the ship, over eliteEntranceTime.
+  const sp = manager.spawnIndicators[0];
+  assert.equal(sp.maxTimer, TUNING.eliteEntranceTime);
+  assert.ok(sp.maxTimer > LIEUTENANT_WARMUP, 'slower than the old off-screen materialize');
 
   game.wave = 3;
   game.updateLieutenantSchedule();
@@ -529,4 +532,22 @@ test('a new run clears orbs, lieutenant schedule and intel memory', () => {
   assert.equal(g.lieutenantWave, 0);
   assert.equal(g.ltCardTimer, 0);
   assert.equal(g.seenArchetypes.size, 0);
+});
+
+test('elites spawn on screen away from the ship, then emerge at a crawl that ramps to full speed', async () => {
+  resetTuning();
+  const { pickOnscreenSpawn } = await import('../js/spawn-placement.js');
+  const game = { player: { x: 2000, y: 2000 }, camX: 1360, camY: 1640, width: 1280, height: 720, zoom: 1, worldWidth: 4200, worldHeight: 4200,
+    asteroidManager: { getNearbyAsteroids: () => [] } };
+  for (let k = 0; k < 20; k++) {
+    const pos = pickOnscreenSpawn(game, { pad: 40, minDist: TUNING.eliteSpawnMinDist });
+    assert.ok(Math.hypot(pos.x - 2000, pos.y - 2000) >= TUNING.eliteSpawnMinDist + 40 - 1e-9);
+  }
+  const e = { emergeT: TUNING.eliteEmergeTime, emergeMax: TUNING.eliteEmergeTime };
+  assert.ok(Math.abs(emergeFactor(e) - 0.15) < 1e-9, 'arrives at a crawl');
+  e.emergeT = TUNING.eliteEmergeTime / 2;
+  assert.ok(emergeFactor(e) > 0.15 && emergeFactor(e) < 1);
+  e.emergeT = 0;
+  assert.equal(emergeFactor(e), 1);
+  assert.equal(emergeFactor({}), 1, 'ordinary enemies are never slowed');
 });

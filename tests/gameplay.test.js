@@ -133,6 +133,6 @@ test('relic caches apply multi-level upgrade rolls rather than discarding their 
     Math.random = () => 0;
     g.openRelicChest({ guaranteedSuper: false });
     assert.equal(g.player.upgradeLevels.mining_speed, 6);
-    assert.equal(g.player.stats.miningSpeed, 75 * 1.5 ** 6 * (g.player.weapons.tectonicBore ? 1.9 : 1));
+    assert.equal(g.player.stats.miningSpeed, 75 * 1.12 ** 6 * (g.player.weapons.tectonicBore ? 1.9 : 1));
   } finally { Math.random = original; }
 });

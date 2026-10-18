@@ -6,7 +6,7 @@ import { EnemyBulletPool } from './enemy-bullets.js';
 import {
   archetypeStats, updateArchetype, speedCap, traceArchetype, drawArchetypeOverlay, drawConduitLinks, isArchetype, SHIELDER
 } from './archetypes.js';
-import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph } from './lieutenants.js';
+import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph, drawEliteRift } from './lieutenants.js';
 import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -61,6 +61,13 @@ export function contactDamageAt(e, wave) {
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
 export const KNOCKBACK_DECAY = 0.8;
+
+// Speed share of an emerging elite: 15% at arrival, easing up to full speed over its emergence.
+export function emergeFactor(e) {
+  if (!(e.emergeT > 0) || !(e.emergeMax > 0)) return 1;
+  const k = 1 - e.emergeT / e.emergeMax;
+  return 0.15 + 0.85 * k * k;
+}
 
 export class EnemyManager {
   constructor({ maxEnemies = 200 } = {}) {
@@ -323,6 +330,9 @@ export class EnemyManager {
           blinkX: 0,
           blinkY: 0,
           isLieutenant: !!c.isLieutenant,
+          // Elites seen materializing emerge slowly: a crawl that ramps to full speed (eliteEmergeTime).
+          emergeT: (c.isBoss || c.isLieutenant) && sp.onScreen ? (TUNING.eliteEmergeTime ?? 1.2) : 0,
+          emergeMax: TUNING.eliteEmergeTime ?? 1.2,
           mods: c.mods || null,
           pace: c.pace || 1, // movement multiplier on top of steering (lieutenants: lieutenantSpeedMult)
           detourRock: null,
@@ -501,7 +511,11 @@ export class EnemyManager {
 
       // Normalize max speed (a Bruiser charge raises the cap; Conduit links add haste;
       // CHILL lowers it through speedScale, see status-effects.js)
-      const cap = speedCap(e) * (e.speedScale ?? 1);
+      let cap = speedCap(e) * (e.speedScale ?? 1);
+      if (e.emergeT > 0) {
+        e.emergeT = Math.max(0, e.emergeT - dt);
+        cap *= emergeFactor(e);
+      }
       const curSpd = Math.hypot(e.vx, e.vy);
       if (curSpd > cap) {
         e.vx = (e.vx / curSpd) * cap;
@@ -518,6 +532,7 @@ export class EnemyManager {
         if (v * pace > limit) pace = Math.max(1, limit / v);
       }
       pace = e.burstSpeed > 0 ? 1 : pace * catchupPace(e, distPlayer, this.view);
+      if (e.emergeT > 0) pace *= emergeFactor(e);
       const gvx = e.gvx || 0;
       const gvy = e.gvy || 0;
       e.x += e.vx * pace + gvx;
@@ -713,6 +728,15 @@ export class EnemyManager {
         drawLieutenantBar(ctx, e, r);
       }
       if (e.isBoss) this.drawBossAura(ctx, e, r);
+      if (e.emergeT > 0) {
+        // Still emerging from its rift: a white-hot halo that cools and widens as it gains speed.
+        const k = e.emergeT / (e.emergeMax || 1);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`;
+        ctx.lineWidth = 2 + 4 * k;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r * (1.25 + (1 - k) * 0.9), 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       // Boss HP bar floating above polyhedron
       if (e.isBoss) {
@@ -829,6 +853,7 @@ export class EnemyManager {
   // a gold core swells, flashing faster as arrival nears. Driven by the sim timer, not wall time.
   drawBossTelegraph(ctx, sp) {
     const t = Math.max(0, Math.min(1, 1 - sp.timer / sp.maxTimer));
+    if (sp.onScreen) drawEliteRift(ctx, sp, t, 48);
     const flash = 0.5 + 0.5 * Math.cos(sp.timer * Math.PI * (5 + t * 7));
     const ringR = BOSS_TELEGRAPH_RADIUS * (1 - t * 0.62);
     const spin = sp.timer * 1.6;

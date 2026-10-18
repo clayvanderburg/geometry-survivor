@@ -74,11 +74,9 @@ export const UPGRADE_POOL = [
     category: 'DRILL CLAWS',
     maxLevel: 6,
     headline: 'miningSpeed',
-    summary: 'Spins the twin drill-claws faster, with longer reach and bigger claws.',
+    summary: 'Spins the twin drill-claws faster. Only mining speed.',
     apply(player) {
-      player.stats.miningSpeed *= 1.5;
-      player.stats.miningRange *= 1.2;
-      player.stats.drillScale = (player.stats.drillScale || 1.0) * 1.15;
+      player.stats.miningSpeed *= 1.12;
     }
   },
   {
