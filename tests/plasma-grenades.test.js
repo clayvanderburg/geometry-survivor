@@ -9,7 +9,7 @@ const { STAT_CARDS, POWER_STATS, TRANSFORMS, makeBuild, levelBuild, BT_TRANSFORM
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon, loadoutAllows, eligibleUpgrades } = await import('../js/upgrades.js');
 const { WEAPON_BY_ID, weaponTags } = await import('../js/loadout.js');
 const { describeUpgrade, describeWeaponPick, describeBreakthrough } = await import('../js/upgrade-cards.js');
-const { grenadeElement, GRENADE_ELEMENTS } = await import('../js/grenades.js');
+const { grenadeElement, GRENADE_ELEMENTS, Grenades } = await import('../js/grenades.js');
 const { DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbers.js');
 const { buildSourceGroups } = await import('../js/run-stats.js');
 const { WEAPONS } = await import('../js/loadout.js');
@@ -208,4 +208,36 @@ test('SYNERGY: EMP Grenades needs grenades + Tesla Arc, names both, and arcs lig
   assert.ok(fight.bySource.emp > 0, 'EMP arcs deal damage');
   discardWeapon(fight.p, 'lightning');
   assert.equal(fight.p.upgradeLevels.evo_emp, undefined, 'EMP leaves with Tesla Arc');
+});
+
+test('a throw spreads its grenades around the ship instead of piling into one direction', () => {
+  // A dense pack to the east (nearest) and a few stragglers west, north and south: a 4-grenade throw
+  // should hit each side once, not drop four grenades on the eastern pack.
+  const gr = new Grenades();
+  const p = { x: 0, y: 0 };
+  const enemies = [];
+  for (let k = 0; k < 8; k++) enemies.push({ x: 100 + k * 6, y: (k % 3) * 8, hp: 1, maxHp: 1 });
+  enemies.push({ x: -200, y: 0, hp: 1, maxHp: 1 }, { x: 0, y: -210, hp: 1, maxHp: 1 }, { x: 0, y: 220, hp: 1, maxHp: 1 });
+  const n = gr.spreadTargets({ enemyManager: { enemies } }, p, 400, 4);
+  assert.equal(n, 4);
+  const sides = new Set(gr.picks.slice(0, n).map((e) => Math.round(Math.atan2(e.y, e.x) / (Math.PI / 2))));
+  assert.equal(sides.size, 4, 'one grenade per side');
+  assert.equal(gr.picks[0], enemies[0], 'the nearest enemy is still the first pick');
+});
+
+test('Cluster Grenade bomblets scatter past the main blast', () => {
+  const { g } = grenadeFight({ bt: { 6: 'transform' }, ticks: 60 * 4 });
+  let far = 0, total = 0;
+  const scatter = g.weaponFx.scatter.bind(g.weaponFx);
+  g.weaponFx.scatter = (x, y, count, spread, radius, ...rest) => {
+    const before = g.weaponFx.events.length;
+    scatter(x, y, count, spread, radius, ...rest);
+    for (const e of g.weaponFx.events.slice(before)) {
+      total++;
+      if (Math.hypot(e.x - x, e.y - y) > W.grenadeBlastRadius(levelBuild('grenades', 1)) * 0.95) far++;
+    }
+  };
+  for (let i = 0; i < 60 * 6; i++) g.update(1 / 60);
+  assert.ok(total > 0, 'bomblets scattered');
+  assert.ok(far / total > 0.9, `most bomblets land outside the blast (${far}/${total})`);
 });

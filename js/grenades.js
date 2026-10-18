@@ -39,7 +39,7 @@ export function grenadeElement(p) {
 }
 
 const POOL = 64;          // >= grenades alive at once: up to 7 per throw, a throw every ~0.5 s, ~1.3-1.6 s each
-const MAX_TARGETS = 8;    // >= W.grenadeCount at max rank (2 + 5)
+const MAX_TARGETS = 24;   // nearest candidates a throw spreads its grenades over (>= W.grenadeCount at max rank)
 const KNOCK = 1.7;
 const ARC_SPLIT = 0.8;    // share of the flight spent on the main arc; the rest is one small bounce
 const ARC_REACH = 0.9;    // share of the throw distance covered by the main arc
@@ -53,6 +53,8 @@ export class Grenades {
     }));
     this.targets = new Array(MAX_TARGETS).fill(null);
     this.targetD = new Float64Array(MAX_TARGETS);
+    this.picks = new Array(MAX_TARGETS).fill(null);
+    this.pickA = new Float64Array(MAX_TARGETS);
     this.clear();
   }
 
@@ -113,6 +115,39 @@ export class Grenades {
     }
   }
 
+  // Up to `max` targets for one throw, into this.picks: the nearest enemy first, then each next pick is
+  // the candidate (of the nearest MAX_TARGETS) furthest in angle from those already picked, nearer ones
+  // winning ties, so a throw fans out around the ship instead of piling into one direction.
+  spreadTargets(game, p, range, max) {
+    const found = this.nearestTargets(game, p.x, p.y, range, MAX_TARGETS);
+    const picks = this.picks;
+    const pickA = this.pickA;
+    let n = 0;
+    for (let k = 0; k < max && k < found; k++) {
+      let best = -1;
+      let bestScore = -Infinity;
+      for (let i = 0; i < found; i++) {
+        const e = this.targets[i];
+        if (!e) continue;
+        const a = Math.atan2(e.y - p.y, e.x - p.x);
+        let sep = Math.PI;
+        for (let j = 0; j < n; j++) {
+          const d = Math.abs(((a - pickA[j]) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+          if (d < sep) sep = d;
+        }
+        const score = sep - Math.sqrt(this.targetD[i]) / Math.max(1, range) * 0.8;
+        if (score > bestScore) { bestScore = score; best = i; }
+      }
+      if (best < 0) break;
+      const e = this.targets[best];
+      picks[n] = e;
+      pickA[n++] = Math.atan2(e.y - p.y, e.x - p.x);
+      this.targets[best] = null;
+    }
+    for (let i = 0; i < found; i++) this.targets[i] = null;
+    return n;
+  }
+
   // Up to `max` nearest valid enemies within `range` of (x, y), nearest first, into this.targets.
   nearestTargets(game, x, y, range, max) {
     const enemies = game.enemyManager.enemies;
@@ -142,7 +177,7 @@ export class Grenades {
     const p = game.player;
     const n = W.grenadeCount(b);
     const range = W.grenadeRange(b);
-    const found = this.nearestTargets(game, p.x, p.y, range, Math.min(n, MAX_TARGETS));
+    const found = this.spreadTargets(game, p, range, Math.min(n, MAX_TARGETS));
     const radius = grenadeBlastRadius(p, b);
     const damage = weaponDamage(p, 'grenade', b);
     const el = grenadeElement(p);
@@ -151,19 +186,19 @@ export class Grenades {
     for (let k = 0; k < n && this.count < POOL; k++) {
       let tx, ty;
       if (found > 0) {
-        const e = this.targets[k % found];
+        const e = this.picks[k % found];
         tx = e.x + (e.vx || 0) * lead;
         ty = e.y + (e.vy || 0) * lead;
         if (k >= found) {
-          // More grenades than targets: spread the extras around the pack.
-          const a = Math.random() * Math.PI * 2;
-          const r = radius * (0.35 + 0.4 * Math.random());
+          // More grenades than targets: the extras land around the pack, outside each other's blasts.
+          const a = (k / n) * Math.PI * 2 + Math.random() * 0.6;
+          const r = radius * (1.1 + 0.5 * Math.random());
           tx += Math.cos(a) * r;
           ty += Math.sin(a) * r;
         }
       } else {
-        // Nothing in range: a fan along the aim.
-        const a = p.angle + (k - (n - 1) / 2) * 0.32;
+        // Nothing in range: an even ring around the ship, starting along the aim.
+        const a = p.angle + (k / n) * Math.PI * 2;
         tx = p.x + Math.cos(a) * range * 0.6;
         ty = p.y + Math.sin(a) * range * 0.6;
       }
@@ -198,7 +233,7 @@ export class Grenades {
       g.pullRadius = radius * W.gravityPullRadiusMult;
       g.spin = Math.random() * Math.PI * 2;
     }
-    for (let k = 0; k < MAX_TARGETS; k++) this.targets[k] = null;
+    for (let k = 0; k < MAX_TARGETS; k++) this.targets[k] = this.picks[k] = null;
     this.throws++;
     const fx = game.particles;
     fx.spawnFlash?.(p.x, p.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
@@ -216,9 +251,9 @@ export class Grenades {
     const fx = game.particles;
     fx.spawnShockwave(g.x, g.y, 20, g.hue, 1.6, 0.18);
     fx.spawnExplosionSparks(g.x, g.y, 3, g.hue, 1, 4, 1.4);
-    // Cluster Grenades: the grenade splits as it lands; bomblets scatter and pop a moment later.
+    // Cluster Grenades: the grenade splits as it lands; bomblets scatter past the blast and pop a moment later.
     if (g.cluster) {
-      game.weaponFx?.scatter(g.x, g.y, W.grenadeClusterBomblets, g.radius * 0.95, Math.max(30, g.radius * W.grenadeClusterRadiusFrac),
+      game.weaponFx?.scatter(g.x, g.y, W.grenadeClusterBomblets, g.radius * W.grenadeClusterSpread, Math.max(30, g.radius * W.grenadeClusterRadiusFrac),
         g.damage * W.grenadeClusterShare, W.grenadeClusterDelay, g.hue, 'grenade');
     }
     if (g.gravity) {

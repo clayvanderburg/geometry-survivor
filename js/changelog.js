@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.20.1',
+    date: '2026-10-18',
+    title: 'Spread Out',
+    notes: [
+      { type: 'balance', text: 'Cluster Grenades: bomblets now scatter wide past the main blast instead of landing inside it.' },
+      { type: 'balance', text: 'Plasma Grenades spread across different directions instead of piling onto one pack.' },
+      { type: 'balance', text: 'Twin Singularities launch in opposite directions so their pulls no longer fight each other.' }
+    ]
+  },
+  {
     version: '0.20.0',
     date: '2026-10-18',
     title: 'Four Cards',

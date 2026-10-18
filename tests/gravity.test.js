@@ -342,3 +342,15 @@ test('infall streams spiral toward their well and vanish when it dies', () => {
   particles.update(1 / 60, 4200, 4200);
   assert.equal(particles.infall.length, 0);
 });
+
+test('Twin Singularities launch in opposite directions so their pulls never overlap', () => {
+  const { game, manager } = arena();
+  game.player.weapons.singularity = 6;
+  addEnemy(manager, 'pinwheel', game.player.x + 300, game.player.y + 40);
+  game.fireSingularity({ ...weaponBuild(game.player, 'singularity', 6), t4: true });
+  assert.equal(game.singularities.length, 2);
+  const [a, b] = game.singularities;
+  const dot = (a.vx * b.vx + a.vy * b.vy) / (Math.hypot(a.vx, a.vy) * Math.hypot(b.vx, b.vy));
+  assert.ok(dot < -0.99, `launched back to back (cos ${dot.toFixed(2)})`);
+  assert.ok(a.vx > 0, 'the first still heads for the nearest enemy');
+});

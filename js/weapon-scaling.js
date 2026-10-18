@@ -292,7 +292,8 @@ export const WEAPON_SCALING = {
   grenadeClusterBomblets: 5,
   grenadeClusterShare: 0.1,
   grenadeClusterDelay: 0.45,
-  grenadeClusterRadiusFrac: 0.4,
+  grenadeClusterRadiusFrac: 0.5,
+  grenadeClusterSpread: 2.2, // bomblets land 1-2.2 blast radii out (scatter keeps 45-100% of the spread)
   cloudShare: 0.3,
   cloudLife: 2.5,
   cloudTick: 0.25,

@@ -2767,12 +2767,12 @@ export class Game {
     if (typeof b === 'number') b = weaponBuild(p, 'singularity', b);
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    // Twin Singularities: two cores fanned apart, each pulling a little weaker.
+    // Twin Singularities: two cores launched in opposite directions so their pulls never fight, each a little weaker.
     const count = W.singularityCount(b);
     const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
     const life = W.singularityLife(b);
     for (let k = 0; k < count; k++) {
-      const a = angle + (count > 1 ? (k === 0 ? -0.35 : 0.35) : 0);
+      const a = angle + k * Math.PI;
       this.singularities.push({
         x: p.x,
         y: p.y,
