@@ -40,7 +40,7 @@ export class WeaponEffects {
   }
 
   // A blast landing after `delay` s at (x, y): { x, y, delay, radius, damage, hue, source, style,
-  // knock?, falloff?, cluster?: { count, share, radiusFrac, delay } } (cluster = bomblets on landing).
+  // knock?, falloff?, cluster?: { count, share, radiusFrac, spread, delay } } (cluster = bomblets on landing).
   schedule(e) {
     if (this.events.length >= MAX_EVENTS) return false;
     this.events.push({ knock: 1.2, falloff: TUNING.splashEdgeFalloff ?? 0.4, ...e, t: e.delay, maxT: Math.max(1e-6, e.delay) });
@@ -54,6 +54,32 @@ export class WeaponEffects {
       const d = spread * (0.45 + Math.random() * 0.55);
       this.schedule({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, fromX: x, fromY: y, delay: delay * (0.85 + Math.random() * 0.3), radius, damage, hue, source, style: 'pop', knock: 0.8 });
     }
+  }
+
+  // Bomblets that hop onto enemies around a blast at (x, y): one each on the nearest enemies between
+  // `minDist` and `spread` away (nearest first, never two under one pop); the rest scatter `spread` out.
+  hop(game, x, y, count, minDist, spread, radius, damage, delay, hue, source) {
+    const enemies = game.enemyManager.enemies;
+    const spots = [];
+    for (let k = 0; k < count; k++) {
+      let best = null;
+      let bestSq = spread * spread;
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (e.dead || e.type === 'blackhole' || e.invulnerable) continue;
+        const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+        if (dSq >= bestSq || dSq < minDist * minDist) continue;
+        if (spots.some((q) => (e.x - q.x) ** 2 + (e.y - q.y) ** 2 < radius * radius)) continue; // already under a bomblet
+        best = e;
+        bestSq = dSq;
+      }
+      if (!best) break;
+      spots.push({ x: best.x, y: best.y });
+    }
+    for (let k = 0; k < spots.length; k++) {
+      this.schedule({ x: spots[k].x, y: spots[k].y, fromX: x, fromY: y, delay: delay * (0.85 + Math.random() * 0.3), radius, damage, hue, source, style: 'pop', knock: 0.8 });
+    }
+    if (spots.length < count) this.scatter(x, y, count - spots.length, spread, radius, damage, delay, hue, source);
   }
 
   // A burning pool: every `tick` s for `life` s it hits everything inside for `damage`. `look` draws it
@@ -186,7 +212,7 @@ export class WeaponEffects {
     e.after?.(game, e);
     if (e.cluster) {
       const c = e.cluster;
-      this.scatter(e.x, e.y, c.count, r * 0.9, Math.max(36, r * c.radiusFrac), e.damage * c.share, c.delay, c.hue ?? e.hue, e.source);
+      this.hop(game, e.x, e.y, c.count, r * 0.75, r * c.spread, Math.max(36, r * c.radiusFrac), e.damage * c.share, c.delay, c.hue ?? e.hue, e.source);
     }
   }
 

@@ -2516,7 +2516,9 @@ export class Game {
     return best;
   }
 
-  // MIRV Rockets: split into mirvParts mini-rockets fanned around the heading.
+  // MIRV Rockets: split into mirvParts mini-rockets fanned around the heading. Each one homes on its own
+  // target among the nearest enemies ahead (left to right, sharing when there are fewer); with nobody
+  // ahead they fly straight on.
   splitMirv(b) {
     const parts = b.mirvParts;
     const speed = Math.hypot(b.vx, b.vy);
@@ -2525,14 +2527,43 @@ export class Game {
     b.blastDamage = (b.blastDamage || 0) / parts;
     b.mirvParts = 1;
     this.particles.spawnFlash?.(b.x, b.y, 12, b.hue, 0.12);
+    const targets = this.mirvTargets(b, parts);
     for (let k = 0; k < parts; k++) {
       const a = heading + (k - (parts - 1) / 2) * 0.22;
       const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies) };
       part.vx = Math.cos(a) * speed;
       part.vy = Math.sin(a) * speed;
       part.radius = 3.4;
+      if (targets.length) {
+        part.target = targets[Math.floor((k * targets.length) / parts)];
+        part.homing = W.mirvHoming;
+      }
       if (k > 0) this.bullets.push(part);
     }
+  }
+
+  // Up to `count` nearest enemies within W.mirvRange ahead of rocket `b`, ordered left to right.
+  mirvTargets(b, count) {
+    const enemies = this.enemyManager.enemies;
+    const out = [];
+    for (let k = 0; k < count; k++) {
+      let best = null;
+      let bestSq = W.mirvRange * W.mirvRange;
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (e.dead || e.type === 'blackhole' || b.hitEnemies?.has(e) || out.includes(e)) continue;
+        const dx = e.x - b.x, dy = e.y - b.y;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < bestSq && dx * b.vx + dy * b.vy > 0) {
+          bestSq = dSq;
+          best = e;
+        }
+      }
+      if (!best) break;
+      out.push(best);
+    }
+    const side = (e) => (e.x - b.x) * b.vy - (e.y - b.y) * b.vx; // > 0: left of the heading
+    return out.sort((p, q) => side(q) - side(p));
   }
 
   // Homing bolts (Escort Drones' Homing Bolts, micro-missiles) curve onto their target.
@@ -2677,7 +2708,7 @@ export class Game {
     const damage = weaponDamage(p, 'missile', b);
     const blastRadius = missileBlastRadius(p, b);
     const hue = missileHue(p);
-    const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, delay: W.clusterDelay } : null;
+    const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, spread: W.clusterSpread, delay: W.clusterDelay } : null;
     // Tactical Nuke: every nukeEvery-th salvo is one huge missile carrying nukeUnits salvos of damage.
     this.missileSalvos = (this.missileSalvos || 0) + 1;
     const nuke = b.t12 && this.missileSalvos % W.nukeEvery === 0;
@@ -2785,16 +2816,17 @@ export class Game {
       hits += end.hits;
       if (bb.t12 && end.last) {
         // Thunderstrike: the chain's last target is struck from above.
-        this.weaponFx.schedule({ x: end.last.x, y: end.last.y, delay: 0.12, radius: W.strikeRadius * (p.stats.areaMult ?? 1), damage: damage * W.lightningJumps(bb) * W.strikeShare, hue: ARC_HUE, source: 'lightning', style: 'thunder', knock: KNOCKBACK.lightning });
+        this.weaponFx.schedule({ x: end.last.x, y: end.last.y, delay: 0.12, radius: W.strikeRadius * (p.stats.areaMult ?? 1), damage: damage * W.lightningJumps(bb) * W.strikeShare, hue: ARC_HUE, source: 'lightning', style: 'thunder', knock: KNOCKBACK.lightning, falloff: W.strikeFalloff });
       }
     }
     if (bb.t8 && hits > 0) {
-      // Ball Lightning: a slow orb drifts toward the pack and zaps whatever is nearest.
+      // Ball Lightning: the orb drops on the nearest enemy, drifts slowly on past it and zaps whatever is
+      // nearest. It carries orbShare of the jumps that landed, so a lone target cannot soak every zap of a full chain.
       const t = this.findNearestEnemy(originX, originY);
       const a = t ? Math.atan2(t.y - originY, t.x - originX) : Math.random() * Math.PI * 2;
       const zaps = W.orbZaps;
-      this.weaponFx.addOrb({ x: originX, y: originY, vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 2.2, life: W.orbLife, zaps, range: W.orbRange,
-        damage: damage * W.lightningChains(bb) * W.lightningJumps(bb) * W.orbShare / zaps, hue: ARC_HUE });
+      this.weaponFx.addOrb({ x: t ? t.x : originX, y: t ? t.y : originY, vx: Math.cos(a) * W.orbDrift, vy: Math.sin(a) * W.orbDrift, life: W.orbLife, zaps, range: W.orbRange,
+        damage: damage * hits * W.orbShare / zaps, hue: ARC_HUE });
     }
     if (hits > 0) this.sound.playArcZap?.(hits);
   }
@@ -4217,7 +4249,7 @@ export class Game {
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, source, KNOCKBACK.missile);
         if (m.cluster) {
           const c = m.cluster;
-          this.weaponFx.scatter(m.x, m.y, c.count, blast * 0.9, Math.max(36, blast * c.radiusFrac), m.damage * c.share, c.delay, 40, source);
+          this.weaponFx.hop(this, m.x, m.y, c.count, blast * 0.75, blast * c.spread, Math.max(36, blast * c.radiusFrac), m.damage * c.share, c.delay, 40, source);
         }
 
         if (p.weapons.stormProtocol && source === 'missile') {

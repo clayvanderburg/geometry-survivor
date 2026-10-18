@@ -122,21 +122,21 @@ export const TRANSFORMS = {
   rockets: {
     6: tf('tandem', 'Tandem Warheads', 'Rocket Pod rockets blast twice: a second, delayed detonation rocks the same spot.'),
     12: tf('napalm', 'Napalm Trail', 'Rocket Pod rockets streak fire and leave a burning napalm pool where they burst.'),
-    18: tf('mirv', 'MIRV Rockets', 'Each Rocket Pod rocket splits into three mini-rockets mid-flight.')
+    18: tf('mirv', 'MIRV Rockets', 'Each Rocket Pod rocket splits into three mini-rockets mid-flight, each homing on its own target ahead.')
   },
   missiles: {
-    6: tf('cluster', 'Cluster Bomblets', 'Each Swarm Missile scatters four bomblets that pop a moment after its blast.'),
+    6: tf('cluster', 'Cluster Bomblets', 'Each Swarm Missile throws four bomblets that hop onto nearby enemies past its blast and pop a moment later.'),
     12: tf('rain', 'Orbital Rain', 'Swarm Missiles launch out of sight and crash down on marked targets from above.'),
     18: tf('nuke', 'Tactical Nuke', 'Every fourth Swarm Missile salvo is one huge nuke with a giant blast.')
   },
   lightning: {
     6: tf('fork', 'Forked Chains', 'Tesla Arc forks: two chains leap out at once, each a little weaker.'),
-    12: tf('orb', 'Ball Lightning', 'Each Tesla Arc discharge also drops a crackling orb that zaps nearby enemies.'),
-    18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above that blasts the area.')
+    12: tf('orb', 'Ball Lightning', 'Each Tesla Arc discharge also drops a crackling orb on the nearest enemy that zaps whatever is close.'),
+    18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above that blasts its last target and anything right beside it.')
   },
   singularity: {
     6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two singularities at once: the second goes after enemies on your far side.'),
-    12: tf('aftershock', 'Aftershock Collapse', 'Each Vortex Singularity collapses twice: a tighter second implosion follows.'),
+    12: tf('aftershock', 'Aftershock Collapse', 'Vortex Singularity pulls from further out and collapses twice: a tighter second implosion follows.'),
     18: tf('cascade', 'Hawking Cascade', 'Collapsing Vortex Singularities spit out three mini-singularities that implode in turn.')
   },
   orbitals: {

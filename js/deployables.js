@@ -229,7 +229,7 @@ export class Deployables {
         if (t.mortarT <= 0) {
           t.mortarT += W.mortarEvery;
           game.weaponFx?.schedule({ x: tgt.x, y: tgt.y, fromX: t.x, fromY: t.y, delay: W.mortarDelay, radius: W.mortarRadius * (p.stats.areaMult ?? 1),
-            damage: weaponDamage(p, 'turret', lv) * W.mortarDamageMult(lv) / W.turretDamageMult(lv), hue: DEPLOYABLE_HUES.turret, source: 'turret', style: 'mortar', knock: MINE_KNOCK });
+            damage: weaponDamage(p, 'turret', lv) * W.mortarDamageMult(lv) / W.turretDamageMult(lv), hue: DEPLOYABLE_HUES.turret, source: 'turret', style: 'mortar', knock: MINE_KNOCK, falloff: W.mortarFalloff });
         }
       }
       const want = Math.atan2(tgt.y - t.y, tgt.x - t.x);
