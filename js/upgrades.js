@@ -97,7 +97,7 @@ export const UPGRADE_POOL = [
     name: 'Reactor Overdrive',
     category: 'POWER',
     maxLevel: 5,
-    headline: 'damage',
+    headline: 'allDamage',
     summary: 'Overclocks the reactor: every weapon hits harder.',
     apply(player) {
       player.stats.damage *= 1.12;
