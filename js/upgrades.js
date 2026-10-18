@@ -508,12 +508,12 @@ export function eligibleUpgrades(player) {
 
 // Exact chance that each eligible card is drawn into `slots` random hand slots by rollUpgrades (weighted
 // sampling without replacement, the same weights and luck). Returns Map(card id -> probability).
-// excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 3 slots, O(n^slots).
+// excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 4 slots, O(n^slots).
 export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   const luck = player.stats.luck || 1.0;
   const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck) }));
   const odds = new Map(pool.map((c) => [c.id, 0]));
-  const k = Math.min(Math.max(0, Math.floor(slots)), 3, pool.length);
+  const k = Math.min(Math.max(0, Math.floor(slots)), 4, pool.length);
   const total = pool.reduce((a, c) => a + c.w, 0);
   if (!k || total <= 0) return odds;
   // Walk every ordered prefix of draws; each card drawn at depth d adds the prefix probability times

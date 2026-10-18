@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.20.0',
+    date: '2026-10-18',
+    title: 'Four Cards',
+    notes: [
+      { type: 'new', text: 'Level-ups now offer 4 cards instead of 3. Pick with 1-4.' },
+      { type: 'fix', text: 'Controller: pressing Down from a card reliably reaches the REROLL button.' }
+    ]
+  },
+  {
     version: '0.19.5',
     date: '2026-10-18',
     title: 'Clearer Cards',

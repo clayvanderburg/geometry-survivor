@@ -29,19 +29,26 @@ export function readGamepad(prevButtons = []) {
 }
 
 // Choose the rect nearest `from` in direction (dx, dy); off-axis distance is penalised so
-// navigation prefers items in the same row/column. Returns an index or -1.
+// navigation prefers items in the same row/column. Items inside a 75-degree cone around the direction
+// win first, so a neighbour that is only a few pixels lower (a lifted focused card) never counts as
+// "down"; anything merely on that side is the fallback. Returns an index or -1.
 export function pickInDirection(from, rects, dx, dy) {
   const fx = from.left + from.width / 2, fy = from.top + from.height / 2;
-  let best = -1, bestScore = Infinity;
-  rects.forEach((r, i) => {
-    const vx = r.left + r.width / 2 - fx, vy = r.top + r.height / 2 - fy;
-    const along = vx * dx + vy * dy;
-    if (along <= 1) return;
-    const across = Math.abs(vx * dy - vy * dx);
-    const score = along + across * 2.5;
-    if (score < bestScore) { bestScore = score; best = i; }
-  });
-  return best;
+  const pick = (cone) => {
+    let best = -1, bestScore = Infinity;
+    rects.forEach((r, i) => {
+      const vx = r.left + r.width / 2 - fx, vy = r.top + r.height / 2 - fy;
+      const along = vx * dx + vy * dy;
+      if (along <= 1) return;
+      const across = Math.abs(vx * dy - vy * dx);
+      if (cone && across > along * 3.7) return; // outside ~75 degrees either side
+      const score = along + across * 2.5;
+      if (score < bestScore) { bestScore = score; best = i; }
+    });
+    return best;
+  };
+  const inCone = pick(true);
+  return inCone >= 0 ? inCone : pick(false);
 }
 
 // [data-gp-nav] marks other focus stops (e.g. Field Guide entries, so the d-pad can browse and scroll them).
