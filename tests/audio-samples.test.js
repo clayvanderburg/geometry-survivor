@@ -239,17 +239,19 @@ test('intensity layers: calm = pads + bass, mid adds drums, high adds lead and e
   assert.deepEqual(muffled, high, 'menus keep the same arrangement (only the bus low-pass glides down)');
 });
 
-test('streamed soundtrack: menu theme on the title, a shuffled playlist in runs, the boss theme in boss fights', () => {
+test('streamed soundtrack: menu theme on the title, the playlist in intensity order in runs, the boss theme in boss fights', () => {
   const engine = new SoundEngine();
   assert.deepEqual(engine.wantedTrack(), { src: SOUNDTRACK.menu, loop: true }, 'title screen');
   engine.setMusicScene('run');
-  assert.deepEqual([...engine.playlist].sort(), [...SOUNDTRACK.run].sort(), 'each run shuffles the whole playlist');
-  assert.deepEqual(engine.wantedTrack(), { src: engine.playlist[0], loop: false });
+  assert.deepEqual(engine.wantedTrack(), { src: 'assets/music/run-geom-harvest.mp3', loop: false }, 'every run opens on the early-wave track');
+  const order = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => { engine.playIndex = i; return engine.wantedTrack().src.split('/').pop(); });
+  assert.deepEqual(order, ['run-geom-harvest.mp3', 'run-asteroid-fields.mp3', 'run-neon-wake.mp3', 'run-singularity.mp3',
+    'run-asteroid-fields.mp3', 'run-neon-wake.mp3', 'run-singularity.mp3', 'run-asteroid-fields.mp3'], 'builds, then cycles without the opener');
   engine.bossStage = 2;
   assert.deepEqual(engine.wantedTrack(), { src: SOUNDTRACK.boss, loop: true }, 'boss fight');
   engine.bossStage = 0;
-  engine.playIndex = 5;
-  assert.equal(engine.wantedTrack().src, engine.playlist[1], 'the playlist wraps around');
+  engine.setMusicScene('run');
+  assert.equal(engine.playIndex, 0, 'a new run starts the playlist over');
   engine.setMusicScene('menu');
   assert.equal(engine.wantedTrack().src, SOUNDTRACK.menu);
 });

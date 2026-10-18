@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.26.1',
+    date: '2026-10-18',
+    title: 'Setlist',
+    notes: [
+      { type: 'fix', text: 'Runs always open on Geom Harvest and build in intensity to Singularity, instead of a random track.' },
+      { type: 'fix', text: 'After a boss fight the run music picks up where it left off.' }
+    ]
+  },
+  {
     version: '0.26.0',
     date: '2026-10-18',
     title: 'Smoother Curves',
