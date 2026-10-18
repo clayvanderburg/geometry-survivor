@@ -78,8 +78,9 @@ export const STAT_CARDS = {
   turret: [
     card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
     card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.', cap(8)),
+    card('turret', 'turret_count', 'count', 'Sentry Turret Count', 'turretMaxActive', 'Sentry Turret: carry one more turret.', cap(3)),
     card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
-    card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Redeploy', 'turretCooldown', 'Sentry Turret: plants a new turret sooner.')
+    card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Recharge', 'turretCooldown', 'Sentry Turret: an expired turret is ready to plant again sooner. Only recharge.')
   ],
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
@@ -163,10 +164,10 @@ export const TRANSFORMS = {
 };
 
 // Which stats add damage output (POWER) vs. only shape the weapon (UTILITY): tests and the Field Guide.
-// Turret lifetime and redeploy keep more turrets firing at once, and a longer-lived singularity grinds
-// longer, so those are POWER too. Everything else (size, radius, pull, reach, range, spin, pierce,
-// capacity, fuse) is UTILITY.
-export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'lifetime', 'redeploy', 'duration']);
+// A longer-lived singularity grinds longer, so its lifetime is POWER too. Everything else (size, radius,
+// pull, reach, range, spin, pierce, capacity, fuse, turret lifetime and recharge: turret DPS is counted
+// with every turret out) is UTILITY.
+export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration']);
 
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;

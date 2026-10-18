@@ -48,7 +48,7 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
-export const TURRET_MAX_ACTIVE = 4;
+export const TURRET_MAX_ACTIVE = 6; // 3 + Sentry Turret Count (cap 3)
 
 export const WEAPON_SCALING = {
   // --- Autocannon (stats: damage, prism, rate, pierce) -----------------------------------------------
@@ -99,6 +99,10 @@ export const WEAPON_SCALING = {
   missileCooldown: (b) => 1.44 / rateMult(b.r.reload),
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
+  // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
+  // missileLife s, so a salvo never chases across the whole view.
+  missileRange: 460,
+  missileLife: 1.6,
   // Transforms: Cluster Bomblets (4 bomblets at 13% each), Orbital Rain (strikes from above on marked
   // targets after rainDelay), Tactical Nuke (every 4th salvo is one nuke worth nukeUnits salvos).
   clusterBomblets: 4,
@@ -116,7 +120,7 @@ export const WEAPON_SCALING = {
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
   lightningJumps: (b) => 5 + 2 * b.r.chain,
   lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
-  lightningRange: (b) => 300 + 25 * b.r.reach,
+  lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
   lightningChains: (b) => (b.t4 ? 2 : 1),
   // Transforms: Forked Chains (2 chains), Ball Lightning (an orb worth orbShare of the cast, orbZaps
   // zaps over orbLife), Thunderstrike (each chain ends in a strike worth strikeShare of that chain).
@@ -207,7 +211,7 @@ export const WEAPON_SCALING = {
   mineMaxActive: (b) => (3 + b.r.capacity) * (b.t12 ? W.triadCount : 1),
   mineLifetime: (b) => 10.5 + 2 * (b?.r?.fuse || 0),
   mineTriggerRadius: () => 48,
-  mineBlastRadius: (b) => 180 * (1 + 0.12 * b.r.radius), // mines are hard to place, so they hit a wide area
+  mineBlastRadius: (b) => 120 * (1 + 0.12 * b.r.radius), // wide, but well inside the old 2x (180)
   // Transforms: Cluster Mines (3 bomblets at 20% each), Seeker Mines (armed mines crawl toward the
   // nearest enemy), Minefield Triad (3 mines per drop, sharing the damage).
   mineClusterBomblets: 3,
@@ -223,13 +227,20 @@ export const WEAPON_SCALING = {
   // --- Sentry Turret (stats: damage, rate, lifetime, redeploy) ------------------------------------
   // Planted at the ship, shoots the nearest enemy it can see past cover. Live turrets at once follow
   // lifetime / redeploy (never above TURRET_MAX_ACTIVE).
-  turretCooldown: (b) => 8 / (1 + 0.15 * b.r.redeploy),
-  turretDuration: (b) => 6 + b.r.lifetime,
-  turretMaxActive: (b) => Math.min(TURRET_MAX_ACTIVE, Math.max(1, Math.ceil(W.turretDuration(b) / W.turretCooldown(b) - 1e-9))),
-  turretRange: () => 340,
+  // Deep Rock Galactic: Survivor style: you carry turretMaxActive turrets (3 at LV 1). Standing still you
+  // plant every ready one in quick succession (turretDropStill s apart); on the move one every
+  // turretDropMoving s. A turret lasts turretDuration s; its slot then recharges for turretCooldown s.
+  // Potential DPS counts every turret out (the user-facing rule: DPS is measured with all of them down),
+  // so Lifetime and Redeploy are UTILITY (they keep them out more of the time).
+  turretCooldown: (b) => 5 / (1 + 0.25 * b.r.redeploy),
+  turretDuration: (b) => 10 + 1.5 * b.r.lifetime,
+  turretMaxActive: (b) => Math.min(TURRET_MAX_ACTIVE, 3 + (b.r.count || 0)),
+  turretDropStill: 0.25,
+  turretDropMoving: 1.2,
+  turretRange: () => 476, // +40% (was 340)
   turretFireRate: (b) => 6.1 * rateMult(b.r.rate),
-  // Mean live turrets: one per cooldown, each lasting its lifetime, never above the active cap.
-  turretAverageActive: (b) => Math.min(W.turretMaxActive(b), W.turretDuration(b) / W.turretCooldown(b)),
+  // Turrets counted for potential DPS: all of them out.
+  turretAverageActive: (b) => W.turretMaxActive(b),
   turretBoltSpeed: 13,
   // Transforms: Twin Barrels (2 bolts per shot), Piercing Rail (every railEvery-th shot is a rail
   // worth railUnits bolts that pierces), Mortar Battery (a shell every mortarEvery s worth 22% of the
@@ -251,7 +262,7 @@ export const WEAPON_SCALING = {
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
   droneFireRate: (b) => 7.6 * rateMult(b.r.rate),
-  droneRange: (b) => 280 + 25 * b.r.range,
+  droneRange: (b) => 392 + 35 * b.r.range, // +40% (was 280 + 25/rank)
   droneBoltSpeed: 15,
   // Transforms: Extra Wingman (+1 drone past the cap), Homing Bolts, Micro-Missile Pods (each drone
   // launches a homing micro-missile every podEvery s worth 22% of its bolt damage).
