@@ -3,7 +3,7 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
@@ -1260,8 +1260,9 @@ export class Game {
     }, 2200);
   }
 
-  getWaveScale() {
-    return waveScaleAt(this.wave);
+  // HP scale for a spawn at the current wave; light fodder (LIGHT_ENEMY_TYPES) uses the lighter start.
+  getWaveScale(type = null) {
+    return waveScaleAt(this.wave, { light: !!type && LIGHT_ENEMY_TYPES.has(type) });
   }
 
   spawnRelicChest(x, y, guaranteedSuper = false) {
@@ -1640,7 +1641,7 @@ export class Game {
     }
 
     if (e.type === 'splitter' && !fromBomb) {
-      const waveScale = this.getWaveScale();
+      const waveScale = this.getWaveScale('mini_splitter');
       for (let k = 0; k < 3; k++) {
         const a = e.rotation + (k * Math.PI * 2) / 3;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
@@ -2113,18 +2114,18 @@ export class Game {
     const spread = (type, count) => {
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(30);
-        em.queueSpawn(type, p2.x, p2.y, waveScale, this.placedSpawn(p2));
+        em.queueSpawn(type, p2.x, p2.y, this.getWaveScale(type), this.placedSpawn(p2));
       }
     };
     const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
       const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
-      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight, this.placedSpawn(pt));
+      em.spawnBoidSwarm(pt.x, pt.y, count, this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
       const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(30);
-        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale, this.placedSpawn(p2));
+        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, this.getWaveScale('pinwheel'), this.placedSpawn(p2));
       }
     } else if (pack === 'splitter') {
       spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
@@ -2142,7 +2143,7 @@ export class Game {
         em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
         for (let k = 0; k < 2; k++) {
           const esc = packMemberPoint(this, p2, k ? 40 : -40, 34);
-          em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+          em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
         }
       }
     } else if (pack === 'blinker') {
@@ -2153,7 +2154,7 @@ export class Game {
       for (let k = 0; k < 3; k++) {
         const a = (k * Math.PI * 2) / 3;
         const esc = packMemberPoint(this, pt, Math.cos(a) * 60, Math.sin(a) * 60);
-        em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+        em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
       }
       if (this.wave >= 8) {
         const esc = packMemberPoint(this, pt, 80, 0);

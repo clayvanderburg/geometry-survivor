@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.15.1',
+    date: '2026-10-18',
+    title: 'The Swarm Is Back',
+    notes: [
+      { type: 'balance', text: 'Enemy packs arrive as often and as large as they did before 0.13, so the arena is crowded again.' },
+      { type: 'balance', text: 'Light swarm enemies (swarmers, pinwheels, weavers and splitter fragments) are back to their old HP. Only the tougher hulls keep the extra early health.' }
+    ]
+  },
+  {
     version: '0.15.0',
     date: '2026-10-18',
     title: 'Void Armory Rebuilt',

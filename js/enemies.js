@@ -22,8 +22,11 @@ export const LIEUTENANT_MAX_SHIP_SHARE = 0.9;
 // --- Difficulty ramp (TUNING "Difficulty Ramp" group) ------------------------------------------
 // Enemy HP scale of a wave (bosses and lieutenants included; speed caps also read it):
 // (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), compounding only past that wave.
-export function waveScaleAt(wave) {
-  const start = TUNING.waveHpStart ?? 1;
+// Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
+// with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
+export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter']);
+export function waveScaleAt(wave, { light = false } = {}) {
+  const start = light ? (TUNING.waveHpStartLight ?? 1) : (TUNING.waveHpStart ?? 1);
   const perWave = TUNING.waveHpPerWave ?? 0.25;
   const growth = TUNING.waveHpGrowth ?? 1.09;
   const from = TUNING.waveHpGrowthFrom ?? 6;
