@@ -166,14 +166,14 @@ export const DEFAULT_TUNING = {
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
   tagCardWeight: 0.7,
-  evolutionWeight: 4,
+  evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
   // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
   waveLength: 22,
   waveHpStart: 2.5,
   waveHpStartLight: 1,
-  waveHpPerWave: 0.25,
+  waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
   waveHpGrowth: 1.065,
   waveHpGrowthFrom: 25,
   spawnIntervalStart: 2.6,
@@ -386,7 +386,7 @@ export const TUNING_SCHEMA = [
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
-      { key: 'evolutionWeight', label: 'Evolution Weight (x Luck)', type: 'range', min: 0, max: 20, step: 0.5, unit: 'x' }
+      { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]
   },
   {

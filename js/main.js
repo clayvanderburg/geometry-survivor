@@ -11,18 +11,20 @@ import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines
+  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, DPS_TARGET, POTENTIAL_DPS
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS
 } from './weapon-scaling.js';
+import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
+import { WeaponEffects } from './weapon-fx.js';
 import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
 import {
-  describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
+  describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
@@ -236,7 +238,12 @@ export class Game {
     this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
     this.handLock = null; // { card, slot }: the locked card in the hand on screen
     this.carriedLock = null; // locked card passed over: guaranteed in the next level-up hand
-    this.handPhase = null; // 'hand' (rerolls and locks allowed) or 'weapon' (the NEW WEAPON pick)
+    this.handPhase = null; // 'hand' (rerolls and locks allowed), 'weapon' (the NEW WEAPON pick) or 'breakthrough'
+    // Weapon milestones (LV 4 / 8 / 12) reached by a card, waiting for their BREAKTHROUGH choice, in order.
+    this.breakthroughQueue = [];
+    this.weaponFx = new WeaponEffects();
+    this.breakthrough = null; // { weaponId, level } on screen
+    this.rdLineIndex = Math.floor(Math.random() * RD_LINES.length);
     this.lockNote = '';
     this.coresDroppedThisWave = 0;
     this.elapsedTime = 0;
@@ -288,6 +295,8 @@ export class Game {
       xp: 0,
       xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
+      // Breakthroughs chosen per weapon at LV 4 / 8 / 12: { singularity: { 4: 'transform', 8: 'boost' } }.
+      breakthroughs: {},
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
@@ -350,6 +359,11 @@ export class Game {
     this.particles.clear();
     this.damageNumbers?.clear();
     (this.deployables ||= new Deployables()).clear();
+    (this.weaponFx ||= new WeaponEffects()).clear();
+    this.missileSalvos = 0;
+    this.turretShots = 0;
+    this.orbitalFlingTimer = 0;
+    this.orbitalNovaTimer = 0;
     this.grid.reset();
     this.shake = 0;
     this.chromaFlash = 0;
@@ -361,6 +375,8 @@ export class Game {
     this.singularityTimer = 0;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
+    this.bladeFlingTimer = this.bladeNovaTimer = undefined;
+    this.bladeNovaHide = 0;
     this.statusStamp = 0;
 
     this.bullets = [];
@@ -784,9 +800,11 @@ export class Game {
       const bonuses = this.progression.getBonuses();
       const liveStats = (upgLv, weapons) => ({
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
-        fireRate: TUNING.fireRate * bonuses.fireRateMult * Math.pow(1.26, upgLv.firerate || 0) * (weapons.pulsarHelix ? 1.15 : 1),
-        bulletSpeed: TUNING.bulletSpeed * Math.pow(1.15, upgLv.firerate || 0),
-        damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.25, upgLv.pierce || 0),
+        // Pew Pews stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
+        // their ranks are read from the weapon build when firing, so the base stays tunable.
+        fireRate: TUNING.fireRate * bonuses.fireRateMult * (weapons.pulsarHelix ? 1.15 : 1),
+        bulletSpeed: TUNING.bulletSpeed,
+        damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.12, upgLv.overdrive || 0),
         magnetRadius: TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0),
         xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0),
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
@@ -1358,6 +1376,8 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 48, 5, 0.45);
+    // A cache card that took a weapon to LV 4 / 8 / 12 opens its Breakthrough right away.
+    if (this.openNextBreakthrough()) return;
     this.processPendingLevelUps();
     this.updateHUD();
   }
@@ -2239,6 +2259,11 @@ export class Game {
       // sweepX/Y: a bolt spawned at a barrel tip sweeps from its gun on the first tick so point-blank targets still get hit.
       const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
       if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
+      if (b.homing) this.steerHomingBolt(b);
+      if (b.mirvT > 0) {
+        b.mirvT -= dt;
+        if (b.mirvT <= 0 && b.mirvParts > 1) this.splitMirv(b);
+      }
       b.x += b.vx;
       b.y += b.vy;
       b.life -= dt;
@@ -2305,12 +2330,98 @@ export class Game {
           this.sound.playMissileImpact?.(0.75);
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
+        if (b.tandem || b.napalm || b.ricochet > 0 || b.arcRounds) this.boltBreakthroughs(b, e, hx, hy);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
         this.bullets.push(b);
       }
     }
+  }
+
+  // Breakthrough effects of a bolt that just hit `e` at (hx, hy).
+  boltBreakthroughs(b, e, hx, hy) {
+    if (b.tandem) {
+      this.weaponFx.schedule({ x: hx, y: hy, delay: W.tandemDelay, radius: b.blastRadius, damage: b.damage * W.tandemShare, hue: b.hue, source: b.source, style: 'tandem', knock: KNOCKBACK.area * 0.5 });
+    }
+    if (b.napalm) {
+      const ticks = W.napalmLife / W.napalmTick;
+      this.weaponFx.addPool({ x: hx, y: hy, radius: (b.blastRadius || 50) * 0.85, life: W.napalmLife, tick: W.napalmTick, damage: b.damage * W.napalmShare / ticks, hue: 18, source: b.source });
+    }
+    if (b.ricochet > 0) {
+      // Ricochet Rounds: one bounce into the nearest other enemy.
+      const next = this.nearestEnemyExcept(hx, hy, W.ricochetRange, b.hitEnemies);
+      if (next) {
+        const a = Math.atan2(next.y - hy, next.x - hx);
+        const speed = Math.hypot(b.vx, b.vy);
+        this.bullets.push({ x: hx, y: hy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: b.hue,
+          radius: b.radius * 0.85, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds });
+        this.particles.spawnDirectionalSparks(hx, hy, a, 0.6, 4, b.hue, 7);
+      }
+    }
+    if (b.arcRounds) {
+      // Arc Rounds: the hit arcs into the nearest few enemies around it.
+      const hit = new Set([e]);
+      let fromX = hx, fromY = hy;
+      for (let k = 0; k < W.arcRoundJumps; k++) {
+        const t = this.nearestEnemyExcept(hx, hy, W.arcRoundRange, hit);
+        if (!t) break;
+        hit.add(t);
+        this.particles.spawnLightning(fromX, fromY, t.x, t.y, 176, 0.8, 0.12, 0);
+        this.hitEnemy(t, b.damage * W.arcRoundShare, b.source || 'blaster', 0, 0, 0.4, b.stat || b.source || 'blaster');
+        fromX = t.x;
+        fromY = t.y;
+      }
+    }
+  }
+
+  // Nearest live enemy within `range` of (x, y) that is not in `skip`.
+  nearestEnemyExcept(x, y, range, skip) {
+    let best = null;
+    let bestSq = range * range;
+    for (const e of this.enemyManager.enemies) {
+      if (e.dead || skip?.has(e) || e.type === 'blackhole') continue;
+      const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+      if (dSq < bestSq) {
+        bestSq = dSq;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  // MIRV Rockets: split into mirvParts mini-rockets fanned around the heading.
+  splitMirv(b) {
+    const parts = b.mirvParts;
+    const speed = Math.hypot(b.vx, b.vy);
+    const heading = Math.atan2(b.vy, b.vx);
+    b.damage /= parts;
+    b.blastDamage = (b.blastDamage || 0) / parts;
+    b.mirvParts = 1;
+    this.particles.spawnFlash?.(b.x, b.y, 12, b.hue, 0.12);
+    for (let k = 0; k < parts; k++) {
+      const a = heading + (k - (parts - 1) / 2) * 0.22;
+      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies) };
+      part.vx = Math.cos(a) * speed;
+      part.vy = Math.sin(a) * speed;
+      part.radius = 3.4;
+      if (k > 0) this.bullets.push(part);
+    }
+  }
+
+  // Homing bolts (Escort Drones' Homing Bolts, micro-missiles) curve onto their target.
+  steerHomingBolt(b) {
+    if (!b.target || b.target.dead) b.target = this.nearestEnemyExcept(b.x, b.y, 320, b.hitEnemies);
+    const t = b.target;
+    if (!t) return;
+    const speed = Math.hypot(b.vx, b.vy);
+    const cur = Math.atan2(b.vy, b.vx);
+    let diff = Math.atan2(t.y - b.y, t.x - b.x) - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const a = cur + Math.max(-b.homing, Math.min(b.homing, diff));
+    b.vx = Math.cos(a) * speed;
+    b.vy = Math.sin(a) * speed;
   }
 
   applyUpgrade(upg) {
@@ -2330,10 +2441,15 @@ export class Game {
 
   firePrimaryWeapon() {
     const p = this.player;
+    const b = weaponBuild(p, 'blaster');
+    const damage = weaponDamage(p, 'blaster', b);
+    const pierce = blasterPierce(p, b);
+    // Breakthroughs: Flak Rounds burst on hit, Ricochet Rounds bounce once, Arc Rounds arc on hit.
+    const flak = b.t4 ? { blastRadius: W.flakRadius * (p.stats.areaMult ?? 1), blastDamage: damage * W.flakShare, blastStat: 'blaster', flak: true } : null;
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
-    for (const stream of prismStreams(p.stats.bulletCount)) {
+    for (const stream of prismStreams(blasterStreams(p, b))) {
       const a = p.angle + stream.angle;
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
       const noseY = p.y + Math.sin(a) * 16 + sideY * stream.lateral;
@@ -2343,11 +2459,14 @@ export class Game {
         y: noseY,
         vx: Math.cos(a) * p.stats.bulletSpeed,
         vy: Math.sin(a) * p.stats.bulletSpeed,
-        damage: weaponDamage(p, 'blaster'),
-        pierce: p.stats.pierce,
-        hue: TUNING.bulletColorHue ?? 186,
-        radius: TUNING.bulletRadius ?? 4.2,
-        life: 1.25
+        damage,
+        pierce,
+        hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
+        radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
+        life: 1.25,
+        ...flak,
+        ricochet: b.t8 ? 1 : 0,
+        arcRounds: b.t12
       });
     }
 
@@ -2360,8 +2479,8 @@ export class Game {
           y: p.y,
           vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
           vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
-          damage: weaponDamage(p, 'helix'),
-          pierce: p.stats.pierce,
+          damage: weaponDamage(p, 'helix', b),
+          pierce,
           hue: 305, // evolution magenta: reads apart from cyan Pew Pews shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
@@ -2377,12 +2496,15 @@ export class Game {
   // Starting weapon: dumbfire rockets from the outer wing tips, always along the hull's heading (where
   // the crab is flying), independent of the turret's aim. Direct hit plus a small blast. Rockets
   // alternate wings; each extra pair launches a little further back and fans slightly outward.
-  fireWingRockets(level = this.player.weapons.rockets || 1) {
+  fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
+    if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
     const heading = p.drillAngle ?? p.angle;
-    const damage = weaponDamage(p, 'rocket', level);
-    const blastRadius = wingRocketBlastRadius(p, level);
-    const count = W.wingRocketCount(level);
+    // MIRV rockets carry all three payloads until they split.
+    const mirv = b.t12 ? W.mirvSplit : 1;
+    const damage = weaponDamage(p, 'rocket', b) * mirv;
+    const blastRadius = wingRocketBlastRadius(p, b);
+    const count = W.wingRocketCount(b);
     for (let i = 0; i < count; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const tier = Math.floor(i / 2);
@@ -2408,16 +2530,48 @@ export class Game {
         kind: 'rocket',
         knock: KNOCKBACK.missile,
         blastRadius,
-        blastDamage: damage * W.wingRocketBlastShare
+        blastDamage: damage * W.wingRocketBlastShare,
+        tandem: b.t4,
+        napalm: b.t8,
+        mirvT: b.t12 ? W.mirvTime : 0,
+        mirvParts: mirv
       });
       this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
     }
     this.sound.playLaser(0.55);
   }
 
-  fireSwarmMissiles(level) {
+  fireSwarmMissiles(b = weaponBuild(this.player, 'missiles')) {
     const p = this.player;
-    const count = W.missileSalvo(level);
+    if (typeof b === 'number') b = weaponBuild(p, 'missiles', b);
+    const salvo = W.missileSalvo(b);
+    const damage = weaponDamage(p, 'missile', b);
+    const blastRadius = missileBlastRadius(p, b);
+    const hue = p.weapons.stormProtocol ? 52 : 325;
+    const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, delay: W.clusterDelay } : null;
+    // Tactical Nuke: every nukeEvery-th salvo is one huge missile carrying nukeUnits salvos of damage.
+    this.missileSalvos = (this.missileSalvos || 0) + 1;
+    const nuke = b.t12 && this.missileSalvos % W.nukeEvery === 0;
+    const count = nuke ? 1 : salvo;
+    const each = nuke ? damage * salvo * W.nukeUnits : damage;
+    const radius = nuke ? blastRadius * W.nukeRadiusMult : blastRadius;
+    if (b.t8) {
+      // Orbital Rain: the salvo leaves the screen; each warhead crashes down on a marked target.
+      const targets = this.rainTargets(p, count);
+      for (let i = 0; i < count; i++) {
+        const t = targets[i % Math.max(1, targets.length)];
+        const jitter = targets.length ? 18 : 260;
+        const a = Math.random() * Math.PI * 2;
+        const x = (t ? t.x : p.x + Math.cos(p.angle) * 200) + Math.cos(a) * Math.random() * jitter;
+        const y = (t ? t.y : p.y + Math.sin(p.angle) * 200) + Math.sin(a) * Math.random() * jitter;
+        this.weaponFx.schedule({ x, y, delay: W.rainDelay + i * 0.05, radius, damage: each, hue, source: 'missile', style: nuke ? 'nuke' : 'strike', knock: KNOCKBACK.missile, cluster,
+          after: p.weapons.stormProtocol ? (g, ev) => g.fireChainLightning(W.stormChainLevel, ev.x, ev.y) : null });
+      }
+      this.particles.spawnDirectionalSparks(p.x, p.y, -Math.PI / 2, 0.5, Math.min(20, 3 * count), hue, 12);
+      this.particles.spawnShockwave(p.x, p.y, 40, hue, 3, 0.3);
+      this.sound.playMissileLaunch?.(count);
+      return;
+    }
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       this.missiles.push({
@@ -2425,15 +2579,30 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: W.missileSpeed(level),
-        damage: weaponDamage(p, 'missile', level),
-        blastRadius: missileBlastRadius(p),
-        hue: p.weapons.stormProtocol ? 52 : 325,
+        speed: W.missileSpeed * (nuke ? 0.8 : 1),
+        damage: each,
+        blastRadius: radius,
+        hue: nuke ? 30 : hue,
         trail: [],
-        life: 3.2
+        life: nuke ? 4 : 3.2,
+        source: 'missile',
+        nuke,
+        cluster
       });
     }
     this.missileSalvoFx(p, count);
+  }
+
+  // Orbital Rain targets: the nearest enemies (one per warhead, repeating when there are fewer).
+  rainTargets(p, count) {
+    const list = [];
+    for (const e of this.enemyManager.enemies) {
+      if (e.dead || e.type === 'blackhole') continue;
+      const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+      if (d < 900 * 900) list.push([d, e]);
+    }
+    list.sort((a, b) => a[0] - b[0]);
+    return list.slice(0, count).map((x) => x[1]);
   }
 
   // Salvo launch (visual/audio only): a bloom and puff ring behind the hull and an exhaust spray
@@ -2462,20 +2631,50 @@ export class Game {
     this.sound.playMissileImpact?.();
   }
 
+  // One Tesla Arc discharge: a chain (two with Forked Chains), plus Ball Lightning and Thunderstrike
+  // when taken. `level` is a build, or a plain level for Storm Protocol's fixed chain. `stat`: run-stats
+  // attribution ('storm' for Storm Protocol's chains).
   fireChainLightning(level, originX = this.player.x, originY = this.player.y, stat = 'lightning') {
     const p = this.player;
-    const enemies = this.enemyManager.enemies;
-    if (enemies.length === 0) return;
-
-    const bounces = W.lightningJumps(level);
+    // Storm Protocol passes a plain level: no stat ranks or Breakthroughs.
+    const bb = typeof level === 'object' ? level : levelBuild('lightning', level);
+    const damage = weaponDamage(p, 'lightning', bb);
+    this.arcStat = stat; // fireArcChain credits its hits to this run-stats key
     const hitSet = new Set();
+    let hits = 0;
+    for (let c = 0; c < W.lightningChains(bb); c++) {
+      const end = this.fireArcChain(bb, damage, originX, originY, hitSet, c);
+      hits += end.hits;
+      if (bb.t12 && end.last) {
+        // Thunderstrike: the chain's last target is struck from above.
+        this.weaponFx.schedule({ x: end.last.x, y: end.last.y, delay: 0.12, radius: W.strikeRadius * (p.stats.areaMult ?? 1), damage: damage * W.lightningJumps(bb) * W.strikeShare, hue: ARC_HUE, source: 'lightning', style: 'thunder', knock: KNOCKBACK.lightning });
+      }
+    }
+    if (bb.t8 && hits > 0) {
+      // Ball Lightning: a slow orb drifts toward the pack and zaps whatever is nearest.
+      const t = this.findNearestEnemy(originX, originY);
+      const a = t ? Math.atan2(t.y - originY, t.x - originX) : Math.random() * Math.PI * 2;
+      const zaps = W.orbZaps;
+      this.weaponFx.addOrb({ x: originX, y: originY, vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 2.2, life: W.orbLife, zaps, range: W.orbRange,
+        damage: damage * W.lightningChains(bb) * W.lightningJumps(bb) * W.orbShare / zaps, hue: ARC_HUE });
+    }
+    if (hits > 0) this.sound.playArcZap?.(hits);
+  }
+
+  // A single arc chain from (originX, originY); `hitSet` is shared between forks so they spread out.
+  fireArcChain(b, damage, originX, originY, hitSet, fork = 0) {
+    const enemies = this.enemyManager.enemies;
+    if (enemies.length === 0) return { hits: 0, last: null };
+    const bounces = W.lightningJumps(b);
+    const range = W.lightningRange(b);
     let currX = originX;
     let currY = originY;
+    let last = null;
 
     let hits = 0;
-    for (let b = 0; b < bounces; b++) {
+    for (let jump = 0; jump < bounces; jump++) {
       let bestIdx = -1;
-      let bestDistSq = 300 * 300;
+      let bestDistSq = range * range;
       for (let i = 0; i < enemies.length; i++) {
         if (hitSet.has(enemies[i])) continue;
         const dx = enemies[i].x - currX;
@@ -2491,18 +2690,19 @@ export class Game {
       const target = enemies[bestIdx];
       hitSet.add(target);
 
-      if (b === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
-      this.arcHopFx(currX, currY, target, b);
+      if (jump === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
+      this.arcHopFx(currX, currY, target, jump, fork ? ARC_HUE + 40 : ARC_HUE);
       hits++;
+      last = target;
       const arc = Math.sqrt(bestDistSq) || 1;
       const kx = ((target.x - currX) / arc) * KNOCKBACK.lightning;
       const ky = ((target.y - currY) / arc) * KNOCKBACK.lightning;
       currX = target.x;
       currY = target.y;
 
-      this.hitEnemy(target, weaponDamage(p, 'lightning', level), 'lightning', kx, ky, 1, stat);
+      this.hitEnemy(target, damage, 'lightning', kx, ky, 1, this.arcStat || 'lightning');
     }
-    if (hits > 0) this.sound.playArcZap?.(hits);
+    return { hits, last };
   }
 
   // Tesla Arc emitter: a violet bloom and a tight ring where the chain leaves, plus two short
@@ -2521,10 +2721,10 @@ export class Game {
 
   // One chain hop: the bolt (slightly thinner down the chain), then an impact bloom, a cross flare,
   // sparks thrown along the bolt and a crackle stub on the struck hull (visual only).
-  arcHopFx(x, y, target, hop) {
+  arcHopFx(x, y, target, hop, hue = ARC_HUE) {
     const fx = this.particles;
     const a = Math.atan2(target.y - y, target.x - x);
-    fx.spawnLightning(x, y, target.x, target.y, ARC_HUE, Math.max(0.75, 1.3 - hop * 0.06));
+    fx.spawnLightning(x, y, target.x, target.y, hue, Math.max(0.75, 1.3 - hop * 0.06));
     fx.spawnFlash?.(target.x, target.y, 16 + target.radius * 0.9, ARC_HUE, 0.2);
     fx.spawnImpact(target.x, target.y, a, 10 + target.radius * 0.5, 0.14);
     fx.spawnDirectionalSparks(target.x, target.y, a, 1.6, 6, ARC_HUE, 8);
@@ -2533,31 +2733,67 @@ export class Game {
     fx.spawnLightning(target.x, target.y, target.x + Math.cos(sa) * r, target.y + Math.sin(sa) * r, ARC_HUE, 0.5, 0.14, 0);
   }
 
-  fireSingularity(level) {
+  fireSingularity(b = weaponBuild(this.player, 'singularity')) {
     const p = this.player;
+    if (typeof b === 'number') b = weaponBuild(p, 'singularity', b);
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    const pullRadius = singularityPullRadius(p, level);
-    this.singularities.push({
-      x: p.x,
-      y: p.y,
-      vx: Math.cos(angle) * 4.2,
-      vy: Math.sin(angle) * 4.2,
-      radius: W.singularityCoreRadius(level),
-      pullRadius,
-      // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
-      // the payoff is the collapse pulse over 85% of the pull radius.
-      damage: weaponDamage(p, 'singularity', level),
-      collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
-      collapseDamage: weaponDamage(p, 'collapse', level),
-      life: 2.6,
-      maxLife: 2.6,
-      spin: 0,
-      hue: 290
-    });
+    // Twin Singularities: two cores fanned apart, each pulling a little weaker.
+    const count = W.singularityCount(b);
+    const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
+    const life = W.singularityLife(b);
+    for (let k = 0; k < count; k++) {
+      const a = angle + (count > 1 ? (k === 0 ? -0.35 : 0.35) : 0);
+      this.singularities.push({
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(a) * 4.2,
+        vy: Math.sin(a) * 4.2,
+        radius: W.singularityCoreRadius(b),
+        pullRadius,
+        // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
+        // the payoff is the collapse pulse over 85% of the pull radius.
+        damage: weaponDamage(p, 'singularity', b),
+        collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
+        collapseDamage: weaponDamage(p, 'collapse', b),
+        // Aftershock Collapse: a tighter second implosion; Hawking Cascade: mini-singularities on collapse.
+        aftershock: b.t8 ? weaponDamage(p, 'collapse', b) * W.aftershockDamageMult(b) / W.singularityCollapseDamageMult(b) : 0,
+        cascade: b.t12 ? b : null,
+        life,
+        maxLife: life,
+        spin: 0,
+        hue: 290
+      });
+    }
     this.particles.spawnFlash?.(p.x, p.y, 34, 290, 0.22);
     this.particles.spawnShockwave(p.x, p.y, 60, 290, 3, 0.3, true);
     this.sound.playSingularityLaunch?.();
+  }
+
+  // Hawking Cascade: three mini-singularities burst out of a collapse, grind briefly and implode.
+  spawnCascade(sg) {
+    const p = this.player;
+    const b = sg.cascade;
+    const ratio = weaponDamage(p, 'singularity', b) / W.singularityDamageMult(b);
+    for (let k = 0; k < W.cascadeMinis; k++) {
+      const a = (k / W.cascadeMinis) * Math.PI * 2 + Math.random() * 0.6;
+      const pullRadius = sg.pullRadius * W.cascadePullScale;
+      this.singularities.push({
+        x: sg.x, y: sg.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3,
+        radius: sg.radius * 0.6,
+        pullRadius,
+        damage: W.cascadeDamageMult(b) * ratio,
+        collapseRadius: sg.collapseRadius * W.cascadeRadiusFrac,
+        collapseDamage: W.cascadeCollapseDamageMult(b) * ratio * (TUNING.singularityCollapseMult ?? 1),
+        aftershock: 0,
+        cascade: null,
+        mini: true,
+        life: W.cascadeLife,
+        maxLife: W.cascadeLife,
+        spin: 0,
+        hue: 310
+      });
+    }
   }
 
   // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
@@ -2725,6 +2961,77 @@ export class Game {
     }
   }
 
+  // Orbit Blades: the ring(s) grind whatever they touch. Counter-Rotating Ring adds a wider ring spinning
+  // the other way; Blade Fling throws saw discs outward; Nova Ring bursts every blade on a timer.
+  updateOrbitals(dt, b) {
+    const p = this.player;
+    this.orbitalAngle += dt * W.orbitalSpin(b);
+    const count = W.orbitalBlades(b);
+    const bladeR = W.orbitalBladeRadius(b);
+    const damage = weaponDamage(p, 'orbital', b);
+    const enemies = this.enemyManager.enemies;
+    const rings = this.orbitalRings(b);
+    for (const ring of rings) {
+      for (let o = 0; o < count; o++) {
+        const oa = ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / count;
+        const ox = p.x + Math.cos(oa) * ring.radius;
+        const oy = p.y + Math.sin(oa) * ring.radius;
+        // Orbiting blades ONLY shred enemies, never asteroids!
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (e.dead) continue;
+          const dx = e.x - ox;
+          const dy = e.y - oy;
+          const reach = e.radius + bladeR;
+          if (dx * dx + dy * dy < reach * reach) {
+            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
+            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
+            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
+            this.sound.playBladeHit?.();
+            this.hitEnemy(e, damage, 'orbital', 0, 0, 0.6);
+          }
+        }
+      }
+    }
+    if (b.t8) {
+      this.bladeFlingTimer = (this.bladeFlingTimer ?? W.flingEvery) - dt;
+      if (this.bladeFlingTimer <= 0) {
+        this.bladeFlingTimer += W.flingEvery;
+        const discDamage = damage * W.flingDamageMult(b) / W.orbitalDamageMult(b);
+        for (let o = 0; o < count; o++) {
+          const oa = this.orbitalAngle + (o * Math.PI * 2) / count;
+          const ox = p.x + Math.cos(oa) * rings[0].radius;
+          const oy = p.y + Math.sin(oa) * rings[0].radius;
+          this.bullets.push({ x: ox, y: oy, vx: Math.cos(oa) * W.flingSpeed, vy: Math.sin(oa) * W.flingSpeed, damage: discDamage, pierce: W.flingPierce,
+            life: W.flingLife, radius: bladeR * 0.7, hue: 150, source: 'orbital', knock: 0 });
+        }
+        this.sound.playBladeHit?.();
+      }
+    }
+    if (b.t12) {
+      this.bladeNovaTimer = (this.bladeNovaTimer ?? W.novaEvery) - dt;
+      if (this.bladeNovaTimer <= 0) {
+        this.bladeNovaTimer += W.novaEvery;
+        const novaDamage = damage * W.orbitalNovaDamageMult(b) / W.orbitalDamageMult(b);
+        for (let o = 0; o < count; o++) {
+          const oa = this.orbitalAngle + (o * Math.PI * 2) / count;
+          this.weaponFx.schedule({ x: p.x + Math.cos(oa) * rings[0].radius, y: p.y + Math.sin(oa) * rings[0].radius, delay: 0, radius: W.novaRadius * (p.stats.areaMult ?? 1),
+            damage: novaDamage, hue: 150, source: 'orbital', style: 'nova', knock: KNOCKBACK.area * 0.5 });
+        }
+        this.bladeNovaHide = 0.35;
+      }
+      this.bladeNovaHide = Math.max(0, (this.bladeNovaHide || 0) - dt);
+    }
+  }
+
+  // Ring layout of the Orbit Blades: one ring, plus a counter-rotating wider ring with the transform.
+  orbitalRings(b) {
+    const radius = W.orbitalRadius(b);
+    const rings = [{ radius, dir: 1, offset: 0 }];
+    if (b.t4) rings.push({ radius: radius * W.counterRadiusMult, dir: -1, offset: Math.PI / W.orbitalBlades(b) });
+    return rings;
+  }
+
   collapseSingularity(sg) {
     sg.dead = true;
     const r = sg.collapseRadius ?? sg.pullRadius * 0.85;
@@ -2737,6 +3044,11 @@ export class Game {
     this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
     // The collapse hits full force at the core and fades to 25% at its rim (singularityCollapseEdgeFalloff).
     this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75, 'collapse');
+    if (sg.aftershock > 0) {
+      this.weaponFx.schedule({ x: sg.x, y: sg.y, delay: W.aftershockDelay, radius: r * W.aftershockRadiusFrac, damage: sg.aftershock, hue: sg.hue,
+        source: 'singularity', style: 'implode', knock: KNOCKBACK.area, falloff: TUNING.singularityCollapseEdgeFalloff ?? 0.75, kind: 'collapse' });
+    }
+    if (sg.cascade) this.spawnCascade(sg);
   }
 
   triggerLevelUp() {
@@ -3101,7 +3413,39 @@ export class Game {
     this.sound.playLevelUp();
   }
 
+  // A weapon that reached LV 4 / 8 / 12 without its Breakthrough: open the R&D pick (from a level-up
+  // hand, a NEW WEAPON pick or a supply cache). Several milestones queue up, lowest weapon slot first.
+  openNextBreakthrough() {
+    const p = this.player;
+    for (const id of ownedWeapons(p)) {
+      const level = pendingBreakthroughs(p, id)[0];
+      if (!level) continue;
+      this.state = 'UPGRADE';
+      this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
+      this.handPhase = 'breakthrough';
+      this.handLock = null;
+      this.breakthrough = { weaponId: id, level };
+      this.currentChoices = ['transform', 'boost'].map((kind) => describeBreakthrough(p, id, level, kind));
+      this.runStats?.offered(this.currentChoices);
+      this.renderHandControls();
+      const name = WEAPON_BY_ID[id].name;
+      this.setUpgradeHeader(`⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
+        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
+      this.renderChoiceCards(this.currentChoices);
+      const modal = document.getElementById('upgrade-modal');
+      modal.classList.remove('hidden');
+      for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
+      this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
+      this.particles.spawnShockwave(p.x, p.y, 260, 280, 5, 0.5);
+      this.sound.playLevelUp();
+      return true;
+    }
+    return false;
+  }
+
   closeUpgradeModal() {
+    this.breakthrough = null;
+    if (this.openNextBreakthrough()) return;
     this.currentChoices = [];
     this.handPhase = null;
     this.handLock = null;
@@ -3127,6 +3471,13 @@ export class Game {
 
     if (upg.isNewWeapon) {
       this.openWeaponPick();
+      return;
+    }
+    if (upg.isBreakthrough) {
+      applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
+      this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
+      this.closeUpgradeModal();
       return;
     }
     if (upg.isWeaponPick) {
@@ -3169,13 +3520,12 @@ export class Game {
       const w = WEAPON_BY_ID[id];
       const level = weaponLevel(p, id);
       const lineList = weaponUpgradeLines(p, id);
-      // Pew Pews has no level of its own: it grows through its upgrade lines.
-      const lineLevels = lineList.reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
-      const lvText = w.levelId
-        ? `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${UPGRADE_BY_ID[w.levelId].maxLevel}</span>`
-        : lineLevels ? `${lineLevels} UPGRADE${lineLevels === 1 ? '' : 'S'}` : 'BASE';
-      const lines = lineList
-        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `LV ${l.level}`}</span>`).join('');
+      const lvText = `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${WEAPON_MAX_LEVEL}</span>`;
+      // Its Breakthroughs (transform names, or Across the Board), then its stat cards and evolutions.
+      const bt = Object.entries(p.breakthroughs?.[id] || {})
+        .map(([m, kind]) => `<span class="loadout-line bt">⚛ ${kind === 'transform' ? TRANSFORMS[id][m].name : BOOST_NAME}</span>`).join('');
+      const lines = bt + lineList
+        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
       const pending = this.discardPending === id;
       const blocked = this.discardBlocked === id;
       // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
@@ -3591,7 +3941,7 @@ export class Game {
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
     if (shouldFire && ownsWeapon(p, 'blaster')) {
-      this.fireAccumulator += dt * p.stats.fireRate;
+      this.fireAccumulator += dt * blasterFireRate(p);
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
@@ -3600,8 +3950,9 @@ export class Game {
     if (p.weapons.rockets > 0) {
       this.rocketTimer -= dt;
       if (shouldFire && this.rocketTimer <= 0) {
-        this.fireWingRockets(p.weapons.rockets);
-        this.rocketTimer = W.wingRocketCooldown(p.weapons.rockets);
+        const b = weaponBuild(p, 'rockets');
+        this.fireWingRockets(b);
+        this.rocketTimer = W.wingRocketCooldown(b);
       }
     }
 
@@ -3609,58 +3960,36 @@ export class Game {
     if (p.weapons.missiles > 0) {
       this.missileTimer -= dt;
       if (this.missileTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireSwarmMissiles(p.weapons.missiles);
-        this.missileTimer = W.missileCooldown(p.weapons.missiles);
+        const b = weaponBuild(p, 'missiles');
+        this.fireSwarmMissiles(b);
+        this.missileTimer = W.missileCooldown(b);
       }
     }
 
     if (p.weapons.lightning > 0) {
       this.lightningTimer -= dt;
       if (this.lightningTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireChainLightning(p.weapons.lightning);
-        this.lightningTimer = W.lightningCooldown(p.weapons.lightning);
+        const b = weaponBuild(p, 'lightning');
+        this.fireChainLightning(b);
+        this.lightningTimer = W.lightningCooldown(b);
       }
     }
 
     if (p.weapons.singularity > 0) {
       this.singularityTimer -= dt;
       if (this.singularityTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireSingularity(p.weapons.singularity);
-        this.singularityTimer = W.singularityCooldown(p.weapons.singularity);
+        const b = weaponBuild(p, 'singularity');
+        this.fireSingularity(b);
+        this.singularityTimer = W.singularityCooldown(b);
       }
     }
 
-    if (p.weapons.orbitals > 0) {
-      this.orbitalAngle += dt * W.orbitalSpin(p.weapons.orbitals);
-      const orbCount = W.orbitalBlades(p.weapons.orbitals);
-      const orbRadius = W.orbitalRadius(p.weapons.orbitals);
-      const enemies = this.enemyManager.enemies;
-      const bladeDamage = weaponDamage(p, 'orbital', p.weapons.orbitals);
-
-      for (let o = 0; o < orbCount; o++) {
-        const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-        const ox = p.x + Math.cos(oa) * orbRadius;
-        const oy = p.y + Math.sin(oa) * orbRadius;
-
-        // Orbiting blades ONLY shred enemies — never asteroids!
-        for (const e of [...enemies].reverse()) {
-          if (e.dead) continue;
-          const dx = e.x - ox;
-          const dy = e.y - oy;
-          if (dx * dx + dy * dy < (e.radius + W.orbitalBladeRadius) * (e.radius + W.orbitalBladeRadius)) {
-            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
-            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
-            this.sound.playBladeHit?.();
-            this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
-          }
-        }
-      }
-    }
+    if (p.weapons.orbitals > 0) this.updateOrbitals(dt, weaponBuild(p, 'orbitals'));
 
     // Deployables (mines, sentry turrets, escort drones) place and fire before the bullet sweep,
     // so their bolts move, bend and collide with everything else this tick.
     this.deployables?.update(dt, this);
+    this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
@@ -3698,12 +4027,18 @@ export class Game {
       }
 
       if (detonated) {
-        const blast = m.blastRadius ?? W.missileBlastRadius;
+        const blast = m.blastRadius ?? 75;
+        const source = m.source || 'missile';
+        if (m.nuke) this.weaponFx.detonate(this, { x: m.x, y: m.y, radius: blast, damage: 0, hue: 30, source, style: 'nuke', knock: 0, falloff: 0 });
         this.missileBlastFx(m, blast);
-        if (p.weapons.cryo) this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
-        this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, 'missile', KNOCKBACK.missile);
+        if (p.weapons.cryo && source === 'missile') this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
+        this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, source, KNOCKBACK.missile);
+        if (m.cluster) {
+          const c = m.cluster;
+          this.weaponFx.scatter(m.x, m.y, c.count, blast * 0.9, Math.max(36, blast * c.radiusFrac), m.damage * c.share, c.delay, 40, source);
+        }
 
-        if (p.weapons.stormProtocol) {
+        if (p.weapons.stormProtocol && source === 'missile') {
           this.fireChainLightning(W.stormChainLevel, m.x, m.y, 'storm');
         }
 
@@ -4257,38 +4592,45 @@ export class Game {
   // Aegis Orbit Blades, batched: a fading motion-smear arc behind each blade, then one glow pass and
   // one core pass over all saw-triangles.
   drawOrbitBlades(ctx, p) {
-    const orbCount = W.orbitalBlades(p.weapons.orbitals);
-    const orbRadius = W.orbitalRadius(p.weapons.orbitals);
+    const b = weaponBuild(p, 'orbitals');
+    if (this.bladeNovaHide > 0) return; // Nova Ring: the blades just burst and are reforming
+    const orbCount = W.orbitalBlades(b);
+    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1));
     const vfx = TUNING.vfxIntensity ?? 1;
-    ctx.strokeStyle = `hsla(150, 100%, 55%, ${Math.min(1, 0.22 * vfx)})`;
-    ctx.lineWidth = 9 * vfx;
-    ctx.beginPath();
-    for (let o = 0; o < orbCount; o++) {
-      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-      ctx.moveTo(p.x + Math.cos(oa - 0.55) * orbRadius, p.y + Math.sin(oa - 0.55) * orbRadius);
-      ctx.arc(p.x, p.y, orbRadius, oa - 0.55, oa);
-    }
-    ctx.stroke();
-    ctx.beginPath();
-    for (let o = 0; o < orbCount; o++) {
-      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-      const ox = p.x + Math.cos(oa) * orbRadius;
-      const oy = p.y + Math.sin(oa) * orbRadius;
-      for (let k = 0; k < 3; k++) {
-        const sa = oa * 3 + (k * Math.PI * 2) / 3;
-        const vx = ox + Math.cos(sa) * 15;
-        const vy = oy + Math.sin(sa) * 15;
-        if (k === 0) ctx.moveTo(vx, vy);
-        else ctx.lineTo(vx, vy);
+    for (const ring of this.orbitalRings(b)) {
+      const orbRadius = ring.radius;
+      const angle = (o) => ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / orbCount;
+      ctx.strokeStyle = `hsla(150, 100%, 55%, ${Math.min(1, 0.22 * vfx)})`;
+      ctx.lineWidth = 9 * vfx;
+      ctx.beginPath();
+      for (let o = 0; o < orbCount; o++) {
+        const oa = angle(o);
+        const tail = oa - 0.55 * ring.dir;
+        ctx.moveTo(p.x + Math.cos(tail) * orbRadius, p.y + Math.sin(tail) * orbRadius);
+        ctx.arc(p.x, p.y, orbRadius, tail, oa, ring.dir < 0);
       }
-      ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath();
+      for (let o = 0; o < orbCount; o++) {
+        const oa = angle(o);
+        const ox = p.x + Math.cos(oa) * orbRadius;
+        const oy = p.y + Math.sin(oa) * orbRadius;
+        for (let k = 0; k < 3; k++) {
+          const sa = oa * 3 + (k * Math.PI * 2) / 3;
+          const vx = ox + Math.cos(sa) * size;
+          const vy = oy + Math.sin(sa) * size;
+          if (k === 0) ctx.moveTo(vx, vy);
+          else ctx.lineTo(vx, vy);
+        }
+        ctx.closePath();
+      }
+      ctx.strokeStyle = `hsla(150, 100%, 58%, ${Math.min(1, 0.35 * vfx)})`;
+      ctx.lineWidth = 7 * vfx;
+      ctx.stroke();
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
     }
-    ctx.strokeStyle = `hsla(150, 100%, 58%, ${Math.min(1, 0.35 * vfx)})`;
-    ctx.lineWidth = 7 * vfx;
-    ctx.stroke();
-    ctx.strokeStyle = '#00ff88';
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -4638,6 +4980,7 @@ export class Game {
     }
 
     for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
+    this.weaponFx?.draw(ctx, this);
 
     this.deployables?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);

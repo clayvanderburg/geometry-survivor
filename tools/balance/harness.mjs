@@ -734,6 +734,8 @@ export function classifyUpgrades() {
     applyUpgradeLevels(player, { ...u, levelJump: 1 });
     // Damage-type cards (Thermite, Cryo, Nanite) flag a weapon modifier, not a weapon of their own.
     const isModifier = u.category === 'DAMAGE TYPE';
-    return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isModifier, isWeapon: !isModifier && JSON.stringify(player.weapons) !== before };
+    // Weapon stat cards raise a weapon's level too, but they are that weapon's cards, not weapons.
+    return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isModifier, isStatCard: !!u.statCard,
+      isWeapon: !isModifier && !u.statCard && JSON.stringify(player.weapons) !== before };
   });
 }

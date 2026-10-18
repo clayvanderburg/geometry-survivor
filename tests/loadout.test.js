@@ -9,9 +9,10 @@ const {
   UPGRADE_POOL, UPGRADE_BY_ID, rollUpgrades, rollLevelUpHand, rollWeaponPicks, acquireWeapon, discardWeapon, eligibleUpgrades,
   canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID, upgradeWeapons, cardInclusionOdds
 } = await import('../js/upgrades.js');
-const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons } = await import('../js/loadout.js');
+const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons, weaponLevel } = await import('../js/loadout.js');
 const { STAT_ROWS, describeWeaponPick, describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET } = await import('../js/weapon-scaling.js');
+const { STAT_CARDS, WEAPON_MAX_LEVEL, makeBuild, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 
 function freshGame() {
@@ -58,16 +59,18 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   const p = freshGame().player;
   const seen = new Set();
   withRandom(() => { for (let i = 0; i < 400; i++) for (const c of rollUpgrades(p, 3)) seen.add(c.id); }, lcg(11));
-  for (const id of ['multishot', 'firerate', 'pierce', 'thermite', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic']) {
+  for (const id of ['blaster_damage', 'multishot', 'firerate', 'pierce', 'thermite', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic']) {
     assert.ok(seen.has(id), `${id} is offered at run start`);
   }
-  for (const id of ['rockets', 'cryo', 'tag_explosive', 'tag_area', 'missiles', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
+  for (const id of ['rockets', 'rockets_damage', 'cryo', 'tag_explosive', 'tag_area', 'missiles', 'missiles_salvo', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'nanite', 'tag_electric', 'evo_tempest', 'evo_siege']) {
     assert.ok(!seen.has(id), `${id} needs its weapon first`);
   }
-  // Equipping Tesla Arc unlocks its level, Nanite Swarm and the ELECTRIC tag card.
+  // Equipping Tesla Arc unlocks its stat cards, Nanite Swarm and the ELECTRIC tag card (never its equip
+  // line: weapons come only from NEW WEAPON cards).
   acquireWeapon(p, 'lightning');
   const ids = eligibleUpgrades(p).map((u) => u.id);
-  for (const id of ['lightning', 'nanite', 'tag_electric']) assert.ok(ids.includes(id), id);
+  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'lightning_reach', 'nanite', 'tag_electric']) assert.ok(ids.includes(id), id);
+  assert.ok(!ids.includes('lightning'), 'equip line is never offered');
   assert.ok(!ids.includes('evo_tempest'), 'Storm Protocol still needs missiles');
   acquireWeapon(p, 'missiles');
   assert.ok(eligibleUpgrades(p).some((u) => u.id === 'evo_tempest'));
@@ -81,8 +84,10 @@ test('equipped weapon level-ups are weighted so a typical hand is mostly about y
     for (let i = 0; i < 600; i++) for (const c of rollUpgrades(p, 3)) { total++; if (['weapon', 'line'].includes(upgradeKind(c))) weaponCards++; }
   }, lcg(5));
   assert.ok(weaponCards / total > 0.5, `weapon cards ${(weaponCards / total * 100).toFixed(0)}% of offers`);
-  assert.equal(upgradeKind(UPGRADE_BY_ID.rockets), 'weapon');
-  assert.equal(upgradeKind(UPGRADE_BY_ID.multishot), 'line');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.rockets), 'core');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.rockets_reload), 'weapon');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.multishot), 'weapon');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.thermite), 'line');
   assert.equal(upgradeKind(UPGRADE_BY_ID.overdrive), 'general');
   assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'tag');
   assert.equal(upgradeKind(UPGRADE_BY_ID.evo_pulsar), 'evolution');
@@ -218,13 +223,13 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   for (const id of ['overdrive', 'thrusters', 'crit_damage']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   const clean = JSON.parse(JSON.stringify({ stats: p.stats, maxHp: p.maxHp }));
   fill(p, ['rockets', 'missiles', 'lightning']);
-  for (const id of ['missiles', 'lightning', 'cryo', 'nanite']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
+  for (const id of ['missiles_salvo', 'lightning_chain', 'cryo', 'nanite']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   applyUpgradeLevels(p, UPGRADE_BY_ID.evo_tempest);
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.tag_electric, levelJump: 2 });
   assert.equal(p.weapons.missiles, 4, 'LV 3 + Storm Protocol launcher');
 
   const removed = discardWeapon(p, 'missiles').map((r) => r.id).sort();
-  assert.deepEqual(removed, ['evo_tempest', 'missiles']);
+  assert.deepEqual(removed, ['evo_tempest', 'missiles', 'missiles_salvo']);
   assert.deepEqual(p.loadout, ['blaster', 'rockets', 'lightning']);
   assert.equal(p.weapons.missiles, 0);
   assert.equal(p.weapons.stormProtocol, 0);
@@ -258,7 +263,7 @@ test('discarding Pew Pews removes Prism Split, Hyper-Capacitor, Phase Piercer, T
   applyUpgradeLevels(p, UPGRADE_BY_ID.evo_pulsar);
   assert.ok(p.weapons.pulsarHelix);
   const removed = discardWeapon(p, 'blaster').map((r) => r.id).sort();
-  assert.deepEqual(removed, ['evo_pulsar', 'firerate', 'multishot', 'pierce', 'thermite']);
+  assert.deepEqual(removed, ['blaster', 'evo_pulsar', 'firerate', 'multishot', 'pierce', 'thermite']);
   assert.equal(p.stats.bulletCount, base.bulletCount);
   assert.equal(p.stats.fireRate, base.fireRate);
   assert.equal(p.weapons.pulsarHelix, 0);
@@ -300,25 +305,26 @@ test('pause-menu discard goes through a confirm step', () => {
   assert.ok(!g.player.loadout.includes('missiles'));
 });
 
-test('Wing Rockets are a leveled weapon on the shared DPS curve, firing about once a second at LV 1', () => {
-  assert.equal(W.wingRocketCooldown(1), 1);
-  assert.equal(W.wingRocketCount(1), 2);
-  assert.ok(W.wingRocketCount(8) > W.wingRocketCount(1), 'more rockets later');
-  assert.ok(W.wingRocketBlastRadius(8) > W.wingRocketBlastRadius(1), 'bigger blasts later');
-  for (let lv = 1; lv <= 8; lv++) assert.ok(Math.abs(POTENTIAL_DPS.rockets(lv) / DPS_TARGET(lv) - 1) < 0.01, `LV ${lv}`);
+test('Wing Rockets fire about once a second at LV 1; their cards add rockets and shorten the reload', () => {
+  const lv1 = levelBuild('rockets', 1);
+  assert.equal(W.wingRocketCooldown(lv1), 1);
+  assert.equal(W.wingRocketCount(lv1), 2);
+  assert.ok(W.wingRocketCount(makeBuild('rockets', 4, { count: 3 })) === 5, 'more rockets per Pods rank');
+  assert.ok(W.wingRocketBlastRadius(makeBuild('rockets', 4, { radius: 3 })) > W.wingRocketBlastRadius(lv1), 'bigger blasts');
+  assert.ok(Math.abs(POTENTIAL_DPS.rockets(lv1) / DPS_TARGET(1) - 1) < 1e-6, 'LV 1 on the shared curve');
   const g = freshGame();
   fill(g.player, ['rockets']);
   g.player.invuln = 1e9;
   g.rocketTimer = 0;
   let volleys = 0;
   const fire = g.fireWingRockets.bind(g);
-  g.fireWingRockets = (lv) => { volleys++; return fire(lv); };
+  g.fireWingRockets = (b) => { volleys++; return fire(b); };
   for (let i = 0; i < 600; i++) g.update(1 / 60); // 10 s of auto-fire
   assert.ok(volleys >= 9 && volleys <= 11, `${volleys} volleys in 10 s`);
-  applyUpgradeLevels(g.player, { ...UPGRADE_BY_ID.rockets, levelJump: 4 });
+  applyUpgradeLevels(g.player, { ...UPGRADE_BY_ID.rockets_count, levelJump: 3 });
   g.bullets = [];
-  g.fireWingRockets(g.player.weapons.rockets);
-  assert.equal(g.bullets.length, W.wingRocketCount(5));
+  g.fireWingRockets(weaponBuild(g.player, 'rockets'));
+  assert.equal(g.bullets.length, 5);
 });
 
 test('Cryo Payload chills enemies caught by wing rocket blasts', async () => {
@@ -331,10 +337,21 @@ test('Cryo Payload chills enemies caught by wing rocket blasts', async () => {
   assert.ok(!(dry.st?.chillT > 0), 'no chill without Cryo Payload');
 });
 
-test('every weapon line goes to LV 8 so a six-weapon build can absorb ~50 weapon levels', () => {
-  for (const w of WEAPONS) if (w.levelId) assert.equal(UPGRADE_BY_ID[w.levelId].maxLevel, 8, w.id);
-  assert.equal(UPGRADE_BY_ID.multishot.maxLevel, 8);
-  assert.equal(UPGRADE_BY_ID.pierce.maxLevel, 8);
+test('every weapon levels 1 to 12 through its stat cards, and stops at LV 12', () => {
+  for (const w of WEAPONS) {
+    if (!w.levelId) continue;
+    assert.equal(UPGRADE_BY_ID[w.levelId].maxLevel, 1, `${w.id} equip line is LV 1`);
+    const room = STAT_CARDS[w.id].reduce((a, c) => a + c.maxLevel, 0);
+    assert.ok(room >= WEAPON_MAX_LEVEL - 1, `${w.id} cards can reach LV 12`);
+  }
+  const p = freshGame().player;
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 5 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.firerate, levelJump: 5 });
+  assert.equal(weaponLevel(p, 'blaster'), 11);
+  // A +5 roll at LV 11 installs only the one level left.
+  assert.equal(applyUpgradeLevels(p, { ...UPGRADE_BY_ID.pierce, levelJump: 5 }), 1);
+  assert.equal(weaponLevel(p, 'blaster'), 12);
+  assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Pew Pews cards past LV 12');
 });
 
 test('the XP curve is a stepped line, driven by TUNING', () => {

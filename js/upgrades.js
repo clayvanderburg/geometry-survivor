@@ -2,8 +2,9 @@
 import { TUNING } from './config.js';
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
 import {
-  WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots
+  WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
 } from './loadout.js';
+import { STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
 
 // Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
 // +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
@@ -15,7 +16,10 @@ export const RARITY = {
   legendary: { label: 'LEGENDARY', color: '#ffcc00' },
   evolution: { label: 'EVOLUTION', color: '#ff4fd8' },
   // Loadout cards (NEW WEAPON and the weapon it opens) are not level rolls, so they get their own tier.
-  weapon: { label: 'NEW WEAPON', color: '#00f3ff' }
+  weapon: { label: 'NEW WEAPON', color: '#00f3ff' },
+  // Breakthrough choices at weapon LV 4 / 8 / 12 (not level rolls either).
+  transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
+  boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }
 };
 
 const RARITY_BY_JUMP = ['common', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
@@ -25,12 +29,41 @@ export function rarityFor(upg, jump = 1) {
   return RARITY_BY_JUMP[Math.max(1, Math.min(5, jump))];
 }
 
+// Each slot weapon contributes its equip line (LV 1, installed by acquireWeapon; never offered in a
+// hand) and its single-stat cards (weapon-levels.js STAT_CARDS). A stat card raises its stat and the
+// weapon's level by 1 per rank; weapon-scaling.js reads the ranks from upgradeLevels and solves the
+// damage from the level, so apply() only has to keep player.weapons[levelKey] equal to the level.
+const CORE_INFO = {
+  blaster: { headline: 'damage', summary: 'Twin plasma streams straight at your aim.' },
+  rockets: { headline: 'rocketCount', summary: 'Wing-tip dumbfire rockets fly along your heading: a direct hit plus a small blast.' },
+  missiles: { headline: 'missileSalvo', summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.' },
+  orbitals: { headline: 'orbitalBlades', summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.' },
+  lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
+  singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
+  mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
+  turret: { headline: 'turretMaxActive', summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.' },
+  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' }
+};
+
+function weaponGroup(id) {
+  const w = WEAPON_BY_ID[id];
+  const key = w.levelKey;
+  const tags = weaponTags(id);
+  const bump = (player) => { player.weapons[key] = (player.weapons[key] || 0) + 1; };
+  const core = { id: w.levelId, name: w.name, category: w.category, tags, maxLevel: 1, isCore: true, weapon: id, ...CORE_INFO[id], apply: bump };
+  const stats = STAT_CARDS[id].map((c) => ({
+    id: c.id, name: c.name, category: WEAPON_BADGE[id], owners: [id], tags, maxLevel: c.maxLevel, headline: c.headline,
+    summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump
+  }));
+  return [core, ...stats];
+}
+
 // Each entry: headline (the STAT_ROWS id shown enlarged on its card, see upgrade-cards.js),
 // a number-free summary and optional tags (TAG_INFO keys in weapon-scaling.js, shown as chips:
 // the weapon families it belongs to or boosts). Exact numbers always come from the card preview.
 //
-// Loadout gating (rollUpgrades): a weapon's level line (WEAPONS[].levelId in loadout.js) is offered only
-// while that weapon is equipped. `owners` lists the weapons a weapon-specific line belongs to (offered
+// Loadout gating (rollUpgrades): a weapon's stat cards are offered only while that weapon is equipped
+// and below LV 12 (its equip line is never offered; NEW WEAPON installs it). `owners` lists the weapons a weapon-specific line belongs to (offered
 // while any of them is equipped, removed when the last one is discarded); evolutions also name
 // `ownersAll`. Lines without owners are general upgrades (passives such as Volatile Shatter included).
 // Tag cards need an equipped weapon or an owned passive with the tag.
@@ -57,46 +90,7 @@ export const UPGRADE_POOL = [
       player.stats.luck += 0.25;
     }
   },
-  {
-    id: 'multishot',
-    name: 'Prism Split',
-    category: 'PEW PEWS',
-    owners: ['blaster'],
-    tags: ['projectile', 'kinetic'],
-    maxLevel: 8,
-    headline: 'bulletCount',
-    summary: 'Adds a pair of blaster streams: rear, then sides, then diagonals. Your forward pair never moves.',
-    apply(player) {
-      player.stats.bulletCount += W.multishotBolts;
-    }
-  },
-  {
-    id: 'firerate',
-    name: 'Hyper-Capacitor',
-    category: 'PEW PEWS',
-    owners: ['blaster'],
-    tags: ['projectile', 'kinetic'],
-    maxLevel: 7,
-    headline: 'fireRate',
-    summary: 'Your Pew Pews fire faster, with quicker bolts.',
-    apply(player) {
-      player.stats.fireRate *= 1.26;
-      player.stats.bulletSpeed *= 1.15;
-    }
-  },
-  {
-    id: 'pierce',
-    name: 'Phase Piercer',
-    category: 'PEW PEWS',
-    owners: ['blaster'],
-    tags: ['projectile', 'kinetic'],
-    maxLevel: 8,
-    headline: 'pierce',
-    summary: 'Bolts slice through more targets: the first takes full damage, each one behind a little less.',
-    apply(player) {
-      player.stats.pierce += 2;
-    }
-  },
+  ...weaponGroup('blaster'),
   {
     id: 'overdrive',
     name: 'Reactor Overdrive',
@@ -108,66 +102,11 @@ export const UPGRADE_POOL = [
       player.stats.damage *= 1.12;
     }
   },
-  {
-    id: 'rockets',
-    name: 'Wing Rockets',
-    category: 'PRIMARY',
-    tags: ['projectile', 'explosive', 'area'],
-    maxLevel: 8,
-    headline: 'rocketCount',
-    summary: 'Wing-tip rockets fire faster and hit harder, then launch more per volley with bigger blasts.',
-    apply(player) {
-      player.weapons.rockets = (player.weapons.rockets || 0) + 1;
-    }
-  },
-  {
-    id: 'missiles',
-    name: 'Swarm Micro-Missiles',
-    category: 'AUTONOMOUS',
-    tags: ['projectile', 'explosive', 'area'],
-    maxLevel: 8,
-    headline: 'missileSalvo',
-    summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.',
-    apply(player) {
-      player.weapons.missiles = (player.weapons.missiles || 0) + 1;
-    }
-  },
-  {
-    id: 'orbitals',
-    name: 'Aegis Orbiting Blades',
-    category: 'AUTONOMOUS',
-    tags: ['orbital', 'kinetic'],
-    maxLevel: 8,
-    headline: 'orbitalBlades',
-    summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.',
-    apply(player) {
-      player.weapons.orbitals = (player.weapons.orbitals || 0) + 1;
-    }
-  },
-  {
-    id: 'lightning',
-    name: 'Tesla Arc Emitter',
-    category: 'AUTONOMOUS',
-    tags: ['electric'],
-    maxLevel: 8,
-    headline: 'lightningJumps',
-    summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.',
-    apply(player) {
-      player.weapons.lightning = (player.weapons.lightning || 0) + 1;
-    }
-  },
-  {
-    id: 'singularity',
-    name: 'Vortex Singularity',
-    category: 'AUTONOMOUS',
-    tags: ['gravity', 'area'],
-    maxLevel: 8,
-    headline: 'singularityPull',
-    summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.',
-    apply(player) {
-      player.weapons.singularity = (player.weapons.singularity || 0) + 1;
-    }
-  },
+  ...weaponGroup('rockets'),
+  ...weaponGroup('missiles'),
+  ...weaponGroup('orbitals'),
+  ...weaponGroup('lightning'),
+  ...weaponGroup('singularity'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
@@ -212,42 +151,9 @@ export const UPGRADE_POOL = [
   },
   // Deployables: placed or escorting units that fight on their own. Their numbers live in
   // weapon-scaling.js and they share the DEPLOYABLE category and 'deployable' tag.
-  {
-    id: 'mines',
-    name: 'Proximity Mines',
-    category: 'DEPLOYABLE',
-    tags: ['deployable', 'explosive'],
-    maxLevel: 8,
-    headline: 'mineMaxActive',
-    summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.',
-    apply(player) {
-      player.weapons.mines = (player.weapons.mines || 0) + 1;
-    }
-  },
-  {
-    id: 'turret',
-    name: 'Sentry Turret',
-    category: 'DEPLOYABLE',
-    tags: ['deployable', 'projectile'],
-    maxLevel: 8,
-    headline: 'turretMaxActive',
-    summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.',
-    apply(player) {
-      player.weapons.turret = (player.weapons.turret || 0) + 1;
-    }
-  },
-  {
-    id: 'drones',
-    name: 'Escort Drones',
-    category: 'DEPLOYABLE',
-    tags: ['deployable', 'projectile'],
-    maxLevel: 8,
-    headline: 'droneCount',
-    summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.',
-    apply(player) {
-      player.weapons.drones = (player.weapons.drones || 0) + 1;
-    }
-  },
+  ...weaponGroup('mines'),
+  ...weaponGroup('turret'),
+  ...weaponGroup('drones'),
   // Critical hits (every weapon can crit; burn ticks cannot)
   {
     id: 'crit_chance',
@@ -481,17 +387,21 @@ function hasTag(player, tag) {
 
 export const UPGRADE_BY_ID = Object.fromEntries(UPGRADE_POOL.map((u) => [u.id, u]));
 
-// What kind of card an upgrade is in a level-up hand: 'weapon' (an equipped weapon's own level),
-// 'line' (a weapon-specific upgrade), 'tag', 'evolution' or 'general'. Kinds set the hand weights.
+// What kind of card an upgrade is in a level-up hand: 'weapon' (a stat card: raises an equipped
+// weapon's level), 'core' (a weapon's equip line, installed by NEW WEAPON, never in a hand), 'line'
+// (a weapon-specific upgrade that is not a level, e.g. Thermite Rounds), 'tag', 'evolution' or
+// 'general'. Kinds set the hand weights.
 export function upgradeKind(u) {
-  if (WEAPON_BY_LEVEL_ID[u.id]) return 'weapon';
+  if (WEAPON_BY_LEVEL_ID[u.id]) return 'core';
+  if (STAT_CARD_BY_ID[u.id]) return 'weapon';
   if (u.isSynergy) return 'evolution';
   if (u.category === 'SPECIALIST') return 'tag';
   if (u.owners) return 'line';
   return 'general';
 }
 
-// Weapons an upgrade belongs to (its level line's weapon, or its owners), for loadout slots and discards.
+// Weapons an upgrade belongs to (its weapon for equip lines and stat cards, or its owners), for
+// loadout slots and discards.
 export function upgradeWeapons(u) {
   const w = WEAPON_BY_LEVEL_ID[u.id];
   if (w) return [w.id];
@@ -507,14 +417,17 @@ export function loadoutAllows(player, u) {
   return true;
 }
 
-// Relative chance of a card appearing in a hand. Equipped weapons' level-ups are weighted up so the
-// weapons you carry keep climbing (and roll their +3/+4/+5 jumps); every weight is a TUNING value.
+// Relative chance of a card appearing in a hand. Every weapon's stat cards share TUNING.weaponLevelWeight
+// x 2 between them (a 4-card weapon offers each at 1.5), so the weapons you carry keep climbing (and roll
+// their +3/+4/+5 jumps). Evolutions are semi-rare: TUNING.evolutionWeight (1) x luck. Every weight is a
+// TUNING value.
 export function cardWeight(u, luck = 1) {
   switch (upgradeKind(u)) {
-    case 'weapon': return TUNING.weaponLevelWeight ?? 3;
+    case 'weapon': return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[STAT_CARD_BY_ID[u.id].weapon].length || 1);
+    case 'core': return 0;
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
     case 'tag': return TUNING.tagCardWeight ?? 0.7;
-    case 'evolution': return (TUNING.evolutionWeight ?? 4) * luck;
+    case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
     default: return 1;
   }
 }
@@ -528,15 +441,33 @@ export function levelJumpChances(luck) {
   return { pentaChance, quadChance, tripleChance, doubleChance };
 }
 
+// Levels a card can still add: its own cap, and for a stat card also the room left under the weapon's
+// LV 12 cap (so a +5 roll on a LV 10 weapon installs +2).
+export function levelRoom(player, u) {
+  const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
+  const sc = STAT_CARD_BY_ID[u.id];
+  if (!sc) return Math.max(0, own);
+  const lv = Math.max(1, weaponLevel(player, sc.weapon));
+  return Math.max(0, Math.min(own, WEAPON_MAX_LEVEL - lv));
+}
+
 // The single place upgrade levels are installed. Level-up picks, supply caches and card previews
 // (on a copy of the player) all go through it, so they share one player.upgradeLevels state.
-// Installing a weapon's level line equips that weapon (it is only offered once equipped, so this
-// matters only for direct installs such as the balance bench).
+// Installing a stat card (or equip line) of an unequipped weapon equips it at LV 1 first (stat cards
+// are only offered once equipped, so this matters only for direct installs such as the balance bench).
 export function applyUpgradeLevels(player, upg) {
+  const owner = WEAPON_BY_LEVEL_ID[upg.id] || WEAPON_BY_ID[STAT_CARD_BY_ID[upg.id]?.weapon];
+  if (owner && Array.isArray(player.loadout) && !player.loadout.includes(owner.id)) {
+    player.loadout.push(owner.id);
+    const core = UPGRADE_BY_ID[owner.levelId];
+    if (!(player.upgradeLevels[core.id] > 0)) {
+      player.upgradeLevels[core.id] = 1;
+      core.apply(player);
+      if (core.id === upg.id) return 1;
+    }
+  }
   const current = player.upgradeLevels[upg.id] || 0;
-  const jump = Math.max(0, Math.min(upg.levelJump || 1, upg.maxLevel - current));
-  const weapon = WEAPON_BY_LEVEL_ID[upg.id];
-  if (jump > 0 && weapon && Array.isArray(player.loadout) && !player.loadout.includes(weapon.id)) player.loadout.push(weapon.id);
+  const jump = Math.max(0, Math.min(upg.levelJump || 1, levelRoom(player, upg)));
   for (let k = 0; k < jump; k++) {
     player.upgradeLevels[upg.id] = current + k + 1;
     upg.apply(player);
@@ -544,13 +475,13 @@ export function applyUpgradeLevels(player, upg) {
   return jump;
 }
 
-// Cards the player can be offered right now: under their level cap, allowed by the loadout and by
-// their own requirements.
+// Cards the player can be offered right now: with room under their level caps (a weapon's LV 12
+// included), allowed by the loadout and by their own requirements.
 export function eligibleUpgrades(player) {
   return UPGRADE_POOL.filter((u) => {
     if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
-    if ((player.upgradeLevels[u.id] || 0) >= u.maxLevel) return false;
     if (!loadoutAllows(player, u)) return false;
+    if (levelRoom(player, u) <= 0) return false;
     if (u.req && !u.req(player)) return false;
     return cardWeight(u) > 0;
   });
@@ -595,8 +526,7 @@ export function rollUpgrades(player, count = 3) {
 
   // Roll Multi-Level Jump (+1 ... +5 levels at once): the jump is the card's rarity.
   return shuffled.slice(0, count).map((u) => {
-    const curLv = player.upgradeLevels[u.id] || 0;
-    const remaining = u.maxLevel - curLv;
+    const remaining = levelRoom(player, u);
     let levelJump = 1;
 
     if (!u.isSynergy && remaining > 1) {
@@ -772,14 +702,36 @@ export function discardWeapon(player, id) {
     }
   }
   if (!player.base && weapon.levelKey) player.weapons[weapon.levelKey] = 0;
+  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds).
+  if (player.breakthroughs) delete player.breakthroughs[id];
   return removed;
+}
+
+// --- Breakthroughs (weapon LV 4 / 8 / 12) --------------------------------------------------------
+
+// Milestones a weapon has reached but not yet chosen a Breakthrough for, lowest first.
+export function pendingBreakthroughs(player, id) {
+  const lv = weaponLevel(player, id);
+  const taken = player.breakthroughs?.[id] || {};
+  return BREAKTHROUGH_LEVELS.filter((m) => lv >= m && !taken[m]);
+}
+
+// Record a Breakthrough choice ('transform' or 'boost') for a weapon at a milestone. Weapon formulas
+// read it straight from player.breakthroughs, so nothing else needs rebuilding.
+export function applyBreakthrough(player, id, level, kind) {
+  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level) || !['transform', 'boost'].includes(kind)) return false;
+  const all = player.breakthroughs || (player.breakthroughs = {});
+  const mine = all[id] || (all[id] = {});
+  if (mine[level]) return false;
+  mine[level] = kind;
+  return true;
 }
 
 // Upgrade lines shown under an equipped weapon's loadout slot: its specific lines and evolutions.
 export function weaponUpgradeLines(player, id) {
   return UPGRADE_POOL
     .filter((u) => !WEAPON_BY_LEVEL_ID[u.id] && upgradeWeapons(u).includes(id) && (player.upgradeLevels[u.id] || 0) > 0)
-    .map((u) => ({ id: u.id, name: u.name, level: player.upgradeLevels[u.id], maxLevel: u.maxLevel, isSynergy: !!u.isSynergy }));
+    .map((u) => ({ id: u.id, name: u.name, level: player.upgradeLevels[u.id], maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, statCard: !!u.statCard }));
 }
 
 // --- Experience curve -------------------------------------------------------------------------

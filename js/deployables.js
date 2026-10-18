@@ -6,13 +6,14 @@
 // damage goes through Game.hitEnemy: turret/drone bolts ride the shared bullet sweep (asteroid
 // cover blocks them), mine bursts use Game.damageEnemiesInRadius.
 import { TUNING } from './config.js';
-import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE } from './weapon-scaling.js';
+import { weaponBuild, levelBuild } from './weapon-levels.js';
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
 
-const MINE_POOL = 10;   // >= W.mineMaxActive at max level
-const TURRET_POOL = 3;  // >= W.turretMaxActive at max level
-const DRONE_POOL = 3;   // W.droneCount never exceeds 3
+const MINE_POOL = 36;   // >= W.mineMaxActive at max level (capacity 11, x3 with Minefield Triad)
+const TURRET_POOL = TURRET_MAX_ACTIVE; // >= W.turretMaxActive at max level
+const DRONE_POOL = 4;   // W.droneCount: up to 3, plus 1 with the Extra Wingman Breakthrough
 const TRAIL_LEN = 9;    // drone thruster trail samples (one per tick)
 const RETARGET_TIME = 0.2;       // seconds between nearest-target searches per turret/drone
 const LOS_CANDIDATES = 3;        // nearest targets tried before giving up on a blocked line of sight
@@ -33,7 +34,7 @@ const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
 // Formation slots (radians from the hull heading, radius scale): one drone trails directly behind,
 // two fly a V off the rear quarters, the third closes the V behind them.
-const DRONE_SLOTS = [[2.35, 1], [-2.35, 1], [Math.PI, 1.3]];
+const DRONE_SLOTS = [[2.35, 1], [-2.35, 1], [Math.PI, 1.3], [Math.PI, 2.1]];
 
 const wrapAngle = (a) => {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -48,10 +49,10 @@ export function isDeployableTarget(e) {
 
 export class Deployables {
   constructor() {
-    this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0 }));
-    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0 }));
+    this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0, cluster: false, seeker: false }));
+    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, shots: 0, mortarT: 0 }));
     this.drones = Array.from({ length: DRONE_POOL }, () => ({
-      x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0,
+      x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0,
       trailX: new Float32Array(TRAIL_LEN), trailY: new Float32Array(TRAIL_LEN), trailHead: 0, trailCount: 0
     }));
     this.clear();
@@ -79,18 +80,22 @@ export class Deployables {
     if (!(w.mines || w.turret || w.drones) && this.activeCount === 0) return;
     this.time += dt;
     this.maxRock = -1; // recomputed lazily for this tick's line-of-sight checks
-    this.updateMines(dt, game, w.mines || 0);
-    this.updateTurrets(dt, game, w.turret || 0);
-    this.updateDrones(dt, game, w.drones || 0);
+    // Each weapon's build (stat-card ranks + Breakthroughs), or null while it isn't equipped.
+    const p = game.player;
+    this.updateMines(dt, game, w.mines ? weaponBuild(p, 'mines') : null);
+    this.updateTurrets(dt, game, w.turret ? weaponBuild(p, 'turret') : null);
+    this.updateDrones(dt, game, w.drones ? weaponBuild(p, 'drones') : null);
   }
 
   // ---- Proximity Mines ----
   updateMines(dt, game, level) {
-    if (level > 0) {
+    if (level) {
       this.mineTimer -= dt;
       // At the active cap the timer stays primed, so a new mine drops as soon as a slot frees.
       if (this.mineTimer <= 0 && this.mineCount < Math.min(MINE_POOL, W.mineMaxActive(level))) {
-        this.dropMine(game.player, level);
+        // Minefield Triad: three mines per drop, in a small triangle.
+        const n = level.t12 ? W.triadCount : 1;
+        for (let k = 0; k < n && this.mineCount < MINE_POOL; k++) this.dropMine(game.player, level, n > 1 ? k : -1);
         this.mineTimer = W.mineCooldown(level);
       }
     }
@@ -100,6 +105,7 @@ export class Deployables {
       const m = this.mines[i];
       m.age += dt;
       let fire = m.age >= m.life;
+      if (!fire && m.seeker && m.age >= armTime) this.crawlMine(game, m, dt);
       if (!fire && m.age >= armTime) {
         for (let j = 0; j < enemies.length; j++) {
           const e = enemies[j];
@@ -120,13 +126,20 @@ export class Deployables {
   }
 
   // Mines drop in the ship's wake (behind its motion, or behind the turret when parked).
-  dropMine(p, level) {
+  dropMine(p, level, corner = -1) {
     const moving = Math.hypot(p.vx, p.vy) > 0.5;
     const back = moving ? Math.atan2(-p.vy, -p.vx) : p.angle + Math.PI;
     const off = (p.radius || 15) + 12;
     const m = this.mines[this.mineCount++];
     m.x = p.x + Math.cos(back) * off;
     m.y = p.y + Math.sin(back) * off;
+    if (corner >= 0) {
+      const a = back + (corner * Math.PI * 2) / W.triadCount;
+      m.x += Math.cos(a) * W.triadSpacing;
+      m.y += Math.sin(a) * W.triadSpacing;
+    }
+    m.cluster = level.t4;
+    m.seeker = level.t8;
     m.age = 0;
     m.life = W.mineLifetime(level);
     m.trigger = W.mineTriggerRadius(level);
@@ -143,12 +156,32 @@ export class Deployables {
     game.particles.spawnExplosionSparks(m.x, m.y, 18, hue, 2, 10, 2.2);
     game.sound.playExplosion(0.7);
     game.damageEnemiesInRadius(m.x, m.y, m.blast, m.damage, hue, 'mine', MINE_KNOCK);
+    // Cluster Mines: bomblets pop just after the main blast.
+    if (m.cluster) game.weaponFx?.scatter(m.x, m.y, W.mineClusterBomblets, m.blast * 0.7, m.blast * 0.4, m.damage * W.mineClusterShare, W.mineClusterDelay, hue, 'mine');
+  }
+
+  // Seeker Mines: an armed mine crawls toward the nearest enemy in seekerRange.
+  crawlMine(game, m, dt) {
+    const enemies = game.enemyManager.enemies;
+    let best = null;
+    let bestSq = W.seekerRange * W.seekerRange;
+    for (let j = 0; j < enemies.length; j++) {
+      const e = enemies[j];
+      if (!isDeployableTarget(e)) continue;
+      const dSq = (e.x - m.x) ** 2 + (e.y - m.y) ** 2;
+      if (dSq < bestSq) { bestSq = dSq; best = e; }
+    }
+    if (!best) return;
+    const d = Math.sqrt(bestSq) || 1;
+    const step = W.seekerSpeed * dt * 60;
+    m.x += ((best.x - m.x) / d) * step;
+    m.y += ((best.y - m.y) / d) * step;
   }
 
   // ---- Sentry Turrets ----
   updateTurrets(dt, game, level) {
     const p = game.player;
-    if (level > 0) {
+    if (level) {
       this.turretTimer -= dt;
       if (this.turretTimer <= 0 && this.turretCount < Math.min(TURRET_POOL, W.turretMaxActive(level)) &&
           this.anyTargetNear(game, p.x, p.y, W.turretRange(level) * 1.5)) {
@@ -157,7 +190,7 @@ export class Deployables {
       }
     }
     // Live turrets fire at the player's current turret level, so an upgrade improves them at once.
-    const lv = Math.max(1, level);
+    const lv = level || levelBuild('turret', 1); // turrets already planted keep firing after a discard
     const range = W.turretRange(lv);
     const rate = W.turretFireRate(lv);
     for (let i = this.turretCount - 1; i >= 0; i--) {
@@ -178,6 +211,15 @@ export class Deployables {
         t.aim += dt * 0.9; // idle sweep
         t.fireAcc = Math.min(1, t.fireAcc + dt * rate);
         continue;
+      }
+      // Mortar Battery: a shell lobbed onto the target every mortarEvery s.
+      if (lv.t12) {
+        t.mortarT -= dt;
+        if (t.mortarT <= 0) {
+          t.mortarT += W.mortarEvery;
+          game.weaponFx?.schedule({ x: tgt.x, y: tgt.y, fromX: t.x, fromY: t.y, delay: W.mortarDelay, radius: W.mortarRadius * (p.stats.areaMult ?? 1),
+            damage: weaponDamage(p, 'turret', lv) * W.mortarDamageMult(lv) / W.turretDamageMult(lv), hue: DEPLOYABLE_HUES.turret, source: 'turret', style: 'mortar', knock: MINE_KNOCK });
+        }
       }
       const want = Math.atan2(tgt.y - t.y, tgt.x - t.x);
       const diff = wrapAngle(want - t.aim);
@@ -219,6 +261,8 @@ export class Deployables {
     t.life = t.maxLife = W.turretDuration(level);
     t.aim = p.angle;
     t.fireAcc = 1;
+    t.shots = 0;
+    t.mortarT = W.mortarEvery;
     t.target = null;
     t.retarget = 0;
     t.flash = 0;
@@ -248,14 +292,25 @@ export class Deployables {
   fireTurretBolt(game, t, level) {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
-    const b = this.fireBolt(game, t.x, t.y, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage, DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
-    b.sweepX = t.x; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
-    b.sweepY = t.y;
-    if (p.weapons.siegeBattery) {
-      b.blastRadius = siegeShellRadius(p);
-      b.blastDamage = weaponDamage(p, 'siege', level);
-      b.blastStat = 'siege'; // run stats: shell bursts are Siege Battery damage
-      b.hue = 24; // amber-hot shells read as explosive
+    // Piercing Rail: every railEvery-th shot is a fast rail slug that pierces a whole line.
+    t.shots = (t.shots || 0) + 1;
+    const rail = level.t8 && t.shots % W.railEvery === 0;
+    // Twin Barrels: two bolts side by side.
+    const barrels = W.turretBarrels(level);
+    for (let k = 0; k < barrels; k++) {
+      const lateral = barrels > 1 ? (k === 0 ? -5 : 5) * TURRET_SCALE : 0;
+      const ox = -Math.sin(t.aim) * lateral, oy = Math.cos(t.aim) * lateral;
+      const b = this.fireBolt(game, t.x + ox, t.y + oy, t.aim, TURRET_MUZZLE, rail ? W.railSpeed : W.turretBoltSpeed, rail ? damage * W.railUnits : damage,
+        rail ? 190 : DEPLOYABLE_HUES.turret, rail ? TURRET_BOLT_RADIUS * 1.5 : TURRET_BOLT_RADIUS, 'turret', W.turretRange(level) * (rail ? 1.6 : 1));
+      b.sweepX = t.x + ox; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
+      b.sweepY = t.y + oy;
+      if (rail) b.pierce = W.railPierce;
+      if (p.weapons.siegeBattery) {
+        b.blastRadius = siegeShellRadius(p);
+        b.blastDamage = weaponDamage(p, 'siege', level);
+        b.blastStat = 'siege'; // run stats: shell bursts are Siege Battery damage
+        b.hue = 24; // amber-hot shells read as explosive
+      }
     }
     t.flash = 1;
     game.sound.playLaser(0.72);
@@ -264,7 +319,7 @@ export class Deployables {
   // ---- Escort Drones ----
   updateDrones(dt, game, level) {
     const p = game.player;
-    const want = level > 0 ? Math.min(DRONE_POOL, W.droneCount(level)) : 0;
+    const want = level ? Math.min(DRONE_POOL, W.droneCount(level)) : 0;
     while (this.droneCount < want) {
       const d = this.drones[this.droneCount++];
       d.x = p.x;
@@ -276,6 +331,7 @@ export class Deployables {
       d.retarget = 0;
       d.flash = 0;
       d.trailCount = 0;
+      d.podT = W.podEvery * (0.5 + this.droneCount / (want + 1));
       game.particles.spawnShockwave(p.x, p.y, 28, DEPLOYABLE_HUES.drone, 2, 0.2);
     }
     while (this.droneCount > want) this.drones[--this.droneCount].target = null;
@@ -315,9 +371,25 @@ export class Deployables {
         d.fireAcc = Math.min(d.fireAcc, 1);
         continue;
       }
+      // Micro-Missile Pods: a homing micro-missile with a small blast every podEvery s.
+      if (level.t12) {
+        d.podT -= dt;
+        if (d.podT <= 0) {
+          d.podT += W.podEvery;
+          const pod = this.fireBolt(game, d.x, d.y, face + (Math.random() - 0.5) * 1.2, 6, W.droneBoltSpeed * 0.55, damage * W.podDamageMult(level) / W.droneDamageMult(level) / 2,
+            40, 3.6, 'drone', range * 1.6);
+          pod.homing = 0.12;
+          pod.target = tgt;
+          pod.blastRadius = W.podBlast * (p.stats.areaMult ?? 1);
+          pod.blastDamage = pod.damage;
+          pod.life += 0.6;
+        }
+      }
       while (d.fireAcc >= 1) {
         d.fireAcc -= 1;
-        this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
+        const bolt = this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
+        // Homing Bolts: curve onto the drone's target.
+        if (level.t8) { bolt.homing = W.homingTurn; bolt.target = tgt; bolt.life += 0.2; }
         d.flash = 1;
         game.sound.playDroneShot?.();
       }

@@ -6,18 +6,20 @@
 // Passives (PASSIVES below, e.g. Volatile Shatter) are not weapons: they take no slot and level
 // through ordinary level-up hands.
 //
-// Each weapon: `levelId` is the UPGRADE_POOL line that is the weapon's own level (null for Pew Pews,
-// whose power comes from its upgrade lines), `levelKey` the player.weapons key that line raises,
-// `tagSources` the WEAPON_TAGS entries the weapon fires (its tag chips and the tag cards it unlocks).
+// Each weapon: `levelId` is the UPGRADE_POOL line that equips it (LV 1), `levelKey` the player.weapons
+// key holding its level (every one of its stat cards raises it by 1, weapon-levels.js), `tagSources`
+// the WEAPON_TAGS entries the weapon fires (its tag chips and the tag cards it unlocks). Every slot
+// weapon, Pew Pews included, levels from 1 to WEAPON_MAX_LEVEL (12).
 // Weapon-specific upgrade lines name their owners with an `owners` list on the UPGRADE_POOL entry.
 import { TUNING } from './config.js';
 import { WEAPON_TAGS } from './weapon-scaling.js';
+import { STAT_CARDS } from './weapon-levels.js';
 
 export const WEAPONS = [
   {
-    id: 'blaster', name: 'Pew Pews', hudName: 'Pew Pews', levelId: null, levelKey: null, category: 'PRIMARY', tagSources: ['blaster'],
+    id: 'blaster', name: 'Pew Pews', hudName: 'Pew Pews', levelId: 'blaster', levelKey: 'blaster', category: 'PRIMARY', tagSources: ['blaster'],
     color: '#00f3ff',
-    summary: 'Twin plasma streams straight at your aim. Grows through Prism Split, Hyper-Capacitor, Phase Piercer and Thermite Rounds.'
+    summary: 'Twin plasma streams straight at your aim. Levels up through Prism Split, Hyper-Capacitor and Phase Piercer.'
   },
   {
     id: 'rockets', name: 'Wing Rockets', hudName: 'Wing Rockets', levelId: 'rockets', levelKey: 'rockets', category: 'PRIMARY', tagSources: ['rocket'],
@@ -95,17 +97,23 @@ export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 6)
 // plus every weapon with a level, so their behaviour is unchanged.
 export function ownedWeapons(p) {
   if (Array.isArray(p.loadout)) return p.loadout;
-  return WEAPONS.filter((w) => (w.levelKey ? (p.weapons?.[w.levelKey] || 0) > 0 : true)).map((w) => w.id);
+  return WEAPONS.filter((w) => w.id === 'blaster' || (p.weapons?.[w.levelKey] || 0) > 0).map((w) => w.id);
 }
 
 export const ownsWeapon = (p, id) => ownedWeapons(p).includes(id);
 export const freeSlots = (p) => Math.max(0, weaponSlots() - ownedWeapons(p).length);
 export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id)).map((w) => w.id);
 
-// Weapon level shown on slots and HUD (0 for Pew Pews, which grows through its upgrade lines instead).
+// Weapon level shown on slots, HUD and cards: LV 1 for equipping it plus every rank of its stat cards
+// (0 when not equipped). Evolution bonus levels (Storm Protocol) are shown separately.
 export function weaponLevel(p, id) {
   const w = WEAPON_BY_ID[id];
-  return w?.levelId ? (p.upgradeLevels?.[w.levelId] || 0) : 0;
+  if (!w) return 0;
+  let lv = p.upgradeLevels?.[w.levelId] || 0;
+  if (!lv && id === 'blaster' && ownsWeapon(p, id)) lv = 1; // fixtures built without the equip line
+  if (!lv) return 0;
+  for (const c of STAT_CARDS[id] || []) lv += p.upgradeLevels?.[c.id] || 0;
+  return lv;
 }
 
 // Passives the player has installed (LV 1+), in registry order.

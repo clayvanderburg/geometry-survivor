@@ -84,7 +84,7 @@ test('a discarded weapon stops its clock; re-equipping starts a new segment', ()
   assert.equal(s.weapons.drones.lv[1][1], 0, 'damage while unequipped is not booked to a level');
   assert.equal(s.weapons.drones.dmg, 50);
   assert.deepEqual(s.weapons.drones.tl, [[0, 1], [15, 0], [40, 1]]);
-  assert.equal(s.weapons.blaster.curve, 0, 'Pew Pews is not on the DPS curve');
+  assert.equal(s.weapons.blaster.curve, 1, 'Pew Pews levels like every other weapon');
 });
 
 test('enemies: spawns, kills, spawn-to-death time, damage to the ship and the cause of death', () => {

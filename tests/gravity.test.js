@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { weaponBuild } from '../js/weapon-levels.js';
 
 // Browser services are stubbed; tests drive the real Game.update / EnemyManager / WarpGrid code.
 globalThis.window = { addEventListener() {} };
@@ -258,7 +259,7 @@ test('singularity collapse is an implosion damage pulse over 85% of its pull rad
     game.fireSingularity(2);
     const sg = game.singularities[0];
     Object.assign(sg, { x: 2000, y: 2000, vx: 0, vy: 0, life: 1 / 60 });
-    assert.equal(sg.collapseDamage, 11 * W.singularityCollapseDamageMult(2) * TUNING.singularityCollapseMult);
+    assert.equal(sg.collapseDamage, 11 * W.singularityCollapseDamageMult(weaponBuild(game.player, 'singularity', 2)) * TUNING.singularityCollapseMult);
     assert.equal(sg.collapseRadius, sg.pullRadius * 0.85);
     Object.assign(inside, { x: 2000 + sg.collapseRadius * 0.9, y: 2000, hp: 1e6, maxHp: 1e6 });
     Object.assign(outside, { x: 2000 + sg.pullRadius + 60, y: 2000, hp: 1e6, maxHp: 1e6 });

@@ -1177,6 +1177,15 @@ html, body {
 .rarity-epic { --rarity: #b565ff; --rarity-soft: rgba(181, 101, 255, 0.38); --rarity-bg: rgba(36, 14, 60, 0.94); }
 .rarity-legendary { --rarity: #ffcc00; --rarity-soft: rgba(255, 204, 0, 0.4); --rarity-bg: rgba(48, 36, 8, 0.94); }
 .rarity-evolution { --rarity: #ff4fd8; --rarity-soft: rgba(255, 79, 216, 0.4); --rarity-bg: rgba(48, 8, 40, 0.94); }
+.rarity-transform { --rarity: #38f2d0; --rarity-soft: rgba(56, 242, 208, 0.4); --rarity-bg: rgba(6, 40, 36, 0.94); }
+.rarity-boost { --rarity: #ffb347; --rarity-soft: rgba(255, 179, 71, 0.4); --rarity-bg: rgba(46, 30, 8, 0.94); }
+/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special. */
+.upgrade-option.breakthrough-card { animation: breakthrough-pulse 1.8s ease-in-out infinite; }
+@keyframes breakthrough-pulse {
+  0%, 100% { box-shadow: 0 0 14px var(--rarity-soft); }
+  50% { box-shadow: 0 0 32px var(--rarity-soft), 0 0 4px var(--rarity) inset; }
+}
+@media (prefers-reduced-motion: reduce) { .upgrade-option.breakthrough-card { animation: none; } }
 
 .upgrade-option {
   position: relative;
@@ -1925,6 +1934,11 @@ html, body {
 .loadout-line.evo {
   color: #ff4fd8;
   background: rgba(255, 79, 216, 0.12);
+}
+
+.loadout-line.bt {
+  color: #38f2d0;
+  background: rgba(56, 242, 208, 0.12);
 }
 
 .loadout-actions {

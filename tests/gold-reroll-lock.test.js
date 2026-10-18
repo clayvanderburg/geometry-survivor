@@ -220,11 +220,11 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
 
   // Its weapon discarded.
   const g2 = freshGame();
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }), null, 'Wing Rockets not equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }), null, 'Wing Rockets not equipped');
   acquireWeapon(g2.player, 'rockets');
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }).id, 'rockets', 'valid while Wing Rockets are equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }).id, 'rockets_damage', 'valid while Wing Rockets are equipped');
   discardWeapon(g2.player, 'rockets');
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 1 }), null);
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 1 }), null);
 
   // Level jump trimmed to the levels left.
   const g3 = freshGame();
@@ -284,6 +284,8 @@ test('keyboard in the level-up modal: R rerolls, Shift+1-3 locks, 1-3 picks; R l
   assert.equal(g.handLock, null, 'Shift+2 again unlocks');
   assert.equal(g.handleUpgradeKey('KeyQ'), false);
   g.handleUpgradeKey('Digit1');
+  // A lucky +3 roll can take a weapon to LV 4: its Breakthrough picks with the same keys.
+  if (g.handPhase === 'breakthrough') g.handleUpgradeKey('Digit1');
   assert.equal(g.state, 'PLAYING');
   assert.equal(g.handleUpgradeKey('KeyR'), false, 'nothing outside the modal');
 });

@@ -24,7 +24,9 @@ const { Game } = await import('../js/main.js');
 const { TUNING } = await import('../js/config.js');
 const { UPGRADE_POOL, RARITY, applyUpgradeLevels, rollUpgrades, levelJumpChances } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, blasterStreams } = await import('../js/weapon-scaling.js');
+const { STAT_CARD_BY_ID, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
+const { weaponLevel } = await import('../js/loadout.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 // Mirrors the run-start player built in Game.resetRun (no armory bonuses).
@@ -57,6 +59,7 @@ function game() {
 }
 
 const byId = (id) => UPGRADE_POOL.find((u) => u.id === id);
+const sc0 = (u) => STAT_CARD_BY_ID[u.id];
 function withRandom(draws, fn) {
   const original = Math.random;
   Math.random = () => (draws.length ? draws.shift() : 0.99);
@@ -65,45 +68,59 @@ function withRandom(draws, fn) {
 
 test('a supply-cache level is the starting level of the next level-up card and the HUD tag', () => {
   const g = game();
-  // Leave Prism Split as the only eligible upgrade so the cache must install it.
-  for (const u of UPGRADE_POOL) if (u.id !== 'multishot') g.player.upgradeLevels[u.id] = u.maxLevel;
+  // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Pew Pews
+  // cards are banished: maxing them would fill the weapon's LV 12 cap).
+  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
+  g.player.banished = Object.fromEntries(Object.keys(STAT_CARD_BY_ID).filter((id) => id !== 'multishot').map((id) => [id, true]));
 
   // Draws: 1x cache tier, Prism Split's shuffle score, then a lucky +2 level roll.
   withRandom([0.99, 0.5, 0.05], () => g.openRelicChest({ guaranteedSuper: false }));
   assert.equal(g.state, 'CHEST');
   assert.equal(g.player.upgradeLevels.multishot, 2);
-  assert.equal(g.player.stats.bulletCount, 6);
+  assert.equal(blasterStreams(g.player), 6);
+  assert.equal(g.player.stats.bulletCount, 2, 'cards never touch the base stats');
 
   const chestCard = elements.get('chest-rewards-grid').children[0];
   assert.match(chestCard.className, /\brarity-uncommon\b/, 'a +2 roll is uncommon');
   assert.match(chestCard.className, /\bjump-2\b/);
-  assert.match(chestCard.innerHTML, /INSTALLED \/\/ NEW → LV 2/);
+  assert.match(chestCard.innerHTML, /INSTALLED \/\/ LV 1 → LV 3/);
   assert.match(chestCard.innerHTML, /\+2 LEVELS/);
-  assert.match(chestCard.innerHTML, /\+4 PROJECTILES/);
+  assert.match(chestCard.innerHTML, /\+4 PEW PEWS PROJECTILES/);
 
   g.closeChestModal();
   assert.equal(g.state, 'PLAYING');
-  assert.match(elements.get('active-weapons-bar').innerHTML, /Prism Split LV 2</);
+  assert.match(elements.get('active-weapons-bar').innerHTML, /Pew Pews LV 3</);
 
   withRandom([], () => g.triggerLevelUp());
   assert.equal(g.state, 'UPGRADE');
   assert.equal(g.currentChoices[0].id, 'multishot');
   const levelCard = elements.get('upgrade-choices').children[0];
-  assert.match(levelCard.innerHTML, /LV 2 → LV 3/);
+  assert.match(levelCard.innerHTML, /LV 3 → LV 4/);
   assert.deepEqual(describeUpgrade(g.player, g.currentChoices[0]).rows.find((r) => r.id === 'bulletCount'),
     { id: 'bulletCount', label: 'Projectiles', before: '6', after: '8' });
 
   g.selectUpgrade(0);
   assert.equal(g.player.upgradeLevels.multishot, 3);
-  assert.match(elements.get('active-weapons-bar').innerHTML, /Prism Split LV 3</);
+  // LV 4: the Pew Pews Breakthrough opens before play resumes.
+  assert.equal(g.state, 'UPGRADE');
+  assert.equal(g.handPhase, 'breakthrough');
+  assert.deepEqual(g.currentChoices.map((c) => c.kind), ['transform', 'boost']);
+  assert.equal(g.currentChoices[0].name, 'Flak Rounds');
+  g.selectUpgrade(0);
+  assert.deepEqual(g.player.breakthroughs.blaster, { 4: 'transform' });
+  assert.equal(g.state, 'PLAYING');
+  assert.match(elements.get('active-weapons-bar').innerHTML, /Pew Pews LV 4</);
 });
 
 test('card previews match the real install for every upgrade and level jump, without touching the player', () => {
-  for (const upg of UPGRADE_POOL) {
+  // Equip lines are never offered (NEW WEAPON installs them) and only set LV 1, so they are skipped.
+  for (const upg of UPGRADE_POOL.filter((u) => !u.isCore)) {
     for (const levelJump of [1, 2, 3]) {
       const player = makePlayer();
       // A mid-run loadout so cross-weapon rows (missile/arc/blade damage) are live.
       for (const id of ['missiles', 'lightning', 'orbitals', 'shrapnel', 'thrusters', 'multishot']) applyUpgradeLevels(player, byId(id));
+      if (sc0(upg)) applyUpgradeLevels(player, byId(sc0(upg).weapon)); // its weapon is equipped
+      for (const w of upg.ownersAll || []) applyUpgradeLevels(player, byId(w)); // an evolution's weapons are equipped
       const snapshot = JSON.stringify(player);
       const card = { ...upg, levelJump };
       const d = describeUpgrade(player, card);
@@ -112,7 +129,8 @@ test('card previews match the real install for every upgrade and level jump, wit
       const beforeText = STAT_ROWS.map((row) => { const v = row.get(player); return v === null ? '—' : row.fmt(v); });
       const jump = applyUpgradeLevels(player, card);
       assert.equal(d.jump, jump);
-      assert.equal(d.toLevel, player.upgradeLevels[upg.id]);
+      const sc = STAT_CARD_BY_ID[upg.id];
+      assert.equal(d.toLevel, sc ? weaponLevel(player, sc.weapon) : player.upgradeLevels[upg.id]);
       const shown = new Map(d.rows.map((r) => [r.id, r]));
       let changed = 0;
       STAT_ROWS.forEach((row, i) => {
@@ -136,18 +154,25 @@ test('card previews match the real install for every upgrade and level jump, wit
 
 test('headlines are computed from the rolled level jump', () => {
   const p = makePlayer();
-  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 1 }).headline, '+2 PROJECTILES');
-  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 2 }).headline, '+4 PROJECTILES');
+  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 1 }).headline, '+2 PEW PEWS PROJECTILES');
+  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 2 }).headline, '+4 PEW PEWS PROJECTILES');
   assert.equal(describeUpgrade(p, byId('mining_speed')).headline, '+12% MINING SPEED');
   assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
-  assert.equal(describeUpgrade(p, byId('pierce')).headline, '+2 PIERCE');
-  assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(1)} MISSILES / SALVO`);
+  assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 PEW PEWS PIERCE');
+  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+50% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+125% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(levelBuild('missiles', 1))} MISSILES / SALVO`);
 });
 
 test('only stats that change are listed', () => {
   const p = makePlayer();
-  assert.deepEqual(describeUpgrade(p, byId('firerate')).rows.map((r) => r.id), ['fireRate', 'bulletSpeed']);
+  assert.deepEqual(describeUpgrade(p, byId('firerate')).rows.map((r) => r.id), ['fireRate']);
+  // Every weapon stat card shows exactly one stat: its own.
+  for (const id of ['missiles', 'singularity', 'orbitals', 'mines']) applyUpgradeLevels(p, byId(id));
+  for (const id of ['singularity_pull', 'singularity_cooldown', 'singularity_core', 'orbitals_size', 'mines_fuse', 'missiles_radius', 'missiles_reload']) {
+    assert.equal(describeUpgrade(p, byId(id)).rows.length, 1, id);
+  }
   p.bombs = 9; // bomb cap: the magnet card must not promise a bomb
   assert.ok(!describeUpgrade(p, byId('magnet')).rows.some((r) => r.id === 'bombs'));
   p.hp = p.maxHp = 100;
@@ -193,10 +218,13 @@ test('+4 and +5 rolls happen only when they fit under the level cap, scaled by l
 test('weapons fire with the shared scaling the cards preview', () => {
   const g = game();
   g.player.stats.damage = 10;
-  g.fireSwarmMissiles(3);
-  assert.equal(g.missiles.length, W.missileSalvo(3));
-  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(3));
-  assert.equal(g.missiles[0].speed, W.missileSpeed(3));
+  g.player.upgradeLevels.missiles_salvo = 2;
+  const b = weaponBuild(g.player, 'missiles', 3);
+  g.fireSwarmMissiles(b);
+  assert.equal(g.missiles.length, W.missileSalvo(b));
+  assert.equal(g.missiles.length, 4);
+  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(b));
+  assert.equal(g.missiles[0].speed, W.missileSpeed);
 });
 
 test('5x jackpot caches use compact cards so both rows of rewards fit one screen', () => {
@@ -211,7 +239,8 @@ test('5x jackpot caches use compact cards so both rows of rewards fit one screen
   for (const card of cards) {
     assert.ok((card.innerHTML.match(/class="upg-stat"/g) || []).length <= 3, 'compact cards list at most 3 rows');
   }
-  assert.ok(cards.some((card) => /\+2 more stats improved/.test(card.innerHTML)), 'trimmed rows are still counted');
+  // Rows a compact card trims are still counted.
+  assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic'), 3).hiddenRows, 2);
   // Normal-size caches and level-up cards keep the full row list.
   assert.equal(describeUpgrade(makePlayer(), byId('evo_tectonic')).rows.length, 5);
 });
@@ -219,7 +248,7 @@ test('5x jackpot caches use compact cards so both rows of rewards fit one screen
 test('Storm Protocol shows its extra missile launcher as +1 STORM on missile cards', () => {
   const p = makePlayer();
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
-  const missiles = UPGRADE_POOL.find((u) => u.id === 'missiles');
+  const missiles = UPGRADE_POOL.find((u) => u.id === 'missiles_salvo');
   assert.equal(describeUpgrade(p, { ...missiles, levelJump: 1 }).bonus, null);
   UPGRADE_POOL.find((u) => u.id === 'evo_tempest').apply(p);
   const d = describeUpgrade(p, { ...missiles, levelJump: 1 });
@@ -227,23 +256,12 @@ test('Storm Protocol shows its extra missile launcher as +1 STORM on missile car
   assert.match(levelText(d), /LV 1 → LV 2 <span class="lv-bonus">\+1 STORM<\/span>/);
 });
 
-test('missile and turret cards preview the faster, lighter-hitting retune', () => {
+test('reload and fire-rate cards change only their own stat', () => {
   const p = makePlayer();
-  const d = TUNING.baseDamage;
-  const row = (desc, id) => desc.rows.find((r) => r.id === id);
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
-  const m = describeUpgrade(p, { ...byId('missiles'), levelJump: 1 });
-  // Salvos every 1.44 s -> 1.36 s (was 1.80 s -> 1.70 s); each missile hits 20% lighter than before.
-  assert.deepEqual(row(m, 'missileCooldown'), { id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.36s' });
-  assert.equal(row(m, 'missileDamage').before, (d * W.missileDamageMult(1)).toFixed(1));
-  assert.equal(row(m, 'missileDamage').after, (d * W.missileDamageMult(2)).toFixed(1));
-  assert.ok(Math.abs(W.missileDamageMult(1) - 0.8 * 3 * 1.8 / 2) < 1e-9);
-
+  const m = describeUpgrade(p, byId('missiles_reload'));
+  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.03s' }]);
   p.upgradeLevels.turret = 1; p.weapons.turret = 1;
-  const t = describeUpgrade(p, { ...byId('turret'), levelJump: 1 });
-  // Twice the bolts (3.05/s -> 6.10/s at LV 1) at half the damage per bolt.
-  assert.deepEqual(row(t, 'turretFireRate'), { id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '7.00/s' });
-  const k = TUNING.deployableDamageMult ?? 1;
-  assert.equal(row(t, 'turretDamage').before, (d * W.turretDamageMult(1) * k).toFixed(1));
-  assert.equal(row(t, 'turretDamage').after, (d * W.turretDamageMult(2) * k).toFixed(1));
+  const t = describeUpgrade(p, byId('turret_rate'));
+  assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
 });
