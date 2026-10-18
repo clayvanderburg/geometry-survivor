@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.24.0',
+    date: '2026-10-18',
+    title: 'Living Grid',
+    notes: [
+      { type: 'fix', text: 'Your ship lights the neon grid evenly all around it (it used to light a lopsided staircase) and pushes a bow wave through the lines.' },
+      { type: 'new', text: 'Explosions send ripples across the grid, scaled by blast size and tinted by their colour.' },
+      { type: 'new', text: 'Gravity wells, singularities, dashes and Supernovas warp the grid harder, with a springier rebound.' }
+    ]
+  },
+  {
     version: '0.23.0',
     date: '2026-10-18',
     title: 'Run Overview',

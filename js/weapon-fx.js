@@ -168,6 +168,7 @@ export class WeaponEffects {
         fx.spawnShockwave(e.x, e.y, r * 1.25, 10, 2, 0.9);
         fx.spawnExplosionSparks(e.x, e.y, 60, 35, 4, 18, 3);
         game.grid.applyImpulse(e.x, e.y, 110, r * 1.4, 40);
+        game.grid.ripple?.(e.x, e.y, r, 40, 1.4);
         game.shake = Math.min(26, Math.max(game.shake, 12 * (TUNING.screenShakeMult ?? 1)));
         game.sound.playExplosion?.(1.2);
         break;
@@ -208,7 +209,9 @@ export class WeaponEffects {
         fx.spawnExplosionSparks(e.x, e.y, e.style === 'tandem' ? 14 : 6, e.hue, 2, 9, 1.8);
         if (e.style === 'tandem') game.sound.playMissileImpact?.(0.7);
     }
+    // Damaging blasts ripple the grid through damageEnemiesInRadius; harmless ones still ripple it.
     if (e.damage > 0) game.damageEnemiesInRadius(e.x, e.y, r, e.damage, e.hue, e.source, e.knock, e.falloff, e.kind);
+    else game.grid.ripple?.(e.x, e.y, r, e.hue);
     e.after?.(game, e);
     if (e.cluster) {
       const c = e.cluster;

@@ -89,14 +89,14 @@ function statsWeaponLevel(p, id) {
 // Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
 const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
-const BLACKHOLE_GRID_DEPTH = 220;
+const BLACKHOLE_GRID_DEPTH = 290;
 // Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
 const ROCKET_CONVERGE = 320;
 // Autocannon tracers are drawn at this share of the shared bolt thickness (the hitbox is unchanged).
 const AUTOCANNON_DRAW_WIDTH = 0.6;
 // Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
 const HAND_SIZE = 4;
-const SINGULARITY_GRID_DEPTH = 260;
+const SINGULARITY_GRID_DEPTH = 340;
 // Swarm Missile colour: orange-gold, turning pink once Storm Protocol charges them with lightning.
 const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 
@@ -1396,6 +1396,7 @@ export class Game {
     this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
 
     this.grid.applyImpulse(this.player.x, this.player.y, 48, 260, 188);
+    this.grid.ripple?.(this.player.x, this.player.y, 240, 188);
     this.particles.spawnShockwave(this.player.x, this.player.y, 240, 188, 5, 0.5);
     this.sound.playLevelUp();
     if (this.range?.active) this.range.onRunStart();
@@ -1545,6 +1546,7 @@ export class Game {
     this.particles.spawnExplosionSparks(rock.x, rock.y, 20, rock.hue, 2, 10, 2.0);
     this.particles.spawnShockwave(rock.x, rock.y, rock.radius * 1.8, rock.hue, 2.5, 0.28);
     this.grid.applyImpulse(rock.x, rock.y, 22, 110, rock.hue);
+    this.grid.ripple?.(rock.x, rock.y, rock.radius * 1.8, rock.hue);
 
     if (rock.oreType === 'gold_vein') {
       // Gold coins (currency, no XP): magnetized and collected like geoms, whoever broke the rock.
@@ -1635,7 +1637,8 @@ export class Game {
     p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * 3.1;
 
     this.sound.playDash();
-    this.grid.applyImpulse(p.x, p.y, 32, 140, 188);
+    this.grid.applyImpulse(p.x, p.y, 46, 180, 188);
+    this.grid.ripple?.(p.x, p.y, 110, 188);
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
     if (p.weapons.dashNova > 0) {
@@ -1661,6 +1664,7 @@ export class Game {
     this.particles.spawnShockwave(p.x, p.y, maxR, 190, 9, 0.7);
     this.particles.spawnShockwave(p.x, p.y, maxR * 0.55, 325, 6, 0.5);
     this.grid.applyImpulse(p.x, p.y, 110, maxR * 0.75, 325);
+    this.grid.ripple?.(p.x, p.y, maxR, 190, 1.2);
 
     // The blast also wipes every hostile plasma orb in flight.
     this.enemyManager.enemyBullets?.clear();
@@ -1710,7 +1714,9 @@ export class Game {
         this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock, 1, stat);
       }
     }
+    // Every blast sends a ring wave through the grid, sized by its radius.
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
+    this.grid.ripple?.(cx, cy, radius, hue);
   }
 
   // Single entry point for weapon damage: armor/Conduit links and corrosion, crit roll, HP, hit flash,
@@ -1799,6 +1805,7 @@ export class Game {
     this.particles.spawnExplosionSparks(e.x, e.y, sparkCount, e.hue, 2.5, 14 * Math.sqrt(intensity), 2.3);
     this.particles.spawnShockwave(e.x, e.y, 48 * intensity, e.hue, 3 * intensity, 0.34);
     this.grid.applyImpulse(e.x, e.y, 26 * intensity, 115 * intensity, e.hue);
+    this.grid.ripple?.(e.x, e.y, 40 * intensity, e.hue);
 
     // Heavier hulls stack extra layers; supernova mass-kills skip them (except elites/bosses).
     if (!fromBomb || tier >= 3) {
@@ -2041,6 +2048,7 @@ export class Game {
     else this.sound.playExplosion(1.8);
     this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
     this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
+    this.grid.ripple?.(p.x, p.y, 130, 348);
     return p.hp <= 0;
   }
 
@@ -2091,6 +2099,7 @@ export class Game {
     this.particles.spawnShockwave(e.x, e.y, 240, e.hue, 4, 0.5);
     this.particles.spawnShockwave(e.x, e.y, 150, 220, 3, 0.35);
     this.grid.applyImpulse(e.x, e.y, 60, 260, e.hue);
+    this.grid.ripple?.(e.x, e.y, 260, e.hue);
     this.addShake(6);
     this.sound.playLieutenantArrival?.();
     const mods = lieutenantModLabels(e).join(' · ');
@@ -2163,6 +2172,7 @@ export class Game {
     this.particles.spawnShockwave(e.x, e.y, 320, e.hue, 5, 0.55);
     this.particles.spawnExplosionSparks(e.x, e.y, 48, 48, 3, 18, 2.6);
     this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
+    this.grid.ripple?.(e.x, e.y, 560, 48);
     this.sound.playBossArrival();
     const hp = Math.round(e.maxHp).toLocaleString();
     this.logGuideEntries(['boss']);
@@ -2180,7 +2190,8 @@ export class Game {
     this.particles.spawnShockwave(e.x, e.y, 420, 185, 6, 0.65);
     this.particles.spawnShockwave(e.x, e.y, 220, 325, 5, 0.45);
     this.particles.spawnExplosionSparks(e.x, e.y, 70, 48, 4, 22, 3);
-    this.grid.applyImpulse(e.x, e.y, 110, 600, 48);
+    this.grid.applyImpulse(e.x, e.y, 140, 600, 48);
+    this.grid.ripple?.(e.x, e.y, 680, 48, 1.3);
     this.sound.playBossDefeat();
     const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE'];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
@@ -2756,7 +2767,8 @@ export class Game {
     }
 
     this.sound.playLaser();
-    this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 48, 188);
+    // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
+    this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
   }
 
   // Rocket Pods: dumbfire rockets from the two flank pods, flying where the turret aims (mouse, right
@@ -3362,7 +3374,7 @@ export class Game {
     this.particles.spawnShockwave(sg.x, sg.y, r, sg.hue, 6, 0.45);
     this.particles.spawnShockwave(sg.x, sg.y, r * 0.45, 200, 4, 0.26);
     this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
-    this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
+    this.grid.applyImpulse(sg.x, sg.y, 95, r * 1.35, sg.hue);
     // The collapse hits full force at the core and fades to 25% at its rim (singularityCollapseEdgeFalloff).
     this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75, 'collapse');
     if (sg.aftershock > 0) {
@@ -3378,6 +3390,7 @@ export class Game {
     this.sound.playLevelUp();
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 145, 5, 0.5);
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
+    this.grid.ripple?.(this.player.x, this.player.y, 220, 145);
 
     // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
     // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
@@ -4258,6 +4271,7 @@ export class Game {
     const pad = p.radius + 24;
     p.x = Math.max(pad, Math.min(this.worldWidth - pad, p.x));
     p.y = Math.max(pad, Math.min(this.worldHeight - pad, p.y));
+    this.grid.applyWake?.(p.x, p.y, p.vx, p.vy);
 
     const targetCamX = Math.max(0, Math.min(this.worldWidth - this.width, p.x - this.width * 0.5));
     const targetCamY = Math.max(0, Math.min(this.worldHeight - this.height, p.y - this.height * 0.5));
@@ -5191,7 +5205,12 @@ export class Game {
     }
     ctx.translate(offsetX, offsetY);
 
-    // 1. Reactive Spring-Mass Neon Grid
+    // 1. Reactive Spring-Mass Neon Grid, lit around the ship (brighter at speed)
+    const ship = this.player;
+    if (ship && this.state !== 'GAMEOVER') {
+      const pace = Math.min(1.6, Math.hypot(ship.vx, ship.vy) / Math.max(1, ship.stats?.moveSpeed ?? 6));
+      this.grid.setLight?.(ship.x, ship.y, 260, 0.8 + 0.3 * pace, 188);
+    }
     this.grid.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // 2. Glowing Outer Sector Boundary Wall
