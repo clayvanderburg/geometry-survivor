@@ -256,9 +256,9 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'weaponlevels', icon: '⚛', title: 'WEAPON LEVELS & BREAKTHROUGHS',
     body: () => [
-      'Every weapon, Autocannon included, goes from LV 1 to LV 12. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
+      'Every weapon, Autocannon included, goes from LV 1 to LV 18. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
       'Damage, fire rate and count cards add damage output. Size, radius, reach and pull cards add none: they make the weapon easier to land, so a weapon built purely for damage hits as hard as any other weapon built the same way.',
-      'At LV 4, 8 and 12 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+18% damage, and +1 to every size, reach and range stat of that weapon). A card that jumps past a milestone still triggers it.',
+      'At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+18% damage, and +1 to every size, reach and range stat of that weapon). A card that jumps past a milestone still triggers it.',
       'EVOLUTIONS are semi-rare one-shot synergy cards that need two weapons (or a weapon and a passive). Every evolution names the weapons it upgrades.'
     ]
   },

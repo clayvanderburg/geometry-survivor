@@ -25,12 +25,25 @@ export const RATE_PREFIX = 'ratelimit/';
 export const MIGRATION_PREFIX = 'migrations/';
 
 // One-time board cleanups. Each runs once per store: the first /api/scores request after it deploys
-// removes every entry under these callsigns from every board (all-time and per version), then writes
-// a marker blob so it never runs again. Runs submitted under these names afterwards are kept.
+// removes every matching entry from every board (all-time and per version), then writes a marker blob
+// so it never runs again. A purge matches by callsign (`names`) and/or by one run's fingerprint
+// (`version`, `wave`, `minScore`..`maxScore`); every field given must match. Later runs are kept.
 export const PURGES = Object.freeze([
   // The developer's test runs, cleared for a fresh start with the rebuilt Void Armory.
-  { id: 'purge-madking-nox-v1', names: ['MADKING', 'NOX'] }
+  { id: 'purge-madking-nox-v1', names: ['MADKING', 'NOX'] },
+  // The developer's ~87M wave-36 run on 0.16.0 (from before the v0.17 weapon rework), removed on request.
+  { id: 'purge-dev-87m-v0160-v1', version: '0.16.0', wave: 36, minScore: 80e6, maxScore: 95e6 }
 ]);
+
+// Does a board entry match a purge rule?
+export function purgeMatches(purge, e) {
+  if (purge.names && !purge.names.map((n) => sanitizeCallsign(n)).includes(sanitizeCallsign(e.name))) return false;
+  if (purge.version !== undefined && e.version !== purge.version) return false;
+  if (purge.wave !== undefined && e.wave !== purge.wave) return false;
+  if (purge.minScore !== undefined && !(e.score >= purge.minScore)) return false;
+  if (purge.maxScore !== undefined && !(e.score <= purge.maxScore)) return false;
+  return true;
+}
 
 // Blob key of a board: 'all' -> the all-time board, '0.9.0' -> board-v1@0.9.0.
 export function boardKey(version) {
@@ -363,13 +376,14 @@ export function createScoresHandler({
     });
   }
 
-  // Removes `names` from one board, compare-and-swap like insertEntry. Resolves the number removed.
-  async function purgeBoard(blobs, key, names) {
+  // Removes a purge's matching entries from one board, compare-and-swap like insertEntry. Resolves the
+  // number removed.
+  async function purgeBoard(blobs, key, purge) {
     for (let attempt = 0; attempt < limits.WRITE_ATTEMPTS; attempt++) {
       const result = await blobs.getWithMetadata(key, { type: 'json' });
       if (!result) return 0;
       const entries = readBoard(result.data);
-      const kept = entries.filter((e) => !names.has(sanitizeCallsign(e.name)));
+      const kept = entries.filter((e) => !purgeMatches(purge, e));
       if (kept.length === entries.length) return 0;
       const write = await blobs.setJSON(key, { ...result.data, entries: kept }, writeConditions(result));
       if (write.modified) return entries.length - kept.length;
@@ -388,15 +402,14 @@ export function createScoresHandler({
       try {
         const marker = MIGRATION_PREFIX + purge.id;
         if (await blobs.getWithMetadata(marker, { type: 'json' })) { purgesDone.add(purge.id); continue; }
-        const names = new Set(purge.names.map((n) => sanitizeCallsign(n)));
         const keys = [BOARD_KEY];
         if (typeof blobs.list === 'function') {
           const listing = await blobs.list({ prefix: VERSION_BOARD_PREFIX });
           for (const b of listing?.blobs || []) keys.push(String(b.key));
         }
         let removed = 0;
-        for (const key of keys) removed += await purgeBoard(blobs, key, names);
-        await blobs.setJSON(marker, { id: purge.id, names: [...names], removed, done: new Date(now()).toISOString() });
+        for (const key of keys) removed += await purgeBoard(blobs, key, purge);
+        await blobs.setJSON(marker, { id: purge.id, rule: purge, removed, done: new Date(now()).toISOString() });
         purgesDone.add(purge.id);
         log?.info?.(`[scores] ${purge.id}: removed ${removed} entries`);
       } catch (err) {

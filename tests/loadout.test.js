@@ -337,21 +337,22 @@ test('Cryo Payload chills enemies caught by wing rocket blasts', async () => {
   assert.ok(!(dry.st?.chillT > 0), 'no chill without Cryo Payload');
 });
 
-test('every weapon levels 1 to 12 through its stat cards, and stops at LV 12', () => {
+test('every weapon levels 1 to 18 through its stat cards (11 ranks per card at most), and stops at LV 18', () => {
   for (const w of WEAPONS) {
     if (!w.levelId) continue;
     assert.equal(UPGRADE_BY_ID[w.levelId].maxLevel, 1, `${w.id} equip line is LV 1`);
     const room = STAT_CARDS[w.id].reduce((a, c) => a + c.maxLevel, 0);
-    assert.ok(room >= WEAPON_MAX_LEVEL - 1, `${w.id} cards can reach LV 12`);
+    assert.ok(room >= WEAPON_MAX_LEVEL - 1, `${w.id} cards can reach LV 18`);
+    for (const c of STAT_CARDS[w.id]) assert.ok(c.maxLevel <= 11, `${c.id} caps at 11 ranks`);
   }
   const p = freshGame().player;
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 5 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 11 });
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.firerate, levelJump: 5 });
-  assert.equal(weaponLevel(p, 'blaster'), 11);
-  // A +5 roll at LV 11 installs only the one level left.
+  assert.equal(weaponLevel(p, 'blaster'), 17);
+  // A +5 roll at LV 17 installs only the one level left.
   assert.equal(applyUpgradeLevels(p, { ...UPGRADE_BY_ID.pierce, levelJump: 5 }), 1);
-  assert.equal(weaponLevel(p, 'blaster'), 12);
-  assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Autocannon cards past LV 12');
+  assert.equal(weaponLevel(p, 'blaster'), 18);
+  assert.ok(!eligibleUpgrades(p).some((u) => STAT_CARDS.blaster.some((c) => c.id === u.id)), 'no Autocannon cards past LV 18');
 });
 
 test('the XP curve is a stepped line, driven by TUNING', () => {

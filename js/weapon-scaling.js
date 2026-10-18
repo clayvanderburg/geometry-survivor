@@ -232,7 +232,7 @@ export const WEAPON_SCALING = {
   // turretDropMoving s. A turret lasts turretDuration s; its slot then recharges for turretCooldown s.
   // Potential DPS counts every turret out (the user-facing rule: DPS is measured with all of them down),
   // so Lifetime and Redeploy are UTILITY (they keep them out more of the time).
-  turretCooldown: (b) => 5 / (1 + 0.25 * b.r.redeploy),
+  turretCooldown: (b) => 2.5 / (1 + 0.25 * b.r.redeploy), // was 5 s
   turretDuration: (b) => 10 + 1.5 * b.r.lifetime,
   turretMaxActive: (b) => Math.min(TURRET_MAX_ACTIVE, 3 + (b.r.count || 0)),
   turretDropStill: 0.25,

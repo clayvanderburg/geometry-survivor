@@ -101,14 +101,9 @@ test('a supply-cache level is the starting level of the next level-up card and t
 
   g.selectUpgrade(0);
   assert.equal(g.player.upgradeLevels.multishot, 3);
-  // LV 4: the Autocannon Breakthrough opens before play resumes.
-  assert.equal(g.state, 'UPGRADE');
-  assert.equal(g.handPhase, 'breakthrough');
-  assert.deepEqual(g.currentChoices.map((c) => c.kind), ['transform', 'boost']);
-  assert.equal(g.currentChoices[0].name, 'Flak Rounds');
-  g.selectUpgrade(0);
-  assert.deepEqual(g.player.breakthroughs.blaster, { 4: 'transform' });
+  // LV 4 is not a milestone (Breakthroughs come at LV 6 / 12 / 18): play resumes.
   assert.equal(g.state, 'PLAYING');
+  assert.deepEqual(g.player.breakthroughs?.blaster ?? {}, {});
   assert.match(elements.get('active-weapons-bar').innerHTML, /Autocannon LV 4</);
 });
 
