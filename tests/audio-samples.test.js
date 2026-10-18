@@ -8,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 globalThis.window = globalThis.window || { addEventListener() {} };
 globalThis.BroadcastChannel = undefined; // config.js tuning sync would keep the test process alive
 globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {} };
-const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_BASE, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
+const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_BASE, SFX_V2_BASE, SFX_ROUND2, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const playMethods = Object.getOwnPropertyNames(SoundEngine.prototype).filter(name => name.startsWith('play') && name !== 'playSample');
+const playMethods = Object.getOwnPropertyNames(SoundEngine.prototype).filter(name => name.startsWith('play') && name !== 'playSample' && name !== 'playPreview');
 
 test('every SFX sample maps to existing play methods and ships as a file', () => {
   const names = Object.keys(SFX_LIBRARY);
@@ -32,6 +32,45 @@ test('every SFX sample maps to existing play methods and ships as a file', () =>
   assert.ok(total < 2.5 * 1024 * 1024, `sfx folder is ${total} bytes`);
   // The Netlify build copies an explicit list of folders into the published site.
   assert.match(fs.readFileSync(path.join(root, 'netlify.toml'), 'utf8'), /cp -r [^\n]*\bassets\b[^\n]* dist\//, 'netlify build must publish assets/');
+});
+
+test('round-2 candidates: both variations ship for every listed sound and only the sound check page uses them', () => {
+  assert.equal(SFX_ROUND2.length, 16);
+  for (const name of SFX_ROUND2) {
+    assert.ok(SFX_LIBRARY[name], `${name} is a library sound`);
+    assert.ok(!SFX_IN_GAME.includes(name), `${name} keeps its procedural sound in game`);
+    for (const v of ['a', 'b']) {
+      const file = path.join(root, SFX_V2_BASE, `${name}_${v}.mp3`);
+      assert.ok(fs.existsSync(file), `missing ${SFX_V2_BASE}${name}_${v}.mp3`);
+      assert.ok(fs.statSync(file).size > 1000, `${name}_${v}.mp3 is empty`);
+    }
+  }
+  assert.ok(SFX_V2_BASE.startsWith(SFX_BASE), 'v2 files live inside the published sfx folder');
+  const page = fs.readFileSync(path.join(root, 'sounds.html'), 'utf8');
+  assert.match(page, /SFX_ROUND2/);
+  assert.match(page, /playPreview\(/);
+  // The game never references the round-2 files.
+  for (const file of fs.readdirSync(path.join(root, 'js'))) {
+    if (file === 'audio.js' || !file.endsWith('.js')) continue;
+    assert.doesNotMatch(fs.readFileSync(path.join(root, 'js', file), 'utf8'), /sfx\/v2|playPreview|loadPreview/, file);
+  }
+  const total = fs.readdirSync(path.join(root, SFX_V2_BASE)).reduce((sum, f) => sum + fs.statSync(path.join(root, SFX_V2_BASE, f)).size, 0)
+    + fs.readdirSync(path.join(root, SFX_BASE)).filter(f => f.endsWith('.mp3')).reduce((sum, f) => sum + fs.statSync(path.join(root, SFX_BASE, f)).size, 0);
+  assert.ok(total < 2.5 * 1024 * 1024, `sfx folder (with v2) is ${total} bytes`);
+});
+
+test('preview playback uses the library settings and is a no-op without audio', async () => {
+  const silent = new SoundEngine();
+  assert.equal(await silent.playPreview(`${SFX_V2_BASE}dash_a.mp3`, SFX_LIBRARY.dash), false);
+  const engine = engineWithSamples([]);
+  engine.previewBuffers = new Map([[`${SFX_V2_BASE}dash_a.mp3`, Promise.resolve({ duration: 0.4 })]]);
+  assert.equal(await engine.playPreview(`${SFX_V2_BASE}dash_a.mp3`, SFX_LIBRARY.dash), true);
+  assert.equal(engine.ctx.counts.sources, 1);
+  assert.equal(engine.ctx.counts.oscillators, 0);
+  // Previews never make the in-game path play a sample.
+  engine.weaponVoices = {};
+  engine.playDash();
+  assert.equal(engine.ctx.counts.sources, 1);
 });
 
 test('audio engine no-ops without an AudioContext', async () => {

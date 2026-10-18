@@ -61,6 +61,15 @@ export const SFX_IN_GAME = Object.freeze([
 ]);
 export const SFX_SAMPLES = Object.freeze(Object.fromEntries(SFX_IN_GAME.map((name) => [name, SFX_LIBRARY[name]])));
 
+// Round-2 candidates (musical synthwave takes, two variations each: <name>_a.mp3 / <name>_b.mp3) for the
+// sounds that kept their procedural version. They only play on the sound check page (playPreview);
+// nothing in the game references them until the player picks one.
+export const SFX_V2_BASE = 'assets/sfx/v2/';
+export const SFX_ROUND2 = Object.freeze([
+  'autocannon_shot', 'drone_shot', 'blade_hit', 'turret_shot', 'mine_drop', 'grenade_blast', 'enemy_hit', 'enemy_death',
+  'player_hit', 'xp_pickup', 'gold_pickup', 'breakthrough', 'boss_warning', 'dash', 'supernova', 'ui_confirm'
+]);
+
 // Drop-in soundtrack: list audio files here (e.g. 'assets/music/track1.mp3') and they replace the
 // procedural score, streaming one after another with a cross-fade. Empty = procedural synthwave.
 export const MUSIC_TRACKS = [];
@@ -335,19 +344,25 @@ export class SoundEngine {
     for (const name of names) {
       if (this.sampleRequested.has(name)) continue;
       this.sampleRequested.add(name);
-      fetch(`${SFX_BASE}${name}.mp3`)
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.arrayBuffer();
-        })
-        .then(data => new Promise((resolve, reject) => {
-          // Callback form for older Safari; newer browsers also return a promise.
-          const pending = ctx.decodeAudioData(data, resolve, reject);
-          if (pending && typeof pending.then === 'function') pending.then(resolve, reject);
-        }))
+      this.fetchBuffer(`${SFX_BASE}${name}.mp3`)
         .then(buffer => { if (this.ctx === ctx) this.samples.set(name, buffer); })
         .catch(() => { this.sampleFailures.add(name); });
     }
+  }
+
+  // Fetch + decode one audio file into an AudioBuffer (rejects on HTTP or decode errors).
+  fetchBuffer(url) {
+    const ctx = this.ctx;
+    return fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then(data => new Promise((resolve, reject) => {
+        // Callback form for older Safari; newer browsers also return a promise.
+        const pending = ctx.decodeAudioData(data, resolve, reject);
+        if (pending && typeof pending.then === 'function') pending.then(resolve, reject);
+      }));
   }
 
   hasSample(name) {
@@ -362,9 +377,15 @@ export class SoundEngine {
     const buffer = this.samples.get(name);
     const def = SFX_LIBRARY[name];
     if (!buffer || !def || !this.ctx || !this.sfxGain) return false;
+    this.startSampleBuffer(buffer, def, `sample:${name}`, { volume, rate, delay });
+    return true;
+  }
+
+  // Start a decoded buffer through the SFX bus with a library entry's level, pitch spread and voice limits.
+  startSampleBuffer(buffer, def, voiceKey, { volume = 1, rate = 1, delay = 0 } = {}) {
     const spread = def.pitchVar ?? 0.04;
     const playbackRate = Math.max(0.25, Math.min(4, rate * (1 + (Math.random() * 2 - 1) * spread)));
-    if (!this.claimVoice(`sample:${name}`, def.gapMs ?? 0, def.maxVoices ?? 3, delay + buffer.duration / playbackRate)) return true;
+    if (!this.claimVoice(voiceKey, def.gapMs ?? 0, def.maxVoices ?? 3, delay + buffer.duration / playbackRate)) return;
     const t = this.ctx.currentTime + Math.max(0, delay);
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
@@ -375,6 +396,24 @@ export class SoundEngine {
     gain.connect(this.sfxGain);
     src.onended = () => { src.disconnect(); gain.disconnect(); };
     src.start(t);
+  }
+
+  // Sound check page only (never called by the game): decode a candidate file once, e.g. a round-2 take.
+  // Resolves to the AudioBuffer, or null when it is missing or fails to decode.
+  loadPreview(url) {
+    this.previewBuffers ||= new Map();
+    if (this.previewBuffers.has(url)) return this.previewBuffers.get(url);
+    if (!this.ctx || typeof this.ctx.decodeAudioData !== 'function' || typeof fetch !== 'function') return Promise.resolve(null);
+    this.previewBuffers.set(url, this.fetchBuffer(url).catch(() => null));
+    return this.previewBuffers.get(url);
+  }
+
+  // Play a candidate file with a library sound's settings (def = SFX_LIBRARY[name]). Resolves to true
+  // when it played.
+  async playPreview(url, def, opts = {}) {
+    const buffer = await this.loadPreview(url);
+    if (!buffer || !def || !this.ctx || !this.sfxGain) return false;
+    this.startSampleBuffer(buffer, def, `preview:${url}`, opts);
     return true;
   }
 
