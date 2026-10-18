@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.21.2',
+    date: '2026-10-18',
+    title: 'Trick Shots',
+    notes: [
+      { type: 'balance', text: 'Ricochet Rounds spread their bounces over the pack, skip enemies the Flak burst already hit, and hit harder.' },
+      { type: 'new', text: 'Ricochet Rounds now bounce off asteroids too.' },
+      { type: 'fix', text: 'Autocannon tracers are 40% slimmer (same hitbox).' }
+    ]
+  },
+  {
     version: '0.21.1',
     date: '2026-10-18',
     title: 'Worth the Pick',

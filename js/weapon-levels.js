@@ -116,7 +116,7 @@ const tf = (id, name, summary) => ({ id, name, summary });
 export const TRANSFORMS = {
   blaster: {
     6: tf('flak', 'Flak Rounds', 'Autocannon bolts burst in a small flak blast wherever they hit.'),
-    12: tf('ricochet', 'Ricochet Rounds', 'Autocannon bolts that hit ricochet into the nearest other enemy.'),
+    12: tf('ricochet', 'Ricochet Rounds', 'Autocannon bolts ricochet off enemies and asteroids into fresh targets.'),
     18: tf('arc', 'Arc Rounds', 'Every Autocannon hit arcs cyan lightning into 2 nearby enemies.')
   },
   rockets: {
