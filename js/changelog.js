@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.3',
+    date: '2026-10-18',
+    title: 'Hand-Picked Sounds',
+    notes: [
+      { type: 'new', text: 'New sounds for rockets, missiles, explosions, Tesla Arc, grenade throws, the Vortex, bosses, lieutenants, elite entrances, menus and game over. Everything else keeps its original sound.' }
+    ]
+  },
+  {
     version: '0.19.2',
     date: '2026-10-18',
     title: 'Sound Rollback',
