@@ -86,6 +86,13 @@ export const STAT_CARDS = {
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
     card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
+  ],
+  grenades: [
+    card('grenades', 'grenades_damage', 'damage', 'Plasma Grenade Charge', 'grenadeDamage', 'Plasma Grenades: hotter plasma cores. Only blast damage.'),
+    card('grenades', 'grenades_count', 'count', 'Plasma Grenade Bandolier', 'grenadeCount', 'Plasma Grenades: one more grenade per throw.', cap(5)),
+    card('grenades', 'grenades_rate', 'rate', 'Plasma Grenade Throw Rate', 'grenadeCooldown', 'Plasma Grenades: throws more often. Only throw rate.', cap(8)),
+    card('grenades', 'grenades_radius', 'radius', 'Plasma Grenade Blast Size', 'grenadeBlast', 'Plasma Grenades: wider blasts. Only blast size.'),
+    card('grenades', 'grenades_range', 'range', 'Plasma Grenade Throw Range', 'grenadeRange', 'Plasma Grenades: lobs reach targets further out. Only throw range.')
   ]
 };
 
@@ -96,10 +103,11 @@ export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.i
 // which weapon it upgrades.
 export const WEAPON_BADGE = {
   blaster: 'PEW PEWS', rockets: 'WING ROCKETS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
-  singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES'
+  singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
+  grenades: 'PLASMA GRENADES'
 };
 
-// Transforms: one per weapon per milestone (27 in all), each changing how the weapon works.
+// Transforms: one per weapon per milestone (30 in all), each changing how the weapon works.
 const tf = (id, name, summary) => ({ id, name, summary });
 export const TRANSFORMS = {
   blaster: {
@@ -146,6 +154,11 @@ export const TRANSFORMS = {
     4: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
     8: tf('homing', 'Homing Bolts', 'Escort Drone bolts curve onto their targets.'),
     12: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
+  },
+  grenades: {
+    4: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets scatter and pop a moment later.'),
+    8: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that burns, freezes or corrodes (by its element) everything inside.'),
+    12: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades pull nearby enemies in toward themselves, then blast harder.')
   }
 };
 

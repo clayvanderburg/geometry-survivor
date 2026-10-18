@@ -6,6 +6,7 @@ import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
+import { Grenades } from './grenades.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -334,7 +335,9 @@ export class Game {
         mines: 0,
         turret: 0,
         drones: 0,
+        grenades: 0,
         siegeBattery: 0,
+        empGrenades: 0,
         thermite: 0,
         cryo: 0,
         nanite: 0,
@@ -359,6 +362,7 @@ export class Game {
     this.particles.clear();
     this.damageNumbers?.clear();
     (this.deployables ||= new Deployables()).clear();
+    (this.grenades ||= new Grenades()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     this.missileSalvos = 0;
     this.turretShots = 0;
@@ -3989,6 +3993,7 @@ export class Game {
     // Deployables (mines, sentry turrets, escort drones) place and fire before the bullet sweep,
     // so their bolts move, bend and collide with everything else this tick.
     this.deployables?.update(dt, this);
+    this.grenades?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -4983,8 +4988,10 @@ export class Game {
     this.weaponFx?.draw(ctx, this);
 
     this.deployables?.drawGround(ctx, this);
+    this.grenades?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
+    this.grenades?.drawAir(ctx, this);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {

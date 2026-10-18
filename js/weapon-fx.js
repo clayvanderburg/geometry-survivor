@@ -1,6 +1,6 @@
 // Breakthrough weapon effects that outlive the shot that made them: timed blasts (cluster bomblets,
 // tandem warheads, strikes from above, tactical nukes, aftershock implosions, mortar shells, orbit-blade
-// novas, thunderstrikes), napalm pools and ball-lightning orbs. Damage goes through the game's own
+// novas, thunderstrikes, grenade bomblets), napalm pools and Plasma Grenade clouds, and ball-lightning orbs. Damage goes through the game's own
 // damageEnemiesInRadius / hitEnemy, so crits, statuses, damage numbers and kills work as for any hit.
 //
 // Everything lives in capped arrays simulated only from Game.update (pause, hit-stop and slow-mo
@@ -56,7 +56,8 @@ export class WeaponEffects {
     }
   }
 
-  // A burning pool: every `tick` s for `life` s it hits everything inside for `damage`.
+  // A burning pool: every `tick` s for `life` s it hits everything inside for `damage`. `look` draws it
+  // as a Plasma Grenade cloud of that element ('plasma', 'frost', 'corrode'; 'fire' and none: flames).
   addPool(p) {
     if (this.pools.length >= MAX_POOLS) this.pools.shift();
     this.pools.push({ tickT: 0, ...p, maxLife: p.life });
@@ -189,6 +190,87 @@ export class WeaponEffects {
     }
   }
 
+  // Plasma Grenade clouds (Lingering Cloud), one look per element: plasma a glowing radioactive haze
+  // with drifting puffs and a turning hazard ring, frost an icy hexagon with a snowflake, corrode a
+  // toxic pool with rising bubbles. Fire clouds use the napalm flames.
+  drawCloud(ctx, p, t, vfx) {
+    const k = Math.max(0, p.life / p.maxLife);
+    const a = Math.min(1, (p.maxLife - p.life) / 0.2) * Math.min(1, k * 3); // fade in, fade out
+    const R = p.radius;
+    const hue = p.hue;
+    ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${Math.min(1, 0.13 * a * vfx)})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
+    ctx.fill();
+    if (p.look === 'frost') {
+      ctx.strokeStyle = `hsla(${hue}, 90%, 80%, ${Math.min(1, 0.6 * a * vfx)})`;
+      ctx.lineWidth = 1.8 * vfx;
+      ctx.beginPath();
+      const spin = t * 0.4 + p.x * 0.01;
+      for (let s = 0; s <= 6; s++) {
+        const q = spin + (s * Math.PI) / 3;
+        if (s === 0) ctx.moveTo(p.x + Math.cos(q) * R, p.y + Math.sin(q) * R);
+        else ctx.lineTo(p.x + Math.cos(q) * R, p.y + Math.sin(q) * R);
+      }
+      for (let s = 0; s < 6; s++) {
+        const q = -spin * 0.7 + (s * Math.PI) / 3;
+        const c = Math.cos(q), d = Math.sin(q);
+        ctx.moveTo(p.x + c * R * 0.12, p.y + d * R * 0.12);
+        ctx.lineTo(p.x + c * R * 0.62, p.y + d * R * 0.62);
+        // a barb on each arm
+        const bx = p.x + c * R * 0.42, by = p.y + d * R * 0.42;
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(q + 0.7) * R * 0.14, by + Math.sin(q + 0.7) * R * 0.14);
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(q - 0.7) * R * 0.14, by + Math.sin(q - 0.7) * R * 0.14);
+      }
+      ctx.stroke();
+    } else if (p.look === 'corrode') {
+      ctx.strokeStyle = `hsla(${hue}, 100%, 60%, ${Math.min(1, 0.5 * a * vfx)})`;
+      ctx.lineWidth = 2 * vfx;
+      ctx.beginPath();
+      for (let s = 0; s < 14; s++) {
+        const q = (s / 14) * Math.PI * 2;
+        const rr = R * (0.88 + 0.1 * Math.sin(t * 4 + s * 1.7 + p.y));
+        if (s === 0) ctx.moveTo(p.x + Math.cos(q) * rr, p.y + Math.sin(q) * rr);
+        else ctx.lineTo(p.x + Math.cos(q) * rr, p.y + Math.sin(q) * rr);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // Bubbles: each rises from a fixed spot, swells, then pops and starts over.
+      ctx.beginPath();
+      for (let s = 0; s < 7; s++) {
+        const ph = (t * 0.9 + s * 0.37 + p.x * 0.003) % 1;
+        const q = s * 2.4 + p.x;
+        const bx = p.x + Math.cos(q) * R * 0.55 * ((s % 3) / 3 + 0.3);
+        const by = p.y + Math.sin(q) * R * 0.5 * ((s % 3) / 3 + 0.3) - ph * R * 0.25;
+        const br = (2 + 5 * ph) * vfx;
+        ctx.moveTo(bx + br, by);
+        ctx.arc(bx, by, br, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+    } else {
+      // Plasma: drifting puffs and a turning dashed hazard ring.
+      ctx.fillStyle = `hsla(${hue}, 100%, 62%, ${Math.min(1, 0.08 * a * vfx)})`;
+      ctx.beginPath();
+      for (let s = 0; s < 5; s++) {
+        const q = t * 0.6 + s * 1.26 + p.y * 0.01;
+        const px = p.x + Math.cos(q) * R * 0.45;
+        const py = p.y + Math.sin(q) * R * 0.45;
+        ctx.moveTo(px + R * 0.42, py);
+        ctx.arc(px, py, R * 0.42, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.strokeStyle = `hsla(${hue}, 100%, 66%, ${Math.min(1, 0.55 * a * vfx)})`;
+      ctx.lineWidth = 2 * vfx;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R, t * 1.2, t * 1.2 + Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
   // World-space drawing (additive layer): pending reticles and bomblets, napalm pools, orbs.
   draw(ctx, game) {
     if (this.activeCount === 0) return;
@@ -198,6 +280,10 @@ export class WeaponEffects {
     ctx.save();
     for (const p of this.pools) {
       if (!view(p.x, p.y, p.radius)) continue;
+      if (p.look && p.look !== 'fire') {
+        this.drawCloud(ctx, p, t, vfx);
+        continue;
+      }
       const k = Math.max(0, p.life / p.maxLife);
       const flicker = 0.75 + 0.25 * Math.sin(t * 23 + p.x);
       ctx.fillStyle = `hsla(${p.hue}, 100%, 50%, ${Math.min(1, 0.16 * k * flicker * vfx)})`;

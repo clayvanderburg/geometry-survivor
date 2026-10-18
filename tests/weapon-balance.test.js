@@ -36,7 +36,7 @@ test('weapons built for damage stay equal: every Damage rank is the same x DAMAG
 });
 
 test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon', () => {
-  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate' };
+  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate' };
   for (const [id, stat] of Object.entries(RATE)) {
     for (let r = 1; r <= 6; r++) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { [stat]: r }));
@@ -65,7 +65,8 @@ test('every stat formula reads only its own rank', () => {
     orbitals: { count: W.orbitalBlades, radius: W.orbitalRadius, spin: W.orbitalSpin, size: W.orbitalBladeRadius },
     mines: { capacity: W.mineMaxActive, rate: W.mineCooldown, radius: W.mineBlastRadius, fuse: W.mineLifetime, damage: W.mineDamageMult },
     turret: { rate: W.turretFireRate, lifetime: W.turretDuration, redeploy: W.turretCooldown, damage: W.turretDamageMult },
-    drones: { rate: W.droneFireRate, wingmen: W.droneCount, range: W.droneRange, damage: W.droneDamageMult }
+    drones: { rate: W.droneFireRate, wingmen: W.droneCount, range: W.droneRange, damage: W.droneDamageMult },
+    grenades: { count: W.grenadeCount, rate: W.grenadeCooldown, radius: W.grenadeBlastRadius, range: W.grenadeRange, damage: W.grenadeDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
     const base = levelBuild(id, 1);
@@ -99,7 +100,8 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BO
 test('damage per hit never drops as Damage ranks go up', () => {
   const perHit = {
     rockets: W.wingRocketDamageMult, missiles: W.missileDamageMult, lightning: W.lightningDamageMult, singularity: W.singularityDamageMult,
-    orbitals: W.orbitalDamageMult, mines: W.mineDamageMult, turret: W.turretDamageMult, drones: W.droneDamageMult
+    orbitals: W.orbitalDamageMult, mines: W.mineDamageMult, turret: W.turretDamageMult, drones: W.droneDamageMult,
+    grenades: W.grenadeDamageMult
   };
   for (const [id, f] of Object.entries(perHit)) {
     for (let r = 1; r < WEAPON_MAX_LEVEL; r++) assert.ok(f(makeBuild(id, 1 + r, { damage: r })) > f(makeBuild(id, r, { damage: r - 1 })), `${id} rank ${r}`);

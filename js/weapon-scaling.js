@@ -263,6 +263,40 @@ export const WEAPON_SCALING = {
   droneDamageMult: (b) => lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
   podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
 
+  // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------
+  // Autonomous: every throw interval the ship lobs `count` grenades at the nearest enemies in throw
+  // range (or along its aim). Each one arcs for grenadeFlight s, sits armed for grenadeFuse s with a
+  // blinking light, then bursts. Its element (and hue) comes from the damage-type cards owned
+  // (grenades.js grenadeElement): Thermite burns, Cryo Payload chills, Nanite Swarm corrodes.
+  grenadeCount: (b) => 2 + b.r.count,
+  grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate),
+  grenadeBlastRadius: (b) => 95 * (1 + 0.12 * b.r.radius),
+  grenadeRange: (b) => 330 + 40 * (b?.r?.range || 0),
+  grenadeFlight: 0.5,
+  grenadeFuse: 0.75,
+  // Transforms: Cluster Grenades (on landing, grenadeClusterBomblets bomblets worth grenadeClusterShare
+  // each pop grenadeClusterDelay s later), Lingering Cloud (a cloud worth cloudShare of the blast, ticking
+  // every cloudTick for cloudLife), Gravity Grenade (armed grenades pull enemies in for gravityFuse s, then
+  // blast: no extra attacks, so its rescale makes every blast hit BT_TRANSFORM_DPS harder).
+  grenadeClusterBomblets: 5,
+  grenadeClusterShare: 0.1,
+  grenadeClusterDelay: 0.45,
+  grenadeClusterRadiusFrac: 0.4,
+  cloudShare: 0.3,
+  cloudLife: 2.5,
+  cloudTick: 0.25,
+  cloudRadiusFrac: 0.85,
+  gravityFuse: 1.1,
+  gravityPullRadiusMult: 1.8,
+  gravityPull: 0.6,
+  grenadeUnits: (b) => 1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare : 0) + (b.t8 ? W.cloudShare : 0),
+  grenadeDamageMult: (b) => lv1('grenades', 'grenades', (b0) => DPS_TARGET(1) * W.grenadeCooldown(b0) / (W.grenadeCount(b0) * W.grenadeUnits(b0))) * hitMult(b) * tfScale(b, W.grenadeUnits),
+  // SYNERGY: EMP Grenades (Plasma Grenades + Tesla Arc): each blast arcs into empArcs enemies within
+  // empRange x the blast radius for empShare of the blast damage each. Off the DPS curve, like Storm Protocol.
+  empArcs: 3,
+  empShare: 0.35,
+  empRangeMult: 1.5,
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -381,7 +415,13 @@ export const POTENTIAL_DPS = {
   mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare : 0)) / W.mineCooldown(b),
   turret: (b) => W.turretAverageActive(b) * (W.turretFireRate(b) * W.turretShotUnits(b) * W.turretDamageMult(b)
     + (b.t12 ? W.mortarDamageMult(b) / W.mortarEvery : 0)),
-  drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0))
+  drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
+  grenades: (b) => {
+    const blast = W.grenadeDamageMult(b);
+    const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * blast : 0;
+    const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
+    return W.grenadeCount(b) * (blast + bomblets + cloud) / W.grenadeCooldown(b);
+  }
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -400,7 +440,8 @@ export const WEAPON_TAGS = {
   mine: ['deployable', 'explosive', 'area'],
   turret: ['deployable', 'projectile', 'kinetic'],
   drone: ['deployable', 'projectile', 'kinetic'],
-  siege: ['deployable', 'explosive', 'area']
+  siege: ['deployable', 'explosive', 'area'],
+  grenade: ['projectile', 'explosive', 'area']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -435,7 +476,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret'
+  drone: 'drones', siege: 'turret', grenade: 'grenades'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -472,6 +513,7 @@ export function weaponDamage(p, weapon, b) {
     case 'turret': base = d * W.turretDamageMult(sourceBuild(p, weapon, b)) * (TUNING.deployableDamageMult ?? 1); break;
     case 'drone': base = d * W.droneDamageMult(sourceBuild(p, weapon, b)) * (TUNING.deployableDamageMult ?? 1); break;
     case 'siege': base = d * W.turretDamageMult(sourceBuild(p, weapon, b)) * W.siegeShellDamageMult * (TUNING.deployableDamageMult ?? 1); break;
+    case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon);
@@ -485,6 +527,7 @@ export const novaRadius = (p, lv) => W.novaRadius(lv) * areaMult(p);
 export const tectonicBlastRadius = (p) => W.tectonicBlastRadius * areaMult(p);
 export const mineBlastRadius = (p, b = weaponBuild(p, 'mines')) => W.mineBlastRadius(b) * areaMult(p);
 export const siegeShellRadius = (p) => W.siegeShellRadius * areaMult(p);
+export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grenadeBlastRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);

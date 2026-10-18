@@ -238,9 +238,10 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'status', icon: '☢', title: 'BURN · CHILL · CORRODE',
     body: () => [
-      'BURN (Thermite Rounds, blaster and helix bolts): each hit adds a stack and refreshes the fire for 3 s; stacks tick every 0.5 s.',
-      `CHILL (Cryo Payload, missile blasts): slows movement; hulls frost over. Bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow.`,
-      'CORRODE (Nanite Swarm, Tesla arcs): each stack makes the target take +5% damage from every source, burn included. Vortexes are immune to all three.'
+      'BURN (Thermite Rounds, blaster and helix bolts, Plasma Grenades): each hit adds a stack and refreshes the fire for 3 s; stacks tick every 0.5 s.',
+      `CHILL (Cryo Payload, rocket, missile and Plasma Grenade blasts): slows movement; hulls frost over. Bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow.`,
+      'CORRODE (Nanite Swarm, Tesla arcs, Plasma Grenades): each stack makes the target take +5% damage from every source, burn included. Vortexes are immune to all three.',
+      'Plasma Grenades take the element of your strongest damage-type card (FIRE, FROST or CORROSIVE; plain PLASMA with none) and apply every damage type you own: blasts, bomblets and Lingering Clouds alike.'
     ]
   },
   {
@@ -294,7 +295,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
-      `Area blasts (missiles, rockets, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
+      `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
       'Field Amplifier makes every AREA weapon reach further.'
     ]
   },
@@ -314,7 +315,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger, white-gold, with a "!". Toggle with N or in the pause menu.'
     ]
   },
@@ -366,6 +367,7 @@ const EVOLUTION_RECIPES = {
   evo_pulsar: 'Prism Split LV 2 or Hyper-Capacitor LV 2',
   evo_tempest: 'Swarm Micro-Missiles + Tesla Arc Emitter',
   evo_siege: 'Proximity Mines + Sentry Turret',
+  evo_emp: 'Plasma Grenades + Tesla Arc Emitter',
   evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any damage-type card'
 };
 
