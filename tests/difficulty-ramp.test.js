@@ -178,11 +178,11 @@ test('light swarm fodder keeps the light HP start; tougher hulls get the extra e
   });
 });
 
-test('spawn density: the pre-0.13 amounts, a touch denser since v0.29', () => {
+test('spawn density: the pre-0.13 amounts, a touch denser since v0.29 and v0.31', () => {
   assert.equal(DEFAULT_TUNING.spawnIntervalStart, 2.6);
   assert.equal(DEFAULT_TUNING.spawnIntervalTau, 7);
-  assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.7);
-  assert.equal(DEFAULT_TUNING.packSizeMult, 1.1);
+  assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.65);
+  assert.equal(DEFAULT_TUNING.packSizeMult, 1.2);
 });
 
 test('the difficulty ramps ease in: no corner where HP compounding, damage ramp or spawn floor switch on', () => {

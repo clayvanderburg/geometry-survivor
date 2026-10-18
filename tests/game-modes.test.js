@@ -40,7 +40,7 @@ function cardsThatRaiseShield() {
     const p = JSON.parse(fresh);
     p.hp = 50;
     applyUpgradeLevels(p, { ...u, levelJump: 1 });
-    return p.maxHp > BASE_SHIELD + ARMORY_RANK * 4 || p.hp > 50;
+    return p.maxHp > BASE_SHIELD + ARMORY_RANK * 2 || p.hp > 50;
   }).map((u) => u.id);
 }
 
@@ -75,7 +75,7 @@ test('the title choice is remembered, and blocked storage reads as NORMAL', () =
 test('HARDCORE: base shield (no Aegis Shield Matrix), other armory upgrades still apply, and no regen ever', () => {
   const normal = run('normal');
   const hc = run('hardcore');
-  assert.equal(normal.player.maxHp, BASE_SHIELD + ARMORY_RANK * 4, 'NORMAL keeps the armory shield');
+  assert.equal(normal.player.maxHp, BASE_SHIELD + ARMORY_RANK * 2, 'NORMAL keeps the armory shield');
   assert.equal(hc.player.maxHp, BASE_SHIELD);
   assert.equal(hc.player.hp, BASE_SHIELD);
   assert.equal(hc.player.base.maxHp, BASE_SHIELD);

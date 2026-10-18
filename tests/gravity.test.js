@@ -207,7 +207,10 @@ test('a Vortex Singularity clumps the pack near its core, while the rim only nud
     const realRandom = Math.random;
     let seed = 12345;
     Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-    try { return clumpedOnce(withSingularity); } finally { Math.random = realRandom; }
+    // The pull curve at the base enemy speed (the shipped speed multiplier is a difficulty knob, not the curve).
+    const speed = TUNING.enemySpeedMult;
+    TUNING.enemySpeedMult = 1;
+    try { return clumpedOnce(withSingularity); } finally { Math.random = realRandom; TUNING.enemySpeedMult = speed; }
   };
   const clumpedOnce = (withSingularity) => {
     const { game, manager } = arena();

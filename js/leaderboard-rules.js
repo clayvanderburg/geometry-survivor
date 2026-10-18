@@ -31,10 +31,12 @@ export function formatRunTime(seconds) {
 }
 
 // --- Versioned boards ------------------------------------------------------------------------------
-// Every game version from VERSIONED_SINCE on has its own board; ALL_TIME is the board of every run
-// (including the ones from before versioning). Newest first.
+// Every game version from BOARDS_SINCE on has its own board; ALL_TIME is the board of every run.
+// Newest first. Every board was wiped for v0.31.0 (netlify/lib/leaderboard.mjs PURGES), so older versions
+// get no tab and their runs are refused.
 export const ALL_TIME = 'all';
-export const BOARD_VERSIONS = Object.freeze(KNOWN_VERSIONS.filter(v => compareVersions(v, VERSIONED_SINCE) >= 0));
+export const BOARDS_SINCE = '0.31.0';
+export const BOARD_VERSIONS = Object.freeze(KNOWN_VERSIONS.filter(v => compareVersions(v, VERSIONED_SINCE) >= 0 && compareVersions(v, BOARDS_SINCE) >= 0));
 
 export function isBoardVersion(value, versions = BOARD_VERSIONS) {
   return typeof value === 'string' && versions.includes(value);
