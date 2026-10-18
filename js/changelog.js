@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.31.1',
+    date: '2026-10-18',
+    title: 'Mid-Game Pressure',
+    notes: [
+      { type: 'balance', text: 'Enemy health snowballs sooner: it picks up from wave 8 and hits full speed by wave 18, right when weapons reach their late levels. Up to 2x tougher from wave 20 on.' }
+    ]
+  },
+  {
     version: '0.31.0',
     date: '2026-10-18',
     title: 'Tougher Still',

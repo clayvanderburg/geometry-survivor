@@ -188,8 +188,8 @@ export const DEFAULT_TUNING = {
   waveHpStartLight: 1,
   waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
   waveHpGrowth: 1.1, // 1.06 before v0.31 (enemy HP outgrew even maxed-armory builds)
-  waveHpGrowthFrom: 12, // 18 before v0.31
-  waveHpGrowthRamp: 14,
+  waveHpGrowthFrom: 8, // 18 before v0.31, 12 before v0.31.1
+  waveHpGrowthRamp: 10, // 14 before v0.31.1: full compounding by ~wave 18, when weapons hit LV15
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
   spawnIntervalStart: 2.6,
