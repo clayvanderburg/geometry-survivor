@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.0',
+    date: '2026-10-18',
+    title: 'Sound Overhaul',
+    notes: [
+      { type: 'new', text: 'All-new sound effects for every weapon, explosion, pickup, boss and menu, plus a victory jingle when you open a supply cache.' },
+      { type: 'new', text: 'New synthwave soundtrack: three songs that rotate between runs and build up as the fight gets hotter, with a darker turn during boss fights.' },
+      { type: 'new', text: 'Breakthroughs, enemy kills, gold pickups, turret shots and grenades each have their own sound now.' }
+    ]
+  },
+  {
     version: '0.18.2',
     date: '2026-10-18',
     title: 'Deeper Weapons',

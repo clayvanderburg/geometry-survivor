@@ -78,8 +78,7 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
    - **SYNERGY: Siege Battery** (Proximity Mines + Sentry Turret): turret bolts burst on impact into nearby enemies.
    - Deployables live in fixed pools outside the enemy list (no enemy-cap cost), freeze with pause/hit-stop/slow-mo, are cleared on run reset, and never target Vortex portals. Tuner group *Deployables*: damage multiplier, mine arming delay, drone formation spacing.
 
-5. **Interactive 132-BPM Synthwave Music & Procedural WebAudio (`js/audio.js`)**
-   - Procedural WebAudio sequencer (dynamics compressor, punchy kick, dual-oscillator sawtooth + sub-square bassline, snare, hi-hats, detuned arpeggiator, and chord pads) that scales filter cutoff and layering with combat intensity.
+5. **Synthwave Score, Sampled SFX & WebAudio (`js/audio.js`)** — see [Audio](#audio) for the details.
    - **Hull-Hugging Shield Barrier** (`drawPlayerShield` in `js/ship-renderer.js`) wraps the crab's silhouette and is also the contact hitbox (`shieldTouches`). Its charged arc shows current shield %, thickness grows with max shield, color shifts blue → amber → critical red, and hits flash with a ripple. Hue, padding and thickness are tunable.
 
 6. **Global + Local Highscore Board & Void Armory Meta-Progression (`js/progression.js`, `js/leaderboard.js`)**
@@ -193,6 +192,24 @@ Every run is measured in-game (`js/run-stats.js`, a few counters per hit) so bal
 
 ---
 
+## Audio
+
+Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created on the first user gesture; master volume (HUD / pause slider, persisted), mute (`M`) and the tuner's music/SFX gains all keep working, and every method no-ops without an AudioContext (node tests).
+
+**Sound effects: samples with procedural fallback.**
+- 32 short samples in `assets/sfx/*.mp3` (~400 KB total, 44.1 kHz mono 96 kbps), generated with ElevenLabs Sound Effects for this game. `assets/sfx/CREDITS.md` lists the prompt behind each file.
+- `SFX_SAMPLES` maps each file to the `play*` methods that use it, its level, a random playbackRate spread (±1–6% so repeats don't sound identical) and voice limits: at most `maxVoices` copies ringing at once and at least `gapMs` between starts, so autocannon fire, hits, pickups and drone shots stay rhythmic instead of stacking into mush.
+- The samples are fetched and decoded once, after the first gesture. Until one is decoded, or if its file is missing or fails to decode, its method plays the original procedural WebAudio sound instead. To replace a sound, drop a new `assets/sfx/<name>.mp3` with the same name (keep it short, trimmed and normalized; tune its `volume` in `SFX_SAMPLES`).
+- XP shards still climb a scale while you collect a streak (the sample is pitched up per pickup); the boss klaxon sample repeats three times over the procedural sub drone; the elite charge-up is pitch-fitted to the materialize time.
+
+**Music: procedural synthwave.**
+- A lookahead scheduler wakes every 25 ms and places every note on the AudioContext clock, so timer jitter never drifts the groove; after a hidden tab it skips missed steps instead of bursting them.
+- Three songs in different keys and tempos (`SONGS`: NEON VECTOR in A minor, CHROME HORIZON in D minor at -6 BPM, MIDNIGHT GRID in F# minor at +6 BPM, around the tuner's base `musicBpm`), each with its own bass pattern, arpeggio and lead timbre. Each song is a form of 8- and 16-bar sections with their own chord progressions; songs rotate when a form ends (a run starts on a random one).
+- Voices: four-on-the-floor kick, gated snare on 2 and 4 with a reverb send, rolling 16th-note resonant bass, lush pads (three detuned saws per chord tone), a lead arpeggio through a dotted-eighth feedback delay, plus 16th hats, claps, crashes and tom fills at high intensity. Bass and pads run through a pump bus that ducks on every kick (sidechain feel); a generated-impulse convolution reverb glues it together.
+- Intensity layering from `setMusicState({ intensity, muffled, boss })` (decided on bar lines with hysteresis): calm = pads + bass, mid (≥ 0.36, reached as the first enemies arrive) adds the drums, high (≥ 0.6) adds the lead arpeggio and extra percussion. `muffled` (pause, level-up, caches, game over) low-passes the bus and drops hats and lead. A boss warning drops to kick + bass under the klaxon; a live boss swaps in a darker Phrygian section with the square-stab riff until it dies.
+
+**Using real music files instead.** Put the files in `assets/music/` and list them in `MUSIC_TRACKS` at the top of `js/audio.js`, e.g. `export const MUSIC_TRACKS = ['assets/music/track1.mp3', 'assets/music/track2.mp3'];`. They stream through an `<audio>` element and the same music bus (volume, mute and the menu muffle still apply), cross-fading 4 s from one track into the next and looping the list. With an empty list (the default) or a track that fails to load, the procedural score plays.
+
 ## File Map (For Multi-Agent Handoffs)
 
 - `index.html` — Main game viewport, HUD, Title/Armory/Highscore modals, Upgrade & Chest Jackpot modals, Field Guide (`#guide-modal`), Patch Notes (`#notes-modal`), and slide-over `#tuner-drawer`.
@@ -237,7 +254,8 @@ Every run is measured in-game (`js/run-stats.js`, a few counters per hit) so bal
 - `js/deployables.js` — Proximity Mines, Sentry Turrets and Escort Drones: pooled update, targeting (nearest visible enemy), bolts through the shared bullet sweep, and neon rendering.
 - `js/grenades.js` — Plasma Grenades: pooled throw / flight / fuse / blast, element from the damage-type cards (`grenadeElement`), Gravity Grenade pull, EMP arcs, and neon rendering (landing markers, blinking armed grenades, grenades in flight over the enemies).
 - `js/damage-numbers.js` — Pooled, canvas-drawn floating damage numbers (per-enemy/per-source aggregation, live cap, persisted toggle).
-- `js/audio.js` — Procedural WebAudio synthwave sequencer and SFX engine.
+- `js/audio.js` — Audio engine: sample SFX with procedural fallbacks, procedural synthwave score, optional streamed music files (see [Audio](#audio)).
+- `assets/sfx/` — The SFX samples (ElevenLabs Sound Effects) and `CREDITS.md` with the prompt behind each file.
 
 ## Engineering checks
 

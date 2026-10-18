@@ -50,6 +50,7 @@ const FOCUSABLE = 'button:not([disabled]), a[href], input[type="range"], input[t
 export class MenuNavigator {
   constructor() {
     this.focused = null;
+    this.onMove = null; // optional hook (menu focus-move sound)
     this.heldDir = '';
     this.repeatIn = 0;
   }
@@ -101,7 +102,10 @@ export class MenuNavigator {
     const dy = pad.navY;
     const others = items.filter(item => item !== el);
     const idx = pickInDirection(el.getBoundingClientRect(), others.map(item => item.getBoundingClientRect()), dx, dy);
-    if (idx !== -1) this.setFocus(others[idx]);
+    if (idx !== -1) {
+      this.setFocus(others[idx]);
+      this.onMove?.();
+    }
   }
 
   activate() {

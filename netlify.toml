@@ -1,6 +1,6 @@
 # Netlify publishes only the playable game; tests, tools and dev docs stay out of the site.
 [build]
-  command = "rm -rf dist && mkdir dist && cp -r index.html tuner.html stats.html css js dist/"
+  command = "rm -rf dist && mkdir dist && cp -r index.html tuner.html stats.html css js assets dist/"
   publish = "dist"
 
 # The global leaderboard API (/api/scores, see netlify/functions/scores.mjs) deploys alongside the
