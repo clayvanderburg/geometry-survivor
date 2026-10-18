@@ -20,7 +20,8 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Touch controls switch on by themselves on touchscreens; a mouse click switches back.' },
       { type: 'new', text: 'Phone layout: a slim HUD, compact level-up cards with a MORE button, and big-button menus that open the leaderboard and armory in their own windows.' },
       { type: 'new', text: 'GO FULLSCREEN button on the title and pause screens. On iPhone, add the game to your home screen to play full screen.' },
-      { type: 'balance', text: 'Small screens zoom out so enemies no longer spawn on top of you; on touch screens the view is zoomed out a further 30%.' }
+      { type: 'balance', text: 'Small screens zoom out so enemies no longer spawn on top of you; on touch screens the view is zoomed out a further 30%.' },
+      { type: 'fix', text: 'Hoovering up a big cluster of XP no longer builds into a shrill whine: the pickup chime climbs less, gets quieter on long streaks and stops stacking.' }
     ]
   },
   {

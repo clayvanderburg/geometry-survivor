@@ -255,3 +255,22 @@ test('streamed soundtrack: menu theme on the title, the playlist in intensity or
   engine.setMusicScene('menu');
   assert.equal(engine.wantedTrack().src, SOUNDTRACK.menu);
 });
+
+test('a big XP cluster chimes in a capped, mid-range climb instead of stacking shrill tones', () => {
+  const engine = engineWithSamples([]);
+  const freqs = [];
+  engine.ctx.createOscillator = () => {
+    engine.ctx.counts.oscillators++;
+    const p = { setValueAtTime(v) { freqs.push(v); }, exponentialRampToValueAtTime() {} };
+    return { frequency: p, type: '', connect() {}, start() {}, stop() {} };
+  };
+  for (let i = 0; i < 60; i++) engine.playGeomPickup(false);
+  assert.ok(engine.ctx.counts.oscillators <= 4, `60 pickups in one burst played ${engine.ctx.counts.oscillators} chimes`);
+  // Spread the burst out (past the voice gap) and the pitch still stops climbing at ~1.1 kHz.
+  engine.weaponVoices = {};
+  for (let i = 0; i < 30; i++) {
+    engine.weaponVoices['proc:xp_pickup'] = { last: -Infinity, ends: [] };
+    engine.playGeomPickup(false);
+  }
+  assert.ok(Math.max(...freqs) < 1200, `top chime ${Math.round(Math.max(...freqs))} Hz`);
+});

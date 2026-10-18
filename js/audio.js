@@ -1256,10 +1256,16 @@ export class SoundEngine {
     const semis = ladder[Math.min(ladder.length - 1, this.geomPitchStep)] + (isCore ? 5 : 0);
     if (this.playSample('xp_pickup', { rate: Math.pow(2, semis / 12) * 0.9, volume: isCore ? 1.5 : 1 })) return;
 
-    const semitones = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36, 38];
-    const note = semitones[this.geomPitchStep] || 0;
+    // The climb tops out at 16 semitones (~1.1 kHz, ~1.4 kHz at the end of its chirp): the old 38-step
+    // climb reached ~5 kHz, the range phone speakers turn shrill. A long streak also plays quieter, and
+    // overlapping chimes are capped, so hoovering up a big cluster can't stack dozens of tones.
+    const semitones = [0, 2, 4, 7, 9, 12, 14, 16];
+    const step = Math.min(semitones.length - 1, this.geomPitchStep);
+    const note = semitones[step];
     const base = isCore ? 587.33 : 440;
     const freq = base * Math.pow(2, note / 12);
+    if (!this.claimVoice(isCore ? 'proc:core_pickup' : 'proc:xp_pickup', 45, 4, isCore ? 0.2 : 0.09)) return;
+    const streakFade = 1 - Math.min(0.45, this.geomPitchStep * 0.03);
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -1268,7 +1274,7 @@ export class SoundEngine {
     osc.frequency.setValueAtTime(freq, t);
     osc.frequency.exponentialRampToValueAtTime(freq * (isCore ? 1.5 : 1.25), t + (isCore ? 0.18 : 0.08));
 
-    gain.gain.setValueAtTime(isCore ? 0.22 : 0.11, t);
+    gain.gain.setValueAtTime((isCore ? 0.22 : 0.11) * streakFade, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + (isCore ? 0.19 : 0.085));
 
     osc.connect(gain);
