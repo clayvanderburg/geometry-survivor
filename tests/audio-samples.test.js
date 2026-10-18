@@ -93,8 +93,10 @@ test('rapid samples are voice-capped and throttled instead of stacking', () => {
 });
 
 test('only the approved samples play in game; everything else keeps its original procedural sound', () => {
-  assert.deepEqual([...SFX_IN_GAME].sort(), ['cache_open', 'level_up']);
-  assert.deepEqual(Object.keys(SFX_SAMPLES).sort(), ['cache_open', 'level_up']);
+  // The player's picks from the sound check page (sounds.html).
+  for (const name of ['level_up', 'cache_open', 'explosion_small', 'implosion', 'ui_select']) assert.ok(SFX_IN_GAME.includes(name), name);
+  for (const name of ['autocannon_shot', 'drone_shot', 'xp_pickup', 'enemy_death', 'breakthrough']) assert.ok(!SFX_IN_GAME.includes(name), name);
+  assert.deepEqual(Object.keys(SFX_SAMPLES).sort(), [...SFX_IN_GAME].sort());
 });
 
 test('missing samples fall back to the procedural sounds', () => {

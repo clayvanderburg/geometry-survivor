@@ -55,7 +55,10 @@ export const SFX_LIBRARY = Object.freeze({
 });
 
 // Samples the player approved for the game. Every other sound uses its original procedural version.
-export const SFX_IN_GAME = Object.freeze(['level_up', 'cache_open']);
+export const SFX_IN_GAME = Object.freeze([
+  'rocket_launch', 'missile_launch', 'explosion_small', 'explosion_large', 'missile_impact', 'arc_zap', 'grenade_throw',
+  'singularity_launch', 'implosion', 'level_up', 'cache_open', 'boss_arrival', 'lieutenant_arrival', 'elite_charge', 'ui_select', 'game_over'
+]);
 export const SFX_SAMPLES = Object.freeze(Object.fromEntries(SFX_IN_GAME.map((name) => [name, SFX_LIBRARY[name]])));
 
 // Drop-in soundtrack: list audio files here (e.g. 'assets/music/track1.mp3') and they replace the
