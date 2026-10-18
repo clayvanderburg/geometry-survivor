@@ -40,7 +40,8 @@ const wb = (p, id, fn) => (ownsWeapon(p, id) ? fn(weaponBuild(p, id)) : null);
 // headline: 'count' (+N UNIT), 'pct' (+N% UNIT), 'points' (+N% UNIT for ratio stats like luck),
 // or a function(before, after). newText: headline when the row comes online (before is null).
 export const STAT_ROWS = [
-  // Build-wide modifiers first, so crit and tag cards lead with their own row
+  // Build-wide modifiers first, so crit, tag and Reactor Overdrive cards lead with their own row
+  { id: 'allDamage', label: 'Base damage (all weapons)', get: (p) => p.stats.damage, fmt: dec1, headline: 'pct', unit: 'DAMAGE · ALL WEAPONS' },
   { id: 'critChance', label: 'Crit chance', get: (p) => critChance(p), fmt: pct, headline: 'points', unit: 'CRIT CHANCE' },
   { id: 'critDamage', label: 'Crit damage', get: (p) => critDamage(p), fmt: mult, headline: 'points', unit: 'CRIT DAMAGE' },
   { id: 'critAverage', label: 'Avg bonus from crits', get: (p) => critChance(p) * (critDamage(p) - 1), fmt: (v) => `+${(v * 100).toFixed(1)}%` },

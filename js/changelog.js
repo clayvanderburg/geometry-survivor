@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.19.5',
+    date: '2026-10-18',
+    title: 'Clearer Cards',
+    notes: [
+      { type: 'fix', text: 'Reactor Overdrive now reads +12% DAMAGE · ALL WEAPONS instead of looking like an Autocannon-only card.' }
+    ]
+  },
+  {
     version: '0.19.4',
     date: '2026-10-18',
     title: 'Synth Picks',
