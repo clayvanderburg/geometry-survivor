@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.4',
+    date: '2026-10-18',
+    title: 'Armory',
+    notes: [
+      { type: 'fix', text: 'The weapon pick has its own orange armory look and leads with the weapon name, so it no longer reads like an upgrade card.' }
+    ]
+  },
+  {
     version: '0.22.3',
     date: '2026-10-18',
     title: 'Clean Numbers',
