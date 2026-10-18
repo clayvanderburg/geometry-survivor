@@ -1042,6 +1042,31 @@ export class SoundEngine {
     [2093, 2637, 3136, 2637, 3136, 4186].slice(0, jackpot ? 6 : 4).forEach((f, i) => tone(f, hit + 0.08 + i * 0.06, 0.18, 0.05, 'sine'));
   }
 
+  // An elite materializing on screen: a low rumble rising in pitch and loudness over `duration` s, with
+  // a filtered noise swell (bosses a fifth lower and louder). The arrival sound itself plays on landing.
+  playEliteCharge(duration = 2.6, boss = false) {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const end = t + Math.max(0.5, duration);
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(boss ? 36 : 55, t);
+    osc.frequency.exponentialRampToValueAtTime(boss ? 150 : 220, end);
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(180, t);
+    filter.frequency.exponentialRampToValueAtTime(boss ? 1400 : 2200, end);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(boss ? 0.16 : 0.1, end - 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end + 0.08);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(end + 0.1);
+  }
+
   playLevelUp() {
     if (!this.enabled || !this.ctx) return;
     const t = this.ctx.currentTime;

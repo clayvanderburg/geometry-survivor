@@ -111,10 +111,10 @@ export function pickSpawnPoint(game, { pad = 0, warmup = SPAWN_WARMUP, rand = Ma
 
 // Visible spawn (sandbox, or the rare case with no room off screen): inside the view, at least
 // spawnMinDist (+ pad) from the ship, inside the arena and clear of rock. The caller adds the long telegraph.
-export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = TUNING } = {}) {
+export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = TUNING, minDist: min = null } = {}) {
   const p = game.player;
   const view = spawnView(game);
-  const minDist = (tuning.spawnMinDist ?? 260) + pad;
+  const minDist = (min ?? tuning.spawnMinDist ?? 260) + pad;
   const inset = ONSCREEN_INSET + pad;
   const spanX = Math.max(0, view.w - inset * 2);
   const spanY = Math.max(0, view.h - inset * 2);

@@ -124,6 +124,13 @@ export const DEFAULT_TUNING = {
   lieutenantCoreReward: 1,
   // Elites (lieutenants + bosses) grind through rock at TUNING.miningSpeed (the ship's base drill DPS,
   // no upgrades) × eliteMiningMult; eliteMining 0 turns it off (they steer round rock like the rest).
+  // Elite entrances (lieutenants and bosses): they materialize ON screen, at least eliteSpawnMinDist from
+  // the ship, over eliteEntranceTime (lieutenants; bosses keep bossWarningTime), then emerge slowly for
+  // eliteEmergeTime (moving at a crawl that ramps to full speed). eliteOnscreen 0 puts them back off screen.
+  eliteOnscreen: 1,
+  eliteSpawnMinDist: 380,
+  eliteEntranceTime: 2.6,
+  eliteEmergeTime: 1.2,
   eliteMining: 1,
   eliteMiningMult: 1.0,
 
@@ -332,6 +339,10 @@ export const TUNING_SCHEMA = [
       { key: 'lieutenantFirstWave', label: 'First Lieutenant Wave', type: 'range', min: 1, max: 10, step: 1, unit: '' },
       { key: 'lieutenantDelay', label: 'Lieutenant Arrival Into Wave', type: 'range', min: 0, max: 20, step: 0.5, unit: 's' },
       { key: 'lieutenantCoreReward', label: 'Lieutenant Void Core Reward', type: 'range', min: 0, max: 5, step: 1, unit: '' },
+      { key: 'eliteOnscreen', label: 'Elites Spawn On Screen (Dramatic Entrance)', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'eliteSpawnMinDist', label: 'Elite Spawn Min Distance', type: 'range', min: 200, max: 700, step: 10, unit: 'px' },
+      { key: 'eliteEntranceTime', label: 'Lieutenant Materialize Time', type: 'range', min: 1.0, max: 5.0, step: 0.1, unit: 's' },
+      { key: 'eliteEmergeTime', label: 'Elite Slow Emergence After Arrival', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 's' },
       { key: 'eliteMining', label: 'Elites Grind Through Asteroids', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
       { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' }
     ]
