@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.12.1',
+    date: '2026-10-18',
+    title: 'Bigger Mine Blasts',
+    notes: [
+      { type: 'balance', text: 'Proximity Mines blast twice as wide. They are hard to place, so each one now catches a much bigger crowd.' }
+    ]
+  },
+  {
     version: '0.12.0',
     date: '2026-10-17',
     title: 'Gold, Rerolls & Locks',
