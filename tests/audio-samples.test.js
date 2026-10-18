@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 globalThis.window = globalThis.window || { addEventListener() {} };
 globalThis.BroadcastChannel = undefined; // config.js tuning sync would keep the test process alive
 globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {} };
-const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_BASE, SFX_V2_BASE, SFX_ROUND2, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
+const { SoundEngine, SFX_SAMPLES, SFX_LIBRARY, SFX_IN_GAME, SFX_FILE, SFX_BASE, SFX_V2_BASE, SFX_ROUND2, MUSIC_TRACKS, SONGS, BOSS_SECTION } = await import('../js/audio.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const playMethods = Object.getOwnPropertyNames(SoundEngine.prototype).filter(name => name.startsWith('play') && name !== 'playSample' && name !== 'playPreview');
@@ -38,7 +38,8 @@ test('round-2 candidates: both variations ship for every listed sound and only t
   assert.equal(SFX_ROUND2.length, 16);
   for (const name of SFX_ROUND2) {
     assert.ok(SFX_LIBRARY[name], `${name} is a library sound`);
-    assert.ok(!SFX_IN_GAME.includes(name), `${name} keeps its procedural sound in game`);
+    // A round-2 sound is in game only through its picked take (SFX_FILE), never the round-1 file.
+    if (SFX_IN_GAME.includes(name)) assert.match(SFX_FILE[name] || '', new RegExp(`^v2/${name}_[ab]$`), `${name} plays its picked take`);
     for (const v of ['a', 'b']) {
       const file = path.join(root, SFX_V2_BASE, `${name}_${v}.mp3`);
       assert.ok(fs.existsSync(file), `missing ${SFX_V2_BASE}${name}_${v}.mp3`);
@@ -133,8 +134,8 @@ test('rapid samples are voice-capped and throttled instead of stacking', () => {
 
 test('only the approved samples play in game; everything else keeps its original procedural sound', () => {
   // The player's picks from the sound check page (sounds.html).
-  for (const name of ['level_up', 'cache_open', 'explosion_small', 'implosion', 'ui_select']) assert.ok(SFX_IN_GAME.includes(name), name);
-  for (const name of ['autocannon_shot', 'drone_shot', 'xp_pickup', 'enemy_death', 'breakthrough']) assert.ok(!SFX_IN_GAME.includes(name), name);
+  for (const name of ['cache_open', 'explosion_small', 'implosion', 'ui_select', 'autocannon_shot', 'supernova']) assert.ok(SFX_IN_GAME.includes(name), name);
+  for (const name of ['level_up', 'drone_shot', 'blade_hit', 'xp_pickup', 'enemy_death', 'breakthrough']) assert.ok(!SFX_IN_GAME.includes(name), name);
   assert.deepEqual(Object.keys(SFX_SAMPLES).sort(), [...SFX_IN_GAME].sort());
 });
 
@@ -147,21 +148,21 @@ test('missing samples fall back to the procedural sounds', () => {
   assert.equal(engine.ctx.counts.sources, 0);
   assert.ok(engine.ctx.counts.oscillators >= 8);
 
-  // level_up is approved for the game; dash is loaded but not approved, so it stays procedural.
-  const sampled = engineWithSamples(['level_up', 'dash']);
-  sampled.playLevelUp();
+  // cache_open is approved for the game; ui_confirm is loaded but not approved, so it stays procedural.
+  const sampled = engineWithSamples(['cache_open', 'ui_confirm']);
+  sampled.playCacheFanfare();
   assert.equal(sampled.ctx.counts.sources, 1);
   assert.equal(sampled.ctx.counts.oscillators, 0);
-  sampled.playDash();
+  sampled.playUiConfirm();
   assert.equal(sampled.ctx.counts.sources, 1);
   assert.ok(sampled.ctx.counts.oscillators > 0);
   // The before/after page: previewAll plays any loaded sample, forceProcedural plays the original.
   sampled.previewAll = true;
   sampled.weaponVoices = {};
-  sampled.playDash();
+  sampled.playUiConfirm();
   assert.equal(sampled.ctx.counts.sources, 2);
   sampled.forceProcedural = true;
-  sampled.playLevelUp();
+  sampled.playCacheFanfare();
   assert.equal(sampled.ctx.counts.sources, 2, 'forced to the original sound');
 });
 
