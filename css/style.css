@@ -1025,9 +1025,16 @@ html, body {
   max-height: 190px;
 }
 
-/* A long board makes the right panel taller: keep the armory cards at the top of theirs. */
+/* A long board makes the right panel taller: keep the armory cards at the top of theirs, and let the title
+   armory grid fill the panel down to its bottom edge (it scrolls inside; never shorter than ~2.5 card rows). */
 .hub-panel:has(> .armory-grid) {
   justify-content: flex-start;
+}
+
+#armory-grid {
+  flex: 1 1 0;
+  min-height: 360px;
+  max-height: none;
 }
 
 .hs-row.hs-mine {

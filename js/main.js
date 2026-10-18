@@ -853,7 +853,7 @@ export class Game {
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
         // Autocannon stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
         // their ranks are read from the weapon build when firing, so the base stays tunable.
-        fireRate: TUNING.fireRate * bonuses.fireRateMult * (weapons.pulsarHelix ? 1.15 : 1),
+        fireRate: TUNING.fireRate * (weapons.pulsarHelix ? 1.15 : 1),
         bulletSpeed: TUNING.bulletSpeed,
         damage: TUNING.baseDamage * bonuses.damageMult * Math.pow(1.12, upgLv.overdrive || 0),
         magnetRadius: TUNING.magnetRadius * bonuses.magnetMult * Math.pow(1.65, upgLv.magnet || 0),

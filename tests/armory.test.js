@@ -49,7 +49,6 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
-  assert.equal(b.fireRateMult, 1, 'other stats untouched');
   assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+15%');
   assert.equal(formatArmoryValue(META_BY_ID.armor, 10), '-5.0%');
   assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+12');
@@ -104,12 +103,11 @@ test('buying: costs escalate, insufficient cores and max rank refuse, the notice
 
 test('every armory stat reaches the run', () => {
   const base = gameWithRanks({});
-  const g = gameWithRanks({ damage: 10, fireRate: 10, critChance: 10, critDamage: 10, area: 10, maxHp: 10, armor: 20, phase: 5,
+  const g = gameWithRanks({ damage: 10, critChance: 10, critDamage: 10, area: 10, maxHp: 10, armor: 20, phase: 5,
     moveSpeed: 10, dash: 20, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
   const p = g.player, b = base.player;
   const near = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} vs ${e}`);
   near(p.stats.damage, b.stats.damage * 1.15, 'damage');
-  near(p.stats.fireRate, b.stats.fireRate * 1.1, 'fire rate');
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance');
   near(p.stats.critDamage, b.stats.critDamage + 0.2, 'crit damage');
   near(p.stats.areaMult, 1.1, 'area');
@@ -138,4 +136,15 @@ test('every armory stat reaches the run', () => {
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance after a live retune');
   near(p.stats.miningRange, b.stats.miningRange * 1.2, 'drill reach after a live retune');
   assert.ok(goldPerVein() >= 1);
+});
+
+test('the retired Chronos Capacitor (Autocannon fire rate) refunds every core spent on it, once', async () => {
+  const { normalizeSave, retiredRefund, armoryCost, RETIRED_UPGRADES } = await import('../js/progression.js');
+  const spent = [0, 1, 2, 3, 4, 5, 6].reduce((n, r) => n + armoryCost(RETIRED_UPGRADES.fireRate, r), 0);
+  assert.equal(retiredRefund({ fireRate: 7 }), spent);
+  const save = normalizeSave({ armory: 2, cores: 100, ranks: { damage: 3, fireRate: 7 } });
+  assert.equal(save.cores, 100 + spent, 'cores come back');
+  assert.equal(save.ranks.fireRate, undefined, 'the upgrade is gone from the save');
+  assert.equal(save.ranks.damage, 3);
+  assert.equal(normalizeSave(save).cores, 100 + spent, 'a second load does not refund again');
 });
