@@ -135,7 +135,7 @@ export const TRANSFORMS = {
     18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above that blasts the area.')
   },
   singularity: {
-    6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two slightly weaker singularities at once, in opposite directions: more damage in total.'),
+    6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two singularities at once: the second goes after enemies on your far side.'),
     12: tf('aftershock', 'Aftershock Collapse', 'Each Vortex Singularity collapses twice: a tighter second implosion follows.'),
     18: tf('cascade', 'Hawking Cascade', 'Collapsing Vortex Singularities spit out three mini-singularities that implode in turn.')
   },
@@ -160,7 +160,7 @@ export const TRANSFORMS = {
     18: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
   },
   grenades: {
-    6: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets scatter wide past the blast and pop a moment later.'),
+    6: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets hop onto nearby enemies past the blast and pop a moment later.'),
     12: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that burns, freezes or corrodes (by its element) everything inside.'),
     18: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades pull nearby enemies in toward themselves, then blast harder.')
   }

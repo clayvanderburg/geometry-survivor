@@ -226,7 +226,7 @@ test('headless range: dummies spawn in formation, weapons fire, DPS is recorded,
   });
   const em = g.enemyManager;
   assert.equal(em.enemies.length, 12, 'twelve dummies, none killed');
-  assert.ok(em.enemies.every((e) => e.tag?.range && e.type === 'pinwheel' && e.hp === INFINITE_HP), 'infinite-HP range dummies');
+  assert.ok(em.enemies.every((e) => e.tag?.range && e.type === 'pinwheel' && e.maxHp === INFINITE_HP && e.hp > INFINITE_HP * 0.99), 'infinite-HP range dummies (topped up every tick)');
   assert.ok(em.enemies.every((e) => Math.hypot(e.x - e.tag.homeX, e.y - e.tag.homeY) < 60), 'stationary dummies hold their posts');
   assert.equal(packs, 0, 'no wave packs');
   assert.equal(g.wave, waveBefore, 'the wave never advances');

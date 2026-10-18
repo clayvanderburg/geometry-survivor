@@ -2279,6 +2279,25 @@ export class Game {
     return best;
   }
 
+  // Nearest enemy within `range` whose bearing from (x, y) is more than `minTurn` radians off `angle`.
+  findNearestEnemyAway(x, y, angle, minTurn, range) {
+    const enemies = this.enemyManager.enemies;
+    let best = null;
+    let bestDistSq = range * range;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      const dx = e.x - x;
+      const dy = e.y - y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq >= bestDistSq) continue;
+      const turn = Math.abs(((Math.atan2(dy, dx) - angle) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      if (turn <= minTurn) continue;
+      bestDistSq = dSq;
+      best = e;
+    }
+    return best;
+  }
+
   // Return the first intersection along a projectile's movement segment.
   segmentHitTime(x0, y0, x1, y1, cx, cy, radius) {
     const dx = x1 - x0, dy = y1 - y0;
@@ -2804,12 +2823,19 @@ export class Game {
     if (typeof b === 'number') b = weaponBuild(p, 'singularity', b);
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    // Twin Singularities: two cores launched in opposite directions so their pulls never fight, each a little weaker.
+    // Twin Singularities: the second core heads for the nearest enemy on the far side (over 100 degrees
+    // from the first) so the two pulls never half-overlap; with nobody back there it stacks on the first.
     const count = W.singularityCount(b);
+    const angles = [angle];
+    if (count > 1) {
+      const far = this.findNearestEnemyAway(p.x, p.y, angle, 1.75, 700);
+      if (far) angles.push(Math.atan2(far.y - p.y, far.x - p.x));
+      else angles.push(angle);
+    }
     const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
     const life = W.singularityLife(b);
     for (let k = 0; k < count; k++) {
-      const a = angle + k * Math.PI;
+      const a = angles[k] ?? angle;
       this.singularities.push({
         x: p.x,
         y: p.y,
