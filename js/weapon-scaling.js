@@ -143,11 +143,12 @@ export const WEAPON_SCALING = {
   singularityCooldown: (b) => 4 / rateMult(b.r.cooldown),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
-  // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale), Aftershock Collapse (a
+  // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
   // second collapse at 60% radius worth aftershockShare), Hawking Cascade (3 mini-singularities worth
   // cascadeShare in total, each grinding and collapsing like a small core).
   singularityCount: (b) => (b.t4 ? 2 : 1),
-  twinPullScale: 0.7,
+  twinPullScale: 1,
+  twinUnitShare: 0.5, // the second core flies the other way and often finds fewer enemies: valued at half
   aftershockShare: 0.22,
   aftershockDelay: 0.6,
   aftershockRadiusFrac: 0.6,
@@ -156,7 +157,7 @@ export const WEAPON_SCALING = {
   cascadeLife: 1.1,
   cascadeRadiusFrac: 0.45,
   cascadePullScale: 0.6,
-  singularityUnits: (b) => W.singularityCount(b) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare : 0)),
+  singularityUnits: (b) => (b.t4 ? 1 + W.twinUnitShare : 1) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare : 0)),
   // Damage of one core per cast (grind over its LV 1 lifetime + collapse), in base damage: the LV 1 value
   // times the build's hit multiplier. Grind is per tick, so a Lifetime card grinds longer at the same rate.
   singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityUnits),
@@ -290,10 +291,10 @@ export const WEAPON_SCALING = {
   // every cloudTick for cloudLife), Gravity Grenade (armed grenades pull enemies in for gravityFuse s, then
   // blast: no extra attacks, so its rescale makes every blast hit BT_TRANSFORM_DPS harder).
   grenadeClusterBomblets: 5,
-  grenadeClusterShare: 0.1,
+  grenadeClusterShare: 0.2,
   grenadeClusterDelay: 0.45,
   grenadeClusterRadiusFrac: 0.5,
-  grenadeClusterSpread: 2.2, // bomblets land 1-2.2 blast radii out (scatter keeps 45-100% of the spread)
+  grenadeClusterSpread: 2.2, // bomblets hop onto enemies up to 2.2 blast radii out (the rest scatter 1-2.2 radii out)
   cloudShare: 0.3,
   cloudLife: 2.5,
   cloudTick: 0.25,
@@ -301,7 +302,8 @@ export const WEAPON_SCALING = {
   gravityFuse: 1.1,
   gravityPullRadiusMult: 1.8,
   gravityPull: 0.6,
-  grenadeUnits: (b) => 1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare : 0) + (b.t8 ? W.cloudShare : 0),
+  grenadeClusterHitShare: 0.2, // bomblets land past the blast and catch fewer enemies: valued at this share
+  grenadeUnits: (b) => 1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0),
   grenadeDamageMult: (b) => lv1('grenades', 'grenades', (b0) => DPS_TARGET(1) * W.grenadeCooldown(b0) / (W.grenadeCount(b0) * W.grenadeUnits(b0))) * hitMult(b) * tfScale(b, W.grenadeUnits),
   // SYNERGY: EMP Grenades (Plasma Grenades + Tesla Arc): each blast arcs into empArcs enemies within
   // empRange x the blast radius for empShare of the blast damage each. Off the DPS curve, like Storm Protocol.
@@ -419,7 +421,7 @@ export const POTENTIAL_DPS = {
     const core = W.singularityDamageMult(b) * W.singularityLife(b) * 60 + W.singularityCollapseDamageMult(b);
     const after = b.t8 ? W.aftershockDamageMult(b) : 0;
     const minis = b.t12 ? W.cascadeMinis * (W.cascadeDamageMult(b) * W.cascadeLife * 60 + W.cascadeCollapseDamageMult(b)) : 0;
-    return W.singularityCount(b) * (core + after + minis) / W.singularityCooldown(b);
+    return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
   },
   orbitals: (b) => W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
@@ -430,7 +432,7 @@ export const POTENTIAL_DPS = {
   drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);
-    const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * blast : 0;
+    const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
     return W.grenadeCount(b) * (blast + bomblets + cloud) / W.grenadeCooldown(b);
   }

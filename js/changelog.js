@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.21.1',
+    date: '2026-10-18',
+    title: 'Worth the Pick',
+    notes: [
+      { type: 'balance', text: 'Cluster Grenades: bomblets now hop onto nearby enemies past the blast, and each hits twice as hard.' },
+      { type: 'balance', text: 'Twin Singularities: full-size pull, harder hits. The second goes after enemies behind you, or stacks on the first when there are none.' }
+    ]
+  },
+  {
     version: '0.21.0',
     date: '2026-10-18',
     title: 'Weapon Range',

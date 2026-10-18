@@ -343,14 +343,20 @@ test('infall streams spiral toward their well and vanish when it dies', () => {
   assert.equal(particles.infall.length, 0);
 });
 
-test('Twin Singularities launch in opposite directions so their pulls never overlap', () => {
-  const { game, manager } = arena();
-  game.player.weapons.singularity = 6;
-  addEnemy(manager, 'pinwheel', game.player.x + 300, game.player.y + 40);
-  game.fireSingularity({ ...weaponBuild(game.player, 'singularity', 6), t4: true });
-  assert.equal(game.singularities.length, 2);
-  const [a, b] = game.singularities;
-  const dot = (a.vx * b.vx + a.vy * b.vy) / (Math.hypot(a.vx, a.vy) * Math.hypot(b.vx, b.vy));
-  assert.ok(dot < -0.99, `launched back to back (cos ${dot.toFixed(2)})`);
-  assert.ok(a.vx > 0, 'the first still heads for the nearest enemy');
+test('Twin Singularities: the second core takes the far side, or stacks on the first when nobody is there', () => {
+  const heading = (sg) => Math.atan2(sg.vy, sg.vx);
+  const launch = (enemies) => {
+    const { game, manager } = arena();
+    game.player.weapons.singularity = 6;
+    const added = enemies.map(([dx, dy]) => [addEnemy(manager, 'pinwheel', game.player.x + dx, game.player.y + dy), dx, dy]);
+    for (const [e, dx, dy] of added) pin(e, game.player.x + dx, game.player.y + dy); // later spawns step earlier ones
+    game.fireSingularity({ ...weaponBuild(game.player, 'singularity', 6), t4: true });
+    assert.equal(game.singularities.length, 2);
+    return game.singularities;
+  };
+  const [a, b] = launch([[300, 0], [-400, 30]]);
+  assert.ok(Math.abs(heading(a)) < 0.01, 'the first heads for the nearest enemy');
+  assert.ok(Math.abs(Math.abs(heading(b)) - Math.PI) < 0.1, 'the second takes the enemy behind the ship');
+  const [c, d] = launch([[300, 0], [320, 60]]);
+  assert.ok(Math.abs(heading(c) - heading(d)) < 1e-9, 'a one-sided pack gets both cores stacked, not half-overlapping');
 });

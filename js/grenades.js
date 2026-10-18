@@ -251,11 +251,7 @@ export class Grenades {
     const fx = game.particles;
     fx.spawnShockwave(g.x, g.y, 20, g.hue, 1.6, 0.18);
     fx.spawnExplosionSparks(g.x, g.y, 3, g.hue, 1, 4, 1.4);
-    // Cluster Grenades: the grenade splits as it lands; bomblets scatter past the blast and pop a moment later.
-    if (g.cluster) {
-      game.weaponFx?.scatter(g.x, g.y, W.grenadeClusterBomblets, g.radius * W.grenadeClusterSpread, Math.max(30, g.radius * W.grenadeClusterRadiusFrac),
-        g.damage * W.grenadeClusterShare, W.grenadeClusterDelay, g.hue, 'grenade');
-    }
+    if (g.cluster) this.cluster(game, g);
     if (g.gravity) {
       fx.spawnShockwave(g.x, g.y, g.pullRadius, g.hue, 2.5, g.fuse, true);
       if (this.throwSound !== this.throws) {
@@ -301,6 +297,31 @@ export class Grenades {
         damage: g.damage * W.cloudShare / ticks, hue: g.hue, source: 'grenade', look: g.element });
     }
     if (g.emp) this.emp(game, g);
+  }
+
+  // Cluster Grenades: the grenade splits as it lands and the bomblets hop onto enemies just outside its
+  // blast (nearest first, each on its own target); bomblets with nobody left to find scatter around it.
+  cluster(game, g) {
+    const wfx = game.weaponFx;
+    if (!wfx) return;
+    const count = W.grenadeClusterBomblets;
+    const spread = g.radius * W.grenadeClusterSpread;
+    const r = Math.max(30, g.radius * W.grenadeClusterRadiusFrac);
+    const damage = g.damage * W.grenadeClusterShare;
+    const n = this.nearestTargets(game, g.x, g.y, spread, MAX_TARGETS);
+    const spots = [];
+    for (let k = 0; k < n; k++) {
+      const e = this.targets[k];
+      this.targets[k] = null;
+      if (spots.length >= count || Math.hypot(e.x - g.x, e.y - g.y) < g.radius * 0.75) continue;
+      if (spots.some((q) => Math.hypot(e.x - q.x, e.y - q.y) < r)) continue; // already under another bomblet
+      spots.push({ x: e.x, y: e.y });
+    }
+    for (let k = 0; k < spots.length; k++) {
+      wfx.schedule({ x: spots[k].x, y: spots[k].y, fromX: g.x, fromY: g.y, delay: W.grenadeClusterDelay * (0.85 + Math.random() * 0.3),
+        radius: r, damage, hue: g.hue, source: 'grenade', style: 'pop', knock: 0.8 });
+    }
+    if (spots.length < count) wfx.scatter(g.x, g.y, count - spots.length, spread, r, damage, W.grenadeClusterDelay, g.hue, 'grenade');
   }
 
   // SYNERGY: EMP Grenades: the blast arcs Tesla lightning into the nearest enemies around it.
