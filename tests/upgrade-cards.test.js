@@ -68,7 +68,7 @@ function withRandom(draws, fn) {
 
 test('a supply-cache level is the starting level of the next level-up card and the HUD tag', () => {
   const g = game();
-  // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Pew Pews
+  // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Autocannon
   // cards are banished: maxing them would fill the weapon's LV 12 cap).
   for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
   g.player.banished = Object.fromEntries(Object.keys(STAT_CARD_BY_ID).filter((id) => id !== 'multishot').map((id) => [id, true]));
@@ -85,11 +85,11 @@ test('a supply-cache level is the starting level of the next level-up card and t
   assert.match(chestCard.className, /\bjump-2\b/);
   assert.match(chestCard.innerHTML, /INSTALLED \/\/ LV 1 → LV 3/);
   assert.match(chestCard.innerHTML, /\+2 LEVELS/);
-  assert.match(chestCard.innerHTML, /\+4 PEW PEWS PROJECTILES/);
+  assert.match(chestCard.innerHTML, /\+4 AUTOCANNON PROJECTILES/);
 
   g.closeChestModal();
   assert.equal(g.state, 'PLAYING');
-  assert.match(elements.get('active-weapons-bar').innerHTML, /Pew Pews LV 3</);
+  assert.match(elements.get('active-weapons-bar').innerHTML, /Autocannon LV 3</);
 
   withRandom([], () => g.triggerLevelUp());
   assert.equal(g.state, 'UPGRADE');
@@ -101,7 +101,7 @@ test('a supply-cache level is the starting level of the next level-up card and t
 
   g.selectUpgrade(0);
   assert.equal(g.player.upgradeLevels.multishot, 3);
-  // LV 4: the Pew Pews Breakthrough opens before play resumes.
+  // LV 4: the Autocannon Breakthrough opens before play resumes.
   assert.equal(g.state, 'UPGRADE');
   assert.equal(g.handPhase, 'breakthrough');
   assert.deepEqual(g.currentChoices.map((c) => c.kind), ['transform', 'boost']);
@@ -109,7 +109,7 @@ test('a supply-cache level is the starting level of the next level-up card and t
   g.selectUpgrade(0);
   assert.deepEqual(g.player.breakthroughs.blaster, { 4: 'transform' });
   assert.equal(g.state, 'PLAYING');
-  assert.match(elements.get('active-weapons-bar').innerHTML, /Pew Pews LV 4</);
+  assert.match(elements.get('active-weapons-bar').innerHTML, /Autocannon LV 4</);
 });
 
 test('card previews match the real install for every upgrade and level jump, without touching the player', () => {
@@ -154,14 +154,14 @@ test('card previews match the real install for every upgrade and level jump, wit
 
 test('headlines are computed from the rolled level jump', () => {
   const p = makePlayer();
-  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 1 }).headline, '+2 PEW PEWS PROJECTILES');
-  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 2 }).headline, '+4 PEW PEWS PROJECTILES');
+  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 1 }).headline, '+2 AUTOCANNON PROJECTILES');
+  assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 2 }).headline, '+4 AUTOCANNON PROJECTILES');
   assert.equal(describeUpgrade(p, byId('mining_speed')).headline, '+12% MINING SPEED');
   assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
-  assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 PEW PEWS PIERCE');
-  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+40% PEW PEWS DAMAGE');
-  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+96% PEW PEWS DAMAGE');
+  assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 AUTOCANNON PIERCE');
+  assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+50% AUTOCANNON DAMAGE');
+  assert.equal(describeUpgrade(p, { ...byId('blaster_damage'), levelJump: 2 }).headline, '+125% AUTOCANNON DAMAGE');
   assert.equal(describeUpgrade(p, byId('missiles')).headline, `+${W.missileSalvo(levelBuild('missiles', 1))} MISSILES / SALVO`);
 });
 
@@ -229,7 +229,7 @@ test('weapons fire with the shared scaling the cards preview', () => {
 
 test('5x jackpot caches use compact cards so both rows of rewards fit one screen', () => {
   const g = game();
-  // Pew Pews lines are maxed, so with tied draws the heaviest-weighted eligible card wins, in pool order:
+  // Autocannon lines are maxed, so with tied draws the heaviest-weighted eligible card wins, in pool order:
   // Rotary Claw twice, then Tectonic Claw Bore (an evolution, 5 changed stats incl. its AREA-scaled blast).
   for (const id of ['multishot', 'firerate', 'pierce', 'thermite']) g.player.upgradeLevels[id] = byId(id).maxLevel;
   withRandom([0.0001], () => g.openRelicChest({ guaranteedSuper: false }));

@@ -9,7 +9,7 @@
 // Each weapon: `levelId` is the UPGRADE_POOL line that equips it (LV 1), `levelKey` the player.weapons
 // key holding its level (every one of its stat cards raises it by 1, weapon-levels.js), `tagSources`
 // the WEAPON_TAGS entries the weapon fires (its tag chips and the tag cards it unlocks). Every slot
-// weapon, Pew Pews included, levels from 1 to WEAPON_MAX_LEVEL (12).
+// weapon, Autocannon included, levels from 1 to WEAPON_MAX_LEVEL (12).
 // Weapon-specific upgrade lines name their owners with an `owners` list on the UPGRADE_POOL entry.
 import { TUNING } from './config.js';
 import { WEAPON_TAGS } from './weapon-scaling.js';
@@ -17,14 +17,14 @@ import { STAT_CARDS } from './weapon-levels.js';
 
 export const WEAPONS = [
   {
-    id: 'blaster', name: 'Pew Pews', hudName: 'Pew Pews', levelId: 'blaster', levelKey: 'blaster', category: 'PRIMARY', tagSources: ['blaster'],
+    id: 'blaster', name: 'Autocannon', hudName: 'Autocannon', levelId: 'blaster', levelKey: 'blaster', category: 'PRIMARY', tagSources: ['blaster'],
     color: '#00f3ff',
     summary: 'Twin plasma streams straight at your aim. Levels up through Prism Split, Hyper-Capacitor and Phase Piercer.'
   },
   {
     id: 'rockets', name: 'Wing Rockets', hudName: 'Wing Rockets', levelId: 'rockets', levelKey: 'rockets', category: 'PRIMARY', tagSources: ['rocket'],
     color: '#ff9b3d',
-    summary: 'Dumbfire rockets from both wing tips along your heading. Direct hit plus a small blast.'
+    summary: 'Dumbfire rockets from both wing tips, fired where you aim. Direct hit plus a small blast.'
   },
   {
     id: 'missiles', name: 'Swarm Micro-Missiles', hudName: 'Missiles', levelId: 'missiles', levelKey: 'missiles', category: 'AUTONOMOUS', tagSources: ['missile'],
@@ -85,7 +85,7 @@ export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
 
-// The crab's starting kit: Pew Pews only; Wing Rockets join through NEW WEAPON like every other weapon.
+// The crab's starting kit: Autocannon only; Wing Rockets join through NEW WEAPON like every other weapon.
 export const STARTING_WEAPONS = ['blaster'];
 
 // Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).

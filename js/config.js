@@ -173,7 +173,7 @@ export const DEFAULT_TUNING = {
   waveLength: 22,
   waveHpStart: 2.5,
   waveHpStartLight: 1,
-  waveHpPerWave: 0.25,
+  waveHpPerWave: 0.15, // 0.25 before v0.17.0's single-stat weapon cards (they grow damage more slowly)
   waveHpGrowth: 1.065,
   waveHpGrowthFrom: 25,
   spawnIntervalStart: 2.6,

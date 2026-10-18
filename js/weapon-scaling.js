@@ -26,8 +26,8 @@ export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 
 // Per-rank steps of the POWER stats shared by every weapon.
-// x1.4 compounding: a weapon built purely for damage reaches ~40x at LV 12, the old LV 1 -> 12 curve.
-export const DAMAGE_GROWTH = 1.4; // Damage card: x1.4 damage per hit per rank (compounding)
+// x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
+export const DAMAGE_GROWTH = 1.5; // Damage card: x1.5 damage per hit per rank (compounding)
 export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
 export const hitMult = (b) => Math.pow(DAMAGE_GROWTH, b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
@@ -51,7 +51,7 @@ const SINGULARITY_COLLAPSE_SHARE = 0.45;
 export const TURRET_MAX_ACTIVE = 4;
 
 export const WEAPON_SCALING = {
-  // --- Pew Pews (stats: damage, prism, rate, pierce) -----------------------------------------------
+  // --- Autocannon (stats: damage, prism, rate, pierce) -----------------------------------------------
   // Plasma Charge raises bolt damage; Prism Split adds a pair of streams in the fixed PRISM_STREAMS
   // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
@@ -72,7 +72,7 @@ export const WEAPON_SCALING = {
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Wing Rockets (stats: damage, count, reload, radius) ----------------------------------------
-  // Dumbfire rockets from the outer wing tips along the hull's heading. Direct hit + a blast worth
+  // Dumbfire rockets from the outer wing tips, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
   wingRocketCooldown: (b) => 1 / rateMult(b.r.reload),
@@ -377,7 +377,7 @@ export function prismNewestGroup(count) {
   return pair >= PRISM_STREAMS.length ? `${name} x2` : name;
 }
 
-// Pew Pews numbers for a player: streams, fire rate and pierce are the player's base stats plus the
+// Autocannon numbers for a player: streams, fire rate and pierce are the player's base stats plus the
 // build's ranks (cards never touch the base stats, so tuner and Armory changes stay live).
 export const blasterStreams = (p, b = weaponBuild(p, 'blaster')) => p.stats.bulletCount + W.blasterExtraStreams(b);
 export const blasterFireRate = (p, b = weaponBuild(p, 'blaster')) => p.stats.fireRate * W.blasterRateMult(b);
@@ -386,7 +386,7 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 // Potential DPS (x base damage) per weapon build, from its counts, cooldowns and hit damage, with
 // every transform's extra attacks. Tests hold every weapon to buildBudget (DPS_TARGET(level) x its
 // Breakthrough multipliers) at every level and stat mix; the balance tool reports it alongside real runs.
-// Pew Pews is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
+// Autocannon is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
 export const POTENTIAL_DPS = {
   blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
     * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare : 0)),
@@ -496,7 +496,7 @@ export function weaponDamage(p, weapon, b) {
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;
     case 'helix': {
-      // Pulsar Helix bolts hit like Pew Pews bolts (Damage ranks and boosts), at helixDamageMult.
+      // Pulsar Helix bolts hit like Autocannon bolts (Damage ranks and boosts), at helixDamageMult.
       base = d * W.helixDamageMult * hitMult(sourceBuild(p, weapon, b));
       break;
     }

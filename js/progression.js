@@ -20,7 +20,7 @@ export const ARMORY_CATEGORIES = [
 export const META_UPGRADES = [
   // OFFENSE
   { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.015, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
-  { id: 'fireRate', cat: 'offense', name: 'Chronos Capacitor', icon: '⚡', color: '#00ff88', stat: 'Pew Pews fire rate', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
+  { id: 'fireRate', cat: 'offense', name: 'Chronos Capacitor', icon: '⚡', color: '#00ff88', stat: 'Autocannon fire rate', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
   { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },

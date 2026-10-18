@@ -289,18 +289,18 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
 });
 
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
-  const p = makePlayer(); // equips only Pew Pews (PROJECTILE KINETIC)
+  const p = makePlayer(); // equips only Autocannon (PROJECTILE KINETIC)
   for (const id of ['tag_explosive', 'tag_electric', 'tag_area']) assert.equal(byId(id).req(p), false, id);
   for (const id of ['cryo', 'nanite']) assert.equal(loadoutAllows(p, byId(id)), false, id);
-  assert.equal(byId('tag_kinetic').req(p), true, 'Pew Pews are kinetic');
-  assert.equal(loadoutAllows(p, byId('thermite')), true, 'Pew Pews fire bolts to ignite');
+  assert.equal(byId('tag_kinetic').req(p), true, 'the Autocannon is kinetic');
+  assert.equal(loadoutAllows(p, byId('thermite')), true, 'Autocannon bolts ignite');
   p.loadout = ['blaster', 'rockets'];
   assert.equal(byId('tag_explosive').req(p), true, 'wing rockets are explosive');
   assert.equal(byId('tag_area').req(p), true, 'wing rockets are area');
   assert.equal(loadoutAllows(p, byId('cryo')), true, 'wing rockets carry cryo');
   p.loadout = ['rockets'];
   assert.equal(byId('tag_kinetic').req(p), false, 'no kinetic weapon equipped');
-  assert.equal(loadoutAllows(p, byId('thermite')), false, 'no Pew Pews, no thermite');
+  assert.equal(loadoutAllows(p, byId('thermite')), false, 'no Autocannon, no thermite');
 });
 
 test('every weapon card carries tags rendered as chips, and every tag has a chip style', () => {

@@ -16,8 +16,8 @@
 
 // Sub-sources that belong to a weapon even though they are not one of its tagSources.
 export const SUB_SOURCES = Object.freeze({
-  burn: 'blaster',        // Thermite Rounds burn ticks (a Pew Pews line)
-  helix: 'blaster',       // Pulsar Helix bolts (Pew Pews evolution)
+  burn: 'blaster',        // Thermite Rounds burn ticks (a Autocannon line)
+  helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse
   siege: 'turret',        // Siege Battery shell bursts on turret bolts

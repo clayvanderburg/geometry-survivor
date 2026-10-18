@@ -12,6 +12,26 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.18.0',
+    date: '2026-10-18',
+    title: 'Plasma Grenades',
+    notes: [
+      { type: 'new', text: 'New weapon: Plasma Grenades. Lobbed at nearby enemies, they land, blink for a moment and blow up in a wide blast.' },
+      { type: 'new', text: 'Grenades take on the element of your damage cards: Thermite burns, Cryo freezes, Nanite corrodes. Every card you own applies to them.' },
+      { type: 'new', text: 'Grenade Breakthroughs: Cluster Grenades (split on landing), Lingering Cloud (an elemental cloud) and Gravity Grenade (drags enemies in, then blasts).' },
+      { type: 'new', text: 'New evolution: EMP Grenades (Plasma Grenades + Tesla Arc). Every blast arcs lightning into nearby enemies.' }
+    ]
+  },
+  {
+    version: '0.17.1',
+    date: '2026-10-18',
+    title: 'Autocannon',
+    notes: [
+      { type: 'new', text: 'Pew Pews is now called the Autocannon. Same gun, same upgrades.' },
+      { type: 'new', text: 'Wing Rockets fire where you aim (mouse, right stick or auto-aim), like the Autocannon, instead of where the ship is flying.' }
+    ]
+  },
+  {
     version: '0.17.0',
     date: '2026-10-18',
     title: 'Breakthroughs',
@@ -20,7 +40,8 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'New weapon cards: damage cards for every weapon, Vortex Core Size and Lifetime, Orbit Blade Size, Proximity Mine Fuse, and more.' },
       { type: 'new', text: 'BREAKTHROUGHS at weapon LV 4, 8 and 12: pick a transform that changes how the weapon works (flak rounds, twin singularities...) or +18% damage and reach.' },
       { type: 'balance', text: 'Damage, fire rate and count cards add damage. Size, reach and pull cards add none: they make the weapon easier to land instead. Weapons built for damage are equally strong.' },
-      { type: 'new', text: 'The pause-menu loadout lists each weapon\'s Breakthroughs, and the Field Guide explains weapon levels.' }
+      { type: 'balance', text: 'Enemy health climbs more slowly per wave to match the new cards. Missiles and Mines are no longer far ahead of other weapons.' },
+      { type: 'new', text: 'The pause-menu loadout shows every weapon\'s level (Pew Pews too) and its Breakthroughs, and the Field Guide explains weapon levels.' }
     ]
   },
   {

@@ -45,13 +45,13 @@ test('the forward pair fires straight along the aim, side by side', () => {
   assert.ok(Math.abs(g.bullets[0].y - g.bullets[1].y - -14) < 1e-9 || Math.abs(g.bullets[1].y - g.bullets[0].y - -14) < 1e-9);
 });
 
-test('wing rockets launch from both wing tips along the hull heading, not the turret aim', () => {
+test('wing rockets launch from both wing tips and fly where the turret aims', () => {
   const g = game(); // turret aims +x, hull heads +y
   g.fireWingRockets();
   assert.equal(g.bullets.length, 2);
   for (const r of g.bullets) {
     assert.equal(r.source, 'rocket');
-    assert.ok(Math.abs(r.vx) < 1e-9 && r.vy === W.wingRocketSpeed, 'flies along the hull heading');
+    assert.ok(Math.abs(r.vy) < 1e-9 && r.vx === W.wingRocketSpeed, 'flies along the turret aim');
     assert.equal(r.damage, 10 * W.wingRocketDamageMult(levelBuild('rockets', 1)));
     assert.equal(r.blastDamage, r.damage * W.wingRocketBlastShare);
   }

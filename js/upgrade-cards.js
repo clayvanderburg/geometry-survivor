@@ -32,7 +32,7 @@ const tagBoost = (p, tag) => p.stats.tagDamage?.[tag] ?? 1;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
 const sec1 = (v) => `${v.toFixed(1)}s`;
-// A weapon's rows show only while it is equipped (any weapon, Pew Pews included, can be discarded);
+// A weapon's rows show only while it is equipped (any weapon, Autocannon included, can be discarded);
 // `fn` gets the weapon's build (level, stat ranks, Breakthroughs).
 const wb = (p, id, fn) => (ownsWeapon(p, id) ? fn(weaponBuild(p, id)) : null);
 // Deployable hits scale with bolt damage and the tuner's deployable multiplier (same as deployables.js).
@@ -50,21 +50,21 @@ export const STAT_ROWS = [
   { id: 'electricDamage', label: 'ELECTRIC damage bonus', get: (p) => tagBoost(p, 'electric'), fmt: tagBonus, headline: 'points', unit: 'ELECTRIC DAMAGE' },
   { id: 'areaSize', label: 'AREA size', get: (p) => areaMult(p), fmt: pct, headline: 'points', unit: 'AREA SIZE' },
 
-  // Pew Pews (primary blaster). Each weapon's rows read its build (weapon-levels.js), so a stat card
+  // Autocannon (primary blaster). Each weapon's rows read its build (weapon-levels.js), so a stat card
   // shows exactly its own stat plus the damage per hit its new level brings.
-  { id: 'bulletCount', label: 'Projectiles', get: (p) => wb(p, 'blaster', (b) => blasterStreams(p, b)), fmt: int, headline: 'count', unit: 'PEW PEWS PROJECTILES' },
+  { id: 'bulletCount', label: 'Projectiles', get: (p) => wb(p, 'blaster', (b) => blasterStreams(p, b)), fmt: int, headline: 'count', unit: 'AUTOCANNON PROJECTILES' },
   { id: 'prismLayout', label: 'Newest streams', get: (p) => wb(p, 'blaster', (b) => blasterStreams(p, b)), fmt: (v) => prismNewestGroup(v) },
-  { id: 'fireRate', label: 'Fire rate', get: (p) => wb(p, 'blaster', (b) => blasterFireRate(p, b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'PEW PEWS FIRE RATE' },
+  { id: 'fireRate', label: 'Fire rate', get: (p) => wb(p, 'blaster', (b) => blasterFireRate(p, b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'AUTOCANNON FIRE RATE' },
   { id: 'bulletSpeed', label: 'Bolt speed', get: (p) => wb(p, 'blaster', () => p.stats.bulletSpeed), fmt: dec1, headline: 'pct', unit: 'BOLT SPEED' },
-  { id: 'pierce', label: 'Pierce', get: (p) => wb(p, 'blaster', (b) => blasterPierce(p, b)), fmt: int, headline: 'count', unit: 'PEW PEWS PIERCE' },
-  { id: 'damage', label: 'Bolt damage', get: (p) => wb(p, 'blaster', (b) => weaponDamage(p, 'blaster', b)), fmt: dec1, headline: 'pct', unit: 'PEW PEWS DAMAGE' },
+  { id: 'pierce', label: 'Pierce', get: (p) => wb(p, 'blaster', (b) => blasterPierce(p, b)), fmt: int, headline: 'count', unit: 'AUTOCANNON PIERCE' },
+  { id: 'damage', label: 'Bolt damage', get: (p) => wb(p, 'blaster', (b) => weaponDamage(p, 'blaster', b)), fmt: dec1, headline: 'pct', unit: 'AUTOCANNON DAMAGE' },
 
   // Wing Rockets
   { id: 'rocketCount', label: 'Rockets / volley', get: (p) => wb(p, 'rockets', W.wingRocketCount), fmt: int, headline: 'count', unit: 'ROCKETS / VOLLEY', newText: (a) => `WING ROCKETS // ${a} / VOLLEY` },
   { id: 'rocketDamage', label: 'Rocket hit', get: (p) => wb(p, 'rockets', (b) => weaponDamage(p, 'rocket', b)), fmt: dec1, headline: 'pct', unit: 'ROCKET DAMAGE' },
   { id: 'rocketCooldown', label: 'Rocket volley interval', get: (p) => wb(p, 'rockets', W.wingRocketCooldown), fmt: secs, headline: 'pct', unit: 'ROCKET VOLLEY INTERVAL' },
   { id: 'rocketBlast', label: 'Rocket blast radius', get: (p) => wb(p, 'rockets', (b) => wingRocketBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'ROCKET BLAST RADIUS' },
-  { id: 'helixBolts', label: 'Spiral bolts per Pew Pews shot', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'SPIRAL BOLTS PER PEW PEWS SHOT', newText: (a) => `+${a} SPIRAL BOLTS` },
+  { id: 'helixBolts', label: 'Spiral bolts per Autocannon shot', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'SPIRAL BOLTS PER AUTOCANNON SHOT', newText: (a) => `+${a} SPIRAL BOLTS` },
   { id: 'helixDamage', label: 'Helix bolt damage', get: (p) => (p.weapons.pulsarHelix ? weaponDamage(p, 'helix') : null), fmt: dec1 },
 
   // Swarm Micro-Missiles + Storm Protocol
@@ -312,7 +312,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 }
 
 // Potential DPS of a weapon for this player (base damage x the weapon's potential, tag bonuses
-// included). Pew Pews counts its real LV 1 output (streams x fire rate) as its starting point.
+// included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
   const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade' };

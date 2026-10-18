@@ -39,7 +39,18 @@ const A = 0, B = 1, X = 2, Y = 3, RB = 5, START = 9, UP = 12, DOWN = 13, LEFT = 
       await Promise.all([page.waitForTimeout(90), page.waitForFunction(i => !__game.gpButtons[i], i, { timeout: 5000 })]);
     };
     const state = () => page.evaluate(() => __game.state);
-    const expect = async (want, step) => { const got = await state(); if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`); };
+    // A lucky +3 roll can take a weapon to LV 4, which opens its Breakthrough before play resumes:
+    // pick it with A (controller coverage for the Breakthrough screen) and carry on.
+    let breakthroughsTaken = 0;
+    const expect = async (want, step) => {
+      for (let k = 0; want === 'PLAYING' && k < 3 && await page.evaluate(() => __game.handPhase === 'breakthrough'); k++) {
+        await page.waitForTimeout(450);
+        await press(A);
+        breakthroughsTaken++;
+      }
+      const got = await state();
+      if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`);
+    };
 
     await press(A);
     await expect('PLAYING', 'A on title launches the run');

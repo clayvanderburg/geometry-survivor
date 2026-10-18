@@ -35,7 +35,7 @@ export function rarityFor(upg, jump = 1) {
 // damage from the level, so apply() only has to keep player.weapons[levelKey] equal to the level.
 const CORE_INFO = {
   blaster: { headline: 'damage', summary: 'Twin plasma streams straight at your aim.' },
-  rockets: { headline: 'rocketCount', summary: 'Wing-tip dumbfire rockets fly along your heading: a direct hit plus a small blast.' },
+  rockets: { headline: 'rocketCount', summary: 'Wing-tip dumbfire rockets fly where you aim: a direct hit plus a small blast.' },
   missiles: { headline: 'missileSalvo', summary: 'Curving, ribbon-trailing homing missiles that detonate on impact.' },
   orbitals: { headline: 'orbitalBlades', summary: 'Spinning saw-triangles orbit your ship and shred anything they touch.' },
   lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
@@ -252,7 +252,7 @@ export const UPGRADE_POOL = [
     tags: ['burn', 'projectile'],
     maxLevel: 5,
     headline: 'burnMax',
-    summary: 'Pew Pews and helix bolts ignite targets, and Plasma Grenades become FIRE grenades. Each hit adds a burn stack and refreshes the fire.',
+    summary: 'Autocannon and helix bolts ignite targets, and Plasma Grenades become FIRE grenades. Each hit adds a burn stack and refreshes the fire.',
     apply(player) {
       player.weapons.thermite = (player.weapons.thermite || 0) + 1;
     }
@@ -306,7 +306,7 @@ export const UPGRADE_POOL = [
   {
     id: 'evo_pulsar',
     name: 'SYNERGY: Pulsar Helix',
-    category: 'PEW PEWS',
+    category: 'AUTOCANNON',
     ownersAll: ['blaster'],
     tags: ['projectile', 'kinetic'],
     isSynergy: true,
@@ -315,7 +315,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
     headline: 'helixBolts',
-    summary: 'EVOLUTION: Upgrades your Pew Pews (not a new weapon): every Pew Pews shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
+    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
       player.stats.fireRate *= 1.15;
