@@ -15,7 +15,12 @@ const {
 
 // Hands and rerolls carry no NEW WEAPON card unless a test asks for one (it would open the weapon
 // pick instead of applying a card), so slot-by-slot checks are deterministic.
-Object.assign(TUNING, { newWeaponChance: 0, newWeaponPity: 99 });
+// NEW WEAPON odds are per weapons owned (newWeaponChanceBy1..5) with two pity counts; set them all at once.
+const odds = (chance, pity = 99) => ({
+  newWeaponChanceBy1: chance, newWeaponChanceBy2: chance, newWeaponChanceBy3: chance, newWeaponChanceBy4: chance, newWeaponChanceBy5: chance,
+  newWeaponPity: pity, newWeaponPityOne: pity
+});
+Object.assign(TUNING, odds(0));
 
 function freshGame(gold = 0) {
   const g = h.createHeadlessGame();
@@ -32,7 +37,7 @@ function withTuning(values, fn) {
 }
 
 // A hand of exactly 3 regular cards (no NEW WEAPON) so slots are predictable.
-const plainHand = (g) => withTuning({ newWeaponChance: 0, newWeaponPity: 99 }, () => g.triggerLevelUp());
+const plainHand = (g) => withTuning(odds(0), () => g.triggerLevelUp());
 const ids = (g) => g.currentChoices.map((c) => c.id);
 const offerable = (p, c) => c.isNewWeapon || eligibleUpgrades(p).some((u) => u.id === c.id);
 
@@ -134,7 +139,7 @@ test('a reroll keeps the locked card in its slot and rolls the rest by the norma
 test('rerolls do not advance the NEW WEAPON pity counter (it counts level-ups)', () => {
   const g = freshGame(10000);
   g.player.newWeaponDrought = 1;
-  withTuning({ newWeaponChance: 0, newWeaponPity: 3 }, () => {
+  withTuning(odds(0, 3), () => {
     g.triggerLevelUp();
     for (let i = 0; i < 5; i++) { g.handRerolls = 0; g.rerollHand(); }
   });
@@ -142,7 +147,7 @@ test('rerolls do not advance the NEW WEAPON pity counter (it counts level-ups)',
   // With pity due, every reroll of that hand still offers NEW WEAPON.
   const g2 = freshGame(10000);
   g2.player.newWeaponDrought = 2;
-  withTuning({ newWeaponChance: 0, newWeaponPity: 3 }, () => {
+  withTuning(odds(0, 3), () => {
     g2.triggerLevelUp();
     assert.ok(g2.currentChoices.some((c) => c.isNewWeapon));
     for (let i = 0; i < 5; i++) { g2.handRerolls = 0; g2.rerollHand(); assert.ok(g2.currentChoices.some((c) => c.isNewWeapon)); }
@@ -215,11 +220,11 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
 
   // Its weapon discarded.
   const g2 = freshGame();
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }), null, 'Wing Rockets not equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }), null, 'Wing Rockets not equipped');
   acquireWeapon(g2.player, 'rockets');
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 3 }).id, 'rockets', 'valid while Wing Rockets are equipped');
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }).id, 'rockets_damage', 'valid while Wing Rockets are equipped');
   discardWeapon(g2.player, 'rockets');
-  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets, levelJump: 1 }), null);
+  assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 1 }), null);
 
   // Level jump trimmed to the levels left.
   const g3 = freshGame();
@@ -230,13 +235,13 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
 
 test('a locked NEW WEAPON card carries over as NEW WEAPON, and drops when no slot is free', () => {
   const g = freshGame(100);
-  withTuning({ newWeaponChance: 1 }, () => g.triggerLevelUp());
+  withTuning(odds(1), () => g.triggerLevelUp());
   const nw = g.currentChoices.findIndex((c) => c.isNewWeapon);
   assert.ok(nw >= 0);
   g.toggleCardLock(nw);
   g.selectUpgrade(nw === 0 ? 1 : 0);
   assert.ok(g.carriedLock.card.isNewWeapon);
-  withTuning({ newWeaponChance: 1 }, () => g.triggerLevelUp());
+  withTuning(odds(1), () => g.triggerLevelUp());
   assert.equal(g.currentChoices.filter((c) => c.isNewWeapon).length, 1, 'exactly one NEW WEAPON card');
   assert.ok(g.currentChoices[nw].isNewWeapon && g.handLock.card === g.currentChoices[nw]);
   assert.equal(g.player.newWeaponDrought, 0);
@@ -252,7 +257,7 @@ test('a locked NEW WEAPON card carries over as NEW WEAPON, and drops when no slo
 
   // Every slot filled before the next level-up: the NEW WEAPON lock is dropped.
   const g2 = freshGame(100);
-  withTuning({ newWeaponChance: 1 }, () => g2.triggerLevelUp());
+  withTuning(odds(1), () => g2.triggerLevelUp());
   const i2 = g2.currentChoices.findIndex((c) => c.isNewWeapon);
   g2.toggleCardLock(i2);
   g2.selectUpgrade(i2 === 0 ? 1 : 0);
@@ -365,4 +370,76 @@ test('a carried-over lock is still the only lock: locking another card in the ne
   const moved = g.currentChoices[other];
   g.selectUpgrade((other + 1) % g.currentChoices.length); // pass over the newly locked card
   assert.equal(g.carriedLock.card, moved, 'only the new lock carries over; the old one is gone');
+});
+
+test('BANISH: 30 gold, two steps, the card never comes back this run and a fresh card takes its slot', async () => {
+  const { eligibleUpgrades, rollLevelUpHand } = await import('../js/upgrades.js');
+  const { banishCost } = await import('../js/gold.js');
+  assert.equal(banishCost(), 30);
+  const g = freshGame(100);
+  plainHand(g);
+  const target = g.currentChoices[1];
+  assert.equal(g.banishCard(1), true, 'first press arms');
+  assert.equal(g.gold, 100, 'arming is free');
+  assert.equal(g.banishArmed, 1);
+  assert.equal(g.banishCard(1), true, 'second press on the same card banishes');
+  assert.equal(g.gold, 70);
+  assert.equal(g.player.banished[target.id], true);
+  assert.notEqual(g.currentChoices[1]?.id, target.id, 'a fresh card took the slot');
+  assert.equal(new Set(g.currentChoices.map((c) => c.id)).size, g.currentChoices.length, 'no duplicates');
+  assert.ok(!eligibleUpgrades(g.player).some((u) => u.id === target.id), 'gone from the pool');
+  for (let i = 0; i < 200; i++) assert.ok(!rollLevelUpHand(g.player, 3).some((c) => c.id === target.id));
+
+  // Arming one card then pressing another only re-arms; nothing is spent.
+  g.banishCard(0);
+  g.banishCard(2);
+  assert.equal(g.banishArmed, 2);
+  assert.equal(g.gold, 70);
+  // Not enough gold: nothing happens.
+  g.gold = 10;
+  const before = g.currentChoices.map((c) => c.id);
+  g.banishCard(2);
+  assert.equal(g.gold, 10);
+  assert.deepEqual(g.currentChoices.map((c) => c.id), before);
+});
+
+test('BANISH: a locked card loses its lock, NEW WEAPON cannot be banished, keyboard and controller work', () => {
+  const g = freshGame(200);
+  plainHand(g);
+  g.toggleCardLock(0);
+  const locked = g.currentChoices[0];
+  g.banishCard(0); g.banishCard(0);
+  assert.equal(g.handLock, null, 'the lock goes with the banished card');
+  assert.equal(g.player.banished[locked.id], true);
+
+  // Keyboard: [B] then a digit banishes at once; [B] again cancels.
+  const goldBefore = g.gold;
+  const id2 = g.currentChoices[2].id;
+  assert.equal(g.handleUpgradeKey('KeyB'), true);
+  assert.equal(g.banishMode, true);
+  assert.equal(g.handleUpgradeKey('Digit3'), true);
+  assert.equal(g.gold, goldBefore - 30);
+  assert.equal(g.player.banished[id2], true);
+  assert.equal(g.banishMode, false);
+  g.handleUpgradeKey('KeyB'); g.handleUpgradeKey('KeyB');
+  assert.equal(g.banishMode, false, '[B] twice cancels');
+
+  // Controller: RB on the focused card, twice.
+  const pad = (button) => ({ pressed: (b) => b === button, buttons: [] });
+  g.gpActive = true;
+  g.menuNav = { focused: g.choiceCardEls[1], update() {}, activate() {}, setFocus(el) { this.focused = el; }, clear() {} };
+  const id1 = g.currentChoices[1].id;
+  g.handleUpgradePad(pad(PAD.RB));
+  assert.equal(g.banishArmed, 1);
+  g.handleUpgradePad(pad(PAD.RB));
+  assert.equal(g.player.banished[id1], true);
+
+  // NEW WEAPON is not banishable.
+  const h2 = freshGame(200);
+  withTuning(odds(1), () => h2.triggerLevelUp());
+  const nwIdx = h2.currentChoices.findIndex((c) => c.isNewWeapon);
+  assert.ok(nwIdx >= 0);
+  assert.equal(h2.banishCard(nwIdx), false);
+  assert.equal(h2.banishCard(nwIdx, true), false);
+  assert.equal(h2.gold, 200);
 });

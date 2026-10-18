@@ -19,9 +19,44 @@ export const SPAWN_HOLD_MAX = 1.5;
 // A lieutenant's sped-up steering never exceeds this share of the ship's base move speed.
 export const LIEUTENANT_MAX_SHIP_SHARE = 0.9;
 
-// Contact damage of a hull touching the ship at a given wave (bosses hit harder; +8% per wave after 5).
+// --- Difficulty ramp (TUNING "Difficulty Ramp" group) ------------------------------------------
+// Enemy HP scale of a wave (bosses and lieutenants included; speed caps also read it):
+// (waveHpStart + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), compounding only past that wave.
+// Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
+// with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
+export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter']);
+export function waveScaleAt(wave, { light = false } = {}) {
+  const start = light ? (TUNING.waveHpStartLight ?? 1) : (TUNING.waveHpStart ?? 1);
+  const perWave = TUNING.waveHpPerWave ?? 0.25;
+  const growth = TUNING.waveHpGrowth ?? 1.09;
+  const from = TUNING.waveHpGrowthFrom ?? 6;
+  return (start + (wave - 1) * perWave) * Math.pow(growth, Math.max(0, wave - from));
+}
+
+// Contact and plasma-orb damage multiplier of a wave: damageRampBase, plus damageRampPerWave per wave
+// after damageRampFrom.
+export function damageRampAt(wave) {
+  return (TUNING.damageRampBase ?? 1) + Math.max(0, wave - (TUNING.damageRampFrom ?? 5)) * (TUNING.damageRampPerWave ?? 0.08);
+}
+
+// XP carried by a kill at a given wave: the enemy's base XP × (1 + xpPerWave·(w−1)).
+export function xpScaleAt(wave) {
+  return 1 + Math.max(0, wave - 1) * (TUNING.xpPerWave ?? 0);
+}
+
+// Seconds between wave packs: spawnIntervalStart − spawnIntervalPerWave·w, never below spawnIntervalMin.
+export function spawnIntervalAt(wave) {
+  return Math.max(TUNING.spawnIntervalMin ?? 0.75, (TUNING.spawnIntervalStart ?? 2.6) - wave * (TUNING.spawnIntervalPerWave ?? 0.14));
+}
+
+// Head count of a wave pack after the global pack-size multiplier (at least one).
+export function packSize(count) {
+  return Math.max(1, Math.round(count * (TUNING.packSizeMult ?? 1)));
+}
+
+// Contact damage of a hull touching the ship at a given wave (bosses hit harder).
 export function contactDamageAt(e, wave) {
-  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * (1 + Math.max(0, wave - 5) * 0.08);
+  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * damageRampAt(wave);
 }
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
@@ -46,6 +81,8 @@ export class EnemyManager {
     this.view = null;
     // (indicator) => { x, y, onScreen } | null: a new place for a guarded spawn the ship is camping on.
     this.relocateSpawn = null;
+    // (enemy) => void, called as each enemy materializes (the game's run stats); null in unit tests.
+    this.onSpawn = null;
     this.tick = 0;
     this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
@@ -184,8 +221,8 @@ export class EnemyManager {
         };
       case 'boss':
         return {
-          hp: 650 * waveScale,
-          maxHp: 650 * waveScale,
+          hp: 650 * waveScale * (TUNING.bossHpMult ?? 1),
+          maxHp: 650 * waveScale * (TUNING.bossHpMult ?? 1),
           speed: 1.35,
           radius: 36,
           sides: 8,
@@ -296,6 +333,7 @@ export class EnemyManager {
           detourY: 0
         };
         this.enemies.push(spawned);
+        this.onSpawn?.(spawned); // run stats (Game sets it): spawn time and per-type spawn counts
         if (spawned.isBoss) this.bossArrivals.push(spawned);
         else if (spawned.isLieutenant) this.lieutenantArrivals.push(spawned);
         grid.applyImpulse(sp.x, sp.y, 12, 65, c.hue);

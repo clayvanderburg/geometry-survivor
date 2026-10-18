@@ -28,6 +28,8 @@ export function rerollCost(rerolls = 0, tuning = TUNING) {
 }
 
 export const lockCost = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldLockCost ?? 5));
+// BANISH: removes a card from this run's pool for good (a fresh card takes its slot).
+export const banishCost = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldBanishCost ?? 30));
 
 // Spends from `wallet.gold` only when it covers the whole amount; gold never goes below 0.
 export function trySpend(wallet, amount) {

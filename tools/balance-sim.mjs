@@ -7,16 +7,19 @@
 //   npm run balance -- --runs 8 --focus     # more runs, plus a "focus:<id>" strategy per upgrade
 //   npm run balance -- --tune enemyHpMult=1.2 --tune fireRate=6   # A/B a tuning change
 //   npm run balance -- --json balance.json  # raw per-run results for further analysis
+//   npm run balance -- --no-bench --stats-out sim-stats.json   # same summary format as /api/stats/summary
 //
 // Flags: --runs N  --seed S  --strategies a,b  --focus  --max-minutes M  --workers N  --meta RANK
-//        --skill expert|average|novice  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --help
+//        --skill expert|average|novice  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { aggregateRuns } from '../js/stats-aggregate.js';
+import { GAME_VERSION } from '../js/version.js';
 
 function parseArgs(argv) {
-  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null };
+  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null, statsOut: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -55,6 +58,7 @@ function parseArgs(argv) {
     else if (a === '--no-bench') opts.bench = false;
     else if (a === '--bench-only') opts.benchOnly = true;
     else if (a === '--json') opts.json = next();
+    else if (a === '--stats-out') opts.statsOut = next();
     else if (a === '--help' || a === '-h') opts.help = true;
     else throw new Error(`Unknown flag ${a} (see --help)`);
   }
@@ -221,6 +225,21 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
         Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' ') || '—', weaponLevels.toFixed(1)];
     })));
 
+    // Upgrade exhaustion: when the slots fill, when hands first run short, and when level-ups find
+    // nothing left (the ALL SYSTEMS MAXED full-shield-repair fallback).
+    const stamp = (rs, key) => {
+      const hits = rs.filter(r => r[key]);
+      if (!hits.length) return '—';
+      const label = `${mmss(median(hits.map(r => r[key].time)))} · L${median(hits.map(r => r[key].level))}`;
+      return hits.length === rs.length ? label : `${label} (${hits.length}/${rs.length})`;
+    };
+    out.push('\n## Upgrade exhaustion (median time · level, among runs that got there)');
+    out.push(table(['strategy', 'NEW WEAPON in hands (slot free)', 'all slots filled', 'first hand < 3 cards', 'first empty hand (MAXED)', 'MAXED level-ups / run'], strategies.map(s => {
+      const rs = byStrat.get(s.name);
+      const hands = sumBy(rs, r => r.handsWithFreeSlot || 0);
+      return [s.name, hands ? `${pct(sumBy(rs, r => r.newWeaponHands || 0) / hands)} of ${hands}` : '—', stamp(rs, 'slotsFullAt'), stamp(rs, 'thinHandAt'), stamp(rs, 'maxedAt'), mean(rs.map(r => r.maxedCount || 0)).toFixed(1)];
+    })));
+
     // Difficulty curve per wave, pooled across strategies.
     const maxWave = Math.max(...runs.map(r => r.wave));
     const rows = [];
@@ -231,7 +250,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const finished = rowsW.filter(p => p.hpEnd !== null);
       rows.push([w, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
     }
-    out.push('\n## Difficulty curve per wave (all strategies pooled; waves are 22 s, bosses every 3rd)');
+    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 3rd)`);
     out.push(table(['wave', 'runs alive', 'deaths', 'HP lost', 'kills', 'enemies on field', 'shield at end', 'level at end'], rows));
 
     // Time-to-kill per enemy type per wave bucket.
@@ -251,6 +270,19 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const a = ttk[`${t}|${b}`];
       return a ? `${histMedian(a.hist).toFixed(2)}s / ${(a.hits / a.n).toFixed(1)} / ${pct(a.oneHit / a.n)} (${a.n})` : '—';
     })])));
+    // Weapon balance from the game's own run stats (js/run-stats.js), the same numbers stats.html shows.
+    const summary = statsSummary(opts, runs);
+    const curve = summary.weapons.filter(w => w.curve);
+    if (curve.length) {
+      const lvls = [...new Set(curve.flatMap(w => w.levels.map(l => l.level)))].sort((a, b) => a - b).filter(l => l <= 10);
+      out.push('\n## Weapon DPS vs DPS_TARGET (run stats; cell = realized share of potential · index vs same-level median; ⬆ needs buff, ⬇ needs nerf at ±20%)');
+      out.push(table(['weapon', 'runs', 'dmg share', ...lvls.map(l => `L${l}`), 'overall'], curve.map(w => [w.id, w.runs, pct(w.dmgShare || 0, 1), ...lvls.map(l => {
+        const r = w.levels.find(x => x.level === l);
+        if (!r || r.vsTarget === null) return '—';
+        const mark = r.flag === 'buff' ? ' ⬆' : r.flag === 'nerf' ? ' ⬇' : '';
+        return `${pct(r.vsTarget)}${r.index !== null ? ` · ${r.index.toFixed(2)}${mark}` : r.enough ? '' : ' (low n)'}`;
+      }), w.index !== null ? `${w.index.toFixed(2)}${w.flag === 'buff' ? ' ⬆ needs buff' : w.flag === 'nerf' ? ' ⬇ needs nerf' : ''}` : '—'])));
+    }
     out.push('\nTimed-out runs (hit the cap) are survivors, so "time" is a lower bound for them.');
     if (runs.some(r => !r.died) && capS) out.push(`Cap = ${mmss(capS)}.`);
   }
@@ -286,6 +318,13 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
   return out.join('\n');
 }
 
+// The runs' gameplay stats in the /api/stats/summary format (source 'sim'), with the sim settings.
+export function statsSummary(opts, runs) {
+  const summary = aggregateRuns(runs.map(r => r.stats).filter(Boolean), { version: GAME_VERSION, source: 'sim' });
+  summary.sim = { seed: opts.seed, runsPerStrategy: opts.runs, strategies: [...new Set(runs.map(r => r.strategy))], maxMinutes: opts.maxMinutes, skill: opts.skill, god: opts.god, meta: opts.meta, tune: opts.tune };
+  return summary;
+}
+
 // Average bench results across seeds, keyed "upgradeId|level|scenario".
 function averageBench(bench) {
   const groups = new Map();
@@ -313,6 +352,7 @@ async function main() {
   const h = await import('./balance/harness.mjs');
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
+  opts.waveLength = h.DEFAULT_TUNING.waveLength;
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 
@@ -348,6 +388,10 @@ async function main() {
     writeFileSync(opts.json, JSON.stringify({ opts, strategies, runs, bench }, null, 1));
     process.stderr.write(`wrote ${opts.json}\n`);
   }
+  if (opts.statsOut) {
+    writeFileSync(opts.statsOut, JSON.stringify(statsSummary(opts, runs), null, 1));
+    process.stderr.write(`wrote ${opts.statsOut}\n`);
+  }
 }
 
 function readHelp() {
@@ -366,7 +410,9 @@ function readHelp() {
   --bench-seeds N   seeds averaged per bench case (default 2)
   --no-bench        skip the weapon throughput bench
   --bench-only      run only the bench
-  --json PATH       write raw per-run results`;
+  --json PATH       write raw per-run results
+  --stats-out PATH  write the runs' gameplay stats aggregated exactly like GET /api/stats/summary
+                    (load it in stats.html next to real player data)`;
 }
 
 // Worker threads run jobs; the main thread plans, dispatches and reports.

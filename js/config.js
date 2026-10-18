@@ -1,5 +1,14 @@
 // Centralized Live Tuning Configuration & Cross-Tab Sync for VEXOLITH // SURVIVOR
-const TUNING_STORAGE_KEY = 'vectra_survivor_tuning_v3';
+// Saved tuning holds only the values that differ from DEFAULT_TUNING (player settings like volume, plus
+// anything changed in the dev tuner), so a balance patch that changes a default reaches every player.
+const TUNING_STORAGE_KEY = 'vexolith_tuning_overrides_v4';
+// Before 0.12.2 every save (even a volume slider) stored a full snapshot of TUNING. Loading one froze old
+// balance values in place and flagged every later run as dev-tuned (never sent to the global board), so
+// only the player settings are carried over from it.
+const LEGACY_TUNING_KEY = 'vectra_survivor_tuning_v3';
+
+// Tuning keys that are player settings (pause-menu sliders), not balance: changing them is fair play.
+export const PLAYER_SETTING_KEYS = Object.freeze(['musicVolume', 'sfxVolume']);
 
 export const DEFAULT_TUNING = {
   // 1. Crab Ship & Drill-Claws
@@ -137,21 +146,51 @@ export const DEFAULT_TUNING = {
   // hand weights are relative: general upgrades weigh 1)
   xpCurveBase: 25,
   xpCurveStep: 16,
-  xpCurveStepMid: 100,
-  xpCurveStepLate: 60,
+  xpCurveStepMid: 150,
+  xpCurveStepLate: 500,
   weaponSlots: 6,
-  newWeaponChance: 0.35,
-  newWeaponPity: 3,
+  newWeaponChanceBy1: 0.8,
+  newWeaponChanceBy2: 0.7,
+  newWeaponChanceBy3: 0.6,
+  newWeaponChanceBy4: 0.4,
+  newWeaponChanceBy5: 0.3,
+  newWeaponPityOne: 2,
+  newWeaponPity: 4,
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
   tagCardWeight: 0.7,
   evolutionWeight: 1,
 
-  // 13. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
+  // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
+  // HP scale = (1 + waveHpPerWave·(w−1)) · waveHpGrowth^(w − waveHpGrowthFrom), bosses and lieutenants included)
+  waveLength: 22,
+  waveHpStart: 2.5,
+  waveHpStartLight: 1,
+  waveHpPerWave: 0.25,
+  waveHpGrowth: 1.065,
+  waveHpGrowthFrom: 25,
+  spawnIntervalStart: 2.6,
+  spawnIntervalPerWave: 0.14,
+  spawnIntervalMin: 0.75,
+  packSizeMult: 1.0,
+  swarmPackPerWave: 2,
+  swarmPackMax: 40,
+  skirmishPackPerWave: 0.6,
+  skirmishPackMax: 24,
+  splitterPackPerWave: 0.4,
+  splitterPackMax: 10,
+  bossHpMult: 0.5,
+  damageRampBase: 0.5,
+  damageRampFrom: 15,
+  damageRampPerWave: 0.04,
+  xpPerWave: 0,
+
+  // 14. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
   goldPerVein: 2,
   goldRerollCost: 20,
   goldRerollGrowth: 2,
-  goldLockCost: 5
+  goldLockCost: 5,
+  goldBanishCost: 30
 };
 
 export const TUNING_SCHEMA = [
@@ -326,12 +365,43 @@ export const TUNING_SCHEMA = [
       { key: 'xpCurveStepMid', label: 'XP Step / Level (LV 20-39)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
       { key: 'xpCurveStepLate', label: 'XP Step / Level (LV 40+)', type: 'range', min: 0, max: 1500, step: 5, unit: '' },
       { key: 'weaponSlots', label: 'Weapon Slots', type: 'range', min: 2, max: 10, step: 1, unit: '' },
-      { key: 'newWeaponChance', label: 'NEW WEAPON Card Chance / Hand', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
-      { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'newWeaponChanceBy1', label: 'NEW WEAPON Chance / Hand (1 Weapon Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponChanceBy2', label: 'NEW WEAPON Chance / Hand (2 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponChanceBy3', label: 'NEW WEAPON Chance / Hand (3 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponChanceBy4', label: 'NEW WEAPON Chance / Hand (4 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponChanceBy5', label: 'NEW WEAPON Chance / Hand (5+ Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
+      { key: 'newWeaponPityOne', label: 'NEW WEAPON Guaranteed Every N Hands (1 Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands (2+ Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
+    ]
+  },
+  {
+    group: '📈 Difficulty Ramp',
+    items: [
+      { key: 'waveLength', label: 'Wave Length (bosses every 3 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
+      { key: 'waveHpStart', label: 'Enemy HP: Wave 1 Scale (tougher hulls)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
+      { key: 'waveHpStartLight', label: 'Enemy HP: Wave 1 Scale (light swarm: swarmers, pinwheels, weavers, fragments)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
+      { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },
+      { key: 'waveHpGrowth', label: 'Enemy HP: Compound Growth / Wave', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
+      { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
+      { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
+      { key: 'spawnIntervalPerWave', label: 'Pack Spawn Interval Drop / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 's' },
+      { key: 'spawnIntervalMin', label: 'Pack Spawn Interval Floor', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 's' },
+      { key: 'packSizeMult', label: 'Pack Size Multiplier (all packs)', type: 'range', min: 0.25, max: 3, step: 0.05, unit: 'x' },
+      { key: 'swarmPackPerWave', label: 'Boid Swarm: Extra Boids / Wave', type: 'range', min: 0, max: 6, step: 0.1, unit: '' },
+      { key: 'swarmPackMax', label: 'Boid Swarm: Max Boids', type: 'range', min: 6, max: 80, step: 1, unit: '' },
+      { key: 'skirmishPackPerWave', label: 'Skirmish Pack: Extra Hulls / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'skirmishPackMax', label: 'Skirmish Pack: Max Hulls', type: 'range', min: 3, max: 99, step: 1, unit: '' },
+      { key: 'splitterPackPerWave', label: 'Splitter Pack: Extra Splitters / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
+      { key: 'splitterPackMax', label: 'Splitter Pack: Max Splitters', type: 'range', min: 2, max: 99, step: 1, unit: '' },
+      { key: 'bossHpMult', label: 'Boss HP (lieutenants follow)', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 'x' },
+      { key: 'damageRampBase', label: 'Contact/Orb Damage Before the Ramp', type: 'range', min: 0.2, max: 3, step: 0.05, unit: 'x' },
+      { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
+      { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
+      { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
     ]
   },
   {
@@ -340,7 +410,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldPerVein', label: 'Gold per Gold Vein', type: 'range', min: 0, max: 30, step: 1, unit: '' },
       { key: 'goldRerollCost', label: 'First Reroll Cost (per hand)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
-      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' }
+      { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
     ]
   }
 ];
@@ -370,10 +441,27 @@ export function normalizeTuning(values) {
   return Object.fromEntries(Object.keys(DEFAULT_TUNING).map(key => [key, normalizeTuningValue(key, source[key])]));
 }
 
+// The values in `t` that differ from the defaults: what gets saved.
+export function tuningOverrides(t = TUNING) {
+  return Object.fromEntries(Object.keys(DEFAULT_TUNING).filter(key => t[key] !== DEFAULT_TUNING[key]).map(key => [key, t[key]]));
+}
+
+function readLegacyPlayerSettings() {
+  const raw = localStorage.getItem(LEGACY_TUNING_KEY);
+  if (!raw) return null;
+  const legacy = JSON.parse(raw);
+  const kept = {};
+  for (const key of PLAYER_SETTING_KEYS) if (legacy && legacy[key] !== undefined) kept[key] = legacy[key];
+  localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides(normalizeTuning(kept))));
+  localStorage.removeItem?.(LEGACY_TUNING_KEY);
+  return kept;
+}
+
 export function loadTuning() {
   try {
     const raw = localStorage.getItem(TUNING_STORAGE_KEY);
-    Object.assign(TUNING, normalizeTuning(raw ? JSON.parse(raw) : {}));
+    const saved = raw ? JSON.parse(raw) : readLegacyPlayerSettings();
+    Object.assign(TUNING, normalizeTuning(saved || {}));
   } catch (e) {
     Object.assign(TUNING, DEFAULT_TUNING);
     console.warn('Failed to load tuning config:', e);
@@ -383,7 +471,7 @@ export function loadTuning() {
 
 export function saveTuning(notifyChannel = true) {
   try {
-    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(TUNING));
+    localStorage.setItem(TUNING_STORAGE_KEY, JSON.stringify(tuningOverrides()));
   } catch (e) {
     console.warn('Failed to save tuning config:', e);
   }

@@ -1,68 +1,95 @@
-// Persistent Highscore Leaderboard & Rebalanced Meta-Progression (Void Cores Armory)
+// Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
 const SAVE_KEY = 'vectra_survivor_save_v2';
 
-export const META_UPGRADES = [
-  {
-    id: 'maxHp',
-    name: 'Aegis Shield Matrix',
-    icon: '◈',
-    color: '#00f3ff',
-    maxRank: 8,
-    baseCost: 8,
-    costScale: 1.55,
-    desc: '+25 Max Shield HP & thicker energy barrier per rank.'
-  },
-  {
-    id: 'damage',
-    name: 'Plasma Overcharge',
-    icon: '✦',
-    color: '#ff007f',
-    maxRank: 8,
-    baseCost: 10,
-    costScale: 1.6,
-    desc: '+12% Base Weapon Damage across all systems per rank.'
-  },
-  {
-    id: 'haste',
-    name: 'Chronos Capacitor',
-    icon: '⚡',
-    color: '#00ff88',
-    maxRank: 6,
-    baseCost: 12,
-    costScale: 1.65,
-    desc: '+9% Base Fire Rate & +7% Ship Thruster Speed per rank.'
-  },
-  {
-    id: 'magnet',
-    name: 'Fortune & Vacuum Array',
-    icon: '🍀',
-    color: '#9d4edd',
-    maxRank: 6,
-    baseCost: 8,
-    costScale: 1.55,
-    desc: '+18% LUCK (multi-level rolls & rare chests), +22% Pickup Radius and +10% XP per rank.'
-  },
-  {
-    id: 'bombs',
-    name: 'Supernova Reserve',
-    icon: '✸',
-    color: '#ffcc00',
-    maxRank: 4,
-    baseCost: 18,
-    costScale: 1.9,
-    desc: '+1 Starting Supernova Smart Bomb every run per rank.'
-  },
-  {
-    id: 'harvester',
-    name: 'Deep-Core Mining Rig',
-    icon: '❖',
-    color: '#00f3ff',
-    maxRank: 6,
-    baseCost: 10,
-    costScale: 1.6,
-    desc: '+22% Asteroid Mining Speed & +20% Void Core drops from enemies and run bounty per rank.'
-  }
+// Void Armory: permanent single-stat upgrades bought with Void Cores. Each rank adds a small `per` step;
+// rank n (0-based) costs round(baseCost * growth^n), so early ranks are quick and late ranks are a grind.
+// Sized for roughly 70-95 hours of typical play to max everything (~700 cores/hour before Void Core Gain;
+// see docs/BALANCE_REPORT.md). `fmt` picks how `per` reads on the card: pct (+1.5%), pts (+0.4% points),
+// flat (+4), sec (+0.02 s). Negative steps are reductions (damage taken, dash cooldown, reroll cost).
+export const ARMORY_VERSION = 2; // bump to reset everyone's ranks and cores again (see normalizeSave)
+export const STARTING_CORES = 15;
+
+export const ARMORY_CATEGORIES = [
+  { id: 'offense', label: 'OFFENSE', icon: '✦' },
+  { id: 'defense', label: 'DEFENSE', icon: '◈' },
+  { id: 'mobility', label: 'MOBILITY', icon: '➤' },
+  { id: 'economy', label: 'ECONOMY', icon: '❖' },
+  { id: 'utility', label: 'UTILITY', icon: '✧' }
 ];
+
+export const META_UPGRADES = [
+  // OFFENSE
+  { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.015, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
+  { id: 'fireRate', cat: 'offense', name: 'Chronos Capacitor', icon: '⚡', color: '#00ff88', stat: 'Pew Pews fire rate', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
+  { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
+  { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
+  { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
+  // DEFENSE
+  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 4, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
+  { id: 'armor', cat: 'defense', name: 'Ablative Plating', icon: '⬢', color: '#7fd4ff', stat: 'damage taken', per: -0.005, fmt: 'pct', maxRank: 30, baseCost: 18, growth: 1.14 },
+  { id: 'phase', cat: 'defense', name: 'Phase Buffer', icon: '◐', color: '#9d8cff', stat: 'invulnerability after a hit', per: 0.02, fmt: 'sec', maxRank: 15, baseCost: 22, growth: 1.18 },
+  // MOBILITY
+  { id: 'moveSpeed', cat: 'mobility', name: 'Vector Thrusters', icon: '➤', color: '#00ff88', stat: 'move speed', per: 0.008, fmt: 'pct', maxRank: 25, baseCost: 12, growth: 1.14 },
+  { id: 'dash', cat: 'mobility', name: 'Blink Coils', icon: '⇢', color: '#5aa8ff', stat: 'dash cooldown', per: -0.01, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },
+  // ECONOMY
+  { id: 'coreYield', cat: 'economy', name: 'Deep-Core Extractor', icon: '❖', color: '#d68fff', stat: 'Void Core gain', per: 0.02, fmt: 'pct', maxRank: 40, baseCost: 15, growth: 1.12 },
+  { id: 'xpGain', cat: 'economy', name: 'Geom Resonator', icon: '⬡', color: '#6dff9e', stat: 'XP gain', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
+  { id: 'goldGain', cat: 'economy', name: 'Gold Assayer', icon: '◆', color: '#ffcc00', stat: 'gold from gold veins', per: 0.04, fmt: 'pct', maxRank: 20, baseCost: 15, growth: 1.15 },
+  { id: 'startGold', cat: 'economy', name: 'Prospector Stake', icon: '⛁', color: '#ffe14d', stat: 'starting gold', per: 2, fmt: 'flat', maxRank: 15, baseCost: 18, growth: 1.17 },
+  { id: 'mining', cat: 'economy', name: 'Rotary Claw Drive', icon: '⚙', color: '#00f3ff', stat: 'mining speed', per: 0.03, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
+  // UTILITY
+  { id: 'luck', cat: 'utility', name: 'Quantum Fortune', icon: '🍀', color: '#9d4edd', stat: 'luck', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
+  { id: 'magnet', cat: 'utility', name: 'Vacuum Array', icon: '⊛', color: '#b6ff4a', stat: 'pickup radius', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
+  { id: 'reroll', cat: 'utility', name: 'Probability Engine', icon: '↻', color: '#ffcc00', stat: 'reroll cost', per: -0.02, fmt: 'pct', maxRank: 15, baseCost: 22, growth: 1.17 },
+  { id: 'miningReach', cat: 'utility', name: 'Extended Claws', icon: '⟟', color: '#7fd4ff', stat: 'drill reach', per: 0.02, fmt: 'pct', maxRank: 15, baseCost: 12, growth: 1.15 },
+  { id: 'bombs', cat: 'utility', name: 'Supernova Reserve', icon: '✸', color: '#ffcc00', stat: 'starting Supernova bomb', per: 1, fmt: 'flat', maxRank: 3, baseCost: 400, growth: 3 }
+];
+
+export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u]));
+
+// Cost of buying rank `rank` + 1 (rank is the current rank).
+export function armoryCost(upg, rank) {
+  return Math.round(upg.baseCost * Math.pow(upg.growth, Math.max(0, rank)));
+}
+
+// Total effect at `rank` as card text: "+15.0%", "+2.0% pts", "+40", "+0.20 s", "-7.5%".
+export function formatArmoryValue(upg, rank) {
+  const v = upg.per * rank;
+  const sign = v < 0 ? '-' : '+';
+  const a = Math.abs(v);
+  if (upg.fmt === 'flat') return `${sign}${Math.round(a)}`;
+  if (upg.fmt === 'sec') return `${sign}${a.toFixed(2)} s`;
+  const pct = (a * 100).toFixed(a * 100 < 10 ? 1 : 0);
+  return upg.fmt === 'pts' ? `${sign}${pct}% pts` : `${sign}${pct}%`;
+}
+
+// Bonuses from ranks (an { id: rank } map). Pure, so the balance sim and tests can use it.
+export function armoryBonuses(ranks = {}) {
+  const r = (id) => ranks[id] || 0;
+  const step = (id) => r(id) * META_BY_ID[id].per;
+  return {
+    damageMult: 1 + step('damage'),
+    fireRateMult: 1 + step('fireRate'),
+    critChanceBonus: step('critChance'),
+    critDamageBonus: step('critDamage'),
+    areaMult: 1 + step('area'),
+    bonusHp: step('maxHp'),
+    damageTakenMult: Math.max(0.5, 1 + step('armor')),
+    hitInvulnBonus: step('phase'),
+    moveSpeedMult: 1 + step('moveSpeed'),
+    dashCooldownMult: Math.max(0.5, 1 + step('dash')),
+    coreMult: 1 + step('coreYield'),
+    xpMult: 1 + step('xpGain'),
+    goldMult: 1 + step('goldGain'),
+    startGold: step('startGold'),
+    miningMult: 1 + step('mining'),
+    luckBonus: step('luck'),
+    magnetMult: 1 + step('magnet'),
+    rerollCostMult: Math.max(0.5, 1 + step('reroll')),
+    miningRangeMult: 1 + step('miningReach'),
+    extraBombs: r('bombs')
+  };
+}
 
 const DEFAULT_HIGHSCORES = [
   { id: 'seed-1', name: 'VEXOLITH // PRIME', score: 125000, multiplier: 14.5, wave: 10, kills: 420, timeStr: '03:40' },
@@ -110,11 +137,16 @@ export function normalizeSave(value) {
     kills: boundedInteger(entry.kills, 0),
     timeStr: typeof entry.timeStr === 'string' && /^\d{2,}:\d{2}$/.test(entry.timeStr) ? entry.timeStr : '00:00'
   })).sort((a, b) => b.score - a.score).slice(0, 8) : [];
+  // An existing save from before ARMORY_VERSION had the old six bundled upgrades: its ranks and cores
+  // are reset once (callsign, high scores, Field Guide and runs played are kept) and a notice is shown.
+  const legacyArmory = Object.keys(source).length > 0 && source.armory !== ARMORY_VERSION;
   return {
     pilotName: normalizePilotName(source.pilotName),
-    cores: boundedInteger(source.cores, 15),
+    cores: legacyArmory ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES),
     totalRuns: boundedInteger(source.totalRuns, 0),
-    ranks,
+    ranks: legacyArmory ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
+    armory: ARMORY_VERSION,
+    armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
     highscores: savedScores.length ? savedScores : DEFAULT_HIGHSCORES.map(entry => ({ ...entry }))
   };
@@ -123,6 +155,7 @@ export function normalizeSave(value) {
 export class ProgressionManager {
   constructor() {
     this.data = this.load();
+    if (this.data.armoryResetNotice) this.save(); // persist a one-time armory reset right away
     this.onExternalChange = null;
     // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
     globalThis.addEventListener?.('storage', (e) => {
@@ -162,8 +195,7 @@ export class ProgressionManager {
   }
 
   getUpgradeCost(upg) {
-    const rank = this.getRank(upg.id);
-    return Math.round(upg.baseCost * Math.pow(upg.costScale, rank));
+    return armoryCost(upg, this.getRank(upg.id));
   }
 
   canBuy(upg) {
@@ -173,7 +205,7 @@ export class ProgressionManager {
   }
 
   buyUpgrade(id) {
-    const upg = META_UPGRADES.find((u) => u.id === id);
+    const upg = META_BY_ID[id];
     if (!upg || !this.canBuy(upg)) return false;
     const cost = this.getUpgradeCost(upg);
     this.data.cores -= cost;
@@ -182,24 +214,19 @@ export class ProgressionManager {
     return true;
   }
 
+  dismissArmoryNotice() {
+    if (!this.data.armoryResetNotice) return;
+    this.data.armoryResetNotice = false;
+    this.save();
+  }
+
   addCores(amount) {
     this.data.cores = Math.min(Number.MAX_SAFE_INTEGER, this.data.cores + boundedInteger(amount, 0, 0));
     this.save();
   }
 
   getBonuses() {
-    return {
-      bonusHp: this.getRank('maxHp') * 25,
-      damageMult: 1 + this.getRank('damage') * 0.12,
-      fireRateMult: 1 + this.getRank('haste') * 0.09,
-      moveSpeedMult: 1 + this.getRank('haste') * 0.07,
-      magnetMult: 1 + this.getRank('magnet') * 0.22,
-      xpMult: 1 + this.getRank('magnet') * 0.10,
-      luckBonus: this.getRank('magnet') * 0.18,
-      extraBombs: this.getRank('bombs'),
-      coreMult: 1 + this.getRank('harvester') * 0.20,
-      miningMult: 1 + this.getRank('harvester') * 0.22
-    };
+    return armoryBonuses(this.data.ranks);
   }
 
   isGuideUnlocked(id) {

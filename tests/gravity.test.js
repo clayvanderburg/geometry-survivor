@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { weaponBuild } from '../js/weapon-levels.js';
 
 // Browser services are stubbed; tests drive the real Game.update / EnemyManager / WarpGrid code.
 globalThis.window = { addEventListener() {} };
@@ -201,7 +202,14 @@ test('loose geoms sink into a black hole while magnetized geoms still fly to the
 });
 
 test('a Vortex Singularity clumps the pack near its core, while the rim only nudges (pull falloff nerf)', () => {
+  // Seeded Math.random: enemy steering jitter is random, and the counts below sit near their thresholds.
   const clumped = (withSingularity) => {
+    const realRandom = Math.random;
+    let seed = 12345;
+    Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    try { return clumpedOnce(withSingularity); } finally { Math.random = realRandom; }
+  };
+  const clumpedOnce = (withSingularity) => {
     const { game, manager } = arena();
     game.player.x = 1500; game.player.weapons.singularity = 1;
     for (let k = 0; k < 24; k++) {
@@ -251,7 +259,7 @@ test('singularity collapse is an implosion damage pulse over 85% of its pull rad
     game.fireSingularity(2);
     const sg = game.singularities[0];
     Object.assign(sg, { x: 2000, y: 2000, vx: 0, vy: 0, life: 1 / 60 });
-    assert.equal(sg.collapseDamage, 11 * W.singularityCollapseDamageMult(2) * TUNING.singularityCollapseMult);
+    assert.equal(sg.collapseDamage, 11 * W.singularityCollapseDamageMult(weaponBuild(game.player, 'singularity', 2)) * TUNING.singularityCollapseMult);
     assert.equal(sg.collapseRadius, sg.pullRadius * 0.85);
     Object.assign(inside, { x: 2000 + sg.collapseRadius * 0.9, y: 2000, hp: 1e6, maxHp: 1e6 });
     Object.assign(outside, { x: 2000 + sg.pullRadius + 60, y: 2000, hp: 1e6, maxHp: 1e6 });

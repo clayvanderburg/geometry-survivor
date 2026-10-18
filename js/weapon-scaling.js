@@ -4,40 +4,58 @@
 // Weapon formulas take a *build* (weapon-levels.js makeBuild / weaponBuild): the weapon level `lv`
 // (1-12, plus evolution bonus levels), the effective rank of each of its stats `r` (stat-card ranks +
 // ACROSS THE BOARD ranks), the transforms taken at LV 4 / 8 / 12 (`t4`, `t8`, `t12`) and the number of
-// ACROSS THE BOARD boosts (`atb`). Each stat formula reads only its own rank.
+// ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
+// exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
 import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild } from './weapon-levels.js';
 
-// Weapon balance rule: every weapon has the same POTENTIAL DPS at the same level, in multiples of the
-// player's base damage per second, whichever stat cards built it. Potential = every attack lands on a
-// target (each missile, arc jump, mine, bolt, singularity core tick + collapse, each orbit-blade pass
-// over an enemy sitting on the ring, and each extra attack a transform adds: flak, bomblets, napalm,
-// orbs, strikes...); splash on extra targets is not counted. Each weapon keeps its own counts,
-// cooldowns and ranges; its damage per hit is solved from this curve, so a stat card that adds a
-// missile or shortens a cooldown lowers the hit damage to match and the level still adds the same DPS.
-// Breakthroughs multiply it: a transform by BT_TRANSFORM_DPS, ACROSS THE BOARD by BT_BOOST_DPS.
-// Pew Pews follows the same curve from its own LV 1 baseline (it is your aimed primary, so its LV 1 is
-// stronger than an autonomous weapon's LV 1).
+// Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
+// stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
+// rank, compounding; fire rate / reload / cooldown: +RATE_STEP attacks per second; count: one more
+// projectile), so a weapon built for damage matches every other weapon built for damage. UTILITY ranks
+// (size, radius, pull, reach, lifetime, spin, pierce) add no potential DPS: they are the trade-off.
+// Potential = every attack lands on a target (each missile, arc jump, mine, bolt, singularity core tick
+// + collapse, each orbit-blade pass over an enemy on the ring, and each extra attack a transform adds:
+// flak, bomblets, napalm, orbs, strikes...); splash on extra targets is not counted.
+// Breakthroughs: a transform multiplies potential by BT_TRANSFORM_DPS (its hit damage is rescaled so the
+// new attacks add exactly that), ACROSS THE BOARD adds BT_BOOST_RANKS to every stat and x BT_BOOST_DPS.
+// DPS_TARGET is the LV 1 reference (and the old level curve the balance tools still report against).
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
 export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 
+// Per-rank steps of the POWER stats shared by every weapon.
+export const DAMAGE_GROWTH = 1.3; // Damage card: x1.3 damage per hit per rank (compounding)
+export const RATE_STEP = 0.3;     // fire rate / reload / cooldown cards: +30% attacks per second per rank
+// Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
+export const hitMult = (b) => Math.pow(DAMAGE_GROWTH, b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
+// Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
+// transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make.
+const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, transforms: 0 });
+const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) : 1);
+const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
+// LV 1 hit damage of a weapon, solved once from its rank-0 build so LV 1 sits on DPS_TARGET(1).
+const lv1Cache = new Map();
+const lv1 = (key, id, solve) => {
+  if (!lv1Cache.has(key)) lv1Cache.set(key, solve(levelBuild(id, 1)));
+  return lv1Cache.get(key);
+};
+
 // Reference target for orbit-blade contact: a typical swarmer hull plus the blade's hit radius.
-const ORBITAL_REF_CONTACT = 2 * (14 + 18);
+const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size adds no potential)
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
 export const TURRET_MAX_ACTIVE = 4;
 
 export const WEAPON_SCALING = {
-  // --- Pew Pews (stats: prism, rate, pierce) -------------------------------------------------------
-  // Prism Split adds a pair of streams in the fixed PRISM_STREAMS order; Hyper-Capacitor adds +20%
-  // fire rate per rank (linear); Phase Piercer +1 pierce per rank. Bolt damage is solved so the
-  // weapon's potential follows DPS_TARGET(level) / DPS_TARGET(1) times its LV 1 output.
+  // --- Pew Pews (stats: damage, prism, rate, pierce) -----------------------------------------------
+  // Plasma Charge raises bolt damage; Prism Split adds a pair of streams in the fixed PRISM_STREAMS
+  // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
-  blasterRateStep: 0.2,
-  blasterRateMult: (b) => 1 + W.blasterRateStep * b.r.rate,
+  blasterRateStep: RATE_STEP,
+  blasterRateMult: (b) => rateMult(b.r.rate),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
@@ -50,14 +68,14 @@ export const WEAPON_SCALING = {
   arcRoundShare: 0.3,
   arcRoundRange: 150,
   blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare : 0)),
-  blasterDamageMult: (b) => buildBudget(b) / DPS_TARGET(1) / ((1 + b.r.prism) * W.blasterRateMult(b) * W.blasterUnits(b)),
+  blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Wing Rockets (stats: damage, count, reload, radius) ----------------------------------------
   // Dumbfire rockets from the outer wing tips along the hull's heading. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => Math.max(0.35, 1 - 0.06 * b.r.reload),
-  wingRocketBlastRadius: (b) => 50 + 6 * b.r.radius,
+  wingRocketCooldown: (b) => 1 / rateMult(b.r.reload),
+  wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 8.5,
   wingRocketLife: 1.6,
@@ -73,12 +91,12 @@ export const WEAPON_SCALING = {
   mirvTime: 0.24,
   rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
-  wingRocketDamageMult: (b) => buildBudget(b) * W.wingRocketCooldown(b) / (W.wingRocketCount(b) * W.rocketUnits(b)),
+  wingRocketDamageMult: (b) => lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => Math.max(0.55, 1.44 - 0.08 * b.r.reload),
-  missileBlastRadius: (b) => 75 + 8 * b.r.radius,
+  missileCooldown: (b) => 1.44 / rateMult(b.r.reload),
+  missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Transforms: Cluster Bomblets (4 bomblets at 13% each), Orbital Rain (strikes from above on marked
   // targets after rainDelay), Tactical Nuke (every 4th salvo is one nuke worth nukeUnits salvos).
@@ -91,12 +109,12 @@ export const WEAPON_SCALING = {
   nukeUnits: 1.88,
   nukeRadiusMult: 2.2,
   missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits) / W.nukeEvery : 1),
-  missileDamageMult: (b) => buildBudget(b) * W.missileCooldown(b) / (W.missileSalvo(b) * W.missileUnits(b)),
+  missileDamageMult: (b) => lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
   lightningJumps: (b) => 5 + 2 * b.r.chain,
-  lightningCooldown: (b) => Math.max(0.5, 1.55 - 0.08 * b.r.recharge),
+  lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
   lightningRange: (b) => 300 + 25 * b.r.reach,
   lightningChains: (b) => (b.t4 ? 2 : 1),
   // Transforms: Forked Chains (2 chains), Ball Lightning (an orb worth orbShare of the cast, orbZaps
@@ -108,17 +126,17 @@ export const WEAPON_SCALING = {
   strikeShare: 0.22,
   strikeRadius: 110,
   lightningUnits: (b) => W.lightningChains(b) * W.lightningJumps(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare : 0)),
-  lightningDamageMult: (b) => buildBudget(b) * W.lightningCooldown(b) / W.lightningUnits(b),
+  lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
-  // --- Vortex Singularity (stats: pull, damage, duration, cooldown) -------------------------------
+  // --- Vortex Singularity (stats: pull, damage, duration, cooldown, core) -------------------------
   // Light per-tick core grind so packs clump, then a collapse pulse over 85% of the pull radius. The
   // pull fades hard toward the rim (gravity.js singularityPullScale) and the collapse falls to 25% at
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
   singularityPullRadius: (b) => 175 + 25 * b.r.pull,
   singularityLife: (b) => 2.6 + 0.3 * b.r.duration,
-  singularityCooldown: (b) => Math.max(1.6, 4 - 0.3 * b.r.cooldown),
-  singularityCoreRadius: () => 22,
+  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown),
+  singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale), Aftershock Collapse (a
   // second collapse at 60% radius worth aftershockShare), Hawking Cascade (3 mini-singularities worth
@@ -134,21 +152,22 @@ export const WEAPON_SCALING = {
   cascadeRadiusFrac: 0.45,
   cascadePullScale: 0.6,
   singularityUnits: (b) => W.singularityCount(b) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare : 0)),
-  // Damage budget of one core per cast (grind + collapse), in base damage.
-  singularityCastDamage: (b) => buildBudget(b) * W.singularityCooldown(b) / W.singularityUnits(b),
-  singularityDamageMult: (b) => W.singularityCastDamage(b) * (1 - SINGULARITY_COLLAPSE_SHARE) / (W.singularityLife(b) * 60),
+  // Damage of one core per cast (grind over its LV 1 lifetime + collapse), in base damage: the LV 1 value
+  // times the build's hit multiplier. Grind is per tick, so a Lifetime card grinds longer at the same rate.
+  singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityUnits),
+  singularityDamageMult: (b) => W.singularityCastDamage(b) * (1 - SINGULARITY_COLLAPSE_SHARE) / (lv1('singularityLife', 'singularity', W.singularityLife) * 60),
   singularityCollapseDamageMult: (b) => W.singularityCastDamage(b) * SINGULARITY_COLLAPSE_SHARE,
   aftershockDamageMult: (b) => W.singularityCastDamage(b) * W.aftershockShare,
   cascadeDamageMult: (b) => W.singularityCastDamage(b) * W.cascadeShare / W.cascadeMinis * (1 - SINGULARITY_COLLAPSE_SHARE) / (W.cascadeLife * 60),
   cascadeCollapseDamageMult: (b) => W.singularityCastDamage(b) * W.cascadeShare / W.cascadeMinis * SINGULARITY_COLLAPSE_SHARE,
 
-  // --- Aegis Orbiting Blades (stats: damage, count, radius, spin) ---------------------------------
-  // Damage per tick of contact; a pass lasts ORBITAL_REF_CONTACT px of arc, so spin never changes the
-  // potential (it sweeps more distinct enemies instead).
+  // --- Aegis Orbiting Blades (stats: damage, count, radius, spin, size) ---------------------------
+  // Damage per tick of contact; a pass lasts ORBITAL_REF_CONTACT px of arc, so spin and blade size never
+  // change the potential (they sweep more distinct enemies instead).
   orbitalBlades: (b) => 2 + b.r.count,
   orbitalRadius: (b) => 103 + 10 * b.r.radius,
-  orbitalSpin: (b) => 4.85 + 0.4 * b.r.spin,
-  orbitalBladeRadius: 18,
+  orbitalSpin: (b) => 4.85 * (1 + 0.12 * b.r.spin),
+  orbitalBladeRadius: (b) => 18 * (1 + 0.15 * (b?.r?.size || 0)),
   // Transforms: Counter-Rotating Ring (a second ring at counterRadiusMult x radius, spinning the other
   // way), Blade Fling (each blade flings a saw disc every flingEvery s), Nova Ring (each blade bursts
   // every novaEvery s). Fling and nova are each worth 22% of the rings' contact damage.
@@ -163,7 +182,9 @@ export const WEAPON_SCALING = {
   novaRadius: 70,
   orbitalPassesContactTicksPerSec: (b) => W.orbitalBlades(b) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(b)) * 60 * (b.t4 ? 1 + 1 / W.counterRadiusMult : 1),
   orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)),
-  orbitalDamageMult: (b) => buildBudget(b) / W.orbitalUnits(b),
+  // A wider ring passes an enemy less often, so its blades hit harder per pass to match: Reach adds no DPS.
+  orbitalDamageMult: (b) => lv1('orbitals', 'orbitals', (b0) => DPS_TARGET(1) / W.orbitalUnits(b0)) * hitMult(b) * tfScale(b, W.orbitalUnits)
+    * W.orbitalRadius(b) / W.orbitalRadius(levelBuild('orbitals', 1)),
   flingDamageMult: (b) => W.flingShare * W.orbitalPassesContactTicksPerSec(b) * W.flingEvery / W.orbitalBlades(b) * W.orbitalDamageMult(b),
   orbitalNovaDamageMult: (b) => W.novaShare * W.orbitalPassesContactTicksPerSec(b) * W.novaEvery / W.orbitalBlades(b) * W.orbitalDamageMult(b),
 
@@ -178,14 +199,14 @@ export const WEAPON_SCALING = {
   novaDamage: (lv) => 35 * lv,
   dashCooldown: (lv, base) => Math.max(0.2, base - lv * 0.14),
 
-  // --- Proximity Mines (stats: damage, capacity, rate, radius) ------------------------------------
+  // --- Proximity Mines (stats: damage, capacity, rate, radius, fuse) ------------------------------
   // Dropped behind the ship on a timer while a slot is free; they arm after TUNING.mineArmTime, burst
   // when an enemy enters the trigger ring, and self-detonate at the end of the fuse.
-  mineCooldown: (b) => Math.max(0.5, 2 - 0.12 * b.r.rate),
+  mineCooldown: (b) => 2 / rateMult(b.r.rate),
   mineMaxActive: (b) => (3 + b.r.capacity) * (b.t12 ? W.triadCount : 1),
-  mineLifetime: () => 10.5,
+  mineLifetime: (b) => 10.5 + 2 * (b?.r?.fuse || 0),
   mineTriggerRadius: () => 48,
-  mineBlastRadius: (b) => 180 + 20 * b.r.radius, // mines are hard to place, so they hit a wide area
+  mineBlastRadius: (b) => 180 * (1 + 0.12 * b.r.radius), // mines are hard to place, so they hit a wide area
   // Transforms: Cluster Mines (3 bomblets at 20% each), Seeker Mines (armed mines crawl toward the
   // nearest enemy), Minefield Triad (3 mines per drop, sharing the damage).
   mineClusterBomblets: 3,
@@ -196,16 +217,16 @@ export const WEAPON_SCALING = {
   triadCount: 3,
   triadSpacing: 36,
   mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare : 0)),
-  mineDamageMult: (b) => buildBudget(b) * W.mineCooldown(b) / W.mineUnits(b),
+  mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
 
   // --- Sentry Turret (stats: damage, rate, lifetime, redeploy) ------------------------------------
   // Planted at the ship, shoots the nearest enemy it can see past cover. Live turrets at once follow
   // lifetime / redeploy (never above TURRET_MAX_ACTIVE).
-  turretCooldown: (b) => Math.max(3, 8 - 0.5 * b.r.redeploy),
+  turretCooldown: (b) => 8 / (1 + 0.15 * b.r.redeploy),
   turretDuration: (b) => 6 + b.r.lifetime,
   turretMaxActive: (b) => Math.min(TURRET_MAX_ACTIVE, Math.max(1, Math.ceil(W.turretDuration(b) / W.turretCooldown(b) - 1e-9))),
   turretRange: () => 340,
-  turretFireRate: (b) => 6.1 + 0.9 * b.r.rate,
+  turretFireRate: (b) => 6.1 * rateMult(b.r.rate),
   // Mean live turrets: one per cooldown, each lasting its lifetime, never above the active cap.
   turretAverageActive: (b) => Math.min(W.turretMaxActive(b), W.turretDuration(b) / W.turretCooldown(b)),
   turretBoltSpeed: 13,
@@ -223,12 +244,12 @@ export const WEAPON_SCALING = {
   mortarDelay: 0.7,
   turretShotUnits: (b) => W.turretBarrels(b) * (b.t8 ? (W.railEvery - 1 + W.railUnits) / W.railEvery : 1),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare : 0)),
-  turretDamageMult: (b) => buildBudget(b) / W.turretUnits(b),
+  turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare : 0))),
   mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
-  droneFireRate: (b) => 7.6 + 1.2 * b.r.rate,
+  droneFireRate: (b) => 7.6 * rateMult(b.r.rate),
   droneRange: (b) => 280 + 25 * b.r.range,
   droneBoltSpeed: 15,
   // Transforms: Extra Wingman (+1 drone past the cap), Homing Bolts, Micro-Missile Pods (each drone
@@ -238,7 +259,7 @@ export const WEAPON_SCALING = {
   podShare: 0.22,
   podBlast: 60,
   droneUnits: (b) => W.droneCount(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
-  droneDamageMult: (b) => buildBudget(b) / W.droneUnits(b),
+  droneDamageMult: (b) => lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
   podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
 
   // Golden synergies
@@ -433,10 +454,8 @@ export function weaponDamage(p, weapon, b) {
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;
     case 'helix': {
-      // Pulsar Helix bolts grow with the Pew Pews level (and fire once per volley, so faster Pew Pews
-      // fire them more often at the same damage per second).
-      const bb = sourceBuild(p, weapon, b);
-      base = d * W.helixDamageMult * DPS_TARGET(bb.lv) / DPS_TARGET(1) / W.blasterRateMult(bb);
+      // Pulsar Helix bolts hit like Pew Pews bolts (Damage ranks and boosts), at helixDamageMult.
+      base = d * W.helixDamageMult * hitMult(sourceBuild(p, weapon, b));
       break;
     }
     case 'shrapnel': base = d * W.shrapnelDamageMult; break;

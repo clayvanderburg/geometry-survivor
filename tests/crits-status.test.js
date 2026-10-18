@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { levelBuild } from '../js/weapon-levels.js';
 
 // Crits, weapon tags and damage types (BURN / CHILL / CORRODE). Browser services are stubbed;
 // the game fixtures run the production hitEnemy / status / firing code.
@@ -273,7 +274,7 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
 
   applyUpgradeLevels(p, byId('tag_explosive'));
   g.fireSwarmMissiles(1);
-  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(1) * 1.3);
+  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * 1.3);
 
   const area = describeUpgrade(p, byId('tag_area'));
   assert.equal(area.headline, '+15% AREA SIZE');
@@ -281,10 +282,10 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   assert.ok(area.rows.some((r) => r.id === 'novaRadius'));
   applyUpgradeLevels(p, byId('tag_area'));
   g.fireSwarmMissiles(1);
-  assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius * 1.15);
+  assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius(levelBuild('missiles', 1)) * 1.15);
 
   applyUpgradeLevels(p, byId('tag_electric'));
-  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(1) * 1.3);
+  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * 1.3);
 });
 
 test('tag cards are only offered once an equipped weapon carries the tag', () => {

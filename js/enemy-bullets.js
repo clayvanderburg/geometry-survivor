@@ -39,6 +39,7 @@ export class EnemyBulletPool {
     b.radius = radius;
     b.life = LIFE;
     b.age = 0;
+    b.from = null; // shooter kind for the run stats (set by the shooter)
     this.active.push(b);
     return b;
   }

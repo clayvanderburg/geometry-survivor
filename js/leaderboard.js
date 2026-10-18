@@ -309,6 +309,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
 export function describeSubmit(state) {
   if (!state) return { text: '', tone: 'dim' };
   if (state.pending) return { text: '◎ UPLINKING RUN TO GLOBAL BOARD…', tone: 'cyan' };
+  if (state.reason === 'optout') return { text: 'GLOBAL POSTING OFF // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'tainted') return { text: 'DEV TUNER USED // RUN NOT SENT TO GLOBAL BOARD', tone: 'dim' };
   if (state.reason === 'skipped') return { text: 'NO SCORE // NOTHING TO UPLINK', tone: 'dim' };
   if (state.ok) {

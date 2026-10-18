@@ -5,14 +5,14 @@
 // Hostile entry ids are enemy `type` strings, plus 'lieutenant' (any elite) and 'boss'. Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING } from './config.js';
-import { EnemyManager, contactDamageAt, BOSS_NAME } from './enemies.js';
+import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
-import { goldPerVein, rerollCost, lockCost } from './gold.js';
+import { goldPerVein, rerollCost, lockCost, banishCost } from './gold.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
 
 export const GUIDE_GROUPS = [
@@ -113,9 +113,7 @@ export const hostileEntry = (id) => HOSTILE_BY_ID.get(id) || null;
 export const resolveText = (v) => (typeof v === 'function' ? v() : v);
 
 // Wave scale used by the game (Game.getWaveScale), so guide stats match the real spawns.
-export function waveScaleAt(wave) {
-  return (1 + (wave - 1) * 0.25) * Math.pow(1.09, Math.max(0, wave - 6));
-}
+export { waveScaleAt };
 
 let statsManager = null;
 // Exact numbers from the real spawn config: HP (with the tuner's HP multiplier), speed in px/s and
@@ -220,14 +218,14 @@ export const MECHANIC_ENTRIES = [
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
       'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
-      `Contact damage is 18 per hit (bosses 38) and grows 8% per wave after wave 5. A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
+      `Contact damage is ${Math.round(18 * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round(38 * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base (plasma orbs too). A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
   {
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
-      'A new wave every 22 s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.',
-      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP scales +25% per wave, and faster after wave 6.`
+      `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.`,
+      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
     ]
   },
   {
@@ -249,9 +247,18 @@ export const MECHANIC_ENTRIES = [
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
       `You carry up to ${weaponSlots()} weapons. The crab starts with ${STARTING_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(' and ')}. Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
-      'While a slot is free, a NEW WEAPON card turns up often (and at least every few level-ups): pick it to choose 1 of 3 new weapons. With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.',
+      `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons. With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
       'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
       ...PASSIVES.map((x) => `${x.name} is a PASSIVE, not a weapon: it takes no slot and is never a NEW WEAPON pick. It turns up in ordinary level-up hands like any general upgrade (with the usual +2…+5 rarity jumps), and owning it unlocks ${passiveTagCards(x.id)}. ${x.summary}`)
+    ]
+  },
+  {
+    id: 'weaponlevels', icon: '⚛', title: 'WEAPON LEVELS & BREAKTHROUGHS',
+    body: () => [
+      'Every weapon, Pew Pews included, goes from LV 1 to LV 12. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
+      'Damage, fire rate and count cards add damage output. Size, radius, reach and pull cards add none: they make the weapon easier to land, so a weapon built purely for damage hits as hard as any other weapon built the same way.',
+      'At LV 4, 8 and 12 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+1 rank in every stat of that weapon and +18% damage). A card that jumps past a milestone still triggers it.',
+      'EVOLUTIONS are semi-rare one-shot synergy cards that need two weapons (or a weapon and a passive). Every evolution names the weapons it upgrades.'
     ]
   },
   {
@@ -320,11 +327,12 @@ export const MECHANIC_ENTRIES = [
     ]
   },
   {
-    id: 'gold', icon: '◆', title: 'GOLD, REROLL & LOCK',
+    id: 'gold', icon: '◆', title: 'GOLD, REROLL, LOCK & BANISH',
     body: () => [
       `Gold veins drop ${goldPerVein()} ◆ gold as glowing gold coins (no XP). Your claws break them, and so do elites grinding through rock; either way the coins are yours to grab. Gold lasts for this run only and starts at 0: it is not Void Cores.`,
       `REROLL on a level-up swaps every unlocked card for a fresh roll with the usual odds: ${rerollCost(0)} ◆, then ${rerollCost(1)} ◆, ${rerollCost(2)} ◆… within the same level-up, back to ${rerollCost(0)} ◆ on the next one. Keys: R, or X on a controller.`,
-      `LOCK a card for ${lockCost()} ◆ (one at a time): it stays put through rerolls, and if you pick a different card it comes back in your next level-up hand (in place of one random card) until you take it. Unlocking is free but refunds nothing. A lock is dropped if the card can no longer be offered by then (maxed, weapon discarded, no free slot for NEW WEAPON). Keys: Shift+1 / 2 / 3, or Y on the focused card.`
+      `LOCK a card for ${lockCost()} ◆ (one at a time): it stays put through rerolls, and if you pick a different card it comes back in your next level-up hand (in place of one random card) until you take it. Unlocking is free but refunds nothing. A lock is dropped if the card can no longer be offered by then (maxed, weapon discarded, no free slot for NEW WEAPON). Keys: Shift+1 / 2 / 3, or Y on the focused card.`,
+      `BANISH a card for ${banishCost()} ◆: it never comes up again this run, and a fresh card takes its slot. It takes two presses so you can't do it by accident: click ✕ twice, press B then 1 / 2 / 3, or RB twice on the focused card. NEW WEAPON can't be banished.`
     ]
   },
   {

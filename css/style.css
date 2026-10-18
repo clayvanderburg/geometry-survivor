@@ -774,14 +774,78 @@ html, body {
 .armory-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 8px;
+  align-content: start;
+  max-height: 404px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
 }
+
+/* Category tabs + completion, and the one-time reset notice, span the whole grid row. */
+.armory-tabs {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 4px;
+  background: rgba(8, 13, 30, 0.96);
+}
+.armory-tab {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 24, 48, 0.85);
+  color: #a9bcd8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.armory-tab.active { border-color: var(--cyan); color: #fff; background: rgba(0, 243, 255, 0.16); }
+.armory-progress { margin-left: auto; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--emerald); }
+.armory-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 204, 0, 0.6);
+  background: rgba(255, 204, 0, 0.1);
+  font-size: 11px;
+  color: #ffe9a8;
+  line-height: 1.35;
+}
+.armory-notice b { color: #ffcc00; letter-spacing: 1px; }
+.armory-notice-ok {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 204, 0, 0.7);
+  background: rgba(255, 204, 0, 0.18);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.armory-value { font-size: 11px; color: #a9bcd8; margin-bottom: 5px; }
+.armory-value b { color: #fff; }
+.armory-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-bottom: 6px; overflow: hidden; }
+.armory-bar i { display: block; height: 100%; background: var(--upg, var(--cyan)); }
+.armory-card .armory-name { color: var(--upg, #fff); }
+.armory-card.maxed { border-color: rgba(0, 255, 136, 0.45); }
 
 .armory-card {
   background: rgba(16, 24, 48, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -823,7 +887,7 @@ html, body {
   font-size: 11px;
   color: #a9bcd8;
   line-height: 1.35;
-  margin-bottom: 8px;
+  margin-bottom: 3px;
 }
 
 .armory-buy-btn {
@@ -1113,6 +1177,15 @@ html, body {
 .rarity-epic { --rarity: #b565ff; --rarity-soft: rgba(181, 101, 255, 0.38); --rarity-bg: rgba(36, 14, 60, 0.94); }
 .rarity-legendary { --rarity: #ffcc00; --rarity-soft: rgba(255, 204, 0, 0.4); --rarity-bg: rgba(48, 36, 8, 0.94); }
 .rarity-evolution { --rarity: #ff4fd8; --rarity-soft: rgba(255, 79, 216, 0.4); --rarity-bg: rgba(48, 8, 40, 0.94); }
+.rarity-transform { --rarity: #38f2d0; --rarity-soft: rgba(56, 242, 208, 0.4); --rarity-bg: rgba(6, 40, 36, 0.94); }
+.rarity-boost { --rarity: #ffb347; --rarity-soft: rgba(255, 179, 71, 0.4); --rarity-bg: rgba(46, 30, 8, 0.94); }
+/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special. */
+.upgrade-option.breakthrough-card { animation: breakthrough-pulse 1.8s ease-in-out infinite; }
+@keyframes breakthrough-pulse {
+  0%, 100% { box-shadow: 0 0 14px var(--rarity-soft); }
+  50% { box-shadow: 0 0 32px var(--rarity-soft), 0 0 4px var(--rarity) inset; }
+}
+@media (prefers-reduced-motion: reduce) { .upgrade-option.breakthrough-card { animation: none; } }
 
 .upgrade-option {
   position: relative;
@@ -1861,6 +1934,11 @@ html, body {
 .loadout-line.evo {
   color: #ff4fd8;
   background: rgba(255, 79, 216, 0.12);
+}
+
+.loadout-line.bt {
+  color: #38f2d0;
+  background: rgba(56, 242, 208, 0.12);
 }
 
 .loadout-actions {
@@ -2797,3 +2875,190 @@ html, body {
   letter-spacing: 1px;
   box-shadow: 0 0 14px rgba(255, 204, 0, 0.7);
 }
+
+/* RUN REPORT (game over, left panel tab; js/run-report.js): headline numbers, damage by weapon as bars
+   with % share and DPS, and the enemies that hurt the ship most. Rows are [data-gp-nav] so the
+   controller can walk and scroll them. */
+.go-left-panel { justify-content: flex-start; }
+.go-left-panel .panel-header { align-items: center; }
+.run-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 243, 255, 0.4) transparent;
+  padding-right: 2px;
+}
+.rr-headline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.rr-head {
+  background: rgba(16, 22, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+.rr-head-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+.rr-head-val {
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.rr-section-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+}
+.rr-section-title span {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.rr-bars, .rr-killers { display: flex; flex-direction: column; gap: 5px; }
+.rr-bar-row {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  outline: none;
+}
+.rr-bar-row:hover, .rr-bar-row.gp-focus, .rr-killer:hover, .rr-killer.gp-focus {
+  border-color: rgba(0, 243, 255, 0.55);
+  background: rgba(0, 243, 255, 0.06);
+}
+.rr-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.rr-name {
+  font-weight: 800;
+  color: #fff;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rr-lv {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.rr-nums {
+  flex-shrink: 0;
+  color: #b4c6e0;
+  font-variant-numeric: tabular-nums;
+}
+.rr-nums b { color: #fff; }
+.rr-track {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.rr-fill {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--rc, var(--cyan));
+  box-shadow: 0 0 10px var(--rc, var(--cyan));
+}
+.rr-killer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: rgba(16, 24, 46, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+.rr-killer.fatal { border-color: rgba(255, 42, 85, 0.6); background: rgba(255, 42, 85, 0.1); }
+.rr-killer-name { font-weight: 800; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-killer.fatal .rr-killer-name { color: #ff8aa3; }
+.rr-killer-val { flex-shrink: 0; color: #b4c6e0; font-variant-numeric: tabular-nums; }
+.rr-empty { font-size: 11px; color: var(--text-dim); padding: 4px 6px; }
+.rr-upload {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+@media (max-width: 480px) {
+  .rr-headline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rr-section-title span { display: none; }
+  .go-left-panel .panel-header { flex-wrap: wrap; }
+}
+
+/* Title-screen consent checkboxes (both start checked): GLOBAL posting and anonymous stats */
+.consent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -4px 0 10px;
+  padding: 0 4px;
+}
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(214, 230, 255, 0.78);
+  cursor: pointer;
+}
+.consent-check b { color: var(--cyan); font-weight: 800; }
+.consent-check i { color: rgba(214, 230, 255, 0.5); font-style: normal; }
+.consent-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 0;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.consent-check input.gp-focus,
+.consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* BANISH toggle (level-up cards): opposite corner to the LOCK toggle; red, and lit when armed. */
+.card-banish-toggle {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 70, 100, 0.65);
+  background: rgba(255, 70, 100, 0.1);
+  color: #ff8fa3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  z-index: 2;
+}
+.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.25); }
+.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; }
+.card-banish-toggle.unaffordable { opacity: 0.45; }
+.card-banish-toggle.hidden { display: none; }

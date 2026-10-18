@@ -481,11 +481,40 @@ export function applyUpgradeLevels(player, upg) {
 // included), allowed by the loadout and by their own requirements.
 export function eligibleUpgrades(player) {
   return UPGRADE_POOL.filter((u) => {
+    if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
     if (!loadoutAllows(player, u)) return false;
     if (levelRoom(player, u) <= 0) return false;
     if (u.req && !u.req(player)) return false;
     return cardWeight(u) > 0;
   });
+}
+
+// Exact chance that each eligible card is drawn into `slots` random hand slots by rollUpgrades (weighted
+// sampling without replacement, the same weights and luck). Returns Map(card id -> probability).
+// excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 3 slots, O(n^slots).
+export function cardInclusionOdds(player, slots = 3, excludeId = null) {
+  const luck = player.stats.luck || 1.0;
+  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck) }));
+  const odds = new Map(pool.map((c) => [c.id, 0]));
+  const k = Math.min(Math.max(0, Math.floor(slots)), 3, pool.length);
+  const total = pool.reduce((a, c) => a + c.w, 0);
+  if (!k || total <= 0) return odds;
+  // Walk every ordered prefix of draws; each card drawn at depth d adds the prefix probability times
+  // its chance of being next.
+  const walk = (depth, prob, remaining, taken) => {
+    for (const c of pool) {
+      if (taken.has(c.id)) continue;
+      const p = prob * (c.w / remaining);
+      odds.set(c.id, odds.get(c.id) + p);
+      if (depth + 1 < k) {
+        taken.add(c.id);
+        walk(depth + 1, p, remaining - c.w, taken);
+        taken.delete(c.id);
+      }
+    }
+  };
+  walk(0, 1, total, new Set());
+  return odds;
 }
 
 export function rollUpgrades(player, count = 3) {
@@ -544,15 +573,29 @@ export function newWeaponCard(player) {
   };
 }
 
-// A level-up hand: rollUpgrades plus, while a slot is free, a NEW WEAPON card with TUNING.newWeaponChance
-// per hand, guaranteed once TUNING.newWeaponPity hands in a row went without one. Caches never offer it
-// (they install their pick automatically). Updates player.newWeaponDrought, the pity counter.
+// NEW WEAPON chance per hand by weapons owned: TUNING newWeaponChanceBy1..By5 (80/70/60/40/30% by
+// default; the By5 value also covers 6+ owned if the tuner adds slots). With no free slot it never shows.
+const NEW_WEAPON_CHANCE_DEFAULTS = [0.8, 0.8, 0.7, 0.6, 0.4, 0.3];
+export function newWeaponChanceFor(owned) {
+  const n = Math.max(1, Math.min(5, Math.floor(owned)));
+  return TUNING[`newWeaponChanceBy${n}`] ?? NEW_WEAPON_CHANCE_DEFAULTS[n];
+}
+
+// Hands in a row without a NEW WEAPON card before one is guaranteed: newWeaponPityOne while the ship
+// carries a single weapon (the 2nd hand by default), newWeaponPity (4) once it carries two or more.
+export function newWeaponPityFor(owned) {
+  return Math.max(1, Math.round(owned <= 1 ? (TUNING.newWeaponPityOne ?? 2) : (TUNING.newWeaponPity ?? 4)));
+}
+
+// A level-up hand: rollUpgrades plus, while a slot is free, a NEW WEAPON card with the chance for the
+// number of weapons owned, guaranteed once the pity count of hands in a row went without one. Caches
+// never offer it (they install their pick automatically). Updates player.newWeaponDrought, the pity counter.
 export function rollLevelUpHand(player, count = 3) {
   const canOffer = canOfferNewWeapon(player);
   let offer = false;
   if (canOffer) {
-    const pity = Math.max(1, Math.round(TUNING.newWeaponPity ?? 3));
-    offer = (player.newWeaponDrought || 0) + 1 >= pity || Math.random() < (TUNING.newWeaponChance ?? 0.35);
+    const owned = ownedWeapons(player).length;
+    offer = (player.newWeaponDrought || 0) + 1 >= newWeaponPityFor(owned) || Math.random() < newWeaponChanceFor(owned);
   }
   const hand = rollUpgrades(player, offer ? count - 1 : count);
   if (canOffer && hand.length === 0) offer = true; // nothing else left to offer

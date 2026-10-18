@@ -176,6 +176,7 @@
           <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
           <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
           <button id="btn-pause-radar" class="neon-btn pause-toggle-btn active" aria-pressed="true">🛰 SECTOR RADAR: ON [R]</button>
+          <button id="btn-pause-stats" class="neon-btn pause-toggle-btn active" aria-pressed="true" title="Anonymous run stats (weapons, enemies, cards; no name, no IP) help balance the game">📡 SHARE ANONYMOUS STATS: ON</button>
           <button id="btn-pause-restart" class="neon-btn" style="border-color:var(--magenta); color:#ff77b7; padding:12px 18px; font-size:13px;">↺ RESTART RUN</button>
         </div>
         </div>
@@ -234,6 +235,7 @@
         <button id="btn-drawer-copy" class="hud-btn active" style="border-color:var(--gold); color:var(--gold);">📋 COPY TUNING FOR AGENT</button>
         <button id="btn-drawer-reset" class="hud-btn" style="border-color:var(--magenta); color:#ff77b7;">↺ RESET</button>
         <a href="tuner.html" target="_blank" class="hud-btn" style="text-decoration:none; text-align:center;">↗ FULL STUDIO TAB</a>
+        <a href="stats.html" target="_blank" rel="noopener" class="hud-btn" style="text-decoration:none; text-align:center; border-color:var(--emerald); color:var(--emerald);">📊 STATS DASHBOARD</a>
       </div>
       <div class="tuner-sandbox-bar">
         <button class="hud-btn" data-sbx="SPAWN_CHEST">★ +Chest</button>
@@ -300,6 +302,10 @@
               <label for="title-pilot-name" class="name-label">PILOT CALLSIGN:</label>
               <input id="title-pilot-name" type="text" maxlength="18" class="name-input" placeholder="MADKING" value="MADKING" />
             </div>
+            <div class="consent-row" role="group" aria-label="Sharing">
+              <label class="consent-check"><input type="checkbox" id="chk-post-global" checked /> <span>Post my runs to the public <b>GLOBAL</b> leaderboard</span></label>
+              <label class="consent-check"><input type="checkbox" id="chk-share-stats" checked /> <span>Share anonymous session stats <i>(no name, no IP; helps balance the game)</i></span></label>
+            </div>
             <div class="board-status board-filter">
               <div id="highscore-note" class="board-note" aria-live="polite"></div>
               <div id="title-board-versions" class="board-versions hidden" data-board-versions role="group" aria-label="Leaderboard version"></div>
@@ -311,7 +317,7 @@
               <span><b>Mouse / [F]/[C]:</b> Aim &amp; Fire Turret</span>
               <span><b>[P] / [ESC]:</b> Pause Mission · <b>[N]:</b> Damage Numbers</span>
               <span><b>[G]:</b> Field Guide · <b>[M]:</b> Audio · <b>[R]:</b> Radar</span>
-              <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock a card (costs ◆ gold from gold veins)</span>
+              <span><b>Level-up:</b> [R] / X Reroll · Shift+[1-3] / Y Lock · [B]+[1-3] / RB×2 Banish (costs ◆ gold from gold veins)</span>
               <span><b>Controller:</b> L-Stick Move · R-Stick Aim/Fire · A Dash · B Nova · X/Y Auto-Fire/Aim · Back Radar · Start Pause · D-Pad + A in Menus</span>
             </div>
           </div>
@@ -379,12 +385,17 @@
         <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
 
         <div class="hub-columns">
-          <div class="hub-panel">
-            <div class="panel-header">
-              <span class="panel-title">❖ SPEND VOID CORES // ARMORY</span>
-              <span class="panel-sub">Upgrade ship for next launch</span>
+          <div class="hub-panel go-left-panel">
+            <div class="panel-header board-header">
+              <div class="board-tabs" role="tablist" aria-label="Run report or armory">
+                <button class="board-tab active" data-go-tab="report" role="tab" aria-selected="true">▤ RUN REPORT</button>
+                <button class="board-tab" data-go-tab="armory" role="tab" aria-selected="false">❖ ARMORY</button>
+              </div>
+              <span id="go-left-sub" class="panel-sub">This run at a glance</span>
             </div>
-            <div id="go-armory-grid" class="armory-grid"></div>
+            <!-- Damage by weapon, top threats and headline numbers (js/run-report.js) -->
+            <div id="go-run-report" class="run-report" data-go-pane="report" aria-live="polite"></div>
+            <div id="go-armory-grid" class="armory-grid hidden" data-go-pane="armory"></div>
           </div>
 
           <div class="hub-panel">

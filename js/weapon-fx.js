@@ -181,7 +181,7 @@ export class WeaponEffects {
         fx.spawnExplosionSparks(e.x, e.y, e.style === 'tandem' ? 14 : 6, e.hue, 2, 9, 1.8);
         if (e.style === 'tandem') game.sound.playMissileImpact?.(0.7);
     }
-    if (e.damage > 0) game.damageEnemiesInRadius(e.x, e.y, r, e.damage, e.hue, e.source, e.knock, e.falloff);
+    if (e.damage > 0) game.damageEnemiesInRadius(e.x, e.y, r, e.damage, e.hue, e.source, e.knock, e.falloff, e.kind);
     e.after?.(game, e);
     if (e.cluster) {
       const c = e.cluster;

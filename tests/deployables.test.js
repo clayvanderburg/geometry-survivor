@@ -25,6 +25,8 @@ const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js'
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+const { levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
+const L = (id, lv = 1) => levelBuild(id, lv);
 
 const silent = new Proxy({}, { get: () => () => {} });
 const DT = 1 / 60;
@@ -67,7 +69,7 @@ test('mines drop in the ship wake, ignore enemies until armed, then burst for th
   assert.equal(e.hp, e.maxHp);
   tick(g, 3 * DT);
   assert.equal(d.mineCount, 0);
-  assert.ok(Math.abs(e.maxHp - e.hp - 10 * W.mineDamageMult(1)) < 1e-6, 'blast deals the card value');
+  assert.ok(Math.abs(e.maxHp - e.hp - 10 * W.mineDamageMult(L('mines'))) < 1e-6, 'blast deals the card value');
   assert.equal(e.dmgNum.source, 'mine');
 });
 
@@ -77,11 +79,11 @@ test('active mines respect the level cap and self-detonate at the end of their f
   g.sound = { playExplosion() { bursts++; } };
   g.player.weapons.mines = 1;
   tick(g, 9);
-  assert.equal(g.deployables.mineCount, W.mineMaxActive(1), 'cap holds while no enemy triggers them');
+  assert.equal(g.deployables.mineCount, W.mineMaxActive(L('mines')), 'cap holds while no enemy triggers them');
   assert.equal(bursts, 0);
-  tick(g, W.mineLifetime(1) - 8.3);
+  tick(g, W.mineLifetime(L('mines')) - 8.3);
   assert.equal(bursts, 1, 'the first mine fused out');
-  assert.equal(g.deployables.mineCount, W.mineMaxActive(1), 'and its free slot is refilled at once');
+  assert.equal(g.deployables.mineCount, W.mineMaxActive(L('mines')), 'and its free slot is refilled at once');
 });
 
 test('a sentry turret deploys at the ship, skips targets behind cover, and fires turret bolts', () => {
@@ -100,13 +102,13 @@ test('a sentry turret deploys at the ship, skips targets behind cover, and fires
   for (const b of g.bullets) {
     assert.equal(b.source, 'turret');
     assert.ok(Math.abs(Math.atan2(b.vy, b.vx) - Math.PI / 2) < 1e-6, 'bolts fly at the visible target');
-    assert.equal(b.damage, 10 * W.turretDamageMult(1));
+    assert.equal(b.damage, 10 * W.turretDamageMult(L('turret')));
   }
   // Removing the cover lets it retarget the nearest.
   rock.hp = 0;
   tick(g, 0.25);
   assert.equal(d.turrets[0].target, blocked);
-  tick(g, W.turretDuration(1));
+  tick(g, W.turretDuration(L('turret')));
   assert.equal(d.turretCount, 0, 'turret expires after its lifetime');
 });
 
@@ -135,8 +137,8 @@ test('a second turret planted by a parked ship steps aside, but never into a roc
   const g = arena({ enemies: [target], rocks: [rock] });
   g.player.weapons.turret = 3;
   const d = g.deployables;
-  d.deployTurret(g, 3);
-  d.deployTurret(g, 3);
+  d.deployTurret(g, L('turret'));
+  d.deployTurret(g, L('turret'));
   assert.equal(d.turretCount, 2);
   const [a, b] = d.turrets;
   assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= TURRET_SPACING, 'turrets do not stack');
@@ -149,10 +151,12 @@ test('escort drones fly in formation behind the hull, fire drone bolts, and neve
   const portal = enemy(2150, 2000, { type: 'blackhole', radius: 22 });
   const g = arena({ enemies: [portal] });
   assert.equal(isDeployableTarget(portal), false);
-  g.player.weapons.drones = 4;
+  g.player.weapons.drones = 3;
+  g.player.upgradeLevels.drones_wingmen = 2; // three drones in the V
   tick(g, 2);
   const d = g.deployables;
-  assert.equal(d.droneCount, W.droneCount(4));
+  assert.equal(d.droneCount, 3);
+  assert.equal(d.droneCount, W.droneCount(weaponBuild(g.player, 'drones')));
   for (let i = 0; i < d.droneCount; i++) {
     const drone = d.drones[i];
     assert.ok(drone.x < g.player.x, `drone ${i} trails behind a ship heading +x`);
@@ -164,8 +168,8 @@ test('escort drones fly in formation behind the hull, fire drone bolts, and neve
   g.enemyManager.enemies.push(target);
   tick(g, 1);
   assert.ok(g.bullets.length >= 3);
-  assert.ok(g.bullets.every((b) => b.source === 'drone' && b.damage === 10 * W.droneDamageMult(4)));
-  g.player.weapons.drones = 1;
+  assert.ok(g.bullets.every((b) => b.source === 'drone' && b.damage === 10 * W.droneDamageMult(weaponBuild(g.player, 'drones'))));
+  g.player.upgradeLevels.drones_wingmen = 0;
   tick(g, DT);
   assert.equal(d.droneCount, 1);
 });
@@ -227,7 +231,7 @@ test('Siege Battery shells burst into neighbours through the shared bullet sweep
     assert.equal(g.player.weapons.siegeBattery, 1);
     g.deployables.fireTurretBolt(g, { x: 2000, y: 2000, aim: 0, flash: 0 }, 1);
     for (let t = 0; t < 30 && g.bullets.length; t++) g.updateBullets(DT);
-    const bolt = 10 * W.turretDamageMult(1);
+    const bolt = 10 * W.turretDamageMult(L('turret'));
     assert.ok(Math.abs(hit.maxHp - hit.hp - bolt * (1 + W.siegeShellDamageMult)) < 1e-6, 'direct hit + burst');
     assert.ok(Math.abs(near.maxHp - near.hp - bolt * W.siegeShellDamageMult) < 1e-6, 'neighbour takes the burst');
     assert.equal(near.dmgNum.source, 'turret');
@@ -239,29 +243,32 @@ test('Siege Battery shells burst into neighbours through the shared bullet sweep
 test('deployable cards preview exact numbers and Siege Battery needs mines + turret', () => {
   const g = arena();
   const p = g.player;
-  assert.equal(describeUpgrade(p, byId('mines')).headline, `PROXIMITY MINES // ${W.mineMaxActive(1)} ACTIVE`);
-  assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretMaxActive(1)} ACTIVE`);
+  assert.equal(describeUpgrade(p, byId('mines')).headline, `PROXIMITY MINES // ${W.mineMaxActive(L('mines'))} ACTIVE`);
+  assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretMaxActive(L('turret'))} ACTIVE`);
   assert.equal(describeUpgrade(p, byId('drones')).headline, '+1 ESCORT DRONE');
-  applyUpgradeLevels(p, { ...byId('turret'), levelJump: 2 });
-  assert.equal(describeUpgrade(p, byId('turret')).headline, '+1 SENTRY TURRET');
-  const rows = describeUpgrade(p, byId('turret')).rows;
-  assert.deepEqual(rows.find((r) => r.id === 'turretDuration'), { id: 'turretDuration', label: 'Turret lifetime', before: '7.0s', after: '8.0s' });
+  applyUpgradeLevels(p, byId('turret'));
+  // A stat card shows only its own stat.
+  const life = describeUpgrade(p, byId('turret_lifetime'));
+  assert.equal(life.headline, '+1.0s TURRET LIFETIME');
+  assert.deepEqual(life.rows.map((r) => r.id), ['turretDuration']);
+  assert.deepEqual(life.rows[0], { id: 'turretDuration', label: 'Turret lifetime', before: '6.0s', after: '7.0s' });
   applyUpgradeLevels(p, byId('drones'));
-  assert.equal(describeUpgrade(p, byId('drones')).headline, '+1 ESCORT DRONE');
+  assert.equal(describeUpgrade(p, byId('drones_wingmen')).headline, '+1 ESCORT DRONE');
   for (const id of ['mines', 'turret', 'drones', 'evo_siege']) {
     assert.ok(byId(id).tags.includes('deployable'), `${id} is tagged deployable`);
   }
   assert.ok(!byId('evo_siege').req(p), 'turret alone does not unlock Siege Battery');
   applyUpgradeLevels(p, byId('mines'));
   assert.ok(byId('evo_siege').req(p));
-  assert.equal(describeUpgrade(p, byId('evo_siege')).headline, `TURRET SHELLS BURST // ${(10 * W.turretDamageMult(2) * W.siegeShellDamageMult).toFixed(1)} DMG`);
-  // Shuffle draws all tie, so offered cards follow pool order among what is eligible.
-  p.upgradeLevels = Object.fromEntries(UPGRADE_POOL.filter((u) => !['mines', 'turret', 'drones'].includes(u.id)).map((u) => [u.id, u.maxLevel]));
-  const original = Math.random;
-  Math.random = () => 0.99;
-  try {
-    assert.deepEqual(rollUpgrades(p, 3).map((u) => u.id).sort(), ['drones', 'mines', 'turret']);
-  } finally { Math.random = original; }
+  assert.equal(describeUpgrade(p, byId('evo_siege')).headline, `TURRET SHELLS BURST // ${(10 * W.turretDamageMult(L('turret')) * W.siegeShellDamageMult).toFixed(1)} DMG`);
+  // With everything else maxed, hands offer only the equipped deployables' stat cards (never their
+  // equip lines: weapons come from NEW WEAPON cards).
+  const deployable = (u) => ['mines', 'turret', 'drones'].includes(u.weapon);
+  p.upgradeLevels = Object.fromEntries(UPGRADE_POOL.filter((u) => !deployable(u)).map((u) => [u.id, u.maxLevel]));
+  for (const id of ['mines', 'turret', 'drones']) p.upgradeLevels[id] = 1;
+  const offered = rollUpgrades(p, 3);
+  assert.equal(offered.length, 3);
+  for (const u of offered) assert.ok(u.statCard && deployable(u), u.id);
 });
 
 test('HUD tags, damage colours and tuning cover the deployables', () => {
@@ -292,7 +299,7 @@ test('the sentry turret is twice its old size: body, placement clearance and muz
   const g = arena({ enemies: [target] });
   g.player.weapons.turret = 1;
   const d = g.deployables;
-  d.deployTurret(g, 1);
+  d.deployTurret(g, L('turret'));
   const t = d.turrets[0];
   t.life = t.maxLife - 1; // fully popped in
   // Bolts leave from the tip of the doubled barrel (34 px out, was 17).
@@ -329,8 +336,8 @@ test('a live turret fires its doubled rate of half-damage bolts', () => {
   tick(g, 2);
   const bolts = g.bullets.filter((b) => b.source === 'turret');
   // 2 s at 6.1 bolts/s (was 3.05/s): about 12 bolts, each half the old damage.
-  assert.ok(Math.abs(bolts.length - 2 * W.turretFireRate(1)) <= 1, `${bolts.length} bolts in 2 s`);
-  for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(1));
+  assert.ok(Math.abs(bolts.length - 2 * W.turretFireRate(L('turret'))) <= 1, `${bolts.length} bolts in 2 s`);
+  for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(L('turret')));
 });
 
 test('a turret bolt still hits an enemy sitting inside its long barrel', () => {

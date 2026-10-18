@@ -3,34 +3,38 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME, contactDamageAt } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
-  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough
+  UPGRADE_POOL, UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
+  discardWeapon, snapshotBase, xpToNextLevel, upgradeKind, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
-import { STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags } from './loadout.js';
+import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
 import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
-import { META_UPGRADES, ProgressionManager } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
+import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
+import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
+import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
+import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
   ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
@@ -43,6 +47,7 @@ import {
   TUNING,
   DEFAULT_TUNING,
   TUNING_SCHEMA,
+  PLAYER_SETTING_KEYS,
   updateTuningKey,
   resetTuningToDefaults,
   onTuningChange,
@@ -66,8 +71,15 @@ export function radarSize(width, height) {
 }
 
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play.
-const PLAYER_SETTING_KEYS = new Set(['musicVolume', 'sfxVolume']);
-const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTING_KEYS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
+const PLAYER_SETTINGS = new Set(PLAYER_SETTING_KEYS);
+const isTuningModified = () => Object.keys(DEFAULT_TUNING).some(key => !PLAYER_SETTINGS.has(key) && TUNING[key] !== DEFAULT_TUNING[key]);
+
+// Run stats: damage stat ids -> weapon (by each weapon's tagSources) or another damage group.
+const STAT_GROUPS = buildSourceGroups(WEAPONS);
+// A weapon's level for the stats: its own level, or (Pew Pews, which has none) 1 + its upgrade levels.
+function statsWeaponLevel(p, id) {
+  return weaponLevel(p, id) || 1 + weaponUpgradeLines(p, id).reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
+}
 
 // Final wind-up of a Vortex Singularity: pull tightens and a contracting ring telegraphs the implosion.
 const SINGULARITY_IMPLODE_TIME = 0.35;
@@ -172,6 +184,12 @@ export class Game {
     this.globalSubmitToken = null;
     this.lastGlobalRunId = null;
     this.runTainted = false; // dev tuner / sandbox touched this run
+    // Anonymous run stats (js/run-stats.js): the RUN REPORT on game over and the opt-out upload.
+    this.shareStats = readShareStats(defaultStatsStorage());
+    this.postGlobal = readPostGlobal(defaultStatsStorage()); // title-screen checkbox: post runs to the GLOBAL board
+    this.statsUpload = null;
+    this.statsUploadToken = null;
+    this.goTab = 'report';
 
     // Controller state: previous-tick buttons for press edges, and DOM menu focus.
     this.gpButtons = [];
@@ -214,7 +232,7 @@ export class Game {
     this.rocksMined = 0;
     this.sessionCores = 0;
     // Gold (per run, gold veins): spent on level-up rerolls and card locks (js/gold.js).
-    this.gold = 0;
+    this.gold = Math.round(bonuses.startGold || 0); // Void Armory: Prospector Stake
     this.goldEarned = 0;
     this.goldSpent = 0;
     this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
@@ -223,6 +241,7 @@ export class Game {
     this.handPhase = null; // 'hand' (rerolls and locks allowed), 'weapon' (the NEW WEAPON pick) or 'breakthrough'
     // Weapon milestones (LV 4 / 8 / 12) reached by a card, waiting for their BREAKTHROUGH choice, in order.
     this.breakthroughQueue = [];
+    this.weaponFx = new WeaponEffects();
     this.breakthrough = null; // { weaponId, level } on screen
     this.rdLineIndex = Math.floor(Math.random() * RD_LINES.length);
     this.lockNote = '';
@@ -265,6 +284,13 @@ export class Game {
       dashTimer: 0,
       dashCooldown: 0,
       bombs: 2 + bonuses.extraBombs,
+      // Void Armory multipliers that live outside `stats` (damage taken, post-hit invulnerability, dash
+      // cooldown, gold per vein, reroll cost).
+      damageTakenMult: bonuses.damageTakenMult ?? 1,
+      hitInvulnBonus: bonuses.hitInvulnBonus || 0,
+      dashCooldownMult: bonuses.dashCooldownMult ?? 1,
+      goldMult: bonuses.goldMult ?? 1,
+      rerollCostMult: bonuses.rerollCostMult ?? 1,
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -274,6 +300,7 @@ export class Game {
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
+      banished: {}, // card ids banished with gold this run (never offered again)
       stats: {
         moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult,
         fireRate: TUNING.fireRate * bonuses.fireRateMult,
@@ -286,12 +313,12 @@ export class Game {
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0),
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1),
-        miningRange: TUNING.miningRange,
+        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1),
         drillScale: TUNING.drillScale,
-        critChance: TUNING.baseCritChance ?? 0.05,
-        critDamage: TUNING.baseCritDamage ?? 1.5,
+        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
         tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
-        areaMult: 1
+        areaMult: bonuses.areaMult || 1
       },
       weapons: {
         rockets: 0,
@@ -318,6 +345,10 @@ export class Game {
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
     snapshotBase(this.player);
     for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    this.runStats = new RunStats({ version: GAME_VERSION, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
+    this.statsTick = 0;
+    if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
+    this.syncRunStats();
     this.discardPending = null;
     this.discardBlocked = null;
     this.weaponBarHtml = null;
@@ -344,6 +375,8 @@ export class Game {
     this.singularityTimer = 0;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
+    this.bladeFlingTimer = this.bladeNovaTimer = undefined;
+    this.bladeNovaHide = 0;
     this.statusStamp = 0;
 
     this.bullets = [];
@@ -430,7 +463,7 @@ export class Game {
         e.preventDefault();
       }
       // Space on a focused button/link activates that control instead of a menu shortcut.
-      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A');
+      const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A' || (focused.tagName === 'INPUT' && focused.type === 'checkbox'));
 
       if (this.guideOpen) {
         this.handleGuideKey(e, onControl);
@@ -611,6 +644,13 @@ export class Game {
     if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => this.startGame());
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
+    document.getElementById('btn-pause-stats')?.addEventListener('click', () => this.toggleShareStats());
+    // Title-screen consent checkboxes (both start checked; unchecking is remembered).
+    document.getElementById('chk-post-global')?.addEventListener('change', (e) => this.setPostGlobal(e.target.checked));
+    document.getElementById('chk-share-stats')?.addEventListener('change', (e) => {
+      if (e.target.checked !== this.shareStats) this.toggleShareStats();
+    });
+    document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
@@ -620,6 +660,7 @@ export class Game {
     }
     this.syncDamageNumbersButton();
     this.syncRadarButton();
+    this.syncShareStatsButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -769,11 +810,11 @@ export class Game {
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
-        miningRange: TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
+        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1) * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
         drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
         // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
-        critChance: (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
-        critDamage: (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep
+        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0) + (upgLv.crit_damage || 0) * W.critDamageStep
       });
 
       p.radius = TUNING.shipRadius;
@@ -868,44 +909,78 @@ export class Game {
 
     ['armory-grid', 'go-armory-grid'].forEach((gridId) => {
       const container = document.getElementById(gridId);
-      if (!container) return;
-      container.innerHTML = '';
-
-      META_UPGRADES.forEach((upg) => {
-        const rank = this.progression.getRank(upg.id);
-        const isMax = rank >= upg.maxRank;
-        const cost = this.progression.getUpgradeCost(upg);
-        const canBuy = this.progression.canBuy(upg);
-
-        const card = document.createElement('div');
-        card.className = `armory-card ${canBuy ? 'affordable' : ''}`;
-        card.innerHTML = `
-          <div>
-            <div class="armory-top">
-              <span class="armory-name" style="color:${upg.color}">${upg.icon} ${upg.name}</span>
-              <span class="armory-rank">RANK ${rank}/${upg.maxRank}</span>
-            </div>
-            <div class="armory-desc">${upg.desc}</div>
-          </div>
-          <button class="armory-buy-btn" ${!canBuy ? 'disabled' : ''}>
-            ${isMax ? 'MAX RANK ACHIEVED' : `UPGRADE // ❖ ${cost} CORES`}
-          </button>
-        `;
-
-        if (canBuy) {
-          card.addEventListener('click', () => {
-            this.sound.init();
-            if (this.progression.buyUpgrade(upg.id)) {
-              this.sound.playLevelUp();
-              this.renderHubUI();
-            }
-          });
-        }
-        container.appendChild(card);
-      });
+      if (container) this.renderArmory(container);
     });
 
     this.renderBoards();
+  }
+
+  // Void Armory panel: category tabs, the one-time reset notice and the upgrade cards (filtered by tab).
+  // Buttons carry data-armory-key so controller focus survives the re-render after a purchase.
+  renderArmory(container) {
+    const prog = this.progression;
+    const focusedKey = container.contains(this.menuNav?.focused) ? this.menuNav.focused.dataset?.armoryKey : null;
+    this.armoryCat ||= 'all';
+    container.innerHTML = '';
+
+    let owned = 0, total = 0;
+    for (const u of META_UPGRADES) { owned += prog.getRank(u.id); total += u.maxRank; }
+    const tabs = document.createElement('div');
+    tabs.className = 'armory-tabs';
+    const tabDefs = [{ id: 'all', label: 'ALL', icon: '' }, ...ARMORY_CATEGORIES];
+    tabs.innerHTML = tabDefs.map((c) => `<button class="armory-tab${this.armoryCat === c.id ? ' active' : ''}" data-armory-key="cat:${c.id}" aria-pressed="${this.armoryCat === c.id}">${c.icon ? c.icon + ' ' : ''}${c.label}</button>`).join('')
+      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`;
+    tabs.querySelectorAll('[data-armory-key^="cat:"]').forEach((btn) => btn.addEventListener('click', () => {
+      this.armoryCat = btn.dataset.armoryKey.slice(4);
+      this.renderHubUI();
+    }));
+    container.appendChild(tabs);
+
+    if (prog.data.armoryResetNotice) {
+      const notice = document.createElement('div');
+      notice.className = 'armory-notice';
+      notice.innerHTML = `<b>VOID ARMORY REBUILT // RANKS AND CORES RESET</b>
+        <span>The armory now has ${META_UPGRADES.length} single-stat upgrades with many more, smaller ranks. Everyone's ranks and Void Cores were reset; your callsign, high scores and Field Guide are kept.</span>
+        <button class="armory-notice-ok" data-armory-key="notice">GOT IT</button>`;
+      notice.querySelector('button').addEventListener('click', () => { prog.dismissArmoryNotice(); this.renderHubUI(); });
+      container.appendChild(notice);
+    }
+
+    for (const upg of META_UPGRADES) {
+      if (this.armoryCat !== 'all' && upg.cat !== this.armoryCat) continue;
+      const rank = prog.getRank(upg.id);
+      const isMax = rank >= upg.maxRank;
+      const cost = prog.getUpgradeCost(upg);
+      const canBuy = prog.canBuy(upg);
+      const card = document.createElement('div');
+      card.className = `armory-card${canBuy ? ' affordable' : ''}${isMax ? ' maxed' : ''}`;
+      card.style.setProperty('--upg', upg.color);
+      card.innerHTML = `
+        <div class="armory-top">
+          <span class="armory-name">${upg.icon} ${upg.name}</span>
+          <span class="armory-rank">${rank}/${upg.maxRank}</span>
+        </div>
+        <div class="armory-desc">${formatArmoryValue(upg, 1)} ${upg.stat} per rank</div>
+        <div class="armory-value">${isMax ? `<b>${formatArmoryValue(upg, rank)}</b> · MAXED` : `${formatArmoryValue(upg, rank)} → <b>${formatArmoryValue(upg, rank + 1)}</b>`}</div>
+        <div class="armory-bar"><i style="width:${(rank / upg.maxRank) * 100}%"></i></div>
+        <button class="armory-buy-btn" data-armory-key="buy:${upg.id}" ${!canBuy ? 'disabled' : ''}>${isMax ? 'MAX RANK' : `❖ ${cost.toLocaleString()}`}</button>`;
+      if (canBuy) {
+        card.addEventListener('click', () => {
+          this.sound.init();
+          if (prog.buyUpgrade(upg.id)) {
+            this.sound.playLevelUp();
+            this.renderHubUI();
+          }
+        });
+      }
+      container.appendChild(card);
+    }
+
+    if (focusedKey) {
+      const again = container.querySelector(`[data-armory-key="${focusedKey}"]:not([disabled])`)
+        || container.querySelector(`[data-armory-key^="cat:"].active`);
+      if (again) this.menuNav.setFocus(again);
+    }
   }
 
   // Both board panels (title + game over) share one tab and one view.
@@ -963,6 +1038,10 @@ export class Game {
     if (!this.globalBoard) return;
     const token = {};
     this.globalSubmitToken = token; // a late answer for an earlier run is ignored
+    if (this.postGlobal === false) {
+      this.globalSubmit = { reason: 'optout' };
+      return;
+    }
     if (this.runTainted || isTuningModified()) {
       this.globalSubmit = { reason: 'tainted' };
       return;
@@ -980,6 +1059,99 @@ export class Game {
         this.renderBoards();
       }
     });
+  }
+
+  // --- Run stats (js/run-stats.js): level sampling, RUN REPORT, anonymous upload -----------------
+
+  // Samples player and weapon levels (a few times a second during play, and at run start/end).
+  syncRunStats() {
+    const p = this.player;
+    const rs = this.runStats;
+    if (!rs || !p) return;
+    rs.levelReached(p.level, this.elapsedTime);
+    const levels = {};
+    for (const id of ownedWeapons(p)) levels[id] = statsWeaponLevel(p, id);
+    rs.sync(levels, this.elapsedTime, p.stats?.damage);
+  }
+
+  finishRunStats() {
+    if (!this.runStats) return null;
+    this.syncRunStats();
+    const p = this.player;
+    return this.runStats.finish({
+      time: this.elapsedTime, wave: this.wave, level: p?.level ?? 1, score: this.score, kills: this.kills,
+      died: !(p?.hp > 0), gold: { earned: this.goldEarned, spent: this.goldSpent },
+      loadout: ownedWeapons(p || {}).map((id) => ({ id, lv: statsWeaponLevel(p, id) }))
+    });
+  }
+
+  // Fire-and-forget like the leaderboard: opted-out, dev-tuner and very short runs are not sent.
+  submitRunStats(summary) {
+    const token = {};
+    this.statsUploadToken = token; // a late answer for an earlier run is ignored
+    const opts = { share: this.shareStats === true, tainted: this.runTainted || isTuningModified() };
+    const skip = statsSkipReason({ ...opts, time: summary.time });
+    this.statsUpload = skip ? { ok: false, reason: skip } : { pending: true };
+    this.renderRunReportPanel();
+    if (skip) return;
+    uploadRunStats(summary, opts).then((result) => {
+      if (this.statsUploadToken !== token) return;
+      this.statsUpload = result;
+      this.renderRunReportPanel();
+    });
+  }
+
+  renderRunReportPanel() {
+    const el = globalThis.document?.getElementById('go-run-report');
+    if (!el || !this.lastRunSummary) return;
+    const view = buildRunReport(this.lastRunSummary, {
+      info: (id) => {
+        const w = WEAPON_BY_ID[id] || PASSIVE_BY_ID[id];
+        return w ? { name: w.hudName || w.name, color: w.color } : OTHER_GROUP_INFO[id] || { name: id, color: '#8ba3c7' };
+      },
+      enemyName: (kind) => hostileEntry(kind)?.name || String(kind).toUpperCase(),
+      upload: describeStatsUpload(this.statsUpload)
+    });
+    renderRunReport(el, view);
+  }
+
+  // Game-over left panel: RUN REPORT (default) or ARMORY.
+  setGameOverTab(tab) {
+    this.goTab = tab === 'armory' ? 'armory' : 'report';
+    const doc = globalThis.document;
+    if (!doc?.querySelectorAll) return;
+    for (const btn of doc.querySelectorAll('[data-go-tab]')) {
+      const on = btn.dataset.goTab === this.goTab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    for (const pane of doc.querySelectorAll('[data-go-pane]')) pane.classList.toggle('hidden', pane.dataset.goPane !== this.goTab);
+    const sub = doc.getElementById('go-left-sub');
+    if (sub) sub.textContent = this.goTab === 'armory' ? 'Upgrade ship for next launch' : 'This run at a glance';
+  }
+
+  toggleShareStats() {
+    this.shareStats = !this.shareStats;
+    writeShareStats(defaultStatsStorage(), this.shareStats);
+    this.syncShareStatsButton();
+  }
+
+  setPostGlobal(on) {
+    this.postGlobal = !!on;
+    writePostGlobal(defaultStatsStorage(), this.postGlobal);
+    this.syncShareStatsButton();
+  }
+
+  syncShareStatsButton() {
+    const post = globalThis.document?.getElementById('chk-post-global');
+    if (post) post.checked = this.postGlobal !== false;
+    const share = globalThis.document?.getElementById('chk-share-stats');
+    if (share) share.checked = this.shareStats === true;
+    const btn = globalThis.document?.getElementById('btn-pause-stats');
+    if (!btn) return;
+    btn.textContent = `📡 SHARE ANONYMOUS STATS: ${this.shareStats ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', this.shareStats);
+    btn.setAttribute?.('aria-pressed', String(this.shareStats));
   }
 
   toggleAutoFire() {
@@ -1107,8 +1279,9 @@ export class Game {
     }, 2200);
   }
 
-  getWaveScale() {
-    return (1 + (this.wave - 1) * 0.25) * Math.pow(1.09, Math.max(0, this.wave - 6));
+  // HP scale for a spawn at the current wave; light fodder (LIGHT_ENEMY_TYPES) uses the lighter start.
+  getWaveScale(type = null) {
+    return waveScaleAt(this.wave, { light: !!type && LIGHT_ENEMY_TYPES.has(type) });
   }
 
   spawnRelicChest(x, y, guaranteedSuper = false) {
@@ -1204,6 +1377,8 @@ export class Game {
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 48, 5, 0.45);
+    // A cache card that took a weapon to LV 4 / 8 / 12 opens its Breakthrough right away.
+    if (this.openNextBreakthrough()) return;
     this.processPendingLevelUps();
     this.updateHUD();
   }
@@ -1223,7 +1398,7 @@ export class Game {
 
     if (rock.oreType === 'gold_vein') {
       // Gold coins (currency, no XP): magnetized and collected like geoms, whoever broke the rock.
-      const coins = goldCoins(goldPerVein());
+      const coins = goldCoins(Math.round(goldPerVein() * (this.player?.goldMult ?? 1)));
       const total = coins.reduce((a, b) => a + b, 0);
       this.particles.spawnFloatText(rock.x, rock.y - 12, `★ GOLD VEIN! +${total} ${GOLD_ICON}`, '#ffcc00', 14);
       for (const value of coins) {
@@ -1289,7 +1464,7 @@ export class Game {
     if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
-      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48);
+      this.damageEnemiesInRadius(rock.x, rock.y, blast, weaponDamage(this.player, 'tectonic'), 48, 'other', undefined, undefined, 'tectonic');
     }
   }
 
@@ -1298,7 +1473,7 @@ export class Game {
     if (p.dashCooldown > 0) return;
 
     p.dashTimer = 0.22;
-    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5);
+    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, 0.32);
 
@@ -1316,7 +1491,7 @@ export class Game {
     if (p.weapons.dashNova > 0) {
       const radius = novaRadius(p, p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
-      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160);
+      this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160, 'other', undefined, undefined, 'nova');
     }
   }
 
@@ -1347,6 +1522,7 @@ export class Game {
       // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
       if (e.isBoss || e.isLieutenant) {
         const dmg = e.maxHp * 0.4;
+        this.runStats?.damage('supernova', Math.min(dmg, Math.max(0, e.hp)));
         e.hp -= dmg;
         e.hitFlash = 1;
         e.sinceHit = 0; // counts as a hit, so a REGENERATING lieutenant's regen pauses too
@@ -1370,7 +1546,8 @@ export class Game {
   // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
   // potential while crowds take less per head.
   // edgeFalloff: share of the damage lost at the rim (linear from the centre); defaults to splashEdgeFalloff.
-  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area, edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4) {
+  // stat: the run-stats id when it differs from `source` (e.g. 'collapse', 'nova'; js/run-stats.js).
+  damageEnemiesInRadius(cx, cy, radius, dmg, hue = 190, source = 'other', knock = KNOCKBACK.area, edgeFalloff = TUNING.splashEdgeFalloff ?? 0.4, stat = source) {
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
       if (e.dead) continue;
@@ -1380,7 +1557,7 @@ export class Game {
       if (dSq <= (radius + e.radius) * (radius + e.radius)) {
         const d = Math.sqrt(dSq) || 1;
         const reach = Math.max(0, Math.min(1, (d - e.radius) / radius));
-        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock);
+        this.hitEnemy(e, dmg * (1 - edgeFalloff * reach), source, (dx / d) * knock, (dy / d) * knock, 1, stat);
       }
     }
     this.grid.applyImpulse(cx, cy, 38, radius * 1.15, hue);
@@ -1389,8 +1566,9 @@ export class Game {
   // Single entry point for weapon damage: armor/Conduit links and corrosion, crit roll, HP, hit flash,
   // damage number, knockback, on-hit statuses and kill. (kx, ky) is a knockback impulse in px/tick
   // for a 10px-radius hull; heavier hulls move less. DoT ticks (DOT_SOURCES) never crit or re-apply
-  // statuses. The damage number shows what actually landed.
-  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1) {
+  // statuses. The damage number shows what actually landed. `stat` attributes the hit in the run
+  // stats (js/run-stats.js) when it differs from `source` (sub-sources: helix, storm, collapse, ...).
+  hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const p = this.player;
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
@@ -1402,6 +1580,8 @@ export class Game {
       ky *= CRIT_KNOCKBACK_MULT;
       this.onCriticalHit(e);
     }
+    this.runStats?.damage(stat, Math.min(dmg, Math.max(0, e.hp)));
+    e.lastStat = stat;
     e.hp -= dmg;
     e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
@@ -1448,6 +1628,12 @@ export class Game {
     e.dead = true;
     enemies.splice(enemyIndex, 1);
     this.kills++;
+    if (this.runStats) {
+      // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
+      const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
+      if (e.hp > 0) this.runStats.damage(by, e.hp);
+      this.runStats.kill(by, e, this.elapsedTime);
+    }
 
     const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
@@ -1476,7 +1662,7 @@ export class Game {
     }
 
     if (e.type === 'splitter' && !fromBomb) {
-      const waveScale = this.getWaveScale();
+      const waveScale = this.getWaveScale('mini_splitter');
       for (let k = 0; k < 3; k++) {
         const a = e.rotation + (k * Math.PI * 2) / 3;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
@@ -1498,7 +1684,7 @@ export class Game {
 
     if (e.type === 'blackhole') {
       this.particles.spawnShockwave(e.x, e.y, 190, 348, 6, 0.5);
-      this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348);
+      this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348, 'other', undefined, undefined, 'blackhole');
     }
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
@@ -1541,6 +1727,7 @@ export class Game {
           radius: 4,
           life: 0.45,
           source: 'other',
+          stat: 'shrapnel',
           knock: KNOCKBACK.shrapnel
         });
       }
@@ -1552,6 +1739,7 @@ export class Game {
     if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
     const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
+    const killXp = e.xp * xpScaleAt(this.wave);
     for (let g = 0; g < geomCount; g++) {
       const ga = Math.random() * Math.PI * 2;
       const gSpd = 1.5 + Math.random() * 4.5;
@@ -1561,7 +1749,7 @@ export class Game {
         y: e.y,
         vx: Math.cos(ga) * gSpd,
         vy: Math.sin(ga) * gSpd,
-        xp: Math.max(1, Math.round(e.xp / geomCount)),
+        xp: Math.max(1, Math.round(killXp / geomCount)),
         rotation: Math.random() * Math.PI * 2,
         hue: e.isBoss || e.isLieutenant ? 48 : 145,
         life: 16,
@@ -1670,15 +1858,18 @@ export class Game {
 
   // Gunner orbs scale with the wave exactly like contact damage.
   enemyBulletDamage(b) {
-    return b.damage * (1 + Math.max(0, this.wave - 5) * 0.08);
+    return b.damage * damageRampAt(this.wave);
   }
 
   // Shared by contact and plasma-orb hits. Returns true when the hit was fatal (caller ends the run).
-  damagePlayer(dmg, shake = 16) {
+  // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
+  damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
+    dmg *= p.damageTakenMult ?? 1; // Void Armory: Ablative Plating
+    this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = 0.65;
+    p.invuln = 0.65 + (p.hitInvulnBonus || 0);
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -1702,7 +1893,7 @@ export class Game {
     this.enemyBulletHit ||= (b) => {
       if (this.player.invuln > 0 || this.player.hp <= 0) return false;
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
-      this.damagePlayer(this.enemyBulletDamage(b), 10);
+      this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
@@ -1754,7 +1945,7 @@ export class Game {
     }
     this.coresDroppedThisWave += cores;
     this.particles.spawnShockwave(e.x, e.y, 260, 48, 5, 0.55);
-    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp)} XP`];
+    const rewards = [`+${pts.toLocaleString()} PTS`, `+${Math.round(e.xp * xpScaleAt(this.wave))} XP`];
     if (cores > 0) rewards.push(`+${cores} ❖ VOID CORE${cores > 1 ? 'S' : ''}`);
     this.showLieutenantCard('defeat', fromBomb ? '▲ LIEUTENANT VAPORIZED ▲' : '▲ LIEUTENANT DOWN ▲', e.name, e.epithet, rewards.join(' · '));
   }
@@ -1944,46 +2135,47 @@ export class Game {
     const spread = (type, count) => {
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(30);
-        em.queueSpawn(type, p2.x, p2.y, waveScale, this.placedSpawn(p2));
+        em.queueSpawn(type, p2.x, p2.y, this.getWaveScale(type), this.placedSpawn(p2));
       }
     };
     const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
-      const count = Math.min(34, 12 + this.wave * 2);
-      em.spawnBoidSwarm(pt.x, pt.y, count, waveScale, this.worldWidth, this.worldHeight, this.placedSpawn(pt));
+      const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
+      em.spawnBoidSwarm(pt.x, pt.y, count, this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
-      for (let i = 0; i < 3 + Math.floor(this.wave * 0.6); i++) {
+      const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
+      for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(30);
-        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, waveScale, this.placedSpawn(p2));
+        em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, this.getWaveScale('pinwheel'), this.placedSpawn(p2));
       }
     } else if (pack === 'splitter') {
-      spread('splitter', 2 + Math.floor(this.wave * 0.4), 450, 750);
+      spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
     } else if (pack === 'bruiser') {
-      spread('bruiser', Math.min(3, 1 + Math.floor(since('bruiser') / 4)), 460, 720);
+      spread('bruiser', packSize(Math.min(3, 1 + Math.floor(since('bruiser') / 4))), 460, 720);
     } else if (pack === 'gunner') {
-      spread('gunner', Math.min(5, 2 + Math.floor(since('gunner') / 4)), 520, 760);
+      spread('gunner', packSize(Math.min(5, 2 + Math.floor(since('gunner') / 4))), 520, 760);
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
-      const count = Math.min(3, 1 + Math.floor(since('shielder') / 5));
+      const count = packSize(Math.min(3, 1 + Math.floor(since('shielder') / 5)));
       for (let i = 0; i < count; i++) {
         const p2 = this.spawnPoint(70);
         em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
         for (let k = 0; k < 2; k++) {
           const esc = packMemberPoint(this, p2, k ? 40 : -40, 34);
-          em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+          em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
         }
       }
     } else if (pack === 'blinker') {
-      spread('blinker', Math.min(7, 3 + Math.floor(since('blinker') / 3)), 480, 760);
+      spread('blinker', packSize(Math.min(7, 3 + Math.floor(since('blinker') / 3))), 480, 760);
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
       em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
       for (let k = 0; k < 3; k++) {
         const a = (k * Math.PI * 2) / 3;
         const esc = packMemberPoint(this, pt, Math.cos(a) * 60, Math.sin(a) * 60);
-        em.queueSpawn('pinwheel', esc.x, esc.y, waveScale, this.placedSpawn(esc));
+        em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
       }
       if (this.wave >= 8) {
         const esc = packMemberPoint(this, pt, 80, 0);
@@ -2060,6 +2252,11 @@ export class Game {
       // sweepX/Y: a bolt spawned at a barrel tip sweeps from its gun on the first tick so point-blank targets still get hit.
       const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
       if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
+      if (b.homing) this.steerHomingBolt(b);
+      if (b.mirvT > 0) {
+        b.mirvT -= dt;
+        if (b.mirvT <= 0 && b.mirvParts > 1) this.splitMirv(b);
+      }
       b.x += b.vx;
       b.y += b.vy;
       b.life -= dt;
@@ -2118,20 +2315,106 @@ export class Game {
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
-        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb);
+        this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
           // Siege Battery shells burst on impact (cover still stops the shell itself).
           this.particles.spawnFlash?.(hx, hy, b.blastRadius * 0.4, b.hue, 0.16);
           this.particles.spawnShockwave(hx, hy, b.blastRadius, b.hue, 3, 0.32);
           this.sound.playMissileImpact?.(0.75);
-          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5);
+          this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
+        if (b.tandem || b.napalm || b.ricochet > 0 || b.arcRounds) this.boltBreakthroughs(b, e, hx, hy);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
         this.bullets.push(b);
       }
     }
+  }
+
+  // Breakthrough effects of a bolt that just hit `e` at (hx, hy).
+  boltBreakthroughs(b, e, hx, hy) {
+    if (b.tandem) {
+      this.weaponFx.schedule({ x: hx, y: hy, delay: W.tandemDelay, radius: b.blastRadius, damage: b.damage * W.tandemShare, hue: b.hue, source: b.source, style: 'tandem', knock: KNOCKBACK.area * 0.5 });
+    }
+    if (b.napalm) {
+      const ticks = W.napalmLife / W.napalmTick;
+      this.weaponFx.addPool({ x: hx, y: hy, radius: (b.blastRadius || 50) * 0.85, life: W.napalmLife, tick: W.napalmTick, damage: b.damage * W.napalmShare / ticks, hue: 18, source: b.source });
+    }
+    if (b.ricochet > 0) {
+      // Ricochet Rounds: one bounce into the nearest other enemy.
+      const next = this.nearestEnemyExcept(hx, hy, W.ricochetRange, b.hitEnemies);
+      if (next) {
+        const a = Math.atan2(next.y - hy, next.x - hx);
+        const speed = Math.hypot(b.vx, b.vy);
+        this.bullets.push({ x: hx, y: hy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: b.hue,
+          radius: b.radius * 0.85, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds });
+        this.particles.spawnDirectionalSparks(hx, hy, a, 0.6, 4, b.hue, 7);
+      }
+    }
+    if (b.arcRounds) {
+      // Arc Rounds: the hit arcs into the nearest few enemies around it.
+      const hit = new Set([e]);
+      let fromX = hx, fromY = hy;
+      for (let k = 0; k < W.arcRoundJumps; k++) {
+        const t = this.nearestEnemyExcept(hx, hy, W.arcRoundRange, hit);
+        if (!t) break;
+        hit.add(t);
+        this.particles.spawnLightning(fromX, fromY, t.x, t.y, 176, 0.8, 0.12, 0);
+        this.hitEnemy(t, b.damage * W.arcRoundShare, b.source || 'blaster', 0, 0, 0.4, b.stat || b.source || 'blaster');
+        fromX = t.x;
+        fromY = t.y;
+      }
+    }
+  }
+
+  // Nearest live enemy within `range` of (x, y) that is not in `skip`.
+  nearestEnemyExcept(x, y, range, skip) {
+    let best = null;
+    let bestSq = range * range;
+    for (const e of this.enemyManager.enemies) {
+      if (e.dead || skip?.has(e) || e.type === 'blackhole') continue;
+      const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+      if (dSq < bestSq) {
+        bestSq = dSq;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  // MIRV Rockets: split into mirvParts mini-rockets fanned around the heading.
+  splitMirv(b) {
+    const parts = b.mirvParts;
+    const speed = Math.hypot(b.vx, b.vy);
+    const heading = Math.atan2(b.vy, b.vx);
+    b.damage /= parts;
+    b.blastDamage = (b.blastDamage || 0) / parts;
+    b.mirvParts = 1;
+    this.particles.spawnFlash?.(b.x, b.y, 12, b.hue, 0.12);
+    for (let k = 0; k < parts; k++) {
+      const a = heading + (k - (parts - 1) / 2) * 0.22;
+      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies) };
+      part.vx = Math.cos(a) * speed;
+      part.vy = Math.sin(a) * speed;
+      part.radius = 3.4;
+      if (k > 0) this.bullets.push(part);
+    }
+  }
+
+  // Homing bolts (Escort Drones' Homing Bolts, micro-missiles) curve onto their target.
+  steerHomingBolt(b) {
+    if (!b.target || b.target.dead) b.target = this.nearestEnemyExcept(b.x, b.y, 320, b.hitEnemies);
+    const t = b.target;
+    if (!t) return;
+    const speed = Math.hypot(b.vx, b.vy);
+    const cur = Math.atan2(b.vy, b.vx);
+    let diff = Math.atan2(t.y - b.y, t.x - b.x) - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const a = cur + Math.max(-b.homing, Math.min(b.homing, diff));
+    b.vx = Math.cos(a) * speed;
+    b.vy = Math.sin(a) * speed;
   }
 
   applyUpgrade(upg) {
@@ -2192,6 +2475,7 @@ export class Game {
           damage: weaponDamage(p, 'helix', b),
           pierce,
           hue: 305, // evolution magenta: reads apart from cyan Pew Pews shots and gold XP geoms
+          stat: 'helix',
           radius: 6.5,
           life: 1.3
         });
@@ -2341,12 +2625,14 @@ export class Game {
   }
 
   // One Tesla Arc discharge: a chain (two with Forked Chains), plus Ball Lightning and Thunderstrike
-  // when taken. `level` is a build, or a plain level for Storm Protocol's fixed chain.
-  fireChainLightning(level, originX = this.player.x, originY = this.player.y) {
+  // when taken. `level` is a build, or a plain level for Storm Protocol's fixed chain. `stat`: run-stats
+  // attribution ('storm' for Storm Protocol's chains).
+  fireChainLightning(level, originX = this.player.x, originY = this.player.y, stat = 'lightning') {
     const p = this.player;
     // Storm Protocol passes a plain level: no stat ranks or Breakthroughs.
     const bb = typeof level === 'object' ? level : levelBuild('lightning', level);
     const damage = weaponDamage(p, 'lightning', bb);
+    this.arcStat = stat; // fireArcChain credits its hits to this run-stats key
     const hitSet = new Set();
     let hits = 0;
     for (let c = 0; c < W.lightningChains(bb); c++) {
@@ -2407,7 +2693,7 @@ export class Game {
       currX = target.x;
       currY = target.y;
 
-      this.hitEnemy(target, damage, 'lightning', kx, ky);
+      this.hitEnemy(target, damage, 'lightning', kx, ky, 1, this.arcStat || 'lightning');
     }
     return { hits, last };
   }
@@ -2440,31 +2726,67 @@ export class Game {
     fx.spawnLightning(target.x, target.y, target.x + Math.cos(sa) * r, target.y + Math.sin(sa) * r, ARC_HUE, 0.5, 0.14, 0);
   }
 
-  fireSingularity(level) {
+  fireSingularity(b = weaponBuild(this.player, 'singularity')) {
     const p = this.player;
+    if (typeof b === 'number') b = weaponBuild(p, 'singularity', b);
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
-    const pullRadius = singularityPullRadius(p, level);
-    this.singularities.push({
-      x: p.x,
-      y: p.y,
-      vx: Math.cos(angle) * 4.2,
-      vy: Math.sin(angle) * 4.2,
-      radius: W.singularityCoreRadius(level),
-      pullRadius,
-      // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
-      // the payoff is the collapse pulse over 85% of the pull radius.
-      damage: weaponDamage(p, 'singularity', level),
-      collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
-      collapseDamage: weaponDamage(p, 'collapse', level),
-      life: 2.6,
-      maxLife: 2.6,
-      spin: 0,
-      hue: 290
-    });
+    // Twin Singularities: two cores fanned apart, each pulling a little weaker.
+    const count = W.singularityCount(b);
+    const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
+    const life = W.singularityLife(b);
+    for (let k = 0; k < count; k++) {
+      const a = angle + (count > 1 ? (k === 0 ? -0.35 : 0.35) : 0);
+      this.singularities.push({
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(a) * 4.2,
+        vy: Math.sin(a) * 4.2,
+        radius: W.singularityCoreRadius(b),
+        pullRadius,
+        // Event-horizon shred per tick is modest so the swarm survives long enough to clump;
+        // the payoff is the collapse pulse over 85% of the pull radius.
+        damage: weaponDamage(p, 'singularity', b),
+        collapseRadius: pullRadius * W.singularityCollapseRadiusFrac,
+        collapseDamage: weaponDamage(p, 'collapse', b),
+        // Aftershock Collapse: a tighter second implosion; Hawking Cascade: mini-singularities on collapse.
+        aftershock: b.t8 ? weaponDamage(p, 'collapse', b) * W.aftershockDamageMult(b) / W.singularityCollapseDamageMult(b) : 0,
+        cascade: b.t12 ? b : null,
+        life,
+        maxLife: life,
+        spin: 0,
+        hue: 290
+      });
+    }
     this.particles.spawnFlash?.(p.x, p.y, 34, 290, 0.22);
     this.particles.spawnShockwave(p.x, p.y, 60, 290, 3, 0.3, true);
     this.sound.playSingularityLaunch?.();
+  }
+
+  // Hawking Cascade: three mini-singularities burst out of a collapse, grind briefly and implode.
+  spawnCascade(sg) {
+    const p = this.player;
+    const b = sg.cascade;
+    const ratio = weaponDamage(p, 'singularity', b) / W.singularityDamageMult(b);
+    for (let k = 0; k < W.cascadeMinis; k++) {
+      const a = (k / W.cascadeMinis) * Math.PI * 2 + Math.random() * 0.6;
+      const pullRadius = sg.pullRadius * W.cascadePullScale;
+      this.singularities.push({
+        x: sg.x, y: sg.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3,
+        radius: sg.radius * 0.6,
+        pullRadius,
+        damage: W.cascadeDamageMult(b) * ratio,
+        collapseRadius: sg.collapseRadius * W.cascadeRadiusFrac,
+        collapseDamage: W.cascadeCollapseDamageMult(b) * ratio * (TUNING.singularityCollapseMult ?? 1),
+        aftershock: 0,
+        cascade: null,
+        mini: true,
+        life: W.cascadeLife,
+        maxLife: W.cascadeLife,
+        spin: 0,
+        hue: 310
+      });
+    }
   }
 
   // Live enemy black holes this tick (reused array; a well killed mid-tick is skipped via e.dead).
@@ -2610,6 +2932,77 @@ export class Game {
     }
   }
 
+  // Orbit Blades: the ring(s) grind whatever they touch. Counter-Rotating Ring adds a wider ring spinning
+  // the other way; Blade Fling throws saw discs outward; Nova Ring bursts every blade on a timer.
+  updateOrbitals(dt, b) {
+    const p = this.player;
+    this.orbitalAngle += dt * W.orbitalSpin(b);
+    const count = W.orbitalBlades(b);
+    const bladeR = W.orbitalBladeRadius(b);
+    const damage = weaponDamage(p, 'orbital', b);
+    const enemies = this.enemyManager.enemies;
+    const rings = this.orbitalRings(b);
+    for (const ring of rings) {
+      for (let o = 0; o < count; o++) {
+        const oa = ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / count;
+        const ox = p.x + Math.cos(oa) * ring.radius;
+        const oy = p.y + Math.sin(oa) * ring.radius;
+        // Orbiting blades ONLY shred enemies, never asteroids!
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          if (e.dead) continue;
+          const dx = e.x - ox;
+          const dy = e.y - oy;
+          const reach = e.radius + bladeR;
+          if (dx * dx + dy * dy < reach * reach) {
+            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
+            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
+            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
+            this.sound.playBladeHit?.();
+            this.hitEnemy(e, damage, 'orbital', 0, 0, 0.6);
+          }
+        }
+      }
+    }
+    if (b.t8) {
+      this.bladeFlingTimer = (this.bladeFlingTimer ?? W.flingEvery) - dt;
+      if (this.bladeFlingTimer <= 0) {
+        this.bladeFlingTimer += W.flingEvery;
+        const discDamage = damage * W.flingDamageMult(b) / W.orbitalDamageMult(b);
+        for (let o = 0; o < count; o++) {
+          const oa = this.orbitalAngle + (o * Math.PI * 2) / count;
+          const ox = p.x + Math.cos(oa) * rings[0].radius;
+          const oy = p.y + Math.sin(oa) * rings[0].radius;
+          this.bullets.push({ x: ox, y: oy, vx: Math.cos(oa) * W.flingSpeed, vy: Math.sin(oa) * W.flingSpeed, damage: discDamage, pierce: W.flingPierce,
+            life: W.flingLife, radius: bladeR * 0.7, hue: 150, source: 'orbital', knock: 0 });
+        }
+        this.sound.playBladeHit?.();
+      }
+    }
+    if (b.t12) {
+      this.bladeNovaTimer = (this.bladeNovaTimer ?? W.novaEvery) - dt;
+      if (this.bladeNovaTimer <= 0) {
+        this.bladeNovaTimer += W.novaEvery;
+        const novaDamage = damage * W.orbitalNovaDamageMult(b) / W.orbitalDamageMult(b);
+        for (let o = 0; o < count; o++) {
+          const oa = this.orbitalAngle + (o * Math.PI * 2) / count;
+          this.weaponFx.schedule({ x: p.x + Math.cos(oa) * rings[0].radius, y: p.y + Math.sin(oa) * rings[0].radius, delay: 0, radius: W.novaRadius * (p.stats.areaMult ?? 1),
+            damage: novaDamage, hue: 150, source: 'orbital', style: 'nova', knock: KNOCKBACK.area * 0.5 });
+        }
+        this.bladeNovaHide = 0.35;
+      }
+      this.bladeNovaHide = Math.max(0, (this.bladeNovaHide || 0) - dt);
+    }
+  }
+
+  // Ring layout of the Orbit Blades: one ring, plus a counter-rotating wider ring with the transform.
+  orbitalRings(b) {
+    const radius = W.orbitalRadius(b);
+    const rings = [{ radius, dir: 1, offset: 0 }];
+    if (b.t4) rings.push({ radius: radius * W.counterRadiusMult, dir: -1, offset: Math.PI / W.orbitalBlades(b) });
+    return rings;
+  }
+
   collapseSingularity(sg) {
     sg.dead = true;
     const r = sg.collapseRadius ?? sg.pullRadius * 0.85;
@@ -2621,7 +3014,12 @@ export class Game {
     this.particles.spawnExplosionSparks(sg.x, sg.y, 46, sg.hue, 4, 17, 2.6);
     this.grid.applyImpulse(sg.x, sg.y, 70, r * 1.35, sg.hue);
     // The collapse hits full force at the core and fades to 25% at its rim (singularityCollapseEdgeFalloff).
-    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75);
+    this.damageEnemiesInRadius(sg.x, sg.y, r, dmg, sg.hue, 'singularity', KNOCKBACK.area, TUNING.singularityCollapseEdgeFalloff ?? 0.75, 'collapse');
+    if (sg.aftershock > 0) {
+      this.weaponFx.schedule({ x: sg.x, y: sg.y, delay: W.aftershockDelay, radius: r * W.aftershockRadiusFrac, damage: sg.aftershock, hue: sg.hue,
+        source: 'singularity', style: 'implode', knock: KNOCKBACK.area, falloff: TUNING.singularityCollapseEdgeFalloff ?? 0.75, kind: 'collapse' });
+    }
+    if (sg.cascade) this.spawnCascade(sg);
   }
 
   triggerLevelUp() {
@@ -2636,6 +3034,8 @@ export class Game {
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
     this.beginHand();
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.runStats?.offered(this.currentChoices);
+    this.recordHandOdds();
     if (this.currentChoices.length === 0) {
       this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
@@ -2658,6 +3058,8 @@ export class Game {
     this.handRerolls = 0;
     this.handLock = null;
     this.lockNote = '';
+    this.banishMode = false;
+    this.banishArmed = -1;
     // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
     this.handDrought = this.player.newWeaponDrought || 0;
     const carried = this.carriedLock;
@@ -2707,13 +3109,28 @@ export class Game {
   }
 
   // Level-up modal keys: [1]-[3] pick, Shift+[1]-[3] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play).
+  // radar toggle only during play), [B] then [1]-[3] banishes that card ([B] again or [Esc] cancels).
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
     const digit = /^(?:Digit|Numpad)([1-3])$/.exec(code);
     if (digit) {
       const idx = Number(digit[1]) - 1;
+      if (this.banishMode) {
+        this.banishMode = false;
+        return this.banishCard(idx, true);
+      }
       return shift ? this.toggleCardLock(idx) : (this.selectUpgrade(idx), true);
+    }
+    if (code === 'KeyB' && this.canEditHand()) {
+      this.banishMode = !this.banishMode;
+      this.banishArmed = -1;
+      this.renderHandControls();
+      return true;
+    }
+    if (code === 'Escape' && this.banishMode) {
+      this.banishMode = false;
+      this.renderHandControls();
+      return true;
     }
     if (code === 'KeyR') return this.rerollHand();
     return false;
@@ -2728,7 +3145,41 @@ export class Game {
       const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
       return idx >= 0 ? this.toggleCardLock(idx) : false;
     }
+    if (gp.pressed(PAD.RB)) {
+      const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
+      return idx >= 0 ? this.banishCard(idx) : false; // first RB arms, second RB on the same card banishes
+    }
     return false;
+  }
+
+  // BANISH card `index` for banishCost() gold: it never comes up again this run and a fresh card takes
+  // its slot. Two steps so a stray click or button can't spend 30 gold: the first arms the card, the
+  // second (or `confirmed`, from the keyboard's [B] + digit) banishes it. NEW WEAPON can't be banished.
+  banishCard(index, confirmed = false) {
+    if (!this.canEditHand()) return false;
+    const card = this.currentChoices[index];
+    if (!card || card.isNewWeapon) return false;
+    if (!confirmed && this.banishArmed !== index) {
+      this.banishArmed = index;
+      this.renderHandControls();
+      return true;
+    }
+    this.banishArmed = -1;
+    if (!this.spendGold(banishCost())) { this.renderHandControls(); return false; }
+    this.player.banished[card.id] = true;
+    this.runStats?.banish();
+    if (this.handLock?.card === card) this.handLock = null;
+    const inHand = new Set(this.currentChoices.map((c) => c.id));
+    const fresh = rollUpgrades(this.player, 3).find((c) => !inHand.has(c.id));
+    if (fresh) this.currentChoices[index] = fresh;
+    else this.currentChoices.splice(index, 1);
+    if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
+    this.lockNote = `✕ ${card.name.replace('SYNERGY: ', '')} banished for the rest of this run`;
+    const focusedIndex = this.focusedChoiceIndex();
+    this.renderHand();
+    if (focusedIndex >= 0) this.focusChoice(Math.min(focusedIndex, this.currentChoices.length - 1));
+    this.sound.playExplosion?.(0.6);
+    return true;
   }
 
   canEditHand() {
@@ -2737,12 +3188,31 @@ export class Game {
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
   // rolls as a new hand); the locked card stays in its slot. 20, 40, 80... gold within one hand.
+  // Card fairness stats: every eligible card's exact chance of being drawn into this hand's random slots
+  // (not the NEW WEAPON card or a locked card), and which cards were drawn.
+  recordHandOdds() {
+    if (!this.runStats) return;
+    const lock = this.handLock?.card;
+    const drawn = this.currentChoices.filter((c) => !c.isNewWeapon && c !== lock);
+    if (!drawn.length) return;
+    this.runStats.handOdds(cardInclusionOdds(this.player, drawn.length, lock?.id), drawn);
+  }
+
+  // Gold price of the next reroll in this hand (Void Armory: Probability Engine discounts it).
+  rerollPrice() {
+    return Math.round(rerollCost(this.handRerolls) * (this.player?.rerollCostMult ?? 1));
+  }
+
   rerollHand() {
     if (!this.canEditHand()) return false;
-    if (!this.spendGold(rerollCost(this.handRerolls))) return false;
+    if (!this.spendGold(this.rerollPrice())) return false;
     this.handRerolls++;
+    this.banishArmed = -1;
     this.player.newWeaponDrought = this.handDrought;
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
+    this.runStats?.reroll();
+    this.runStats?.offered(this.currentChoices, this.handLock?.card);
+    this.recordHandOdds();
     if (this.handLock) this.handLock.slot = this.currentChoices.indexOf(this.handLock.card);
     const focusedIndex = this.focusedChoiceIndex();
     this.renderHand();
@@ -2762,6 +3232,7 @@ export class Game {
     } else {
       if (!this.spendGold(lockCost())) return false;
       this.handLock = { card, slot: index };
+      this.runStats?.lock();
     }
     this.lockNote = '';
     this.renderHandControls();
@@ -2786,7 +3257,7 @@ export class Game {
     doc?.getElementById('hand-goldbar')?.classList?.[inHand ? 'remove' : 'add']('hidden');
     const count = doc?.getElementById('hand-gold-count');
     if (count) count.textContent = `${GOLD_ICON} ${this.gold} GOLD`;
-    const cost = rerollCost(this.handRerolls);
+    const cost = this.rerollPrice();
     const lc = lockCost();
     const reroll = doc?.getElementById('btn-reroll-hand');
     if (reroll) {
@@ -2798,9 +3269,11 @@ export class Game {
     const note = doc?.getElementById('hand-lock-note');
     if (note) {
       const lockedName = this.handLock?.card.name.replace('SYNERGY: ', '');
-      note.textContent = this.lockNote
+      const bc = banishCost();
+      note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[3] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
+        : this.lockNote
         || (lockedName ? `🔒 ${lockedName} is locked: pick another card and it comes back next level-up`
-          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y`);
+          : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-3] / Y   ✕ ${bc} ${GOLD_ICON} banishes one for the run · [B]+[1-3] / RB×2`);
       note.classList?.[this.lockNote ? 'add' : 'remove']('dropped');
     }
     (this.choiceCardEls || []).forEach((el, idx) => {
@@ -2813,6 +3286,17 @@ export class Game {
         badge.textContent = '🔒 LOCKED';
         el.appendChild(badge);
       } else if (!locked && badge) badge.remove?.();
+      const banish = el.querySelector?.('.card-banish-toggle');
+      if (banish) {
+        const bc = banishCost();
+        const armed = this.banishArmed === idx;
+        const nw = !!this.currentChoices[idx]?.isNewWeapon;
+        banish.classList?.[nw ? 'add' : 'remove']('hidden');
+        banish.classList?.[this.gold >= bc ? 'remove' : 'add']('unaffordable');
+        banish.classList?.[armed || this.banishMode ? 'add' : 'remove']('armed');
+        banish.textContent = armed ? `✕ CONFIRM ${bc} ${GOLD_ICON}` : `✕ ${bc} ${GOLD_ICON}`;
+        banish.title = this.gold >= bc ? `Banish for ${bc} gold: it never comes up again this run (click twice)` : `Need ${bc} gold to banish`;
+      }
       const toggle = el.querySelector?.('.card-lock-toggle');
       if (!toggle) return;
       const affordable = locked || this.gold >= lc;
@@ -2863,6 +3347,14 @@ export class Game {
           this.toggleCardLock(idx);
         });
         card.appendChild(lock);
+        const banish = document.createElement('div');
+        banish.className = 'card-banish-toggle';
+        banish.setAttribute?.('role', 'button');
+        banish.addEventListener('click', (e) => {
+          e.stopPropagation?.();
+          this.banishCard(idx);
+        });
+        card.appendChild(banish);
       }
       container.appendChild(card);
       this.choiceCardEls.push(card);
@@ -2874,6 +3366,8 @@ export class Game {
     this.handPhase = 'weapon';
     this.renderHandControls();
     this.currentChoices = rollWeaponPicks(this.player, 3);
+    this.runStats?.offered(this.currentChoices);
+    this.runStats?.weaponPickOdds(unownedWeapons(this.player), this.currentChoices);
     if (this.currentChoices.length === 0) {
       this.closeUpgradeModal();
       return;
@@ -2890,7 +3384,39 @@ export class Game {
     this.sound.playLevelUp();
   }
 
+  // A weapon that reached LV 4 / 8 / 12 without its Breakthrough: open the R&D pick (from a level-up
+  // hand, a NEW WEAPON pick or a supply cache). Several milestones queue up, lowest weapon slot first.
+  openNextBreakthrough() {
+    const p = this.player;
+    for (const id of ownedWeapons(p)) {
+      const level = pendingBreakthroughs(p, id)[0];
+      if (!level) continue;
+      this.state = 'UPGRADE';
+      this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
+      this.handPhase = 'breakthrough';
+      this.handLock = null;
+      this.breakthrough = { weaponId: id, level };
+      this.currentChoices = ['transform', 'boost'].map((kind) => describeBreakthrough(p, id, level, kind));
+      this.runStats?.offered(this.currentChoices);
+      this.renderHandControls();
+      const name = WEAPON_BY_ID[id].name;
+      this.setUpgradeHeader(`⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
+        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
+      this.renderChoiceCards(this.currentChoices);
+      const modal = document.getElementById('upgrade-modal');
+      modal.classList.remove('hidden');
+      for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
+      this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
+      this.particles.spawnShockwave(p.x, p.y, 260, 280, 5, 0.5);
+      this.sound.playLevelUp();
+      return true;
+    }
+    return false;
+  }
+
   closeUpgradeModal() {
+    this.breakthrough = null;
+    if (this.openNextBreakthrough()) return;
     this.currentChoices = [];
     this.handPhase = null;
     this.handLock = null;
@@ -2906,6 +3432,7 @@ export class Game {
     const upg = this.currentChoices[index];
     if (!upg) return;
     const p = this.player;
+    this.runStats?.picked(upg);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
     if (this.handPhase === 'hand' && this.handLock) {
@@ -2915,6 +3442,13 @@ export class Game {
 
     if (upg.isNewWeapon) {
       this.openWeaponPick();
+      return;
+    }
+    if (upg.isBreakthrough) {
+      applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
+      this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
+      this.closeUpgradeModal();
       return;
     }
     if (upg.isWeaponPick) {
@@ -2957,13 +3491,12 @@ export class Game {
       const w = WEAPON_BY_ID[id];
       const level = weaponLevel(p, id);
       const lineList = weaponUpgradeLines(p, id);
-      // Pew Pews has no level of its own: it grows through its upgrade lines.
-      const lineLevels = lineList.reduce((a, l) => a + (l.isSynergy ? 0 : l.level), 0);
-      const lvText = w.levelId
-        ? `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${UPGRADE_BY_ID[w.levelId].maxLevel}</span>`
-        : lineLevels ? `${lineLevels} UPGRADE${lineLevels === 1 ? '' : 'S'}` : 'BASE';
-      const lines = lineList
-        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `LV ${l.level}`}</span>`).join('');
+      const lvText = `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${WEAPON_MAX_LEVEL}</span>`;
+      // Its Breakthroughs (transform names, or Across the Board), then its stat cards and evolutions.
+      const bt = Object.entries(p.breakthroughs?.[id] || {})
+        .map(([m, kind]) => `<span class="loadout-line bt">⚛ ${kind === 'transform' ? TRANSFORMS[id][m].name : BOOST_NAME}</span>`).join('');
+      const lines = bt + lineList
+        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
       const pending = this.discardPending === id;
       const blocked = this.discardBlocked === id;
       // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
@@ -3081,6 +3614,9 @@ export class Game {
       multiplier: this.multiplier,
       time: this.elapsedTime
     });
+    this.lastRunSummary = this.finishRunStats();
+    if (this.lastRunSummary) this.submitRunStats(this.lastRunSummary);
+    this.setGameOverTab(this.goTab);
 
     const rankBadge = document.getElementById('go-rank-badge');
     if (rankBadge) {
@@ -3224,6 +3760,7 @@ export class Game {
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
+    if ((++this.statsTick & 15) === 0) this.syncRunStats();
 
     const enemyCount = this.enemyManager.enemies.length;
     const dynamicIntensity = Math.min(
@@ -3234,8 +3771,8 @@ export class Game {
     const bossStage = this.getBossStage();
     this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
-    // Escalate waves every 22 seconds
-    if (this.waveTimer >= 22) {
+    // Escalate waves every `waveLength` seconds (Difficulty Ramp tuning)
+    if (this.waveTimer >= (TUNING.waveLength ?? 22)) {
       this.waveTimer = 0;
       this.wave++;
       this.coresDroppedThisWave = 0;
@@ -3260,7 +3797,7 @@ export class Game {
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnWavePack();
-      this.spawnCooldown = Math.max(0.75, 2.6 - this.wave * 0.14);
+      this.spawnCooldown = spawnIntervalAt(this.wave);
     }
 
     const p = this.player;
@@ -3375,7 +3912,7 @@ export class Game {
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
     if (shouldFire && ownsWeapon(p, 'blaster')) {
-      this.fireAccumulator += dt * p.stats.fireRate;
+      this.fireAccumulator += dt * blasterFireRate(p);
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
@@ -3384,8 +3921,9 @@ export class Game {
     if (p.weapons.rockets > 0) {
       this.rocketTimer -= dt;
       if (shouldFire && this.rocketTimer <= 0) {
-        this.fireWingRockets(p.weapons.rockets);
-        this.rocketTimer = W.wingRocketCooldown(p.weapons.rockets);
+        const b = weaponBuild(p, 'rockets');
+        this.fireWingRockets(b);
+        this.rocketTimer = W.wingRocketCooldown(b);
       }
     }
 
@@ -3393,58 +3931,36 @@ export class Game {
     if (p.weapons.missiles > 0) {
       this.missileTimer -= dt;
       if (this.missileTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireSwarmMissiles(p.weapons.missiles);
-        this.missileTimer = W.missileCooldown(p.weapons.missiles);
+        const b = weaponBuild(p, 'missiles');
+        this.fireSwarmMissiles(b);
+        this.missileTimer = W.missileCooldown(b);
       }
     }
 
     if (p.weapons.lightning > 0) {
       this.lightningTimer -= dt;
       if (this.lightningTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireChainLightning(p.weapons.lightning);
-        this.lightningTimer = W.lightningCooldown(p.weapons.lightning);
+        const b = weaponBuild(p, 'lightning');
+        this.fireChainLightning(b);
+        this.lightningTimer = W.lightningCooldown(b);
       }
     }
 
     if (p.weapons.singularity > 0) {
       this.singularityTimer -= dt;
       if (this.singularityTimer <= 0 && this.enemyManager.enemies.length > 0) {
-        this.fireSingularity(p.weapons.singularity);
-        this.singularityTimer = W.singularityCooldown(p.weapons.singularity);
+        const b = weaponBuild(p, 'singularity');
+        this.fireSingularity(b);
+        this.singularityTimer = W.singularityCooldown(b);
       }
     }
 
-    if (p.weapons.orbitals > 0) {
-      this.orbitalAngle += dt * W.orbitalSpin(p.weapons.orbitals);
-      const orbCount = W.orbitalBlades(p.weapons.orbitals);
-      const orbRadius = W.orbitalRadius(p.weapons.orbitals);
-      const enemies = this.enemyManager.enemies;
-      const bladeDamage = weaponDamage(p, 'orbital', p.weapons.orbitals);
-
-      for (let o = 0; o < orbCount; o++) {
-        const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-        const ox = p.x + Math.cos(oa) * orbRadius;
-        const oy = p.y + Math.sin(oa) * orbRadius;
-
-        // Orbiting blades ONLY shred enemies — never asteroids!
-        for (const e of [...enemies].reverse()) {
-          if (e.dead) continue;
-          const dx = e.x - ox;
-          const dy = e.y - oy;
-          if (dx * dx + dy * dy < (e.radius + W.orbitalBladeRadius) * (e.radius + W.orbitalBladeRadius)) {
-            // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
-            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
-            this.sound.playBladeHit?.();
-            this.hitEnemy(e, bladeDamage, 'orbital', 0, 0, 0.6);
-          }
-        }
-      }
-    }
+    if (p.weapons.orbitals > 0) this.updateOrbitals(dt, weaponBuild(p, 'orbitals'));
 
     // Deployables (mines, sentry turrets, escort drones) place and fire before the bullet sweep,
     // so their bolts move, bend and collide with everything else this tick.
     this.deployables?.update(dt, this);
+    this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
@@ -3494,7 +4010,7 @@ export class Game {
         }
 
         if (p.weapons.stormProtocol && source === 'missile') {
-          this.fireChainLightning(W.stormChainLevel, m.x, m.y);
+          this.fireChainLightning(W.stormChainLevel, m.x, m.y, 'storm');
         }
 
         this.missiles.splice(i, 1);
@@ -3544,7 +4060,7 @@ export class Game {
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
-          this.damagePlayer(this.contactDamage(e));
+          this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
           // Sturdy hulls (Bruisers, Lieutenants) bounce off; everything else but bosses pops on impact.
           if (e.sturdy) bounceFromShip(e, p.x, p.y);
@@ -4047,38 +4563,45 @@ export class Game {
   // Aegis Orbit Blades, batched: a fading motion-smear arc behind each blade, then one glow pass and
   // one core pass over all saw-triangles.
   drawOrbitBlades(ctx, p) {
-    const orbCount = W.orbitalBlades(p.weapons.orbitals);
-    const orbRadius = W.orbitalRadius(p.weapons.orbitals);
+    const b = weaponBuild(p, 'orbitals');
+    if (this.bladeNovaHide > 0) return; // Nova Ring: the blades just burst and are reforming
+    const orbCount = W.orbitalBlades(b);
+    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1));
     const vfx = TUNING.vfxIntensity ?? 1;
-    ctx.strokeStyle = `hsla(150, 100%, 55%, ${Math.min(1, 0.22 * vfx)})`;
-    ctx.lineWidth = 9 * vfx;
-    ctx.beginPath();
-    for (let o = 0; o < orbCount; o++) {
-      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-      ctx.moveTo(p.x + Math.cos(oa - 0.55) * orbRadius, p.y + Math.sin(oa - 0.55) * orbRadius);
-      ctx.arc(p.x, p.y, orbRadius, oa - 0.55, oa);
-    }
-    ctx.stroke();
-    ctx.beginPath();
-    for (let o = 0; o < orbCount; o++) {
-      const oa = this.orbitalAngle + (o * Math.PI * 2) / orbCount;
-      const ox = p.x + Math.cos(oa) * orbRadius;
-      const oy = p.y + Math.sin(oa) * orbRadius;
-      for (let k = 0; k < 3; k++) {
-        const sa = oa * 3 + (k * Math.PI * 2) / 3;
-        const vx = ox + Math.cos(sa) * 15;
-        const vy = oy + Math.sin(sa) * 15;
-        if (k === 0) ctx.moveTo(vx, vy);
-        else ctx.lineTo(vx, vy);
+    for (const ring of this.orbitalRings(b)) {
+      const orbRadius = ring.radius;
+      const angle = (o) => ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / orbCount;
+      ctx.strokeStyle = `hsla(150, 100%, 55%, ${Math.min(1, 0.22 * vfx)})`;
+      ctx.lineWidth = 9 * vfx;
+      ctx.beginPath();
+      for (let o = 0; o < orbCount; o++) {
+        const oa = angle(o);
+        const tail = oa - 0.55 * ring.dir;
+        ctx.moveTo(p.x + Math.cos(tail) * orbRadius, p.y + Math.sin(tail) * orbRadius);
+        ctx.arc(p.x, p.y, orbRadius, tail, oa, ring.dir < 0);
       }
-      ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath();
+      for (let o = 0; o < orbCount; o++) {
+        const oa = angle(o);
+        const ox = p.x + Math.cos(oa) * orbRadius;
+        const oy = p.y + Math.sin(oa) * orbRadius;
+        for (let k = 0; k < 3; k++) {
+          const sa = oa * 3 + (k * Math.PI * 2) / 3;
+          const vx = ox + Math.cos(sa) * size;
+          const vy = oy + Math.sin(sa) * size;
+          if (k === 0) ctx.moveTo(vx, vy);
+          else ctx.lineTo(vx, vy);
+        }
+        ctx.closePath();
+      }
+      ctx.strokeStyle = `hsla(150, 100%, 58%, ${Math.min(1, 0.35 * vfx)})`;
+      ctx.lineWidth = 7 * vfx;
+      ctx.stroke();
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
     }
-    ctx.strokeStyle = `hsla(150, 100%, 58%, ${Math.min(1, 0.35 * vfx)})`;
-    ctx.lineWidth = 7 * vfx;
-    ctx.stroke();
-    ctx.strokeStyle = '#00ff88';
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
   }
 
   drawPlayerShield(ctx, p, beatPulse) {
@@ -4428,6 +4951,7 @@ export class Game {
     }
 
     for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
+    this.weaponFx?.draw(ctx, this);
 
     this.deployables?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);

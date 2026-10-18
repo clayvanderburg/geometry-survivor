@@ -1,11 +1,11 @@
 // Weapon levels 1-12, single-stat cards and Breakthroughs.
 //
 // Every slot weapon (Pew Pews included) has a level from 1 to WEAPON_MAX_LEVEL. Equipping it is LV 1;
-// every stat card for that weapon raises one stat AND the weapon level by 1 (a +N rarity jump raises
-// both by N, clamped so the weapon never passes LV 12). The weapon's damage per hit is solved from
-// DPS_TARGET(level) (weapon-scaling.js), so its potential DPS is the same whichever stat cards you
-// pick: the stat you choose only shapes how that damage is delivered (bigger hits, more missiles,
-// wider pull...).
+// every stat card for that weapon raises ONLY its own stat, and the weapon level by 1 (a +N rarity jump
+// raises both by N, clamped so the weapon never passes LV 12). The level itself adds nothing: it counts
+// cards toward the LV 4 / 8 / 12 Breakthroughs. POWER cards (damage, fire rate / reload / cooldown,
+// count) each add damage output; UTILITY cards (size, radius, pull, reach, lifetime) add none, so a
+// weapon built for damage matches every other weapon built for damage, and utility is a trade-off.
 //
 // At LV 4, 8 and 12 the weapon reaches a BREAKTHROUGH: pick a transform (a new way the weapon works)
 // or ACROSS THE BOARD (+1 rank in every stat of that weapon and a flat damage boost). Both are worth
@@ -26,60 +26,65 @@ export const BT_BOOST_RANKS = 1;
 // cap of LV 12 usually bites first). Ids of the old Pew Pews lines are kept, so saves, locks and
 // strategies keep working.
 const card = (weapon, id, stat, name, headline, summary, extra = {}) => ({ weapon, id, stat, name, headline, summary, maxLevel: WEAPON_MAX_LEVEL - 1, ...extra });
+const cap = (maxLevel) => ({ maxLevel });
 
 export const STAT_CARDS = {
   blaster: [
-    card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Pew Pews: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.'),
-    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Pew Pews: fire faster.'),
-    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Pew Pews: each bolt slices through one more target (each one behind takes a little less).')
+    card('blaster', 'blaster_damage', 'damage', 'Pew Pews Plasma Charge', 'damage', 'Pew Pews: hotter bolts. Only damage per bolt.'),
+    card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Pew Pews: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
+    card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Pew Pews: fire faster. Only fire rate.'),
+    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Pew Pews: each bolt slices through one more target (each one behind takes a little less).', cap(6))
   ],
   rockets: [
-    card('rockets', 'rockets_damage', 'damage', 'Wing Rocket Warheads', 'rocketDamage', 'Wing Rockets: heavier warheads. Every level goes into damage per rocket.'),
-    card('rockets', 'rockets_count', 'count', 'Wing Rocket Pods', 'rocketCount', 'Wing Rockets: one more rocket per volley.'),
+    card('rockets', 'rockets_damage', 'damage', 'Wing Rocket Warheads', 'rocketDamage', 'Wing Rockets: heavier warheads. Only damage per rocket.'),
+    card('rockets', 'rockets_count', 'count', 'Wing Rocket Pods', 'rocketCount', 'Wing Rockets: one more rocket per volley.', cap(6)),
     card('rockets', 'rockets_reload', 'reload', 'Wing Rocket Launch Rails', 'rocketCooldown', 'Wing Rockets: shorter time between volleys.'),
-    card('rockets', 'rockets_radius', 'radius', 'Wing Rocket Blast Radius', 'rocketBlast', 'Wing Rockets: wider blasts.')
+    card('rockets', 'rockets_radius', 'radius', 'Wing Rocket Blast Size', 'rocketBlast', 'Wing Rockets: wider blasts. Only blast size.')
   ],
   missiles: [
-    card('missiles', 'missiles_damage', 'damage', 'Swarm Missile Warheads', 'missileDamage', 'Swarm Missiles: heavier warheads. Every level goes into damage per missile.'),
-    card('missiles', 'missiles_salvo', 'salvo', 'Swarm Missile Salvo Size', 'missileSalvo', 'Swarm Missiles: one more missile per salvo.'),
+    card('missiles', 'missiles_damage', 'damage', 'Swarm Missile Warheads', 'missileDamage', 'Swarm Missiles: heavier warheads. Only damage per missile.'),
+    card('missiles', 'missiles_salvo', 'salvo', 'Swarm Missile Salvo Size', 'missileSalvo', 'Swarm Missiles: one more missile per salvo.', cap(8)),
     card('missiles', 'missiles_reload', 'reload', 'Swarm Missile Reload', 'missileCooldown', 'Swarm Missiles: shorter time between salvos.'),
-    card('missiles', 'missiles_radius', 'radius', 'Swarm Missile Blast Radius', 'missileBlast', 'Swarm Missiles: wider blasts.')
+    card('missiles', 'missiles_radius', 'radius', 'Swarm Missile Blast Size', 'missileBlast', 'Swarm Missiles: wider blasts. Only blast size.')
   ],
   lightning: [
-    card('lightning', 'lightning_damage', 'damage', 'Tesla Arc Voltage', 'lightningDamage', 'Tesla Arc: higher voltage. Every level goes into damage per jump.'),
-    card('lightning', 'lightning_chain', 'chain', 'Tesla Arc Chain Length', 'lightningJumps', 'Tesla Arc: each discharge jumps to 2 more enemies.'),
+    card('lightning', 'lightning_damage', 'damage', 'Tesla Arc Voltage', 'lightningDamage', 'Tesla Arc: higher voltage. Only damage per jump.'),
+    card('lightning', 'lightning_chain', 'chain', 'Tesla Arc Chain Length', 'lightningJumps', 'Tesla Arc: each discharge jumps to more enemies. Only chain length.', cap(6)),
     card('lightning', 'lightning_recharge', 'recharge', 'Tesla Arc Recharge', 'lightningCooldown', 'Tesla Arc: discharges more often.'),
-    card('lightning', 'lightning_reach', 'reach', 'Tesla Arc Reach', 'lightningReach', 'Tesla Arc: each jump reaches further.')
+    card('lightning', 'lightning_reach', 'reach', 'Tesla Arc Reach', 'lightningReach', 'Tesla Arc: each jump reaches further. Only reach.')
   ],
   singularity: [
-    card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: +25 pull radius. Only the pull radius (the pull still fades hard toward the rim).'),
-    card('singularity', 'singularity_damage', 'damage', 'Vortex Implosion Damage', 'singularityCollapse', 'Vortex Singularity: every level goes into core grind and collapse damage.'),
-    card('singularity', 'singularity_duration', 'duration', 'Vortex Duration', 'singularityLife', 'Vortex Singularity: each singularity holds its pull longer before it collapses.'),
-    card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often.')
+    card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: a wider pull. Only pull radius (the pull still fades hard toward the rim).'),
+    card('singularity', 'singularity_damage', 'damage', 'Vortex Implosion Damage', 'singularityCollapse', 'Vortex Singularity: harder core grind and collapse. Only damage.'),
+    card('singularity', 'singularity_duration', 'duration', 'Vortex Lifetime', 'singularityLife', 'Vortex Singularity: each singularity lasts longer before it collapses. Only lifetime.'),
+    card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often. Only cooldown.'),
+    card('singularity', 'singularity_core', 'core', 'Vortex Core Size', 'singularityCore', 'Vortex Singularity: a bigger core grinds a wider area. Only core size.', cap(6))
   ],
   orbitals: [
-    card('orbitals', 'orbitals_damage', 'damage', 'Orbit Blade Edge', 'orbitalDamage', 'Orbit Blades: sharper edges. Every level goes into blade damage.'),
-    card('orbitals', 'orbitals_count', 'count', 'Orbit Blade Count', 'orbitalBlades', 'Orbit Blades: one more blade on the ring.'),
-    card('orbitals', 'orbitals_radius', 'radius', 'Orbit Blade Radius', 'orbitalRadius', 'Orbit Blades: the ring orbits further out.'),
-    card('orbitals', 'orbitals_spin', 'spin', 'Orbit Blade Spin', 'orbitalSpin', 'Orbit Blades: the ring spins faster, so the blades sweep more enemies.')
+    card('orbitals', 'orbitals_damage', 'damage', 'Orbit Blade Edge', 'orbitalDamage', 'Orbit Blades: sharper edges. Only blade damage.'),
+    card('orbitals', 'orbitals_count', 'count', 'Orbit Blade Count', 'orbitalBlades', 'Orbit Blades: one more blade on the ring.', cap(6)),
+    card('orbitals', 'orbitals_radius', 'radius', 'Orbit Blade Reach', 'orbitalRadius', 'Orbit Blades: the ring orbits further out. Only orbit distance.'),
+    card('orbitals', 'orbitals_spin', 'spin', 'Orbit Blade Spin', 'orbitalSpin', 'Orbit Blades: the ring spins faster, so the blades sweep more enemies.'),
+    card('orbitals', 'orbitals_size', 'size', 'Orbit Blade Size', 'orbitalBladeSize', 'Orbit Blades: bigger saw blades. Only blade size.', cap(8))
   ],
   mines: [
-    card('mines', 'mines_damage', 'damage', 'Proximity Mine Charge', 'mineDamage', 'Proximity Mines: bigger charges. Every level goes into blast damage.'),
-    card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once.'),
-    card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often.'),
-    card('mines', 'mines_radius', 'radius', 'Proximity Mine Blast Radius', 'mineBlastRadius', 'Proximity Mines: wider blasts.')
+    card('mines', 'mines_damage', 'damage', 'Proximity Mine Charge', 'mineDamage', 'Proximity Mines: bigger charges. Only blast damage.'),
+    card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once.', cap(8)),
+    card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often. Only drop rate.'),
+    card('mines', 'mines_radius', 'radius', 'Proximity Mine Blast Size', 'mineBlastRadius', 'Proximity Mines: wider blasts. Only blast size.'),
+    card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
   ],
   turret: [
-    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Every level goes into bolt damage.'),
+    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
     card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.'),
-    card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer.'),
+    card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
     card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Redeploy', 'turretCooldown', 'Sentry Turret: plants a new turret sooner.')
   ],
   drones: [
-    card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Every level goes into bolt damage.'),
+    card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.'),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (up to 3).', { maxLevel: 2 }),
-    card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out.')
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
+    card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ]
 };
 
@@ -142,6 +147,12 @@ export const TRANSFORMS = {
     12: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
   }
 };
+
+// Which stats add damage output (POWER) vs. only shape the weapon (UTILITY): tests and the Field Guide.
+// Turret lifetime and redeploy keep more turrets firing at once, and a longer-lived singularity grinds
+// longer, so those are POWER too. Everything else (size, radius, pull, reach, range, spin, pierce,
+// capacity, fuse) is UTILITY.
+export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'lifetime', 'redeploy', 'duration']);
 
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${BT_BOOST_RANKS} rank in every stat and +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage. No new tricks, just more of everything.`;

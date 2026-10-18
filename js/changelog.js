@@ -12,6 +12,81 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.17.0',
+    date: '2026-10-18',
+    title: 'Breakthroughs',
+    notes: [
+      { type: 'new', text: 'Every weapon now levels from LV 1 to LV 12, Pew Pews included. Each weapon card raises ONE stat and nothing else, and the card shows exactly that stat.' },
+      { type: 'new', text: 'New weapon cards: damage cards for every weapon, Vortex Core Size and Lifetime, Orbit Blade Size, Proximity Mine Fuse, and more.' },
+      { type: 'new', text: 'BREAKTHROUGHS at weapon LV 4, 8 and 12: pick a transform that changes how the weapon works (flak rounds, twin singularities, seeker mines...) or +1 to all its stats.' },
+      { type: 'balance', text: 'Damage, fire rate and count cards add damage. Size, reach and pull cards add none: they make the weapon easier to land instead. Weapons built for damage are equally strong.' },
+      { type: 'new', text: 'The pause-menu loadout lists each weapon\'s Breakthroughs, and the Field Guide explains weapon levels.' }
+    ]
+  },
+  {
+    version: '0.16.0',
+    date: '2026-10-18',
+    title: 'Banish',
+    notes: [
+      { type: 'new', text: 'BANISH a level-up card for 30 gold: it never comes up again this run, and a fresh card takes its slot.' },
+      { type: 'new', text: 'Banishing takes two presses so it cannot happen by accident: click the ✕ twice, press B then 1-3, or RB twice on a controller.' }
+    ]
+  },
+  {
+    version: '0.15.1',
+    date: '2026-10-18',
+    title: 'The Swarm Is Back',
+    notes: [
+      { type: 'balance', text: 'Enemy packs arrive as often and as large as they did before 0.13, so the arena is crowded again.' },
+      { type: 'balance', text: 'Light swarm enemies (swarmers, pinwheels, weavers and splitter fragments) are back to their old HP. Only the tougher hulls keep the extra early health.' }
+    ]
+  },
+  {
+    version: '0.15.0',
+    date: '2026-10-18',
+    title: 'Void Armory Rebuilt',
+    notes: [
+      { type: 'new', text: 'The Void Armory now has 20 permanent upgrades across Offense, Defense, Mobility, Economy and Utility. Each one improves a single stat.' },
+      { type: 'balance', text: 'Upgrades are smaller per rank but go much further (up to 40 ranks), and every rank costs a bit more than the last. It is a long grind now.' },
+      { type: 'balance', text: "Everyone's armory ranks and Void Cores have been reset. Your callsign, high scores and Field Guide progress are kept." },
+      { type: 'new', text: 'New armory stats include crit chance and damage, area size, damage reduction, dash cooldown, gold gain, starting gold and cheaper rerolls.' },
+      { type: 'fix', text: "Cleared the developer's test scores from the global leaderboard." }
+    ]
+  },
+  {
+    version: '0.14.0',
+    date: '2026-10-18',
+    title: 'Run Report',
+    notes: [
+      { type: 'new', text: 'RUN REPORT on the game-over screen: how much of your damage each weapon dealt (with its DPS), which enemies hurt you most and what landed the final blow.' },
+      { type: 'new', text: 'Runs now send anonymous stats (weapons, enemies, cards; never your callsign) so we can spot weapons that need a buff or a nerf. Runs under 20 seconds are not sent.' },
+      { type: 'new', text: 'Two checkboxes under your callsign, both on by default: post your runs to the public GLOBAL leaderboard, and share anonymous session stats.' },
+      { type: 'new', text: 'Uncheck either one any time and your choice is remembered. Anonymous stats can also be switched in the pause menu.' }
+    ]
+  },
+  {
+    version: '0.13.0',
+    date: '2026-10-18',
+    title: 'The Long Run',
+    notes: [
+      { type: 'balance', text: 'Runs are paced for the long haul: a strong run now lasts around 30 minutes and climbs past level 50, instead of hitting a wall around wave 30.' },
+      { type: 'balance', text: 'Enemies are about 2.5× tougher from the start but come in fewer, smaller packs, so burn, chill and corrosion have time to work.' },
+      { type: 'balance', text: 'Contact and plasma orb hits start at half damage and only ramp up from wave 15, more gently than before.' },
+      { type: 'balance', text: 'Late waves still get much tougher, so every run ends eventually. Bosses grow more slowly than before.' },
+      { type: 'balance', text: 'NEW WEAPON cards depend on how many weapons you carry: 80% of hands with one (and never two hands in a row without), then 70%, 60%, 40% and 30%.' },
+      { type: 'balance', text: 'Levels after 20 need more XP, and much more after 40, so upgrades keep coming through a long run.' }
+    ]
+  },
+  {
+    version: '0.12.2',
+    date: '2026-10-18',
+    title: 'Scores Fixed',
+    notes: [
+      { type: 'fix', text: 'Fixed runs not reaching the GLOBAL board after you had moved a volume slider. Your volume is kept; everything else resets to the current balance.' },
+      { type: 'fix', text: 'Balance updates now reach every player. Before, an old saved copy of the settings could keep you on outdated numbers.' }
+    ]
+  },
+  {
     version: '0.12.1',
     date: '2026-10-18',
     title: 'Bigger Mine Blasts',
