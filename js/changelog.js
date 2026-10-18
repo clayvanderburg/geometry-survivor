@@ -18,7 +18,7 @@ export const CHANGELOG = Object.freeze([
     notes: [
       { type: 'new', text: 'Every weapon now levels from LV 1 to LV 12, Pew Pews included. Each weapon card raises ONE stat and nothing else, and the card shows exactly that stat.' },
       { type: 'new', text: 'New weapon cards: damage cards for every weapon, Vortex Core Size and Lifetime, Orbit Blade Size, Proximity Mine Fuse, and more.' },
-      { type: 'new', text: 'BREAKTHROUGHS at weapon LV 4, 8 and 12: pick a transform that changes how the weapon works (flak rounds, twin singularities, seeker mines...) or +1 to all its stats.' },
+      { type: 'new', text: 'BREAKTHROUGHS at weapon LV 4, 8 and 12: pick a transform that changes how the weapon works (flak rounds, twin singularities...) or +18% damage and reach.' },
       { type: 'balance', text: 'Damage, fire rate and count cards add damage. Size, reach and pull cards add none: they make the weapon easier to land instead. Weapons built for damage are equally strong.' },
       { type: 'new', text: 'The pause-menu loadout lists each weapon\'s Breakthroughs, and the Field Guide explains weapon levels.' }
     ]

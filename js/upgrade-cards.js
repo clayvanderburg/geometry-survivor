@@ -11,7 +11,7 @@ import {
 } from './weapon-scaling.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import {
-  STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, boostSummary,
+  STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
   weaponBuild, levelBuild
 } from './weapon-levels.js';
 
@@ -344,7 +344,7 @@ export function describeBreakthrough(player, weaponId, level, kind, maxRows = MA
     jump: 1,
     headline: transform
       ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
-      : `+${BT_BOOST_RANKS} EVERY STAT // +${Math.round(gain * 100)}% DPS`,
+      : `+${Math.round((BT_BOOST_DPS - 1) * 100)}% DAMAGE + UTILITY // +${Math.round(gain * 100)}% DPS`,
     rows: rows.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, rows.length - maxRows),
     levelHtml: `⚛ BREAKTHROUGH // ${weapon.name.toUpperCase()} LV ${level}`,

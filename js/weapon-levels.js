@@ -8,7 +8,7 @@
 // weapon built for damage matches every other weapon built for damage, and utility is a trade-off.
 //
 // At LV 4, 8 and 12 the weapon reaches a BREAKTHROUGH: pick a transform (a new way the weapon works)
-// or ACROSS THE BOARD (+1 rank in every stat of that weapon and a flat damage boost). Both are worth
+// or ACROSS THE BOARD (a flat damage boost and +1 rank in every UTILITY stat of that weapon). Both are worth
 // about the same potential DPS (BT_TRANSFORM_DPS vs BT_BOOST_DPS, pinned by tests).
 //
 // No DOM and no game imports, so tests, the card previews and the balance harness can all use it.
@@ -18,7 +18,8 @@ export const BREAKTHROUGH_LEVELS = [4, 8, 12];
 // Potential-DPS multiplier of one Breakthrough choice (tests/breakthroughs.test.js pins both).
 export const BT_TRANSFORM_DPS = 1.22;
 export const BT_BOOST_DPS = 1.18;
-// ACROSS THE BOARD: free ranks added to every stat of the weapon (not counted toward its level).
+// ACROSS THE BOARD: free ranks added to every UTILITY stat of the weapon (not counted toward its level).
+// POWER stats get none: +1 Prism Split, fire rate and damage at once would multiply far past a transform.
 export const BT_BOOST_RANKS = 1;
 
 // Single-stat cards per weapon. `stat` is the rank key read by weapon-scaling.js; `headline` the
@@ -155,7 +156,7 @@ export const TRANSFORMS = {
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'lifetime', 'redeploy', 'duration']);
 
 export const BOOST_NAME = 'Across the Board';
-export const boostSummary = (weaponName) => `${weaponName}: +${BT_BOOST_RANKS} rank in every stat and +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage. No new tricks, just more of everything.`;
+export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
 
 // In-world R&D lines for the Breakthrough header ({weapon} is the weapon's name).
 export const RD_LINES = [
@@ -197,7 +198,7 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
     else if (bt[m] === 'transform') t[m] = true;
   }
   const r = {};
-  for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + atb * BT_BOOST_RANKS;
+  for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
   return { id, lv, r, atb, t4: !!t[4], t8: !!t[8], t12: !!t[12], transforms: (t[4] ? 1 : 0) + (t[8] ? 1 : 0) + (t[12] ? 1 : 0) };
 }
 

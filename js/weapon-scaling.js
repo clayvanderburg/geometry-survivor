@@ -18,7 +18,7 @@ import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild } from './weapo
 // + collapse, each orbit-blade pass over an enemy on the ring, and each extra attack a transform adds:
 // flak, bomblets, napalm, orbs, strikes...); splash on extra targets is not counted.
 // Breakthroughs: a transform multiplies potential by BT_TRANSFORM_DPS (its hit damage is rescaled so the
-// new attacks add exactly that), ACROSS THE BOARD adds BT_BOOST_RANKS to every stat and x BT_BOOST_DPS.
+// new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and BT_BOOST_RANKS to every UTILITY stat.
 // DPS_TARGET is the LV 1 reference (and the old level curve the balance tools still report against).
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 

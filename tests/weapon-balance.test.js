@@ -79,7 +79,7 @@ test('every stat formula reads only its own rank', () => {
   }
 });
 
-test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BOARD a rank of everything and BT_BOOST_DPS', () => {
+test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BOARD exactly BT_BOOST_DPS (+1 utility rank)', () => {
   for (const id of IDS) {
     for (const m of BREAKTHROUGH_LEVELS) {
       const ranks = { damage: 2 };
@@ -87,8 +87,9 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BO
       const t = POTENTIAL_DPS[id](makeBuild(id, m, ranks, { [m]: 'transform' }));
       assert.ok(near(t, plain * BT_TRANSFORM_DPS), `${id} LV ${m} transform: x${(t / plain).toFixed(3)}`);
       const boost = makeBuild(id, m, ranks, { [m]: 'boost' });
-      assert.equal(boost.r.damage, 3);
-      assert.ok(POTENTIAL_DPS[id](boost) > plain * BT_BOOST_DPS, `${id} LV ${m} boost`);
+      assert.equal(boost.r.damage, 2, 'no free POWER ranks');
+      for (const c of STAT_CARDS[id]) if (!POWER_STATS.has(c.stat)) assert.equal(boost.r[c.stat], 1, `${id} ${c.stat} +1`);
+      assert.ok(near(POTENTIAL_DPS[id](boost), plain * BT_BOOST_DPS), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
     }
     const all = POTENTIAL_DPS[id](makeBuild(id, 12, {}, { 4: 'transform', 8: 'transform', 12: 'transform' }));
     assert.ok(near(all, lv1(id) * BT_TRANSFORM_DPS ** 3), `${id} three transforms`);
