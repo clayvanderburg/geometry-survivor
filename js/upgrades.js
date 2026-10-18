@@ -16,7 +16,7 @@ export const RARITY = {
   legendary: { label: 'LEGENDARY', color: '#ffcc00' },
   evolution: { label: 'EVOLUTION', color: '#ff4fd8' },
   // Loadout cards (NEW WEAPON and the weapon it opens) are not level rolls, so they get their own tier.
-  weapon: { label: 'NEW WEAPON', color: '#00f3ff' },
+  weapon: { label: 'NEW WEAPON', color: '#ff8a3d' },
   // Breakthrough choices at weapon LV 6 / 12 / 18 (not level rolls either).
   transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
   boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }

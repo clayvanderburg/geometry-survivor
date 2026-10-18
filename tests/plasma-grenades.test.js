@@ -83,7 +83,7 @@ test('grenade cards preview their own stat; the NEW WEAPON pick and Breakthrough
   g.resetRun();
   const p = g.player;
   const pick = describeWeaponPick(p, 'grenades');
-  assert.equal(pick.headline, 'PLASMA GRENADES // 2 / THROW');
+  assert.equal(pick.headline, 'PLASMA GRENADES', 'a weapon pick leads with the weapon, not a stat');
   acquireWeapon(p, 'grenades');
   assert.equal(describeUpgrade(p, { ...UPGRADE_BY_ID.grenades_count, levelJump: 1 }).headline, '+1 GRENADES / THROW');
   assert.equal(describeUpgrade(p, { ...UPGRADE_BY_ID.grenades_damage, levelJump: 1 }).headline, `+${Math.round((DAMAGE_GROWTH - 1) * 100)}% GRENADE DAMAGE`);

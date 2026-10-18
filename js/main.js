@@ -3499,6 +3499,7 @@ export class Game {
     const doc = globalThis.document;
     const inHand = this.handPhase === 'hand';
     doc?.getElementById('hand-goldbar')?.classList?.[inHand ? 'remove' : 'add']('hidden');
+    doc?.getElementById('upgrade-modal')?.classList?.[this.handPhase === 'weapon' ? 'add' : 'remove']('phase-weapon');
     const count = doc?.getElementById('hand-gold-count');
     if (count) count.textContent = `${GOLD_ICON} ${this.gold} GOLD`;
     const cost = this.rerollPrice();
@@ -3668,6 +3669,7 @@ export class Game {
     this.handPhase = null;
     this.handLock = null;
     document.getElementById('upgrade-modal').classList.add('hidden');
+    document.getElementById('upgrade-modal').classList.remove?.('phase-weapon');
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: false });
     this.processPendingLevelUps();

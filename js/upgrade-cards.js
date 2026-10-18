@@ -292,8 +292,6 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
   const copy = deepCopy(player);
   acquireWeapon(copy, weaponId);
   const changed = diffRows(before, readRows(copy));
-  const levelUpg = UPGRADE_BY_ID[weapon.levelId];
-  const lead = changed.find((r) => r.id === levelUpg?.headline) || changed[0];
   const maxLevel = WEAPON_MAX_LEVEL;
   return {
     id: `weapon:${weaponId}`,
@@ -308,7 +306,9 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
     rarityLabel: RARITY.weapon.label,
     color: RARITY.weapon.color,
     jump: 1,
-    headline: lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : weapon.name.toUpperCase(),
+    // The weapon itself is the headline (its LV 1 numbers are in the rows), so the pick doesn't read
+    // like a "+1 / +5" stat upgrade.
+    headline: weapon.name.toUpperCase(),
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, changed.length - maxRows),
     levelHtml: `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>`
