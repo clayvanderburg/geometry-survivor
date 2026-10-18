@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.26.2',
+    date: '2026-10-18',
+    title: 'Full Volume Menus',
+    notes: [
+      { type: 'fix', text: 'Pause and level-up menus no longer soften the music, so you can set the volume by ear.' }
+    ]
+  },
+  {
     version: '0.26.1',
     date: '2026-10-18',
     title: 'Setlist',
