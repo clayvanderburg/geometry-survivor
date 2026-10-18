@@ -128,7 +128,8 @@ export class EnemyManager {
     if (this.enemies.length + this.spawnIndicators.length >= this.maxEnemies) return false;
     const config = this.getArchetype(type, waveScale, extra);
     const hpMult = TUNING.enemyHpMult ?? 1.0;
-    const spdMult = TUNING.enemySpeedMult ?? 1.0;
+    // Vortexes keep their drift: the ship must always be able to escape them (gravity.js escape cap).
+    const spdMult = type === 'blackhole' ? 1 : (TUNING.enemySpeedMult ?? 1.0);
     config.hp *= hpMult;
     config.maxHp *= hpMult;
     config.speed *= spdMult;

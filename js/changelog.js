@@ -12,13 +12,23 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.29.0',
+    version: '0.30.0',
     date: '2026-10-18',
     title: 'Mobile Play',
     notes: [
       { type: 'new', text: 'Play on your phone or tablet: touch the left half of the screen to fly, the right half to aim, and tap DASH / NOVA. Without a thumb on the aim side, the turret auto-aims.' },
       { type: 'new', text: 'Touch controls switch on by themselves on touchscreens; a mouse click switches back.' },
       { type: 'balance', text: 'Small screens (under 600 px tall) zoom out to show as much of the sector as a laptop, so enemies no longer spawn on top of you.' }
+    ]
+  },
+  {
+    version: '0.29.0',
+    date: '2026-10-18',
+    title: 'Tougher',
+    notes: [
+      { type: 'balance', text: 'Enemies have a bit more health (+10%), speed (+5%) and contact damage, and come in slightly bigger, faster packs.' },
+      { type: 'balance', text: 'Your ship is a bit weaker: base shield 90 (was 100), base damage 10 (was 11), damage cards +45% per rank (was +50%).' },
+      { type: 'balance', text: 'Applies to every mode.' }
     ]
   },
   {

@@ -84,7 +84,7 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   const [boss] = liveBosses(g);
   assert.equal(boss.name, 'PRISMATIC DREADNOUGHT');
   assert.equal(boss.epithet, 'WAVE 3 WARDEN');
-  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult, 'presentation does not change boss stats');
+  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult * TUNING.enemyHpMult, 'presentation does not change boss stats');
   assert.equal(calls.arrivals, 1);
   assert.deepEqual(g.enemyManager.bossArrivals, [], 'arrivals are drained once staged');
   assert.equal(g.bossCard.kind, 'arrival');

@@ -190,12 +190,12 @@ test('guide stats come from the real spawn config and game formulas', () => {
   for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && id !== 'boss')) {
     const cfg = em.getArchetype(id, waveScaleAt(1));
     const s = hostileStats(id);
-    assert.equal(s.hp, Math.round(cfg.maxHp), `${id} HP`);
-    assert.equal(s.speed, Math.round(cfg.speed * 60), `${id} speed`);
+    assert.equal(s.hp, Math.round(cfg.maxHp * TUNING.enemyHpMult), `${id} HP`);
+    assert.equal(s.speed, Math.round(cfg.speed * (id === 'blackhole' ? 1 : TUNING.enemySpeedMult) * 60), `${id} speed`);
     assert.equal(s.contact, Math.round(contactDamageAt(cfg, 1)), `${id} contact`);
   }
   assert.equal(hostileStats('bruiser').contact, Math.round(18 * 1.5 * damageRampAt(1)));
-  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult));
+  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult * TUNING.enemyHpMult));
   assert.equal(hostileStats('gunner').unlockWave, ARCHETYPE_INFO.gunner.unlockWave);
   const g = Object.assign(Object.create(Game.prototype), { wave: 9 });
   assert.equal(g.contactDamage({ contactMult: 1.5 }), contactDamageAt({ contactMult: 1.5 }, 9), 'one contact formula');
