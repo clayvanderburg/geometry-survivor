@@ -159,13 +159,16 @@ const CLIPS = {
       await context.addInitScript(() => {
         let s = 1234567;
         Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-        try { localStorage.setItem('vexolith_tutorial_seen', '1'); sessionStorage.setItem('vexolith_splash_seen', '1'); } catch {}
+        try { localStorage.setItem('vexolith_tutorial_seen', '1'); } catch {}
       });
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto('http://127.0.0.1:8096/index.html');
-      await page.waitForTimeout(600);
+      await page.locator('#splash-screen').waitFor({ state: 'visible' });
+      await page.keyboard.press('Escape'); // past the splash screen
+      await page.locator('#splash-screen').waitFor({ state: 'hidden' });
+      await page.waitForTimeout(300);
       const frameDir = path.join(tmp, name);
       fs.mkdirSync(frameDir, { recursive: true });
 

@@ -5223,9 +5223,9 @@ export class Game {
 
   // --- Tutorial ------------------------------------------------------------------------------------
 
-  // The browser boot shows the splash once per session; the title waits behind it.
+  // The browser boot shows the splash on every load; the title waits behind it.
   showSplash() {
-    if (this.splash?.shouldShow() && this.state === 'TITLE' && this.splash.show()) {
+    if (this.state === 'TITLE' && this.splash?.show()) {
       this.splashOpen = true;
       this.resetInput();
     }

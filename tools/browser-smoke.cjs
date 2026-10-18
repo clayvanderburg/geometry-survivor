@@ -22,6 +22,11 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await page.keyboard.press('Space');
  await page.locator('#splash-screen').waitFor({state:'hidden'});
  if(!await page.locator('#title-modal').isVisible()) throw Error('The splash should give way to the title, not a run');
+ // Every refresh shows it again.
+ await page.reload();
+ await page.locator('#splash-screen').waitFor({state:'visible'});
+ await page.keyboard.press('Enter');
+ await page.locator('#splash-screen').waitFor({state:'hidden'});
  await page.waitForTimeout(500);
  if(await page.locator('#tutorial-modal').isVisible()) throw Error('The tutorial waits for the first LAUNCH');
  // Game mode selector next to LAUNCH: three choices, NORMAL by default, [3] picks BLITZ and the run wears its badge.
@@ -90,6 +95,6 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await blocked.keyboard.press('p');
  if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (key continues to the title), first-launch tutorial (next/back/skip into the run/remembered), blocked-storage boot + tutorial + patch notes + mode pick; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (every load and refresh, key continues to the title), first-launch tutorial (next/back/skip into the run/remembered), blocked-storage boot + tutorial + patch notes + mode pick; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

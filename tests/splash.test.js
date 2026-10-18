@@ -1,5 +1,5 @@
-// SPLASH screen (js/splash.js + Game wiring in js/main.js): once per session, any input continues to the
-// title (never launches), storage blocked still works, and only the browser boot shows it.
+// SPLASH screen (js/splash.js + Game wiring in js/main.js): shows on every load, any input continues to
+// the title (never launches), and only the browser boot shows it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -8,19 +8,11 @@ globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
-const { SPLASH_SEEN_KEY, SplashScreen, readSplashSeen, writeSplashSeen } = await import('../js/splash.js');
+const { SplashScreen } = await import('../js/splash.js');
 const { Game } = await import('../js/main.js');
 const { PAD } = await import('../js/gamepad.js');
 
 const root = new URL('../', import.meta.url);
-const memoryStorage = () => {
-  const map = new Map();
-  return { getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), map };
-};
-const blockedStorage = {
-  getItem() { throw new DOMException('Storage unavailable', 'SecurityError'); },
-  setItem() { throw new DOMException('Storage unavailable', 'SecurityError'); }
-};
 function installDom() {
   const classes = new Set(['hidden']);
   const el = {
@@ -32,27 +24,14 @@ function installDom() {
   return el;
 }
 
-test('the splash shows once per session; dismissing remembers it; blocked storage shows it every load', () => {
-  const storage = memoryStorage();
-  assert.equal(readSplashSeen(storage), false);
-  assert.equal(new SplashScreen({ storage }).shouldShow(), true);
-  assert.equal(writeSplashSeen(storage), true);
-  assert.equal(storage.map.get(SPLASH_SEEN_KEY), '1');
-  assert.equal(new SplashScreen({ storage }).shouldShow(), false);
-  assert.equal(readSplashSeen(blockedStorage), false);
-  assert.equal(writeSplashSeen(blockedStorage), false);
-  assert.equal(new SplashScreen({ storage: blockedStorage }).shouldShow(), true);
-});
-
 test('Game: the splash covers the title; a key, a click or a controller button continues to the title only', () => {
   for (const how of ['key', 'click', 'pad']) {
     const el = installDom();
-    const storage = memoryStorage();
     let audio = 0;
     const game = Object.assign(Object.create(Game.prototype), {
       state: 'TITLE', menuNav: { clear() {} }, resetInput() {}, sound: { init() { audio++; } }
     });
-    game.splash = new SplashScreen({ storage, onDismiss: () => game.onSplashDismissed() });
+    game.splash = new SplashScreen({ onDismiss: () => game.onSplashDismissed() });
     assert.equal(game.showSplash(), game);
     assert.equal(game.splashOpen, true);
     assert.equal(el.classList.contains('hidden'), false);
@@ -68,14 +47,25 @@ test('Game: the splash covers the title; a key, a click or a controller button c
     assert.equal(el.classList.contains('splash-out'), true);
     assert.equal(audio, 1, `${how}: the dismissing gesture starts the audio`);
     assert.equal(game.menuState, null, 'menus get a fresh grace period');
-    assert.equal(storage.map.get(SPLASH_SEEN_KEY), '1');
   }
 });
 
-test('the splash only shows on the title screen and only once', () => {
+test('the splash shows on every load: nothing is remembered between page loads', () => {
+  for (let load = 0; load < 3; load++) {
+    const el = installDom();
+    const game = Object.assign(Object.create(Game.prototype), { state: 'TITLE', menuNav: { clear() {} }, resetInput() {}, sound: { init() {} } });
+    game.splash = new SplashScreen({ onDismiss: () => game.onSplashDismissed() });
+    game.showSplash();
+    assert.equal(game.splashOpen, true, `load ${load + 1}`);
+    el.listeners.click();
+    assert.equal(game.splashOpen, false);
+  }
+});
+
+test('the splash only shows over the title screen', () => {
   installDom();
   const game = Object.assign(Object.create(Game.prototype), { state: 'PLAYING', resetInput() {} });
-  game.splash = new SplashScreen({ storage: memoryStorage() });
+  game.splash = new SplashScreen();
   game.showSplash();
   assert.equal(!!game.splashOpen, false);
 });

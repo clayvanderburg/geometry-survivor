@@ -75,13 +75,15 @@ const SCENES = {
       let s = 1234567;
       Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
       if (range) try { localStorage.setItem('vexolith_weapon_range', range); } catch {}
-      try { localStorage.setItem('vexolith_tutorial_seen', '1'); sessionStorage.setItem('vexolith_splash_seen', '1'); } catch {}
+      try { localStorage.setItem('vexolith_tutorial_seen', '1'); } catch {}
     }, { range });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('http://127.0.0.1:8096/index.html');
-    await page.waitForTimeout(500);
+    await page.locator('#splash-screen').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape'); // past the splash screen
+    await page.locator('#splash-screen').waitFor({ state: 'hidden' });
     await page.locator(scene === 'range' ? '#btn-weapon-range' : '#btn-start-game').click();
     await page.waitForTimeout(400);
 
