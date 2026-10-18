@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.27.3',
+    date: '2026-10-18',
+    title: 'Armory Tidy',
+    notes: [
+      { type: 'balance', text: 'Chronos Capacitor (Autocannon fire rate) leaves the Void Armory: weapons are built during the run. Every Void Core you spent on it is refunded.' },
+      { type: 'fix', text: 'The Void Armory list now fills its panel on the title screen.' }
+    ]
+  },
+  {
     version: '0.27.2',
     date: '2026-10-18',
     title: 'Clear Flak',

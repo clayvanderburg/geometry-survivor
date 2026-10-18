@@ -104,7 +104,7 @@ test('save normalization tolerates malformed entries and bounds permanent ranks'
   const save = normalizeSave({ armory: 2, pilotName: 4, cores: 'bad', ranks: { damage: 500, fireRate: -5, haste: 3 },
     highscores: [null, {}, { score: 42, name: ' Clay ', wave: -2, multiplier: Infinity }] });
   assert.equal(save.pilotName, 'MADKING'); assert.equal(save.cores, 15);
-  assert.equal(save.ranks.damage, 40); assert.equal(save.ranks.fireRate, 0);
+  assert.equal(save.ranks.damage, 40); assert.equal(save.ranks.fireRate, undefined, 'Chronos Capacitor is retired');
   assert.equal(save.ranks.haste, undefined, 'retired upgrade ids are dropped');
   assert.equal(save.highscores.length, 1); assert.equal(save.highscores[0].wave, 1);
   assert.equal(save.highscores[0].name, 'CLAY');

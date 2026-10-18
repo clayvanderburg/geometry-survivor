@@ -20,7 +20,6 @@ export const ARMORY_CATEGORIES = [
 export const META_UPGRADES = [
   // OFFENSE
   { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.015, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
-  { id: 'fireRate', cat: 'offense', name: 'Chronos Capacitor', icon: '⚡', color: '#00ff88', stat: 'Autocannon fire rate', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
   { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
@@ -69,7 +68,6 @@ export function armoryBonuses(ranks = {}) {
   const step = (id) => r(id) * META_BY_ID[id].per;
   return {
     damageMult: 1 + step('damage'),
-    fireRateMult: 1 + step('fireRate'),
     critChanceBonus: step('critChance'),
     critDamageBonus: step('critDamage'),
     areaMult: 1 + step('area'),
@@ -121,6 +119,23 @@ export function normalizeGuide(value) {
   return { seen, fresh };
 }
 
+// Armory upgrades that were removed: a save still holding ranks in one gets every core it spent on them
+// back once (the ranks then drop out of the save). Chronos Capacitor boosted only the Autocannon, while
+// every other weapon is built in the run, so it went in v0.27.3.
+export const RETIRED_UPGRADES = Object.freeze({
+  fireRate: { baseCost: 12, growth: 1.13, maxRank: 30 }
+});
+
+// Cores spent on ranks of retired upgrades in a save's `ranks`.
+export function retiredRefund(sourceRanks = {}) {
+  let cores = 0;
+  for (const [id, upg] of Object.entries(RETIRED_UPGRADES)) {
+    const rank = boundedInteger(sourceRanks[id], 0, 0, upg.maxRank);
+    for (let n = 0; n < rank; n++) cores += armoryCost(upg, n);
+  }
+  return cores;
+}
+
 export function normalizeSave(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const sourceRanks = source.ranks && typeof source.ranks === 'object' ? source.ranks : {};
@@ -142,7 +157,7 @@ export function normalizeSave(value) {
   const legacyArmory = Object.keys(source).length > 0 && source.armory !== ARMORY_VERSION;
   return {
     pilotName: normalizePilotName(source.pilotName),
-    cores: legacyArmory ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES),
+    cores: legacyArmory ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES) + retiredRefund(sourceRanks),
     totalRuns: boundedInteger(source.totalRuns, 0),
     ranks: legacyArmory ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
     armory: ARMORY_VERSION,

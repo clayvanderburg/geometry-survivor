@@ -684,7 +684,7 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
     rerollCostMult: bonuses.rerollCostMult ?? 1,
     stats: {
       moveSpeed: t.moveSpeed * (bonuses.moveSpeedMult ?? 1),
-      fireRate: t.fireRate * (bonuses.fireRateMult ?? 1),
+      fireRate: t.fireRate,
       bulletSpeed: t.bulletSpeed,
       bulletCount: 2,
       pierce: 1,
