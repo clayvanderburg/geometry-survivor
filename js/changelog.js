@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.1',
+    date: '2026-10-18',
+    title: 'On Target',
+    notes: [
+      { type: 'fix', text: 'Rocket Pods now angle in on what you aim at, so a lone enemy dead ahead no longer slips between the two rockets.' }
+    ]
+  },
+  {
     version: '0.22.0',
     date: '2026-10-18',
     title: 'Breakthrough Balance',

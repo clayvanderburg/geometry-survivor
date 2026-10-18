@@ -30,7 +30,7 @@ test('Prism Split adds stream pairs in a fixed order: forward, rear, sides, diag
 function game() {
   const silent = new Proxy({}, { get: () => () => {} });
   return Object.assign(Object.create(Game.prototype), {
-    bullets: [], sound: silent, grid: silent, helixAngle: 0,
+    bullets: [], sound: silent, grid: silent, helixAngle: 0, enemyManager: { enemies: [] },
     player: { x: 1000, y: 1000, radius: 15, angle: 0, drillAngle: Math.PI / 2, weapons: {}, stats: { damage: 10, bulletCount: 2, bulletSpeed: 14, pierce: 1 } }
   });
 }
@@ -45,16 +45,31 @@ test('the forward pair fires straight along the aim, side by side', () => {
   assert.ok(Math.abs(g.bullets[0].y - g.bullets[1].y - -14) < 1e-9 || Math.abs(g.bullets[1].y - g.bullets[0].y - -14) < 1e-9);
 });
 
-test('Rocket Pods launch from both flank pods and fly where the turret aims', () => {
+// Where a rocket crosses the aim line (y = 1000 here): the x of that crossing.
+const crossing = (r) => r.x - (r.y - 1000) * (r.vx / r.vy);
+
+test('Rocket Pods launch from both flank pods and converge on the turret aim line', () => {
   const g = game(); // turret aims +x, hull heads +y
   g.fireWingRockets();
   assert.equal(g.bullets.length, 2);
   for (const r of g.bullets) {
     assert.equal(r.source, 'rocket');
-    assert.ok(Math.abs(r.vy) < 1e-9 && r.vx === W.wingRocketSpeed, 'flies along the turret aim');
+    assert.ok(Math.abs(Math.hypot(r.vx, r.vy) - W.wingRocketSpeed) < 1e-9 && r.vx > 0, 'flies out along the turret aim');
+    assert.ok(Math.abs(crossing(r) - 1320) < 1e-6, 'meets the aim line 320 px out with nobody ahead');
     assert.equal(r.damage, 10 * W.wingRocketDamageMult(levelBuild('rockets', 1)));
     assert.equal(r.blastDamage, r.damage * W.wingRocketBlastShare);
   }
   const xs = g.bullets.map((r) => r.x - 1000).sort((a, b) => a - b);
   assert.ok(Math.abs(xs[0] + 15 * 1.12) < 1e-9 && Math.abs(xs[1] - 15 * 1.12) < 1e-9, 'one from each flank pod');
+});
+
+test('a lone enemy dead ahead is hit by both Rocket Pods instead of being straddled', () => {
+  const g = game();
+  g.enemyManager.enemies.push({ x: 1180, y: 1000, radius: 10 });
+  g.fireWingRockets();
+  for (const r of g.bullets) assert.ok(Math.abs(crossing(r) - 1180) < 1e-6, 'converges on the enemy');
+  const off = game();
+  off.enemyManager.enemies.push({ x: 1000, y: 1180, radius: 10 }); // 90 degrees off the aim: ignored
+  off.fireWingRockets();
+  for (const r of off.bullets) assert.ok(Math.abs(crossing(r) - 1320) < 1e-6);
 });
