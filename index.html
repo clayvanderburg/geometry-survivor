@@ -2,13 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VEXOLITH" />
+  <meta name="theme-color" content="#030308" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
   <title>VEXOLITH // VOID SURVIVOR</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
+
+    <!-- Touch controls (js/touch-controls.js): left half moves, right half aims, plus DASH / NOVA -->
+    <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
+      <div class="touch-stick" data-stick="move"><div class="touch-knob"></div></div>
+      <div class="touch-stick" data-stick="aim"><div class="touch-knob"></div></div>
+      <button id="touch-dash" class="touch-btn touch-dash" tabindex="-1">DASH</button>
+      <button id="touch-nova" class="touch-btn touch-nova" tabindex="-1">NOVA<span id="touch-nova-count" class="touch-nova-count">2</span></button>
+    </div>
 
     <!-- HUD Overlay -->
     <div id="hud">
@@ -165,6 +180,15 @@
             <div id="pause-actions" class="pause-actions">
               <button id="btn-resume-game" class="neon-btn primary-btn">▶ RESUME [P / ESC]</button>
               <button id="btn-pause-exit-range" class="neon-btn range-exit-btn">◀ EXIT WEAPON RANGE</button>
+              <!-- Touch play: the run overview tabs open as their own window (Game.bindMobileMenus) -->
+              <div class="m-menu">
+                <button class="neon-btn m-btn" data-m-open="run" data-m-tab="[data-pause-tab=loadout]">⚔ LOADOUT</button>
+                <button class="neon-btn m-btn" data-m-open="run" data-m-tab="[data-pause-tab=stats]">▤ STATS</button>
+                <button class="neon-btn m-btn" data-m-open="run" data-m-tab="[data-pause-tab=upgrades]">★ UPGRADES</button>
+                <button class="neon-btn m-btn" data-m-open="run" data-m-tab="[data-pause-tab=settings]">⚙ SETTINGS</button>
+                <button class="neon-btn m-btn m-fullscreen" data-fullscreen-btn>⛶ GO FULLSCREEN</button>
+                <p class="m-fs-tip hidden">iPhone can't go full screen from the browser: tap Share <b>⎋</b>, then <b>Add to Home Screen</b>, and launch VEXOLITH from your home screen.</p>
+              </div>
               <div class="pause-action-row">
                 <button id="btn-pause-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-pause" class="guide-btn-badge"></span></button>
                 <button id="btn-pause-notes" class="neon-btn notes-open-btn">📜 PATCH NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
@@ -184,7 +208,7 @@
             </div>
           </aside>
 
-          <section class="pause-main">
+          <section class="pause-main" data-m-section="run">
             <div class="board-tabs pause-tabs" role="tablist" aria-label="Run overview">
               <button class="board-tab active" data-pause-tab="loadout" role="tab" aria-selected="true">⚔ LOADOUT</button>
               <button class="board-tab" data-pause-tab="stats" role="tab" aria-selected="false">▤ STATS</button>
@@ -341,7 +365,7 @@
 
         <div class="hub-columns">
           <!-- Left: Permanent Armory (Meta-Progression) -->
-          <div class="hub-panel">
+          <div class="hub-panel" data-m-section="armory">
             <div class="panel-header">
               <span class="panel-title">❖ VOID ARMORY // PERMANENT UPGRADES</span>
               <span class="panel-sub">Persists across all sessions</span>
@@ -350,7 +374,7 @@
           </div>
 
           <!-- Right: Highscore Leaderboard & Pilot Callsign -->
-          <div class="hub-panel">
+          <div class="hub-panel" data-m-section="board">
             <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
               <div class="board-tabs" role="tablist" aria-label="Highscore board">
@@ -390,6 +414,16 @@
           <div id="mode-select" class="mode-select" role="radiogroup" aria-label="Game mode"></div>
           <button id="btn-start-game" class="neon-btn primary-btn">LAUNCH INTO THE SECTOR [SPACE / CLICK]</button>
           <button id="btn-weapon-range" class="neon-btn range-open-btn" title="Test any weapon build on target dummies: nothing is recorded">🎯 WEAPON RANGE</button>
+        </div>
+        <!-- Touch play: the title's sections open as their own windows (Game.bindMobileMenus) -->
+        <div class="m-menu">
+          <button class="neon-btn m-btn m-fullscreen" data-fullscreen-btn>⛶ GO FULLSCREEN</button>
+          <button class="neon-btn m-btn" data-m-open="board">🏆 LEADERBOARD</button>
+          <button class="neon-btn m-btn" data-m-open="armory">❖ ARMORY</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-title-guide">📖 FIELD GUIDE</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-weapon-range">🎯 RANGE</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-title-notes">📜 NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
+          <p class="m-fs-tip hidden">iPhone can't go full screen from the browser: tap Share <b>⎋</b>, then <b>Add to Home Screen</b>, and launch VEXOLITH from your home screen.</p>
         </div>
       </div>
     </div>
@@ -453,7 +487,7 @@
         <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
 
         <div class="hub-columns">
-          <div class="hub-panel go-left-panel">
+          <div class="hub-panel go-left-panel" data-m-section="report">
             <div class="panel-header board-header">
               <div class="board-tabs" role="tablist" aria-label="Run report or armory">
                 <button class="board-tab active" data-go-tab="report" role="tab" aria-selected="true">▤ RUN REPORT</button>
@@ -466,7 +500,7 @@
             <div id="go-armory-grid" class="armory-grid hidden" data-go-pane="armory"></div>
           </div>
 
-          <div class="hub-panel">
+          <div class="hub-panel" data-m-section="board">
             <div class="panel-header board-header">
               <span class="panel-title">★ HIGHSCORE BOARD</span>
               <div class="board-tabs" role="tablist" aria-label="Highscore board">
@@ -493,6 +527,13 @@
           <button id="btn-restart-game" class="neon-btn primary-btn">RELAUNCH SHIP [SPACE / CLICK]</button>
           <button id="btn-go-menu" class="neon-btn go-menu-btn">⌂ MAIN MENU</button>
           <button id="btn-go-guide" class="neon-btn guide-open-btn">📖 FIELD GUIDE [G]<span id="guide-badge-go" class="guide-btn-badge"></span></button>
+        </div>
+        <!-- Touch play: report, leaderboard and armory open as their own windows (Game.bindMobileMenus) -->
+        <div class="m-menu">
+          <button class="neon-btn m-btn" data-m-open="report" data-m-tab="[data-go-tab=report]">▤ RUN REPORT</button>
+          <button class="neon-btn m-btn" data-m-open="board">🏆 LEADERBOARD</button>
+          <button class="neon-btn m-btn" data-m-open="report" data-m-tab="[data-go-tab=armory]">❖ ARMORY</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-go-guide">📖 FIELD GUIDE</button>
         </div>
       </div>
     </div>

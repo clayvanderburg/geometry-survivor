@@ -63,6 +63,7 @@ import {
   baseTuning
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
+import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -75,8 +76,19 @@ function loadRadarVisible() {
   try { return globalThis.localStorage?.getItem(RADAR_STORAGE_KEY) !== '0'; } catch { return true; }
 }
 // Radar side in px: 2.5x the original, but never more than 55% of the screen's short side (laptops, phones).
-export function radarSize(width, height) {
-  return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, 0.55 * Math.min(width, height)));
+// Touch play passes a smaller share: the thumbs need that corner.
+export function radarSize(width, height, shortShare = 0.55) {
+  return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
+}
+
+// Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
+// as a small laptop window: enemies spawn just off screen, so a tiny view would put them on top of the ship.
+// Touch play zooms out a further 30% (TOUCH_VIEW_MIN_SIDE): thumbs cover part of the screen.
+const VIEW_MIN_SIDE = 600;
+const TOUCH_VIEW_MIN_SIDE = Math.round(VIEW_MIN_SIDE / 0.7);
+export function viewScale(width, height, minSide = VIEW_MIN_SIDE) {
+  const side = Math.min(width, height);
+  return side > 0 ? Math.min(1, side / minSide) : 1;
 }
 
 // Player settings (pause-menu volume sliders) are tuning keys too, but changing them is fair play. A game
@@ -172,10 +184,10 @@ export class Game {
   constructor() {
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
+    // Touch play (js/touch-controls.js): on from the start on phones and tablets, switched on by any touch
+    // and off again by a mouse click.
+    this.touchMode = isTouchDevice();
+    this.resize();
 
     // 10x Area Sector World (~4200 x 4200 units)
     this.worldWidth = 4200;
@@ -233,6 +245,16 @@ export class Game {
     this.menuNav.onMove = () => this.sound?.playUiSelect?.();
     this.menuState = null;
     this.menuGrace = 0;
+
+    // Touch sticks and buttons (shown only while a run is live), and the scrubber that drops keyboard hints.
+    this.touch = new TouchControls(document.getElementById('touch-controls'), {
+      onDash: () => this.state === 'PLAYING' && this.triggerDash(),
+      onNova: () => this.state === 'PLAYING' && this.triggerSupernova(),
+      onTouch: () => this.sound.init()
+    });
+    this.keyHints = new KeyHintScrubber(document.body);
+    this.keyHints.setActive(this.touchMode);
+    document.body?.classList?.toggle('touch-mode', this.touchMode);
 
     this.currentChoices = [];
     // Field Guide overlay (built on first open) sits on top of the title, pause or game-over screen.
@@ -417,13 +439,79 @@ export class Game {
     this.updateHUD();
   }
 
+  // this.width / this.height are the view in world px (bigger than the window on small screens, see
+  // viewScale); draw() scales them onto the canvas by renderScale.
+  resize() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // Touch screens draw sharper (up to 1.5 device px per CSS px): phones are dense, but pay for every pixel.
+    const dpr = isTouchDevice() ? Math.min(1.5, window.devicePixelRatio || 1) : 1;
+    this.viewScale = viewScale(vw, vh, this.touchMode ? TOUCH_VIEW_MIN_SIDE : VIEW_MIN_SIDE);
+    this.width = vw / this.viewScale;
+    this.height = vh / this.viewScale;
+    this.renderScale = this.viewScale * dpr;
+    this.canvas.width = Math.round(vw * dpr);
+    this.canvas.height = Math.round(vh * dpr);
+  }
+
+  setTouchMode(on) {
+    if (this.touchMode === on) return;
+    this.touchMode = on;
+    document.body?.classList?.toggle('touch-mode', on);
+    this.keyHints?.setActive(on);
+    if (!on) {
+      this.touch?.reset();
+      this.closeMobileWindows();
+    }
+    this.resize();
+    this.renderHandControls();
+  }
+
+  // Touch menus (title, pause, game over): a home view of big buttons, each opening one section of the
+  // screen (leaderboard, armory, loadout...) as its own full-screen window with a BACK button.
+  bindMobileMenus() {
+    const doc = globalThis.document;
+    if (!doc?.querySelectorAll) return;
+    doc.querySelectorAll('[data-m-open]').forEach((btn) => btn.addEventListener('click', () => {
+      const card = btn.closest('.modal-card');
+      const section = card?.querySelector(`[data-m-section="${btn.dataset.mOpen}"]`);
+      if (!section) return;
+      if (btn.dataset.mTab) card.querySelector(btn.dataset.mTab)?.click();
+      this.closeMobileWindows();
+      if (!section.querySelector(':scope > .m-back')) {
+        const back = doc.createElement('button');
+        back.className = 'neon-btn m-back';
+        back.textContent = '◀ BACK';
+        back.addEventListener('click', () => this.closeMobileWindows());
+        section.prepend(back);
+      }
+      section.classList.add('m-window');
+      section.scrollTop = 0;
+      this.sound?.playUiSelect?.();
+    }));
+    doc.querySelectorAll('[data-m-proxy]').forEach((btn) => btn.addEventListener('click', () => {
+      doc.getElementById(btn.dataset.mProxy)?.click();
+    }));
+    doc.querySelectorAll('[data-fullscreen-btn]').forEach((btn) => btn.addEventListener('click', () => {
+      const supported = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
+      if (supported) {
+        this.toggleFullscreen();
+        globalThis.screen?.orientation?.lock?.('landscape')?.catch?.(() => {});
+      } else {
+        btn.closest('.m-menu')?.querySelector('.m-fs-tip')?.classList.toggle('hidden');
+      }
+    }));
+  }
+
+  closeMobileWindows() {
+    globalThis.document?.querySelectorAll?.('.m-window').forEach((el) => el.classList.remove('m-window'));
+  }
+
   bindEvents() {
-    window.addEventListener('resize', () => {
-      this.width = window.innerWidth;
-      this.height = window.innerHeight;
-      this.canvas.width = this.width;
-      this.canvas.height = this.height;
-    });
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') this.setTouchMode(true);
+      else if (e.pointerType === 'mouse') this.setTouchMode(false);
+    }, true);
 
     const titleNameInput = document.getElementById('title-pilot-name');
     const goNameInput = document.getElementById('go-pilot-name');
@@ -651,8 +739,8 @@ export class Game {
     });
 
     window.addEventListener('mousemove', (e) => {
-      this.mouse.x = e.clientX;
-      this.mouse.y = e.clientY;
+      this.mouse.x = e.clientX / (this.viewScale || 1);
+      this.mouse.y = e.clientY / (this.viewScale || 1);
       // Deliberate mouse use hands aiming and menu focus back from the controller.
       if (this.gpActive && Math.abs(e.movementX ?? 0) + Math.abs(e.movementY ?? 0) > 3) {
         this.gpActive = false;
@@ -731,6 +819,7 @@ export class Game {
     document.addEventListener('fullscreenchange', () => this.syncFullscreenButtons());
     document.addEventListener('webkitfullscreenchange', () => this.syncFullscreenButtons());
     this.syncHudButtons();
+    this.bindMobileMenus();
     this.syncFullscreenButtons();
     if (pauseDmgNumsBtn) pauseDmgNumsBtn.addEventListener('click', () => this.toggleDamageNumbers());
     document.getElementById('btn-pause-radar')?.addEventListener('click', () => this.toggleRadar());
@@ -1387,6 +1476,14 @@ export class Game {
     if (!doc) return;
     const on = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
     const supported = !!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled);
+    // The big touch-menu buttons: on iPhone (no element fullscreen) they explain Add to Home Screen instead,
+    // and a game already launched from the home screen has no browser bar to hide.
+    const standalone = !!(globalThis.matchMedia?.('(display-mode: fullscreen), (display-mode: standalone)')?.matches || globalThis.navigator?.standalone);
+    doc.querySelectorAll?.('[data-fullscreen-btn]').forEach((btn) => {
+      btn.textContent = on ? '⛶ EXIT FULLSCREEN' : supported ? '⛶ GO FULLSCREEN' : '⛶ FULL SCREEN';
+      btn.classList.toggle('active', on);
+      btn.classList.toggle('hidden', standalone && !on);
+    });
     for (const [id, label] of [['btn-fullscreen', on ? '⛶ EXIT FULLSCREEN [V]' : '⛶ FULLSCREEN [V]'], ['btn-pause-fullscreen', `⛶ FULLSCREEN: ${on ? 'ON' : 'OFF'} [V]`]]) {
       const btn = doc.getElementById(id);
       if (!btn) continue;
@@ -1435,6 +1532,7 @@ export class Game {
     this.mouse.down = false;
     this.gpDashLatch = false;
     this.gpBombLatch = false;
+    this.touch?.reset();
   }
 
   togglePause() {
@@ -1483,7 +1581,7 @@ export class Game {
       pauseBtn.classList.remove('active');
     }
 
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
     this.ctx.fillStyle = '#030308';
     this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -3747,6 +3845,7 @@ export class Game {
       note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[4] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
         : this.lockNote
         || (lockedName ? `🔒 ${lockedName} is locked: pick another card and it comes back next level-up`
+          : this.touchMode ? `🔒 ${lc} ${GOLD_ICON} keeps a card for next level-up · ✕ ${bc} ${GOLD_ICON} banishes it for the run`
           : `🔒 ${lc} ${GOLD_ICON} locks a card for your next level-up · [Shift+1-4] / Y   ✕ ${bc} ${GOLD_ICON} banishes one for the run · [B]+[1-4] / RB×2`);
       note.classList?.[this.lockNote ? 'add' : 'remove']('dropped');
     }
@@ -3802,6 +3901,7 @@ export class Game {
     if (strip && this.player) strip.innerHTML = loadoutStripHtml(this.player);
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
+    this.closeCardDetail();
     container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
     const shownAt = performance.now();
     this.choiceCardEls = [];
@@ -3814,6 +3914,15 @@ export class Game {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.selectUpgrade(idx);
       });
+      // Touch play shows compact cards; MORE opens the full card front and centre (hidden on desktop).
+      const more = document.createElement('div');
+      more.className = 'card-more-btn';
+      more.textContent = 'MORE';
+      more.addEventListener('click', (e) => {
+        e.stopPropagation?.();
+        this.openCardDetail(idx, view);
+      });
+      card.appendChild(more);
       // Gold LOCK toggle (level-up hands only; renderHandControls labels it). Not a <button>, so the
       // controller's focus stays on whole cards: it locks the focused card with Y.
       if (this.handPhase === 'hand') {
@@ -3837,6 +3946,42 @@ export class Game {
       container.appendChild(card);
       this.choiceCardEls.push(card);
     });
+  }
+
+  // The full card on its own, over the hand, with PICK and BACK (touch play's MORE button).
+  openCardDetail(idx, view) {
+    const doc = globalThis.document;
+    const modal = doc?.getElementById('upgrade-modal');
+    if (!modal) return;
+    this.closeCardDetail();
+    const wrap = doc.createElement('div');
+    wrap.id = 'card-detail';
+    wrap.className = 'card-detail';
+    const card = doc.createElement('div');
+    card.className = `${view.className} card-detail-card`;
+    card.innerHTML = view.html;
+    const actions = doc.createElement('div');
+    actions.className = 'card-detail-actions';
+    const pick = doc.createElement('button');
+    pick.className = 'neon-btn primary-btn';
+    pick.textContent = '✓ PICK';
+    pick.addEventListener('click', () => {
+      this.closeCardDetail();
+      this.selectUpgrade(idx);
+    });
+    const back = doc.createElement('button');
+    back.className = 'neon-btn';
+    back.textContent = '◀ BACK';
+    back.addEventListener('click', () => this.closeCardDetail());
+    actions.append(pick, back);
+    wrap.append(card, actions);
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) this.closeCardDetail(); });
+    modal.appendChild(wrap);
+    this.sound?.playUiSelect?.();
+  }
+
+  closeCardDetail() {
+    globalThis.document?.getElementById?.('card-detail')?.remove?.();
   }
 
   // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
@@ -3900,6 +4045,7 @@ export class Game {
     this.currentChoices = [];
     this.handPhase = null;
     this.handLock = null;
+    this.closeCardDetail();
     document.getElementById('upgrade-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.remove?.('phase-weapon');
     this.state = 'PLAYING';
@@ -4354,6 +4500,12 @@ export class Game {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) inputX -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) inputX += 1;
 
+    const touchMove = this.touchMode ? this.touch?.move : null;
+    if (touchMove && (touchMove.x || touchMove.y)) {
+      inputX = touchMove.x;
+      inputY = touchMove.y;
+    }
+
     if (gp) {
       if (Math.abs(gp.moveX) > 0 || Math.abs(gp.moveY) > 0) {
         inputX = gp.moveX;
@@ -4413,13 +4565,18 @@ export class Game {
     const worldMouseX = this.mouse.x + this.camX;
     const worldMouseY = this.mouse.y + this.camY;
 
+    // Touch play aims with the right stick and otherwise auto-aims (there is no cursor to follow).
+    const touchAim = this.touchMode ? this.touch?.aim : null;
+    const touchAiming = !!(touchAim && (touchAim.x || touchAim.y));
     if (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)) {
       p.angle = Math.atan2(gp.aimY, gp.aimX);
-    } else if (this.autoAim) {
+    } else if (touchAiming) {
+      p.angle = Math.atan2(touchAim.y, touchAim.x);
+    } else if (this.autoAim || this.touchMode) {
       const nearest = this.findAutoAimTarget(p.x, p.y);
       if (nearest) {
         p.angle = Math.atan2(nearest.y - p.y, nearest.x - p.x);
-      } else {
+      } else if (!this.touchMode) {
         p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
       }
     } else if (!this.gpActive) {
@@ -4443,7 +4600,7 @@ export class Game {
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
 
     // 3. Primary Weapon Firing
-    const shouldFire = this.autoFire || this.mouse.down || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
+    const shouldFire = this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
     if (shouldFire && ownsWeapon(p, 'blaster')) {
       this.fireAccumulator += dt * blasterFireRate(p);
       while (this.fireAccumulator >= 1) {
@@ -4739,6 +4896,7 @@ export class Game {
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
     document.getElementById('bombs-count').textContent = p.bombs;
+    if (this.touchMode) this.touch?.setStatus(dashReadyPct / 100, p.bombs);
 
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
@@ -5145,7 +5303,7 @@ export class Game {
   }
 
   drawMinimap(ctx) {
-    const mapSize = radarSize(this.width, this.height);
+    const mapSize = radarSize(this.width, this.height, this.touchMode ? 0.36 : 0.55);
     const k = mapSize / RADAR_BASE_SIZE; // blips grow with the radar so they stay readable
     const pad = 18;
     const mx = this.width - mapSize - pad;
@@ -5313,7 +5471,8 @@ export class Game {
     const ctx = this.ctx;
     const beatPulse = this.sound.getBeatPulse();
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const rs = this.renderScale ?? 1;
+    ctx.setTransform(rs, 0, 0, rs, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
@@ -5519,7 +5678,7 @@ export class Game {
 
     // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues (hidden with the HUD, [H])
     if (!this.hudHidden && (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST')) {
-      if (this.radarVisible) this.drawMinimap(ctx);
+      if (this.radarVisible && !this.touchMode) this.drawMinimap(ctx);
       this.drawBossIndicators(ctx);
     }
 
@@ -5644,6 +5803,12 @@ export class Game {
     this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
     this.draw();
+    this.touch?.setVisible(this.touchMode && !this.gpActive && this.state === 'PLAYING');
+    if (this.state !== this.lastLoopState) {
+      // A touch-menu window never outlives its screen.
+      this.lastLoopState = this.state;
+      this.closeMobileWindows();
+    }
     this.overview?.frame(now);
     if (this.state === 'TITLE') this.titleShip?.frame(now);
     requestAnimationFrame((t) => this.loop(t));

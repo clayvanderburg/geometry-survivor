@@ -25,12 +25,14 @@ html, body {
   background-color: var(--bg-deep);
   font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   color: var(--text-main);
+  overscroll-behavior: none; /* no pull-to-refresh or bounce on phones */
 }
 
 #game-container {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh; /* mobile browsers: the visible area, not the one behind the address bar */
   overflow: hidden;
   cursor: crosshair;
 }
@@ -50,6 +52,8 @@ html, body {
   flex-direction: column;
   justify-content: space-between;
   padding: 14px 22px;
+  /* Phones in landscape: keep the HUD clear of the notch and rounded corners. */
+  padding: max(14px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 14px max(22px, env(safe-area-inset-left));
   z-index: 10;
 }
 
@@ -3872,4 +3876,309 @@ html, body {
   .mode-opt { flex: 1; min-width: 0; padding: 5px 4px; }
   .mode-opt-name { font-size: 11.5px; letter-spacing: 1px; }
   .mode-opt-sub { font-size: 7.5px; letter-spacing: 0.4px; }
+}
+
+/* Touch controls (js/touch-controls.js): a full-screen layer under the HUD. A thumb on the left half
+   drops a move stick where it lands, one on the right half an aim stick; DASH / NOVA sit by the radar. */
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-stick {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 243, 255, 0.35);
+  background: radial-gradient(circle, rgba(0, 243, 255, 0.08), rgba(0, 243, 255, 0.02) 70%);
+  pointer-events: none;
+  display: none;
+}
+.touch-stick[data-stick="aim"] {
+  border-color: rgba(255, 0, 170, 0.4);
+  background: radial-gradient(circle, rgba(255, 0, 170, 0.08), rgba(255, 0, 170, 0.02) 70%);
+}
+.touch-stick.active { display: block; }
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: rgba(0, 243, 255, 0.35);
+  box-shadow: 0 0 14px rgba(0, 243, 255, 0.6);
+}
+.touch-stick[data-stick="aim"] .touch-knob {
+  background: rgba(255, 0, 170, 0.35);
+  box-shadow: 0 0 14px rgba(255, 0, 170, 0.6);
+}
+.touch-btn {
+  position: absolute;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  font: 700 12px/1 Consolas, monospace;
+  letter-spacing: 1px;
+  color: #fff;
+  background: rgba(5, 10, 24, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  touch-action: none;
+  opacity: 0.55;
+}
+.touch-btn.ready { opacity: 1; }
+.touch-dash {
+  right: max(16px, env(safe-area-inset-right));
+  border-color: rgba(0, 243, 255, 0.8);
+  /* The ring fills as the dash recharges. */
+  background:
+    radial-gradient(circle, rgba(5, 10, 24, 0.85) 58%, transparent 60%),
+    conic-gradient(rgba(0, 243, 255, 0.75) calc(var(--ready, 1) * 360deg), rgba(0, 243, 255, 0.12) 0);
+}
+.touch-nova {
+  right: calc(max(16px, env(safe-area-inset-right)) + 84px);
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 34px);
+  border-color: rgba(255, 170, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.touch-nova-count { font-size: 15px; color: #ffcc00; }
+.touch-btn:active { transform: scale(0.94); }
+
+/* Touch play: no keyboard hints on the ability pills. */
+body.touch-mode .key-hint { display: none; }
+
+/* ===== Touch play (body.touch-mode): a phone-sized HUD, compact level-up cards and menus whose
+   sections open as their own windows (Game.bindMobileMenus). Desktop never sees any of this. ===== */
+.m-menu, .card-more-btn { display: none; }
+
+/* HUD: score, wave + XP, shield and a small pause button. Everything else steps aside. */
+body.touch-mode #hud { padding: max(6px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
+body.touch-mode .hud-top { gap: 10px; grid-template-columns: 1fr 1.6fr 1fr; }
+body.touch-mode .left-badges,
+body.touch-mode #active-weapons-bar,
+body.touch-mode .ability-group,
+body.touch-mode .quick-toggles > :not(#btn-pause):not(#btn-fullscreen),
+body.touch-mode #lt-card,
+body.touch-mode #guide-toast,
+body.touch-mode #center-banner,
+body.touch-mode #boss-card,
+body.touch-mode #hud-hidden-hint { display: none !important; }
+body.touch-mode .stat-label { font-size: 9px; letter-spacing: 2px; }
+body.touch-mode .stat-value { font-size: 20px; }
+body.touch-mode .wave-row { font-size: 12px; margin: 3px 0 0; }
+/* XP bar on top, level with the shield bar; the wave and timer sit under it. */
+body.touch-mode .xp-bar-container { order: -1; margin-top: 2px; }
+body.touch-mode .xp-bar-container { height: 9px; }
+body.touch-mode #level-display { font-size: 8px; }
+body.touch-mode .bars-wrapper { gap: 4px; }
+body.touch-mode .bar-group { gap: 6px; }
+body.touch-mode .bar-label { font-size: 9px; letter-spacing: 1px; }
+body.touch-mode .hp-bar-outer { height: 9px; width: 120px; }
+body.touch-mode #hp-text { font-size: 10px; }
+body.touch-mode .quick-toggles { margin-top: 6px; justify-content: flex-end; }
+body.touch-mode :is(#btn-pause, #btn-fullscreen) { font-size: 11px; padding: 6px 12px; pointer-events: auto; }
+
+/* Boss: one thin bar under the wave, no title card. */
+/* Hugs the XP bar: pinned under the centre column instead of in a row below the tall right column. */
+body.touch-mode .hud-top { position: relative; }
+body.touch-mode .boss-hud { position: absolute; top: 31px; left: 50%; transform: translateX(-50%); width: min(240px, 36vw); margin-top: 0; }
+body.touch-mode .boss-warning { font-size: 10px; padding: 3px 8px; gap: 6px; }
+body.touch-mode .boss-warning-text { display: none; }
+body.touch-mode .boss-bars { gap: 3px; padding: 0; background: none; border: 0; box-shadow: none; }
+body.touch-mode .boss-bar-head { margin-bottom: 1px; }
+body.touch-mode .boss-bar-name,
+body.touch-mode .boss-bar-row + .boss-bar-row .boss-bar-name { font-size: 8px; letter-spacing: 1px; }
+body.touch-mode .boss-bar-epithet,
+body.touch-mode .boss-bar-hp,
+body.touch-mode .boss-bar-more { display: none; }
+body.touch-mode .boss-bar-track,
+body.touch-mode .boss-bar-row + .boss-bar-row .boss-bar-track { height: 4px; }
+
+/* Menus: the home view is a few big buttons; [data-m-section] parts only show as an open window. */
+body.touch-mode .m-menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+body.touch-mode .m-btn { margin: 0; padding: 11px 6px; font-size: 12px; letter-spacing: 1px; position: relative; }
+body.touch-mode .m-fullscreen {
+  grid-column: 1 / -1;
+  padding: 13px;
+  font-size: 15px;
+  color: #05060f;
+  background: linear-gradient(90deg, #ffcc00, #ff9d00);
+  border-color: #ffd84d;
+  box-shadow: 0 0 22px rgba(255, 204, 0, 0.55);
+  animation: m-fs-pulse 2.2s ease-in-out infinite;
+}
+body.touch-mode .m-fullscreen.active { animation: none; background: rgba(255, 204, 0, 0.12); color: var(--gold); box-shadow: none; }
+@keyframes m-fs-pulse { 50% { box-shadow: 0 0 34px rgba(255, 204, 0, 0.9); } }
+@media (prefers-reduced-motion: reduce) { body.touch-mode .m-fullscreen { animation: none; } }
+.m-fs-tip { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--text-dim); }
+body.touch-mode .m-btn .notes-badge { position: absolute; top: -7px; right: -4px; }
+body.touch-mode [data-m-section]:not(.m-window) { display: none !important; }
+body.touch-mode .m-window {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: block !important;
+  max-height: none !important;
+  overflow-y: auto;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left)) !important;
+  background: rgba(4, 7, 18, 0.98) !important;
+  text-align: left;
+}
+body.touch-mode .m-back { position: sticky; top: 0; z-index: 2; margin: 0 0 10px; padding: 9px 16px; font-size: 13px; }
+body.touch-mode .modal-overlay { padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left)); }
+body.touch-mode .modal-card { max-height: 100%; padding: 14px 18px; border-radius: 12px; }
+body.touch-mode .controls-mini,
+body.touch-mode .upgrade-hint,
+body.touch-mode .pause-hint,
+body.touch-mode .hand-key { display: none !important; }
+
+/* Title home: logo, mode, LAUNCH and the button grid. */
+body.touch-mode .hub-card { max-width: 720px; display: flex; flex-direction: column; gap: 10px; }
+body.touch-mode #title-modal .hub-header { display: block; margin: 0; padding: 0; border: 0; text-align: center; }
+body.touch-mode #title-modal .glitch-subtitle,
+body.touch-mode .title-ship-stage,
+body.touch-mode .hub-header-side,
+body.touch-mode #btn-title-notes,
+body.touch-mode #btn-weapon-range,
+body.touch-mode #gameover-modal .wallet-pill,
+body.touch-mode #btn-go-guide { display: none !important; }
+body.touch-mode .neon-title { font-size: 30px; margin: 0; }
+body.touch-mode .title-meta { justify-content: center; margin-top: 2px; }
+body.touch-mode .hub-columns { display: block; margin: 0; }
+body.touch-mode .title-actions { margin: 0 !important; gap: 8px !important; }
+body.touch-mode #btn-start-game,
+body.touch-mode #btn-restart-game { width: 100%; padding: 13px; font-size: 16px; }
+
+/* Pause home: RESUME, the button grid, RESTART / MAIN MENU. */
+body.touch-mode .pause-card { max-width: 640px; }
+body.touch-mode .pause-head { margin-bottom: 8px; justify-content: center; }
+body.touch-mode .pause-head .glitch-subtitle { display: none; }
+body.touch-mode .pause-head .upgrade-title { font-size: 22px; margin: 0; }
+body.touch-mode .pause-layout { display: block; }
+body.touch-mode .pause-side { width: 100%; gap: 8px; }
+body.touch-mode .pause-ship-stage,
+body.touch-mode #pause-run-info,
+body.touch-mode #btn-pause-notes { display: none !important; }
+body.touch-mode .pause-actions { gap: 8px; }
+body.touch-mode .pause-actions > .neon-btn,
+body.touch-mode .pause-action-row .neon-btn { padding: 11px 8px; font-size: 13px; margin: 0; }
+body.touch-mode #btn-resume-game { padding: 13px; font-size: 16px; }
+
+/* Game over home: title, run numbers, RELAUNCH / MAIN MENU and the button grid. */
+body.touch-mode #gameover-modal .hub-header { margin: 0; padding: 0; border: 0; justify-content: center; }
+body.touch-mode #gameover-modal .neon-title { font-size: 26px !important; }
+body.touch-mode #gameover-modal .glitch-subtitle { font-size: 10px; }
+
+/* Level-up: compact cards (rarity, name, headline, level) in one row; MORE opens the full card. */
+body.touch-mode .upgrade-card { padding: 10px 12px; max-width: 980px; }
+body.touch-mode .upgrade-header .glitch-subtitle { font-size: 9px; margin: 0; }
+body.touch-mode .upgrade-title { font-size: 19px; margin: 2px 0 8px; }
+body.touch-mode .upgrade-choices-grid,
+body.touch-mode .upgrade-choices-grid.cards-4,
+body.touch-mode #chest-rewards-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) { padding: 10px 10px 8px; }
+body.touch-mode .upgrade-option:not(.card-detail-card):hover { transform: none; }
+body.touch-mode .upgrade-option:not(.card-detail-card) :is(.upg-key, .upg-tags, .upg-stats) { display: none; }
+/* What the card actually does, in brief: the full text and stats are behind MORE. */
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+}
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-top { margin-bottom: 4px; justify-content: flex-start; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-badge { font-size: 8.5px; padding: 2px 6px; letter-spacing: 0.5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-name { font-size: 14px; margin-bottom: 4px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline { font-size: 13px; line-height: 1.2; margin: 0; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-level { font-size: 10px; margin-top: 6px; padding-top: 5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-jump-ribbon { font-size: 9px; padding: 2px 8px; }
+body.touch-mode .card-lock-toggle,
+body.touch-mode .card-banish-toggle { font-size: 10px; padding: 3px 8px; margin-top: 6px; }
+body.touch-mode .card-more-btn {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--rarity);
+  color: var(--rarity);
+  font: 800 11px/1 Consolas, monospace;
+  letter-spacing: 2px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+body.touch-mode .hand-goldbar { margin-top: 8px; gap: 8px; padding: 6px 10px; }
+body.touch-mode .hand-lock-note { font-size: 10px; }
+body.touch-mode #upgrade-loadout-strip { display: none; }
+body.touch-mode .card-detail {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  background: rgba(2, 3, 8, 0.9);
+}
+body.touch-mode .card-detail-card { width: min(560px, 100%); max-height: calc(100% - 64px); overflow-y: auto; cursor: default; }
+body.touch-mode .card-detail-card .upg-key,
+body.touch-mode .card-detail-card .card-more-btn { display: none; }
+body.touch-mode .card-detail-actions { display: flex; gap: 10px; }
+body.touch-mode .card-detail-actions .neon-btn { margin: 0; padding: 11px 26px; font-size: 14px; }
+body.touch-mode .m-btn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.touch-mode .loadout-slot { min-height: 0; }
+body.touch-mode .gameover-stats { gap: 6px; margin-bottom: 4px; }
+body.touch-mode .go-stat-box { padding: 5px 8px; }
+body.touch-mode .go-stat-label { font-size: 8px; letter-spacing: 1px; }
+body.touch-mode .go-stat-val { font-size: 15px; }
+body.touch-mode .go-global-rank { min-height: 0; margin: 0 0 2px; font-size: 11px; letter-spacing: 1.5px; }
+body.touch-mode #gameover-modal .title-actions { display: flex; flex-direction: row; flex-wrap: nowrap; }
+body.touch-mode #gameover-modal .title-actions .neon-btn { flex: 1; margin: 0; padding: 12px 8px; font-size: 14px; }
+body.touch-mode #btn-restart-game { flex: 2 !important; }
+body.touch-mode .card-detail-card .upg-jump-ribbon { position: static; transform: none; align-self: flex-start; margin-bottom: 8px; }
+@media (max-height: 400px) {
+  body.touch-mode .hub-card { gap: 7px; padding-top: 10px; padding-bottom: 10px; }
+  body.touch-mode .neon-title { font-size: 24px; }
+  body.touch-mode .upgrade-header .glitch-subtitle,
+  body.touch-mode .hand-lock-note { display: none; }
+  body.touch-mode .upgrade-option:not(.card-detail-card) .upg-summary { -webkit-line-clamp: 2; }
+  body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline { font-size: 12px; }
+  body.touch-mode .card-more-btn { padding: 5px 0; }
+}
+@media (orientation: portrait) {
+  body.touch-mode .hud-top { grid-template-columns: auto 1fr auto; gap: 8px; }
+  body.touch-mode .wave-row { white-space: nowrap; font-size: 11px; }
+  body.touch-mode .bar-label { display: none; }
+  body.touch-mode .hp-bar-outer { width: 64px; }
+}
+
+/* Landscape phones: the front camera sits in a top corner, so the score (top left) and the shield / pause
+   column (top right) keep clear of both corners, whichever way the phone is turned. */
+@media (orientation: landscape) {
+  body.touch-mode #hud {
+    padding-left: max(64px, calc(env(safe-area-inset-left) + 16px));
+    padding-right: max(64px, calc(env(safe-area-inset-right) + 16px));
+  }
 }
