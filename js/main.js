@@ -32,6 +32,7 @@ import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, tr
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
+import { TutorialUI } from './tutorial.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -176,6 +177,8 @@ const GUIDE_SCAN_TICKS = 6;
 const GUIDE_STATES = ['TITLE', 'PAUSED', 'GAMEOVER'];
 // Screens with a PATCH NOTES button (the notes overlay closes itself if the state moves on).
 const NOTES_STATES = ['TITLE', 'PAUSED'];
+// Screens with a TUTORIAL button; the tutorial also opens by itself on the first LAUNCH on a device.
+const TUTORIAL_STATES = ['TITLE', 'PAUSED'];
 
 // Crits shove a little harder and flash a gold star flare sized to the target.
 const CRIT_KNOCKBACK_MULT = 1.5;
@@ -264,6 +267,17 @@ export class Game {
     // when there are notes for a version the player hasn't read.
     this.notesOpen = false;
     this.patchNotes = new PatchNotesUI({ onClose: () => this.onNotesClosed() });
+    // First-run tutorial (js/tutorial.js): opens on the first LAUNCH on a device (the run starts when it
+    // closes; switched on by the browser boot, enableFirstLaunchTutorial), skippable on every slide,
+    // replayed from the TUTORIAL buttons.
+    this.tutorialOpen = false;
+    this.tutorialOnLaunch = false;
+    this.tutorialLaunchAfter = false;
+    this.tutorial = new TutorialUI({
+      getInput: () => (this.gpActive ? 'pad' : this.touchMode ? 'touch' : 'keyboard'),
+      onClose: (reason) => this.onTutorialClosed(reason),
+      onGuide: () => this.openGuide()
+    });
     this.renderVersionTags();
     // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
     this.range = new WeaponRange(this);
@@ -594,6 +608,10 @@ export class Game {
       // Space on a focused button/link activates that control instead of a menu shortcut.
       const onControl = focused && (focused.tagName === 'BUTTON' || focused.tagName === 'A' || (focused.tagName === 'INPUT' && focused.type === 'checkbox'));
 
+      if (this.tutorialOpen) {
+        this.handleTutorialKey(e, onControl);
+        return;
+      }
       if (this.guideOpen) {
         this.handleGuideKey(e, onControl);
         return;
@@ -836,6 +854,9 @@ export class Game {
     }
     for (const id of ['btn-title-notes', 'btn-pause-notes']) {
       document.getElementById(id)?.addEventListener('click', () => this.openNotes());
+    }
+    for (const id of ['btn-title-tutorial', 'btn-pause-tutorial']) {
+      document.getElementById(id)?.addEventListener('click', () => this.openTutorial());
     }
     this.syncDamageNumbersButton();
     this.syncRadarButton();
@@ -1568,6 +1589,9 @@ export class Game {
 
   startGame() {
     this.sound.init();
+    // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
+    if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
+      && this.openTutorial({ launchAfter: true })) return;
     if (this.guideOpen) this.closeGuide();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
@@ -4322,6 +4346,10 @@ export class Game {
   // Controller menus: d-pad/left stick moves focus, A selects, Start confirms the screen's main action,
   // B (or Start) resumes from pause. A short grace period stops a held dash press picking a card.
   updateMenuController(gp, dt) {
+    if (this.tutorialOpen) {
+      this.updateTutorialController(gp, dt);
+      return;
+    }
     if (this.guideOpen) {
       this.updateGuideController(gp, dt);
       return;
@@ -4401,6 +4429,7 @@ export class Game {
     // The guide only lives over the title, pause and game-over screens.
     if (this.guideOpen && !GUIDE_STATES.includes(this.state)) this.closeGuide();
     if (this.notesOpen && !NOTES_STATES.includes(this.state)) this.closeNotes();
+    if (this.tutorialOpen && !TUTORIAL_STATES.includes(this.state)) this.closeTutorial();
     const gp = this.pollGamepad();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
@@ -4965,7 +4994,7 @@ export class Game {
   }
 
   openGuide({ tab = null, focusId = null } = {}) {
-    if (this.guideOpen || this.notesOpen || !GUIDE_STATES.includes(this.state)) return false;
+    if (this.guideOpen || this.notesOpen || this.tutorialOpen || !GUIDE_STATES.includes(this.state)) return false;
     this.fieldGuide ||= new FieldGuideUI({
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
@@ -5089,7 +5118,7 @@ export class Game {
   }
 
   openNotes() {
-    if (this.notesOpen || this.guideOpen || !NOTES_STATES.includes(this.state) || !this.patchNotes) return false;
+    if (this.notesOpen || this.guideOpen || this.tutorialOpen || !NOTES_STATES.includes(this.state) || !this.patchNotes) return false;
     this.notesReturnFocus = document.activeElement;
     if (!this.patchNotes.open()) return false;
     this.notesOpen = true;
@@ -5172,6 +5201,105 @@ export class Game {
     if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) {
       this.closeNotes();
     } else if (gp.pressed(PAD.A)) {
+      this.sound.init();
+      this.menuNav.activate();
+    }
+  }
+
+  // --- Tutorial ------------------------------------------------------------------------------------
+
+  // The browser boot switches this on: the first LAUNCH on a device (the tutorial was never skipped or
+  // finished here) shows the tutorial before the run. Headless tests and tools leave it off.
+  enableFirstLaunchTutorial() {
+    this.tutorialOnLaunch = true;
+    return this;
+  }
+
+  openTutorial({ launchAfter = false } = {}) {
+    if (this.tutorialOpen || this.guideOpen || this.notesOpen || !TUTORIAL_STATES.includes(this.state) || !this.tutorial) return false;
+    this.tutorialReturnFocus = document.activeElement;
+    this.closeMobileWindows();
+    if (!this.tutorial.open()) return false;
+    this.tutorialOpen = true;
+    this.tutorialLaunchAfter = launchAfter;
+    this.resetInput();
+    this.menuNav?.clear();
+    // Focus moves into the tutorial so Enter/Space can't click the (now covered) button that opened it.
+    this.tutorial.nextBtn?.focus?.({ preventScroll: true });
+    return true;
+  }
+
+  closeTutorial() {
+    this.tutorial?.close();
+  }
+
+  // Opened by the first LAUNCH: SKIP or LET'S FLY carries on into the run (the Field Guide button
+  // stays on the title instead).
+  onTutorialClosed(reason) {
+    const launch = this.tutorialLaunchAfter && (reason === 'skip' || reason === 'done') && this.state === 'TITLE';
+    this.tutorialOpen = false;
+    this.tutorialLaunchAfter = false;
+    this.menuNav?.clear();
+    this.menuState = null;
+    this.tutorialReturnFocus?.focus?.();
+    if (launch) this.startGame();
+  }
+
+  // Keyboard in the tutorial: ←/→ change slides, Enter/Space go on (or press the focused button),
+  // Esc skips. Like the guide, keys never reach the screen behind it.
+  handleTutorialKey(e, onControl) {
+    const tut = this.tutorial;
+    const code = e.code;
+    const focused = document.activeElement;
+    const inTutorial = !!focused && tut.root.contains(focused);
+    if (code === 'Tab') {
+      const stops = [...tut.root.querySelectorAll('button:not([disabled])')].filter(el => el.getClientRects().length > 0);
+      const i = inTutorial ? stops.indexOf(focused) : -1;
+      const next = i === -1 ? (e.shiftKey ? stops.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + stops.length) % stops.length;
+      e.preventDefault();
+      stops[next]?.focus();
+      return;
+    }
+    if (onControl && inTutorial && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
+    const actions = {
+      Escape: () => tut.close('skip'),
+      Backspace: () => tut.close('skip'),
+      ArrowRight: () => tut.go(tut.index + 1),
+      ArrowLeft: () => tut.go(tut.index - 1),
+      KeyD: () => tut.go(tut.index + 1),
+      KeyA: () => tut.go(tut.index - 1),
+      Enter: () => tut.next(),
+      NumpadEnter: () => tut.next(),
+      Space: () => tut.next()
+    };
+    const action = actions[code];
+    if (!action) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    this.sound.init();
+    action();
+  }
+
+  // Controller in the tutorial: d-pad walks BACK / NEXT (and the Field Guide button on the last
+  // slide), A presses it, LB / RB change slides, B skips.
+  updateTutorialController(gp, dt) {
+    const tut = this.tutorial;
+    if (this.menuState !== 'TUTORIAL') {
+      this.menuState = 'TUTORIAL';
+      this.menuGrace = 0.25;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !tut?.root) return;
+    this.menuNav.update(tut.root, gp, dt, tut.nextBtn);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B)) {
+      tut.close('skip');
+    } else if (gp.pressed(PAD.RB)) {
+      tut.go(tut.index + 1);
+    } else if (gp.pressed(PAD.LB)) {
+      tut.go(tut.index - 1);
+    } else if (gp.pressed(PAD.A) || gp.pressed(PAD.START)) {
       this.sound.init();
       this.menuNav.activate();
     }
@@ -5816,5 +5944,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial());
 }

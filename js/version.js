@@ -5,6 +5,7 @@
 // Rule: every merge that changes gameplay (balance, weapons, enemies, scoring, pacing) bumps
 // GAME_VERSION and adds a matching entry at the top of CHANGELOG in js/changelog.js.
 // tests/changelog.test.js fails if the two disagree.
+// A minor bump also re-checks the first-run tutorial slides (js/tutorial.js, TUTORIAL_REVIEWED_FOR).
 
 export const GAME_VERSION = '0.31.0';
 

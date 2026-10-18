@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test",
     "balance": "node tools/balance-sim.mjs",
-    "start": "node tools/serve.js"
+    "start": "node tools/serve.js",
+    "tutorial-media": "node tools/tutorial-media.cjs"
   },
   "engines": {
     "node": ">=20"
