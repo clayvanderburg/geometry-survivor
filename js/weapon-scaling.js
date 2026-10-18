@@ -30,7 +30,7 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
-export const DAMAGE_GROWTH = 1.5; // Damage card: x1.5 damage per hit per rank (compounding)
+export const DAMAGE_GROWTH = 1.45; // Damage card: x1.45 damage per hit per rank (compounding; 1.5 before v0.29)
 export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
 export const hitMult = (b) => Math.pow(DAMAGE_GROWTH, b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);

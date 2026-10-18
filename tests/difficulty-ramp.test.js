@@ -74,7 +74,7 @@ test('enemy HP scale follows the linear and compound ramp terms, for the game an
     // Every spawned hull (bosses and lieutenants included) reads the same scale.
     const g = rampGame({ wave: 9 });
     g.enemyManager.queueSpawn('swarmer', 0, 0, g.getWaveScale(), { instant: true });
-    assert.ok(Math.abs(g.enemyManager.spawnIndicators[0].config.maxHp - 10 * waveScaleAt(9)) < 1e-9);
+    assert.ok(Math.abs(g.enemyManager.spawnIndicators[0].config.maxHp - 10 * TUNING.enemyHpMult * waveScaleAt(9)) < 1e-9);
   });
 });
 
@@ -178,11 +178,11 @@ test('light swarm fodder keeps the light HP start; tougher hulls get the extra e
   });
 });
 
-test('spawn density is back to the pre-0.13 amounts', () => {
+test('spawn density: the pre-0.13 amounts, a touch denser since v0.29', () => {
   assert.equal(DEFAULT_TUNING.spawnIntervalStart, 2.6);
   assert.equal(DEFAULT_TUNING.spawnIntervalTau, 7);
-  assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.75);
-  assert.equal(DEFAULT_TUNING.packSizeMult, 1);
+  assert.equal(DEFAULT_TUNING.spawnIntervalMin, 0.7);
+  assert.equal(DEFAULT_TUNING.packSizeMult, 1.1);
 });
 
 test('the difficulty ramps ease in: no corner where HP compounding, damage ramp or spawn floor switch on', () => {

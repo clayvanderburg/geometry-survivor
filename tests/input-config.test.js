@@ -69,7 +69,7 @@ test('tuning rejects poison values and clamps persisted schema bounds', () => {
   assert.equal(config.normalizeTuningValue('moveSpeed', -100), 2);
   assert.equal(config.normalizeTuningValue('carapaceColor', '<bad>'), config.DEFAULT_TUNING.carapaceColor);
   storage.set('vexolith_tuning_overrides_v4', JSON.stringify({ moveSpeed: 999, baseDamage: 'oops', evil: true }));
-  config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 14); assert.equal(config.TUNING.baseDamage, 11);
+  config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 14); assert.equal(config.TUNING.baseDamage, 10);
   assert.equal(config.TUNING.evil, undefined);
   storage.delete('vexolith_tuning_overrides_v4'); config.loadTuning(); assert.equal(config.TUNING.moveSpeed, 5);
 });

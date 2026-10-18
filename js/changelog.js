@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.29.0',
+    date: '2026-10-18',
+    title: 'Tougher',
+    notes: [
+      { type: 'balance', text: 'Enemies have a bit more health (+10%), speed (+5%) and contact damage, and come in slightly bigger, faster packs.' },
+      { type: 'balance', text: 'Your ship is a bit weaker: base shield 90 (was 100), base damage 10 (was 11), damage cards +45% per rank (was +50%).' },
+      { type: 'balance', text: 'Applies to every mode.' }
+    ]
+  },
+  {
     version: '0.28.0',
     date: '2026-10-18',
     title: 'Game Modes',

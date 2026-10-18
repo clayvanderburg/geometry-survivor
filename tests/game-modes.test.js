@@ -10,7 +10,7 @@ globalThis.localStorage = { getItem: (k) => (saved.has(k) ? saved.get(k) : null)
 const h = await import('../tools/balance/harness.mjs');
 const { MODES, MODE_IDS, modeRules, normalizeMode, readStoredMode, writeStoredMode, MODE_STORAGE_KEY, cycleMode, modeBonuses } = await import('../js/modes.js');
 const { TUNING, DEFAULT_TUNING, baseTuning, updateTuningKey, applyTuningOverlay, clearTuningOverlay } = await import('../js/config.js');
-const { UPGRADE_POOL, eligibleUpgrades, rollUpgrades, rollLevelUpHand, applyUpgradeLevels } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, eligibleUpgrades, rollUpgrades, rollLevelUpHand, applyUpgradeLevels, BASE_SHIELD } = await import('../js/upgrades.js');
 const { normalizeSave, LOCAL_TOP } = await import('../js/progression.js');
 const { buildBoardView } = await import('../js/leaderboard.js');
 const { sanitizeRunStats } = await import('../js/stats-rules.js');
@@ -40,7 +40,7 @@ function cardsThatRaiseShield() {
     const p = JSON.parse(fresh);
     p.hp = 50;
     applyUpgradeLevels(p, { ...u, levelJump: 1 });
-    return p.maxHp > 100 + ARMORY_RANK * 4 || p.hp > 50;
+    return p.maxHp > BASE_SHIELD + ARMORY_RANK * 4 || p.hp > 50;
   }).map((u) => u.id);
 }
 
@@ -75,10 +75,10 @@ test('the title choice is remembered, and blocked storage reads as NORMAL', () =
 test('HARDCORE: base shield (no Aegis Shield Matrix), other armory upgrades still apply, and no regen ever', () => {
   const normal = run('normal');
   const hc = run('hardcore');
-  assert.equal(normal.player.maxHp, 100 + ARMORY_RANK * 4, 'NORMAL keeps the armory shield');
-  assert.equal(hc.player.maxHp, 100);
-  assert.equal(hc.player.hp, 100);
-  assert.equal(hc.player.base.maxHp, 100);
+  assert.equal(normal.player.maxHp, BASE_SHIELD + ARMORY_RANK * 4, 'NORMAL keeps the armory shield');
+  assert.equal(hc.player.maxHp, BASE_SHIELD);
+  assert.equal(hc.player.hp, BASE_SHIELD);
+  assert.equal(hc.player.base.maxHp, BASE_SHIELD);
   assert.equal(hc.player.stats.damage, normal.player.stats.damage, 'damage armory applies');
   assert.equal(hc.player.damageTakenMult, normal.player.damageTakenMult, 'armor armory applies');
   assert.equal(hc.player.bombs, normal.player.bombs);
@@ -118,7 +118,7 @@ test('HARDCORE: caches, shield crystals and a maxed level-up repair nothing', ()
     while (g.state === 'UPGRADE') g.selectUpgrade(0);
   }
   assert.equal(p.hp, 30, 'no cache repair');
-  assert.equal(p.maxHp, 100, 'no cache card raised the shield');
+  assert.equal(p.maxHp, BASE_SHIELD, 'no cache card raised the shield');
   // A shield crystal (shield vein) broken by the ship.
   g.state = 'PLAYING';
   g.onRockShattered({ x: p.x + 50, y: p.y, radius: 20, sides: 6, rotation: 0, hue: 150, oreType: 'shield_vein' });
