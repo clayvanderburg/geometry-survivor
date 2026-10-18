@@ -4182,3 +4182,105 @@ body.touch-mode .card-detail-card .upg-jump-ribbon { position: static; transform
     padding-right: max(64px, calc(env(safe-area-inset-right) + 16px));
   }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Tutorial (js/tutorial.js): first-run slide show, a clip and a couple of lines per slide.
+   Side by side on wide and landscape screens, stacked on portrait phones.
+   --------------------------------------------------------------------------------------------- */
+.tutorial-card {
+  max-width: 940px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px 12px;
+  text-align: left;
+}
+.tutorial-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tutorial-kicker { margin: 0; }
+.tutorial-skip {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8eefc;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+}
+.tutorial-skip:hover, .tutorial-skip:focus-visible { border-color: var(--magenta); color: #fff; background: rgba(255, 0, 127, 0.16); }
+.tutorial-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  touch-action: pan-y;
+}
+.tutorial-media {
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #02030a;
+  border: 1px solid rgba(0, 243, 255, 0.3);
+  box-shadow: 0 0 22px rgba(0, 243, 255, 0.15);
+}
+.tutorial-media img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.tutorial-count { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--text-dim); }
+.tutorial-title {
+  margin: 2px 0 10px;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(0, 243, 255, 0.8);
+  line-height: 1.15;
+}
+.tutorial-text p { margin: 0 0 10px; font-size: 15px; line-height: 1.5; color: #c9d6ec; }
+.tutorial-text b { color: #fff; }
+.tutorial-text b.tut-gold { color: var(--gold); }
+.tutorial-text b.tut-green { color: var(--emerald); }
+.tutorial-text b.tut-purple { color: #c58cff; }
+.tutorial-guide-btn { margin-top: 4px; padding: 10px 18px; font-size: 12px; letter-spacing: 2px; }
+.tutorial-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tutorial-nav-btn { padding: 10px 22px; font-size: 13px; letter-spacing: 2px; min-width: 120px; }
+.tutorial-nav-btn:disabled { opacity: 0.3; cursor: default; transform: none; box-shadow: none; }
+.tutorial-dots { display: flex; gap: 7px; }
+.tutorial-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.tutorial-dot.done { background: rgba(0, 243, 255, 0.45); }
+.tutorial-dot.active { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.tutorial-replay { text-align: center; font-size: 11px; letter-spacing: 0.5px; color: var(--text-dim); }
+.tutorial-replay b { color: #e8eefc; }
+
+.tutorial-open-btn {
+  border-color: #b565ff;
+  background: linear-gradient(90deg, rgba(181, 101, 255, 0.2), rgba(0, 243, 255, 0.14));
+  text-shadow: 0 0 10px rgba(181, 101, 255, 0.8);
+  box-shadow: 0 0 18px rgba(181, 101, 255, 0.25);
+}
+/* Pause menu: TUTORIAL / FIELD GUIDE / PATCH NOTES share a row (hidden buttons take no column). */
+.pause-action-row.pause-info-row { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+@media (max-width: 520px) { .pause-action-row.pause-info-row { grid-auto-flow: row; } }
+
+/* Portrait phones: the clip on top, text below. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .tutorial-card { padding: 12px 14px 10px; gap: 10px; }
+  .tutorial-body { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .tutorial-title { font-size: 20px; margin-bottom: 6px; }
+  .tutorial-text p { font-size: 14px; line-height: 1.45; margin-bottom: 8px; }
+  .tutorial-nav-btn { min-width: 0; padding: 10px 16px; font-size: 12px; letter-spacing: 1px; }
+}
+/* Landscape phones: side by side, everything compact so one slide fits without scrolling. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .tutorial-card { padding: 8px 14px 6px; gap: 6px; max-height: 100%; }
+  .tutorial-skip { padding: 5px 12px; font-size: 10px; }
+  .tutorial-body { gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .tutorial-media { justify-self: center; height: min(calc(100vh - 112px), 56vw); width: auto; max-width: 100%; }
+  .tutorial-count { display: none; }
+  .tutorial-title { font-size: 17px; margin: 0 0 4px; letter-spacing: 2px; }
+  .tutorial-text p { font-size: 12.5px; line-height: 1.35; margin-bottom: 5px; }
+  .tutorial-guide-btn { margin-top: 0; padding: 6px 12px; font-size: 10.5px; }
+  .tutorial-nav-btn { min-width: 0; padding: 6px 16px; font-size: 12px; letter-spacing: 1px; }
+  .tutorial-replay { font-size: 10px; }
+}

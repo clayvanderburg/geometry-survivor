@@ -47,6 +47,7 @@ async function openGame(browser, api) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => {
+    try { localStorage.setItem('vexolith_tutorial_seen', '1'); } catch {}
     window.__pad = { buttons: Array(17).fill(false), axes: [0, 0, 0, 0] };
     navigator.getGamepads = () => [{ connected: true, axes: window.__pad.axes, buttons: window.__pad.buttons.map(pressed => ({ pressed })) }];
   });

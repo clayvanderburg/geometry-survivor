@@ -17,6 +17,15 @@ const { chromium } = require(process.argv[2] || 'playwright');
  const page = await context.newPage();
  const errors=[]; page.on('pageerror', e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8096');
+ // First visit: the tutorial opens over the title; NEXT / BACK move, SKIP closes it for good.
+ await page.locator('#tutorial-modal').waitFor({state:'visible'});
+ await page.locator('#btn-tutorial-next').click();
+ if(!/2 \/ 6/.test(await page.locator('#tutorial-body .tutorial-count').innerText())) throw Error('NEXT should show slide 2');
+ await page.keyboard.press('ArrowLeft');
+ if(!/1 \/ 6/.test(await page.locator('#tutorial-body .tutorial-count').innerText())) throw Error('Left arrow should go back to slide 1');
+ await page.locator('#btn-tutorial-skip').click();
+ if(await page.locator('#tutorial-modal').isVisible()) throw Error('SKIP TUTORIAL did not close it');
+ if(await page.evaluate(()=>localStorage.getItem('vexolith_tutorial_seen'))!=='1') throw Error('Skipping should remember the tutorial was seen');
  // Game mode selector next to LAUNCH: three choices, NORMAL by default, [3] picks BLITZ and the run wears its badge.
  if(await page.locator('#mode-select [data-game-mode]').count() !== 3) throw Error('Title needs the NORMAL / HARDCORE / BLITZ selector');
  if(await page.locator('#mode-select [aria-checked="true"]').getAttribute('data-game-mode') !== 'normal') throw Error('NORMAL is the default mode');
@@ -50,6 +59,10 @@ const { chromium } = require(process.argv[2] || 'playwright');
  blocked.on('pageerror', e=>errors.push(e.message));
  await blocked.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Storage unavailable','SecurityError');}}));
  await blocked.goto('http://127.0.0.1:8096');
+ // Storage blocked: the tutorial still opens (it can't know it was seen) and Esc skips it.
+ await blocked.locator('#tutorial-modal').waitFor({state:'visible'});
+ await blocked.keyboard.press('Escape');
+ if(await blocked.locator('#tutorial-modal').isVisible()) throw Error('Esc did not skip the tutorial');
  // Patch notes with storage blocked: NEW badge shows, the notes open and close, and the badge clears for the session.
  if(await blocked.locator('#notes-modal').isVisible()) throw Error('Patch notes must not open by themselves');
  if(!await blocked.locator('#btn-title-notes [data-notes-badge]').isVisible()) throw Error('PATCH NOTES needs its NEW badge');
@@ -64,6 +77,6 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await blocked.keyboard.press('p');
  if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, blocked-storage boot + patch notes + mode pick; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, first-run tutorial (next/back/skip/remembered), blocked-storage boot + tutorial + patch notes + mode pick; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -16,6 +16,8 @@ The game has a semver version, `GAME_VERSION` in **`js/version.js`** (the single
 
 **Rule: every merge that affects gameplay (balance, weapons, enemies, scoring, pacing, anything that changes what a run can score) bumps `GAME_VERSION` and adds a matching entry at the top of `CHANGELOG` in the same PR.** Use a minor bump (`0.9.0` → `0.10.0`) for a release with new content and a patch bump (`0.9.0` → `0.9.1`) for a tuning tweak or fix. Write the notes for players: short, plain and concrete ("Escort Drones fire 4× faster (same damage output)"), no file names or jargon, a handful per version. `tests/changelog.test.js` fails if the version and the newest entry disagree, or if versions are not unique and descending. The global leaderboard is one shared board that never resets: every score is tagged with the version it was set on (see below), so players can see when a run was flown under different balance. Pure UI/docs changes don't need a bump.
 
+**Rule: keep the first-run TUTORIAL accurate.** Any change to something the tutorial says or shows (controls, the shield, mining and veins, gold / reroll / lock, level-ups, weapon slots, lieutenants, bosses, Void Cores / armory) updates its slides in `js/tutorial.js` and, if a clip now looks wrong, re-captures them with `npm run tutorial-media` in the same PR. Every minor version bump (new content) re-checks all slides and sets `TUTORIAL_REVIEWED_FOR` in `js/tutorial.js` to the new major.minor; `tests/tutorial.test.js` fails until it does. Keep it brief: a few short lines per slide. See [Tutorial](#tutorial-first-run-slides).
+
 Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.0 the original prototype, 0.2.0 PR #3–#4, 0.3.0 #5–#6, 0.4.0 #7–#8, 0.5.0 #9, 0.6.0 #10–#11, 0.7.0 #12–#13, 0.8.0 #14, 0.8.1 #15, 0.9.0 versioned leaderboard + patch notes.
 
 ---
@@ -123,7 +125,19 @@ Versions 0.1.0–0.8.1 were assigned after the fact from the merge history: 0.1.
    - **⌂ MAIN MENU** in the pause menu asks *ABANDON RUN?* first (CONFIRM / CANCEL; Esc or B cancels): an abandoned run is not recorded anywhere (no local high score, no global board, no run stats; Void Cores already looted stay banked). On the game-over screen MAIN MENU goes straight to the title (the run was already recorded).
    - **`[H]`** hides every HUD overlay (bars, slots, buttons, radar, edge arrows) for a clean view, with a faint *[H] SHOW HUD* hint to bring it back (session only). **`[V]`** toggles fullscreen (Fullscreen API, WebKit fallback; the button hides where element fullscreen isn't supported). Both have HUD buttons (top right) and pause SETTINGS toggles, so controllers can reach them too.
 
+13. **Tutorial (first-run slides)** — see [Tutorial](#tutorial-first-run-slides).
+
 ---
+
+## Tutorial (first-run slides)
+
+`js/tutorial.js` (`#tutorial-modal`) is a six-slide PILOT BRIEFING for new players: FLY & FIGHT, SURVIVE THE SWARM, MINE ASTEROIDS (gold veins change upgrade choices, green veins restore the shield, purple cores give Void Cores), LEVEL UP (NEW WEAPON / upgrades, gold REROLL / LOCK), ELITES & BOSSES and YOU'RE READY (Void Armory, then *for in-depth info, check our handy 📖 FIELD GUIDE*, with a button that opens it). Each slide is a looping clip of the real game plus one or two short lines.
+
+- **When it shows**: by itself over the title screen on a first visit (`Game.maybeShowTutorial`, called once at boot). Closing it (SKIP TUTORIAL or LET'S FLY on the last slide) stores `vexolith_tutorial_seen` in `localStorage`; with storage blocked it shows once per page load. Replay it any time from **🎓 TUTORIAL** on the title screen (desktop header and the touch menu) or in the pause menu; every slide says so.
+- **Controls**: SKIP TUTORIAL ✕ on every slide, BACK / NEXT, dots for progress. Keyboard ←/→ (or A/D), Enter/Space next, Esc skips. Touch: tap, or swipe left/right. Controller: d-pad + A on the buttons, LB / RB change slides, B skips. The controls line follows the active input (keyboard / touch / controller).
+- **Layout**: clip and text side by side on desktop and landscape phones, stacked on portrait phones; tested at 1280×760, 390×780 and 740×340.
+- **Clips**: `assets/tutorial/*.webp` (animated WebP, ~480 px wide, a few hundred KB each, only the open slide and the next one load). `npm run tutorial-media` (`tools/tutorial-media.cjs`, needs Playwright + ffmpeg; `--only fly,mine` for some) steps the real game with seeded randomness and re-captures them. Slide numbers that come from tuning (weapon slots, first lieutenant wave) are read live.
+- **Keeping it accurate**: see the rule under [Versions & patch notes](#versions--patch-notes).
 
 ## Game modes
 
@@ -263,6 +277,8 @@ Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created o
 - `js/leaderboard-rules.js` — Callsign alphabet (`sanitizeCallsign`) and board versions (`BOARD_VERSIONS`, `ALL_TIME`) shared by the game and the function.
 - `js/version.js` — `GAME_VERSION` (single source of truth), `VERSIONED_SINCE`, semver compare and `v0.X.Y` / `pre-0.9` labels; shared with the function.
 - `js/changelog.js` — `CHANGELOG`: player-facing patch notes, newest first; also the server's list of known versions.
+- `js/tutorial.js` — First-run TUTORIAL slides (`tutorialSlides`, `TUTORIAL_REVIEWED_FOR`), seen flag and the `#tutorial-modal` controller (`TutorialUI`). Keep its slides accurate (rule at the top of this README).
+- `assets/tutorial/` — The tutorial clips (animated WebP), captured by `tools/tutorial-media.cjs` (`npm run tutorial-media`).
 - `js/patch-notes.js` — PATCH NOTES screen (`#notes-modal`): HTML builders, NEW badge / last-seen version, expand/collapse.
 - `netlify/functions/scores.mjs` — The `/api/scores` Netlify Function (wires `@netlify/blobs` `getStore` into the handler).
 - `netlify/lib/leaderboard.mjs` — Leaderboard handler: per-version + all-time boards, version validation, plausibility envelope, profanity filter, IP rate limit, ETag compare-and-swap writes.
