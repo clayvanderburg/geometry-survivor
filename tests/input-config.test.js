@@ -101,10 +101,11 @@ test('an old full-snapshot save keeps only the volume, so stale balance values s
 });
 
 test('save normalization tolerates malformed entries and bounds permanent ranks', () => {
-  const save = normalizeSave({ pilotName: 4, cores: 'bad', ranks: { damage: 500, haste: -5 },
+  const save = normalizeSave({ armory: 2, pilotName: 4, cores: 'bad', ranks: { damage: 500, fireRate: -5, haste: 3 },
     highscores: [null, {}, { score: 42, name: ' Clay ', wave: -2, multiplier: Infinity }] });
   assert.equal(save.pilotName, 'MADKING'); assert.equal(save.cores, 15);
-  assert.equal(save.ranks.damage, 8); assert.equal(save.ranks.haste, 0);
+  assert.equal(save.ranks.damage, 40); assert.equal(save.ranks.fireRate, 0);
+  assert.equal(save.ranks.haste, undefined, 'retired upgrade ids are dropped');
   assert.equal(save.highscores.length, 1); assert.equal(save.highscores[0].wave, 1);
   assert.equal(save.highscores[0].name, 'CLAY');
   storage.set('vectra_survivor_save_v2', 'null'); assert.doesNotThrow(() => new ProgressionManager());

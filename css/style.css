@@ -774,14 +774,78 @@ html, body {
 .armory-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 8px;
+  align-content: start;
+  max-height: 404px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
 }
+
+/* Category tabs + completion, and the one-time reset notice, span the whole grid row. */
+.armory-tabs {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 4px;
+  background: rgba(8, 13, 30, 0.96);
+}
+.armory-tab {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 24, 48, 0.85);
+  color: #a9bcd8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.armory-tab.active { border-color: var(--cyan); color: #fff; background: rgba(0, 243, 255, 0.16); }
+.armory-progress { margin-left: auto; font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--emerald); }
+.armory-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 204, 0, 0.6);
+  background: rgba(255, 204, 0, 0.1);
+  font-size: 11px;
+  color: #ffe9a8;
+  line-height: 1.35;
+}
+.armory-notice b { color: #ffcc00; letter-spacing: 1px; }
+.armory-notice-ok {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 204, 0, 0.7);
+  background: rgba(255, 204, 0, 0.18);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.armory-value { font-size: 11px; color: #a9bcd8; margin-bottom: 5px; }
+.armory-value b { color: #fff; }
+.armory-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-bottom: 6px; overflow: hidden; }
+.armory-bar i { display: block; height: 100%; background: var(--upg, var(--cyan)); }
+.armory-card .armory-name { color: var(--upg, #fff); }
+.armory-card.maxed { border-color: rgba(0, 255, 136, 0.45); }
 
 .armory-card {
   background: rgba(16, 24, 48, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -823,7 +887,7 @@ html, body {
   font-size: 11px;
   color: #a9bcd8;
   line-height: 1.35;
-  margin-bottom: 8px;
+  margin-bottom: 3px;
 }
 
 .armory-buy-btn {

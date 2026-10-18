@@ -64,7 +64,7 @@ const fakeCtx = () => {
 };
 
 test('old saves load with an empty field guide, and guide data is normalized', () => {
-  const legacy = normalizeSave({ cores: 40, ranks: { damage: 2 } });
+  const legacy = normalizeSave({ armory: 2, cores: 40, ranks: { damage: 2 } }); // current armory, older guide
   assert.deepEqual(legacy.guide, { seen: [], fresh: [] });
   assert.equal(legacy.cores, 40);
   assert.deepEqual(normalizeGuide(null), { seen: [], fresh: [] });
@@ -79,7 +79,7 @@ test('old saves load with an empty field guide, and guide data is normalized', (
 
 test('guide unlocks persist in the existing save key and NEW badges clear once viewed', () => {
   store.clear();
-  store.set(SAVE_KEY, JSON.stringify({ cores: 12, pilotName: 'ACE' })); // a save from before the guide existed
+  store.set(SAVE_KEY, JSON.stringify({ armory: 2, cores: 12, pilotName: 'ACE' })); // a save from before the guide existed
   const prog = new ProgressionManager();
   assert.equal(prog.data.cores, 12);
   assert.deepEqual(prog.unlockGuideEntries(['bruiser', 'gunner', 'bruiser']), ['bruiser', 'gunner']);

@@ -24,7 +24,7 @@ import {
 import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
 } from './upgrade-cards.js';
-import { META_UPGRADES, ProgressionManager } from './progression.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -230,7 +230,7 @@ export class Game {
     this.rocksMined = 0;
     this.sessionCores = 0;
     // Gold (per run, gold veins): spent on level-up rerolls and card locks (js/gold.js).
-    this.gold = 0;
+    this.gold = Math.round(bonuses.startGold || 0); // Void Armory: Prospector Stake
     this.goldEarned = 0;
     this.goldSpent = 0;
     this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
@@ -277,6 +277,13 @@ export class Game {
       dashTimer: 0,
       dashCooldown: 0,
       bombs: 2 + bonuses.extraBombs,
+      // Void Armory multipliers that live outside `stats` (damage taken, post-hit invulnerability, dash
+      // cooldown, gold per vein, reroll cost).
+      damageTakenMult: bonuses.damageTakenMult ?? 1,
+      hitInvulnBonus: bonuses.hitInvulnBonus || 0,
+      dashCooldownMult: bonuses.dashCooldownMult ?? 1,
+      goldMult: bonuses.goldMult ?? 1,
+      rerollCostMult: bonuses.rerollCostMult ?? 1,
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -296,12 +303,12 @@ export class Game {
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0),
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1),
-        miningRange: TUNING.miningRange,
+        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1),
         drillScale: TUNING.drillScale,
-        critChance: TUNING.baseCritChance ?? 0.05,
-        critDamage: TUNING.baseCritDamage ?? 1.5,
+        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
         tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
-        areaMult: 1
+        areaMult: bonuses.areaMult || 1
       },
       weapons: {
         rockets: 0,
@@ -784,11 +791,11 @@ export class Game {
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
         miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
-        miningRange: TUNING.miningRange * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
+        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1) * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
         drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
         // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
-        critChance: (TUNING.baseCritChance ?? 0.05) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
-        critDamage: (TUNING.baseCritDamage ?? 1.5) + (upgLv.crit_damage || 0) * W.critDamageStep
+        critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
+        critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0) + (upgLv.crit_damage || 0) * W.critDamageStep
       });
 
       p.radius = TUNING.shipRadius;
@@ -883,44 +890,78 @@ export class Game {
 
     ['armory-grid', 'go-armory-grid'].forEach((gridId) => {
       const container = document.getElementById(gridId);
-      if (!container) return;
-      container.innerHTML = '';
-
-      META_UPGRADES.forEach((upg) => {
-        const rank = this.progression.getRank(upg.id);
-        const isMax = rank >= upg.maxRank;
-        const cost = this.progression.getUpgradeCost(upg);
-        const canBuy = this.progression.canBuy(upg);
-
-        const card = document.createElement('div');
-        card.className = `armory-card ${canBuy ? 'affordable' : ''}`;
-        card.innerHTML = `
-          <div>
-            <div class="armory-top">
-              <span class="armory-name" style="color:${upg.color}">${upg.icon} ${upg.name}</span>
-              <span class="armory-rank">RANK ${rank}/${upg.maxRank}</span>
-            </div>
-            <div class="armory-desc">${upg.desc}</div>
-          </div>
-          <button class="armory-buy-btn" ${!canBuy ? 'disabled' : ''}>
-            ${isMax ? 'MAX RANK ACHIEVED' : `UPGRADE // ❖ ${cost} CORES`}
-          </button>
-        `;
-
-        if (canBuy) {
-          card.addEventListener('click', () => {
-            this.sound.init();
-            if (this.progression.buyUpgrade(upg.id)) {
-              this.sound.playLevelUp();
-              this.renderHubUI();
-            }
-          });
-        }
-        container.appendChild(card);
-      });
+      if (container) this.renderArmory(container);
     });
 
     this.renderBoards();
+  }
+
+  // Void Armory panel: category tabs, the one-time reset notice and the upgrade cards (filtered by tab).
+  // Buttons carry data-armory-key so controller focus survives the re-render after a purchase.
+  renderArmory(container) {
+    const prog = this.progression;
+    const focusedKey = container.contains(this.menuNav?.focused) ? this.menuNav.focused.dataset?.armoryKey : null;
+    this.armoryCat ||= 'all';
+    container.innerHTML = '';
+
+    let owned = 0, total = 0;
+    for (const u of META_UPGRADES) { owned += prog.getRank(u.id); total += u.maxRank; }
+    const tabs = document.createElement('div');
+    tabs.className = 'armory-tabs';
+    const tabDefs = [{ id: 'all', label: 'ALL', icon: '' }, ...ARMORY_CATEGORIES];
+    tabs.innerHTML = tabDefs.map((c) => `<button class="armory-tab${this.armoryCat === c.id ? ' active' : ''}" data-armory-key="cat:${c.id}" aria-pressed="${this.armoryCat === c.id}">${c.icon ? c.icon + ' ' : ''}${c.label}</button>`).join('')
+      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`;
+    tabs.querySelectorAll('[data-armory-key^="cat:"]').forEach((btn) => btn.addEventListener('click', () => {
+      this.armoryCat = btn.dataset.armoryKey.slice(4);
+      this.renderHubUI();
+    }));
+    container.appendChild(tabs);
+
+    if (prog.data.armoryResetNotice) {
+      const notice = document.createElement('div');
+      notice.className = 'armory-notice';
+      notice.innerHTML = `<b>VOID ARMORY REBUILT // RANKS AND CORES RESET</b>
+        <span>The armory now has ${META_UPGRADES.length} single-stat upgrades with many more, smaller ranks. Everyone's ranks and Void Cores were reset; your callsign, high scores and Field Guide are kept.</span>
+        <button class="armory-notice-ok" data-armory-key="notice">GOT IT</button>`;
+      notice.querySelector('button').addEventListener('click', () => { prog.dismissArmoryNotice(); this.renderHubUI(); });
+      container.appendChild(notice);
+    }
+
+    for (const upg of META_UPGRADES) {
+      if (this.armoryCat !== 'all' && upg.cat !== this.armoryCat) continue;
+      const rank = prog.getRank(upg.id);
+      const isMax = rank >= upg.maxRank;
+      const cost = prog.getUpgradeCost(upg);
+      const canBuy = prog.canBuy(upg);
+      const card = document.createElement('div');
+      card.className = `armory-card${canBuy ? ' affordable' : ''}${isMax ? ' maxed' : ''}`;
+      card.style.setProperty('--upg', upg.color);
+      card.innerHTML = `
+        <div class="armory-top">
+          <span class="armory-name">${upg.icon} ${upg.name}</span>
+          <span class="armory-rank">${rank}/${upg.maxRank}</span>
+        </div>
+        <div class="armory-desc">${formatArmoryValue(upg, 1)} ${upg.stat} per rank</div>
+        <div class="armory-value">${isMax ? `<b>${formatArmoryValue(upg, rank)}</b> · MAXED` : `${formatArmoryValue(upg, rank)} → <b>${formatArmoryValue(upg, rank + 1)}</b>`}</div>
+        <div class="armory-bar"><i style="width:${(rank / upg.maxRank) * 100}%"></i></div>
+        <button class="armory-buy-btn" data-armory-key="buy:${upg.id}" ${!canBuy ? 'disabled' : ''}>${isMax ? 'MAX RANK' : `❖ ${cost.toLocaleString()}`}</button>`;
+      if (canBuy) {
+        card.addEventListener('click', () => {
+          this.sound.init();
+          if (prog.buyUpgrade(upg.id)) {
+            this.sound.playLevelUp();
+            this.renderHubUI();
+          }
+        });
+      }
+      container.appendChild(card);
+    }
+
+    if (focusedKey) {
+      const again = container.querySelector(`[data-armory-key="${focusedKey}"]:not([disabled])`)
+        || container.querySelector(`[data-armory-key^="cat:"].active`);
+      if (again) this.menuNav.setFocus(again);
+    }
   }
 
   // Both board panels (title + game over) share one tab and one view.
@@ -1335,7 +1376,7 @@ export class Game {
 
     if (rock.oreType === 'gold_vein') {
       // Gold coins (currency, no XP): magnetized and collected like geoms, whoever broke the rock.
-      const coins = goldCoins(goldPerVein());
+      const coins = goldCoins(Math.round(goldPerVein() * (this.player?.goldMult ?? 1)));
       const total = coins.reduce((a, b) => a + b, 0);
       this.particles.spawnFloatText(rock.x, rock.y - 12, `★ GOLD VEIN! +${total} ${GOLD_ICON}`, '#ffcc00', 14);
       for (const value of coins) {
@@ -1410,7 +1451,7 @@ export class Game {
     if (p.dashCooldown > 0) return;
 
     p.dashTimer = 0.22;
-    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5);
+    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, 0.32);
 
@@ -1802,10 +1843,11 @@ export class Game {
   // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
+    dmg *= p.damageTakenMult ?? 1; // Void Armory: Ablative Plating
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = 0.65;
+    p.invuln = 0.65 + (p.hitInvulnBonus || 0);
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -2780,9 +2822,14 @@ export class Game {
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
   // rolls as a new hand); the locked card stays in its slot. 20, 40, 80... gold within one hand.
+  // Gold price of the next reroll in this hand (Void Armory: Probability Engine discounts it).
+  rerollPrice() {
+    return Math.round(rerollCost(this.handRerolls) * (this.player?.rerollCostMult ?? 1));
+  }
+
   rerollHand() {
     if (!this.canEditHand()) return false;
-    if (!this.spendGold(rerollCost(this.handRerolls))) return false;
+    if (!this.spendGold(this.rerollPrice())) return false;
     this.handRerolls++;
     this.player.newWeaponDrought = this.handDrought;
     this.currentChoices = rollHandAround(this.player, 3, this.handLock, rollLevelUpHand);
@@ -2832,7 +2879,7 @@ export class Game {
     doc?.getElementById('hand-goldbar')?.classList?.[inHand ? 'remove' : 'add']('hidden');
     const count = doc?.getElementById('hand-gold-count');
     if (count) count.textContent = `${GOLD_ICON} ${this.gold} GOLD`;
-    const cost = rerollCost(this.handRerolls);
+    const cost = this.rerollPrice();
     const lc = lockCost();
     const reroll = doc?.getElementById('btn-reroll-hand');
     if (reroll) {
