@@ -8,6 +8,8 @@ Per-sound playback level, pitch variation and voice limits live in `SFX_SAMPLES`
 
 | File | Prompt | Notes |
 | --- | --- | --- |
+| `autocannon_shot.mp3` | Short punchy retro arcade blaster shot, bright synth pew with a crisp click attack, very short | cut to 0.30 s |
+| `drone_shot.mp3` | Tiny high pitched synth laser blip, very short and soft, retro arcade | first blip of a longer take |
 | `rocket_launch.mp3` | Small rocket launching, short bright whoosh with an ignition pop, retro sci-fi arcade | |
 | `missile_launch.mp3` | Quick homing missile launch, airy rising whoosh with a soft low thump, sci-fi arcade, short | |
 | `explosion_small.mp3` | Small punchy retro arcade explosion, crunchy noise burst with a short low thump | |
