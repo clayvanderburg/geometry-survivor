@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.22.5',
+    date: '2026-10-18',
+    title: 'Quiet Crits',
+    notes: [
+      { type: 'fix', text: 'Crit damage numbers no longer end in "!": they still pop bigger and gold.' }
+    ]
+  },
+  {
     version: '0.22.4',
     date: '2026-10-18',
     title: 'Armory',

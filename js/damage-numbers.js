@@ -153,7 +153,7 @@ export class DamageNumbers {
       n.pop = crit ? 1 : 0.6;
     }
     if (crit) {
-      n.text = `${formatDamage(n.value)}!`;
+      n.text = formatDamage(n.value); // crits stand out by size and gold colour, no "!"
       n.size = critFontSize(n.value);
       n.life = CRIT_LIFE;
     } else {
