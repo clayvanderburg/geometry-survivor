@@ -292,12 +292,18 @@ function cards() {
   const table = (s, key, title) => {
     const list = state[s][key];
     if (!list.length) return '<p class="empty">No offers recorded.</p>';
-    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · ${title}</th><th>Offered</th><th>Picked</th><th>Pick rate</th></tr>
-      ${list.map((c) => `<tr><td>${esc(key === 'weaponPicks' ? weaponName(c.id) : cardName(c.id))}</td><td>${c.offered}</td><td>${c.picked}</td><td>${pct(c.pickRate)}<span class="inline-bar" style="width:${Math.round((c.pickRate || 0) * 60)}px; background:${SERIES[s]}"></span></td></tr>`).join('')}</table></div>`;
+    const fair = (c) => {
+      if (c.fairness == null) return '<span class="muted">—</span>';
+      const tag = c.flag === 'over' ? ' <b class="flag nerf">⬆ TOO OFTEN</b>' : c.flag === 'under' ? ' <b class="flag buff">⬇ TOO RARE</b>' : '';
+      return `${c.fairness.toFixed(2)}${c.z != null ? ` <span class="muted">z ${c.z > 0 ? '+' : ''}${c.z.toFixed(1)}</span>` : ''}${c.lowSample ? ' <span class="muted">(low n)</span>' : ''}${tag}`;
+    };
+    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · ${title}</th><th>Eligible hands</th><th>Drawn / expected</th><th>Fairness</th><th>Offered</th><th>Picked</th><th>Pick rate</th></tr>
+      ${list.map((c) => `<tr><td>${esc(key === 'weaponPicks' ? weaponName(c.id) : cardName(c.id))}</td><td>${c.eligible ?? '—'}</td><td>${c.drawn ?? '—'} / ${c.expected ?? '—'}</td><td>${fair(c)}</td><td>${c.offered}</td><td>${c.picked}</td><td>${pct(c.pickRate)}<span class="inline-bar" style="width:${Math.round((c.pickRate || 0) * 60)}px; background:${SERIES[s]}"></span></td></tr>`).join('')}</table></div>`;
   };
-  return `<section><div class="section-head"><h2>Cards · pick rates</h2>${legend()}</div>
+  return `<section><div class="section-head"><h2>Cards · fairness &amp; pick rates</h2>${legend()}</div>
+    <p class="note"><b>Fairness</b> = how often a card was drawn into a hand's random slots ÷ how often its weight predicts, counting only hands where it could appear (weapon cards only while that weapon is owned; maxed cards drop out). 1.00 is exactly fair; ⬆/⬇ flags mean more than ±25% off <i>and</i> beyond random noise (over 3 standard deviations), once ~20 draws were expected. Evolutions are rarer by design, but their fairness is still measured against their own lower weight.</p>
     <p class="note">NEW WEAPON pick rate: ${slots.map((s) => `${s.toUpperCase()} ${pct(state[s].newWeapon.pickRate)} (${state[s].newWeapon.picked}/${state[s].newWeapon.offered})`).join(' · ')}. Offers count every card shown, including rerolled hands; a locked card is counted once per hand.</p>
-    <div class="grid2">${slots.map((s) => table(s, 'cards', 'card')).join('')}</div>
+    <div>${slots.map((s) => table(s, 'cards', 'card')).join('')}</div>
     <h2 style="margin-top:12px">NEW WEAPON · which weapon was chosen</h2>
     <div class="grid2">${slots.map((s) => table(s, 'weaponPicks', 'weapon')).join('')}</div></section>`;
 }

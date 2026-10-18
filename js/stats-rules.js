@@ -11,7 +11,7 @@
 //                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L)] } } }
 //   sources     { stat id: damage }  (sub-sources such as burn, helix, collapse, storm, siege)
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
-//   cards       { card id: [offered, picked] }   weaponPicks { weapon id: [offered, picked] }
+//   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
 import { KNOWN_VERSIONS } from './changelog.js';
 
 export const STATS_SCHEMA = 1;
@@ -122,7 +122,9 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
     for (const [id, v] of entries(body[key], L.MAX_CARDS)) {
       if (!Array.isArray(v)) continue;
       const offered = int(v[0], 1e5);
-      run[key][id] = [offered, Math.min(offered, int(v[1], 1e5))];
+      const eligible = int(v[2], 1e5);
+      // [offered, picked, eligible hands, expected random draws, random draws]
+      run[key][id] = [offered, Math.min(offered, int(v[1], 1e5)), eligible, dec(v[3], eligible, 0), Math.min(eligible, int(v[4], 1e5))];
     }
   }
   return { run };

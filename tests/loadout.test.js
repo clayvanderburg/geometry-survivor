@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   UPGRADE_POOL, UPGRADE_BY_ID, rollUpgrades, rollLevelUpHand, rollWeaponPicks, acquireWeapon, discardWeapon, eligibleUpgrades,
-  canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID, upgradeWeapons
+  canOfferNewWeapon, newWeaponChanceFor, xpToNextLevel, totalXpForLevel, upgradeKind, applyUpgradeLevels, NEW_WEAPON_ID, upgradeWeapons, cardInclusionOdds
 } = await import('../js/upgrades.js');
 const { WEAPONS, WEAPON_BY_ID, PASSIVES, ownedWeapons, ownedPassives, ownedTags, freeSlots, weaponSlots, unownedWeapons } = await import('../js/loadout.js');
 const { STAT_ROWS, describeWeaponPick, describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
@@ -515,4 +515,23 @@ test('stress: no hand or cache ever offers a card for a weapon you do not own (i
       }
     }
   }, rand);
+});
+
+test('card fairness odds: the exact draw chances match what rollUpgrades actually deals', () => {
+  const p = freshGame().player;
+  fill(p, ['lightning', 'mines']);
+  const odds = cardInclusionOdds(p, 3);
+  const sum = [...odds.values()].reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 3) < 1e-9, 'three slots: the chances add up to 3');
+  assert.ok([...odds.keys()].every((id) => eligibleUpgrades(p).some((u) => u.id === id)), 'only eligible cards');
+  const seen = new Map();
+  const N = 6000;
+  withRandom(() => { for (let i = 0; i < N; i++) for (const c of rollUpgrades(p, 3)) seen.set(c.id, (seen.get(c.id) || 0) + 1); }, lcg(9));
+  for (const [id, prob] of odds) {
+    const got = (seen.get(id) || 0) / N;
+    assert.ok(Math.abs(got - prob) < 0.03, `${id}: dealt ${got.toFixed(3)} vs predicted ${prob.toFixed(3)}`);
+  }
+  // A locked card is kept out of the draw.
+  const lockId = [...odds.keys()][0];
+  assert.equal(cardInclusionOdds(p, 2, lockId).has(lockId), false);
 });
