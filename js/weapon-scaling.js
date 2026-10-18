@@ -65,10 +65,14 @@ export const WEAPON_SCALING = {
   flakRadius: 46,
   ricochetShare: 0.6,
   ricochetRange: 240,
+  ricochetClaimTime: 0.3, // s a ricochet's pick stays claimed, so the next bolts bounce elsewhere
+  // Ricochets land ~95%, but ACROSS THE BOARD's free Pierce ranks carry bolts on through crowds (worth 0 in
+  // this model), so the bounce is valued at this share of a full ricochet to keep the transform level with it.
+  ricochetValue: 0.25,
   arcRoundJumps: 2,
   arcRoundShare: 0.3,
   arcRoundRange: 150,
-  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare : 0)),
+  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Wing Rockets (stats: damage, count, reload, radius) ----------------------------------------
@@ -403,7 +407,7 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 // Autocannon is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
 export const POTENTIAL_DPS = {
   blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
-    * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare : 0)),
+    * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
   rockets: (b) => W.wingRocketCount(b) * (b.t12 ? W.mirvSplit : 1) * W.wingRocketDamageMult(b)
     * (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) / W.wingRocketCooldown(b),
   missiles: (b) => {

@@ -88,6 +88,8 @@ function statsWeaponLevel(p, id) {
 const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 220;
+// Autocannon tracers are drawn at this share of the shared bolt thickness (the hitbox is unchanged).
+const AUTOCANNON_DRAW_WIDTH = 0.6;
 // Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
 const HAND_SIZE = 4;
 const SINGULARITY_GRID_DEPTH = 260;
@@ -2367,6 +2369,7 @@ export class Game {
           const hx = x0 + (b.x - x0) * hit.t;
           const hy = y0 + (b.y - y0) * hit.t;
           this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          if (b.ricochet > 0) this.ricochetOffRock(b, hit.rock, hx, hy);
           break;
         }
         if (hit.shield) {
@@ -2420,18 +2423,13 @@ export class Game {
       this.weaponFx.addPool({ x: hx, y: hy, radius: (b.blastRadius || 50) * 0.85, life: W.napalmLife, tick: W.napalmTick, damage: b.damage * W.napalmShare / ticks, hue: 18, source: b.source });
     }
     if (b.ricochet > 0) {
-      // Ricochet Rounds: one bounce into the nearest other enemy.
-      const next = this.nearestEnemyExcept(hx, hy, W.ricochetRange, b.hitEnemies);
-      if (next) {
-        const a = Math.atan2(next.y - hy, next.x - hx);
-        const speed = Math.hypot(b.vx, b.vy);
-        // Ricochets glow gold (and keep Flak and Arc Rounds), so each transform stays visible on its own.
-        this.bullets.push({ x: hx, y: hy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: 48,
-          radius: b.radius * 1.1, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds,
-          blastRadius: b.flak ? b.blastRadius : 0, blastDamage: b.flak ? b.blastDamage * W.ricochetShare : 0, blastStat: b.blastStat, blastHue: b.blastHue, flak: b.flak });
-        this.particles.spawnDirectionalSparks(hx, hy, a, 0.6, 7, 48, 9);
-        this.particles.spawnLightning?.(hx, hy, hx + Math.cos(a) * 28, hy + Math.sin(a) * 28, 48, 0.6, 0.1, 0);
-      }
+      // Ricochet Rounds: one bounce off the struck hull toward a fresh target (see ricochetTarget); with
+      // nobody to find it still glances off at an angle.
+      const next = this.ricochetTarget(hx, hy, b);
+      const travel = Math.atan2(b.vy, b.vx);
+      const a = next ? Math.atan2(next.y - hy, next.x - hx) : travel + (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.5);
+      if (next) next.ricochetAt = this.elapsedTime;
+      this.spawnRicochet(b, hx, hy, a);
     }
     if (b.arcRounds) {
       // Arc Rounds: the hit arcs into the nearest few enemies around it.
@@ -2450,6 +2448,60 @@ export class Game {
   }
 
   // Nearest live enemy within `range` of (x, y) that is not in `skip`.
+  // Ricochet Rounds target: the closest enemy in W.ricochetRange that this bolt hasn't hit, steering clear
+  // of enemies inside the bolt's own Flak burst (already hit by it) and of enemies another ricochet picked
+  // in the last W.ricochetClaimTime s, so a stream of bolts fans its bounces out over the pack.
+  ricochetTarget(x, y, b) {
+    let best = null;
+    let bestScore = Infinity;
+    const rangeSq = W.ricochetRange * W.ricochetRange;
+    const burst = b.flak ? b.blastRadius : 0;
+    for (const e of this.enemyManager.enemies) {
+      if (e.dead || b.hitEnemies?.has(e) || e.type === 'blackhole') continue;
+      const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+      if (dSq > rangeSq) continue;
+      const d = Math.sqrt(dSq);
+      let score = d;
+      if (d < burst + e.radius) score += W.ricochetRange;
+      if (this.elapsedTime - (e.ricochetAt ?? -1e9) < W.ricochetClaimTime) score += W.ricochetRange * 0.75;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  // The gold ricochet bolt from (x, y) along angle `a` (it keeps Flak and Arc Rounds, never bounces again).
+  spawnRicochet(b, x, y, a) {
+    const speed = Math.hypot(b.vx, b.vy);
+    this.bullets.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, damage: b.damage * W.ricochetShare, pierce: 1, hue: 48,
+      radius: b.radius * 1.1, width: b.width, life: 0.6, source: b.source, stat: b.stat, hitEnemies: new Set(b.hitEnemies), arcRounds: b.arcRounds,
+      blastRadius: b.flak ? b.blastRadius : 0, blastDamage: b.flak ? b.blastDamage * W.ricochetShare : 0, blastStat: b.blastStat, blastHue: b.blastHue, flak: b.flak });
+    this.particles.spawnDirectionalSparks(x, y, a, 0.6, 7, 48, 9);
+    this.particles.spawnLightning?.(x, y, x + Math.cos(a) * 28, y + Math.sin(a) * 28, 48, 0.6, 0.1, 0);
+  }
+
+  // Ricochet Rounds off an asteroid: the bolt reflects off the rock face, snapping onto an enemy within
+  // ~40 degrees of the reflection when there is one.
+  ricochetOffRock(b, rock, hx, hy) {
+    const nx = (hx - rock.x) / (Math.hypot(hx - rock.x, hy - rock.y) || 1);
+    const ny = (hy - rock.y) / (Math.hypot(hx - rock.x, hy - rock.y) || 1);
+    const dot = b.vx * nx + b.vy * ny;
+    let a = Math.atan2(b.vy - 2 * dot * ny, b.vx - 2 * dot * nx);
+    const x = hx + nx * 2, y = hy + ny * 2;
+    const next = this.ricochetTarget(x, y, b);
+    if (next) {
+      const to = Math.atan2(next.y - y, next.x - x);
+      const turn = Math.abs(((to - a) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      if (turn < 0.7) {
+        a = to;
+        next.ricochetAt = this.elapsedTime;
+      }
+    }
+    this.spawnRicochet(b, x, y, a);
+  }
+
   nearestEnemyExcept(x, y, range, skip) {
     let best = null;
     let bestSq = range * range;
@@ -2538,6 +2590,7 @@ export class Game {
         hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
         radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
         life: 1.25,
+        width: AUTOCANNON_DRAW_WIDTH,
         ...flak,
         ricochet: b.t8 ? 1 : 0,
         arcRounds: b.t12
@@ -5100,14 +5153,15 @@ export class Game {
       const tailY = b.y - b.vy * 1.4;
 
       ctx.strokeStyle = `hsla(${b.hue}, 100%, 60%, 0.55)`;
-      ctx.lineWidth = b.radius * 2.2;
+      const w = b.width ?? 1; // drawn thickness only (Autocannon tracers are slimmer than their hitbox)
+      ctx.lineWidth = b.radius * 2.2 * w;
       ctx.beginPath();
       ctx.moveTo(tailX, tailY);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
 
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = b.radius * 0.85;
+      ctx.lineWidth = b.radius * 0.85 * w;
       ctx.beginPath();
       ctx.moveTo(tailX, tailY);
       ctx.lineTo(b.x, b.y);
