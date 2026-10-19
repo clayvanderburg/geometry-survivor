@@ -7,8 +7,8 @@
 import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
-import { HOSTILE_INFO, MAYFLY } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, bossBuilt } from './bosses.js';
+import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE } from './hostiles.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, bossBuilt } from './bosses.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
@@ -89,6 +89,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Never park in a cloud. Strafe across its edge and sweep it: spread shots, lightning and orbit blades clear them fast.'
   },
   {
+    id: 'drone', name: 'DRONE', group: 'swarm', unlockWave: unlockWaveOf('drone'),
+    what: () => `A tiny green kamikaze launched by carriers. It homes on you with a limited turn, so a sharp sidestep makes it overshoot, and it burns out on its own after ${secs(DRONE.life)}. Contact stings for a little over half a normal hit.`,
+    tip: 'Keep moving in curves and let them overshoot, or sweep them as they bunch up behind you.'
+  },
+  {
     id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: unlockWaveOf('blackhole'),
     what: () => `A crimson singularity. Inside its ${TUNING.blackholePullRadius ?? 200} px dashed rim it drags enemies, sparks, Geoms and your shots into orbit and tugs your ship. It collapses in a 175 px burst that damages nearby hostiles when it dies.`,
     tip: () => `The tug is ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust at the rim, rising to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} from ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the way in. It never matches your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
@@ -134,6 +139,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Step off the line as they line up, then shoot down the length of the V as it passes. Take the leader first.'
   },
   {
+    id: 'carrier', name: 'CARRIER', group: 'archetype', unlockWave: unlockWaveOf('carrier'),
+    what: () => `A green hangar ship that hangs back about ${CARRIER.range} px and launches ${CARRIER.launch} drones out of its flanks every ${secs(CARRIER.launchEvery)}, up to ${CARRIER.maxDrones} at a time. Durable, slow and never closes in on its own. Debuts with the Hive Carrier.`,
+    tip: 'Go and get it: every second you leave it alone is more drones. Cut through the drones on the way in.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -153,6 +163,11 @@ export const HOSTILE_ENTRIES = [
     id: 'wing_commander', name: BOSS_DEFS.wing_commander.name, group: 'boss', boss: true, unlockWave: bossWave('wing_commander'),
     what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad amber delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, and the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
     tip: 'Do not stand in its lane: sidestep the run, then cross its mine lines through the gaps. Thin the escort between passes so it has fewer wingmen to call back.'
+  },
+  {
+    id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
+    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge, slow mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${bossGrindText()}`,
+    tip: 'Take the bays out one at a time while dodging the drones; area damage hits several. Once the core is exposed, circle wide through the gaps in the spiral.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

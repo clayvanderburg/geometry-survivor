@@ -9,7 +9,7 @@ import {
 import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph, drawEliteRift } from './lieutenants.js';
 import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
-import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler } from './bosses.js';
+import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
@@ -37,7 +37,7 @@ export function easeIn(x, r) {
 // compounding phases in past that wave.
 // Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
 // with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
-export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter', 'mayfly']);
+export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter', 'mayfly', 'drone']);
 export function waveScaleAt(wave, { light = false } = {}) {
   const start = light ? (TUNING.waveHpStartLight ?? 1) : (TUNING.waveHpStart ?? 1);
   const perWave = TUNING.waveHpPerWave ?? 0.25;
@@ -230,10 +230,11 @@ export class EnemyManager {
     }
     if (isArchetype(type)) return archetypeStats(type, waveScale);
     if (isHostileKind(type)) return hostileKindStats(type, waveScale);
+    if (isBossPart(type)) return PART_STATS[type](waveScale);
     if (isBossKind(type)) {
       const def = bossDef(type);
       const tier = BOSS_TIER[def.tier] || BOSS_TIER.minor;
-      const hp = bossHp(waveScale, def.tier);
+      const hp = bossHp(waveScale, def.tier) * (def.hpScale ?? 1);
       return {
         hp, maxHp: hp, speed: 1.35, radius: 36, sides: 8, hue: def.hue, score: tier.score, xp: tier.xp, vRot: 0.03,
         ...def.stats(waveScale),
@@ -440,6 +441,7 @@ export class EnemyManager {
           tier: c.tier || 1, // veteran form of the core swarm (js/wave-plan.js)
           bossTier: c.bossTier || null,
           bossWave: c.bossWave || 0,
+          mount: null, // boss parts (Hive Carrier bays): the boss whose hull they ride
           leader: null, // serpent body segments: the hull ahead in the chain (js/serpents.js)
           deflect: false, // true: shots are blocked but do no damage (serpent bodies)
           anchor: null, // Brood Queen escorts: the boss whose ring they ride (js/bosses.js)
@@ -510,6 +512,13 @@ export class EnemyManager {
       env.dirX = dirX;
       env.dirY = dirY;
       env.dist = distPlayer;
+      if (e.mount) {
+        // Boss part (a Hive Carrier bay): rides its mount, no steering of its own (bosses.js).
+        updateArchetype(e, this, env); // hit timers
+        updateMount(e, this, env);
+        this.enemyIndex.update(e);
+        continue;
+      }
       // Chasers bend their approach round rock that blocks the line to the ship (see pursuit.js).
       steerAroundRocks(e, dirX, dirY, distPlayer, this.terrain, dt, (tick + i) % PROBE_TICKS === 0, steer);
       const moveX = steer.x;
@@ -826,6 +835,8 @@ export class EnemyManager {
           traceHostileKind(ctx, e, r);
         } else if (isBossKind(e.type)) {
           bossDef(e.type).trace(ctx, e, r);
+        } else if (isBossPart(e.type)) {
+          tracePart(ctx, e, r);
         } else if (e.type === 'blackhole') {
           // Pulsing event horizon circle + inner accretion ring
           ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -864,6 +875,7 @@ export class EnemyManager {
 
       drawArchetypeOverlay(ctx, e, r);
       drawHostileOverlay(ctx, e, r);
+      if (e.mount) drawPartOverlay(ctx, e, r);
       if (e.isBoss) bossDef(e.type)?.overlay?.(ctx, e, r);
       if (e.isLieutenant) {
         drawLieutenantAura(ctx, e, r);

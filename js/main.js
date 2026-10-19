@@ -177,7 +177,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -1926,8 +1926,8 @@ export class Game {
     for (const e of [...enemies].reverse()) {
       if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
-      // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
-      if (e.isBoss || e.isLieutenant) {
+      // Bosses, their mounted parts and lieutenants survive a supernova: it strips 40% of their max HP instead.
+      if (e.isBoss || e.isLieutenant || e.mount) {
         const dmg = e.maxHp * 0.4;
         this.runStats?.damage('supernova', Math.min(dmg, Math.max(0, e.hp)));
         e.hp -= dmg;
@@ -2611,6 +2611,9 @@ export class Game {
         const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
         spawnSerpent(em, 'serpent', p2.x, p2.y, this.getWaveScale('serpent'), SERPENT.segments, { angle, extra: this.placedSpawn(p2) });
       }
+    } else if (pack === 'carrier') {
+      // The roster's drones are launched by the carriers over time, not spawned with them.
+      spread('carrier', count('carrier'));
     } else if (pack === 'kestrel') {
       // One V on a strafing run that starts lined up on the ship.
       const p2 = this.spawnPoint(80);

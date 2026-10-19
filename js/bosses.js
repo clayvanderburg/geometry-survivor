@@ -11,6 +11,7 @@
 import { TUNING } from './config.js';
 import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
+import { launchDrones } from './hostiles.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -402,10 +403,167 @@ const wingCommander = {
   }
 };
 
+// --- HIVE CARRIER (wave 12, major) ----------------------------------------------------------
+// A huge, slow mothership with four launch bays on its hull. While any bay stands the core is shielded
+// (shots spark off it) and every bay launches homing drones. Destroy the bays and the core is exposed:
+// it spins up, sprays a spiral of orbs and launches gunner pods.
+export const HIVE = {
+  bays: 4, bayRadius: 58, bayHpShare: 0.25, coreHpScale: 0.6, bayLaunchEvery: 2.6, bayDrones: 3,
+  holdRange: 260, speed: 0.9, exposedSpeed: 1.3, spin: 0.25, exposedSpin: 0.8,
+  spiralEvery: 0.14, spiralStep: 0.45, spiralSpeed: 3.2, podEvery: 7, pods: 2, podCap: 4
+};
+
+function bayCount(e, m) {
+  let n = 0;
+  for (const o of m.enemies) if (o.mount === e && !o.dead) n++;
+  for (const sp of m.spawnIndicators) if (sp.config.attach?.mount === e) n++;
+  return n;
+}
+
+const hiveCarrier = {
+  name: 'HIVE CARRIER', epithet: 'MOTHER OF A THOUSAND DRONES', tier: 'major', hue: 120, debut: ['carrier', 'drone', 'gunner'],
+  hpScale: HIVE.coreHpScale,
+  stats: () => ({ speed: HIVE.speed, radius: 44, sides: 6, vRot: 0 }),
+  onArrive(e, m) {
+    e.phase = 1;
+    e.deflect = true;
+    e.aiTimer = HIVE.podEvery;
+    e.spiralT = 0;
+    e.spiralA = 0;
+    const bayHp = e.maxHp * HIVE.bayHpShare;
+    for (let k = 0; k < HIVE.bays; k++) {
+      const a = Math.PI / 4 + (k * Math.PI * 2) / HIVE.bays;
+      m.queueSpawn('hive_bay', e.x + Math.cos(a) * HIVE.bayRadius, e.y + Math.sin(a) * HIVE.bayRadius, 1, {
+        instant: true, attach: { mount: e, mountA: a, mountR: HIVE.bayRadius, hp: bayHp, maxHp: bayHp, bossBody: e.type, aiTimer: 0.8 + k * 0.5 }
+      });
+    }
+  },
+  update(e, m, env) {
+    const { dt, dist } = env;
+    if (e.phase === 1 && bayCount(e, m) === 0) {
+      // Every bay down: the core is exposed and spins up.
+      e.phase = 2;
+      e.deflect = false;
+      e.speed = HIVE.exposedSpeed;
+      e.aiTimer = 1;
+      env.particles?.spawnShockwave?.(e.x, e.y, 320, e.hue, 6, 0.55);
+      env.grid?.applyImpulse(e.x, e.y, 80, 320, e.hue);
+    }
+    const push = dist > HIVE.holdRange ? 0.1 : dist < HIVE.holdRange - 60 ? -0.06 : 0;
+    e.vx = (e.vx + env.moveX * push) * 0.94;
+    e.vy = (e.vy + env.moveY * push) * 0.94;
+    e.rotation += (e.phase === 2 ? HIVE.exposedSpin : HIVE.spin) * dt;
+    if (e.phase !== 2) return;
+    e.spiralT -= dt;
+    if (e.spiralT <= 0) {
+      e.spiralT = HIVE.spiralEvery;
+      e.spiralA += HIVE.spiralStep;
+      fireOrb(m, e, e.spiralA, HIVE.spiralSpeed);
+      fireOrb(m, e, e.spiralA + Math.PI, HIVE.spiralSpeed);
+    }
+    e.aiTimer -= dt;
+    if (e.aiTimer <= 0) {
+      e.aiTimer = HIVE.podEvery;
+      let pods = 0;
+      for (const o of m.enemies) if (o.parent === e && !o.dead) pods++;
+      for (let k = 0; k < HIVE.pods && pods < HIVE.podCap; k++, pods++) {
+        const a = e.rotation + k * Math.PI;
+        m.queueSpawn('gunner', e.x + Math.cos(a) * e.radius * 1.3, e.y + Math.sin(a) * e.radius * 1.3, m.waveScaleFor('gunner', e.bossWave), {
+          instant: true, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, attach: { parent: e }
+        });
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    // Hexagonal mothership: outer hull, inner reactor ring, and spokes to the bay mounts.
+    for (let k = 0; k < 6; k++) {
+      const a = (k * Math.PI) / 3;
+      if (k === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    const core = r * (e.phase === 2 ? 0.5 + Math.sin(e.pulsePhase * 2) * 0.06 : 0.42);
+    ctx.moveTo(core, 0);
+    ctx.arc(0, 0, core, 0, Math.PI * 2);
+    for (let k = 0; k < 4; k++) {
+      const a = Math.PI / 4 + (k * Math.PI) / 2;
+      ctx.moveTo(Math.cos(a) * core, Math.sin(a) * core);
+      ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95);
+    }
+  },
+  overlay(ctx, e, r) {
+    if (!e.deflect) return;
+    // The bay-powered shield: a dashed hex bubble that flashes when shots spark off it.
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 75%, ${0.3 + (e.hitFlash || 0) * 0.5})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let k = 0; k < 12; k++) {
+      const a0 = e.rotation + (k * Math.PI) / 6;
+      ctx.moveTo(e.x + Math.cos(a0) * r * 1.12, e.y + Math.sin(a0) * r * 1.12);
+      ctx.arc(e.x, e.y, r * 1.12, a0, a0 + 0.3);
+    }
+    ctx.stroke();
+  }
+};
+
+// --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
+// have their own HP and AI, and pop when the boss dies.
+export const PART_STATS = {
+  hive_bay: () => ({
+    hp: 100, maxHp: 100, speed: 0, radius: 17, sides: 4, hue: 120, score: 300, xp: 10, vRot: 0, sturdy: true, knockMult: 0
+  })
+};
+export const isBossPart = (type) => Object.hasOwn(PART_STATS, type);
+
+// Per-tick for a mounted part: ride the mount, launch drones; doomed when the mount dies.
+export function updateMount(e, m, env) {
+  const M = e.mount;
+  if (!M || M.dead) {
+    e.doomT = (e.doomT ?? 0.12) - env.dt;
+    if (e.doomT <= 0 && !e.doomQueued) {
+      e.doomQueued = true;
+      m.doomed.push(e);
+    }
+    return;
+  }
+  const a = M.rotation + e.mountA;
+  e.x = M.x + Math.cos(a) * e.mountR;
+  e.y = M.y + Math.sin(a) * e.mountR;
+  e.vx = M.vx;
+  e.vy = M.vy;
+  e.rotation = a;
+  if (e.type === 'hive_bay') {
+    e.aiTimer -= env.dt;
+    if (e.aiTimer <= 0) {
+      e.aiTimer = HIVE.bayLaunchEvery;
+      launchDrones(e, m, 1, HIVE.bayDrones, m.waveScaleFor('drone', M.bossWave));
+    }
+  }
+}
+
+export function tracePart(ctx, e, r) {
+  // A hangar block with launch-door slats facing outward.
+  ctx.rect(-r * 0.8, -r * 0.8, r * 1.6, r * 1.6);
+  for (let k = -1; k <= 1; k++) {
+    ctx.moveTo(r * 0.2, k * r * 0.45);
+    ctx.lineTo(r * 0.8, k * r * 0.45);
+  }
+}
+
+export function drawPartOverlay(ctx, e, r) {
+  if (!(e.sinceHit < 2) || e.hp >= e.maxHp) return;
+  ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.8 * (1 - e.sinceHit / 2)})`;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, r * 1.4 + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, e.hp / e.maxHp));
+  ctx.stroke();
+}
+
 export const BOSS_DEFS = {
   brood_queen: broodQueen,
   ouroboros,
-  wing_commander: wingCommander
+  wing_commander: wingCommander,
+  hive_carrier: hiveCarrier
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

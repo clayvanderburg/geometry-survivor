@@ -299,6 +299,41 @@ const SCENES = {
     onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
+  carrier: {
+    w: 640, loop: 10,
+    setup(s) { s.home(0.3, 0.5); s.spawn('carrier', s.W * 0.85, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.3, s.H * 0.5, 30, 1.3);
+      if (s.t > 3) s.autoFire(0.14);
+      if (s.count('carrier') === 0 && s.every(1.5)) s.spawn('carrier', s.W * 0.9, s.H * 0.5);
+    }
+  },
+  drone: {
+    w: 520, loop: 8,
+    setup(s) { s.home(0.7, 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.7, s.H * 0.5, 60, 2.2);
+      s.autoFire(0.2);
+      if (s.count() < 3 && s.every(0.6)) s.spawn('drone', s.W * 0.05, s.H * (0.2 + Math.random() * 0.6), { attach: { aimAngle: 0, lifeT: 6 } });
+    }
+  },
+  hive_carrier: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.72, 0.5);
+      s.manager.queueSpawn('hive_carrier', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.72, s.H * 0.5, s.H * 0.25, 0.7);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.mount || (e.isBoss && !e.deflect));
+      // Speed the fight along: the bays fall one by one, then the exposed core.
+      if (s.t > 5 && s.every(1.2)) { const bay = s.manager.enemies.find(e => e.mount && !e.dead); if (bay) s.kill(bay); }
+      const q = s.find('hive_carrier');
+      if (q && s.t > 12.8) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -625,7 +660,8 @@ const SILHOUETTE = {
   mini_splitter: ['mini_splitter', 100], blackhole: ['blackhole', 220], bruiser: ['bruiser', 200], gunner: ['gunner', 140],
   shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
-  kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260]
+  kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
+  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

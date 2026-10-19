@@ -390,3 +390,53 @@ test('Wing Commander arriving already lined up never double-books its escort slo
   const slots = m.enemies.filter(e => e.wingLeader === c).map(e => e.wingSlot).sort();
   assert.deepEqual(slots, [1, 2, 3, 4, 5, 6]);
 });
+
+test('carriers hang back and launch capped drones that home in and burn out', async () => {
+  resetTuning();
+  const { CARRIER, DRONE } = await import('../js/hostiles.js');
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  m.queueSpawn('carrier', 2000, 2000, 1, { instant: true });
+  step(m, player, 2);
+  const c = m.enemies.find(e => e.type === 'carrier');
+  step(m, player, 60 * 12);
+  const drones = m.enemies.filter(e => e.type === 'drone' && e.parent === c);
+  assert.ok(drones.length > 0 && drones.length <= CARRIER.maxDrones, `${drones.length} drones`);
+  assert.ok(Math.abs(Math.hypot(c.x - player.x, c.y - player.y) - CARRIER.range) < CARRIER.band + 120, 'holds its range');
+  // Burn-out: a drone past its life is doomed without a reward.
+  step(m, player, Math.ceil(DRONE.life * 60) + 2);
+  assert.ok(m.doomed.some(e => e.type === 'drone' && e.noReward));
+});
+
+test('Hive Carrier: bays shield the core and launch drones; with every bay down the core is exposed', async () => {
+  resetTuning();
+  const { HIVE } = await import('../js/bosses.js');
+  const g = campaignGame({ wave: 12 });
+  const m = g.enemyManager;
+  m.queueSpawn('hive_carrier', 2400, 2000, waveScaleAt(12), { instant: true, wave: 12 });
+  step(m, g.player, 4);
+  const h = m.enemies.find(e => e.type === 'hive_carrier');
+  const bays = m.enemies.filter(e => e.mount === h);
+  assert.equal(bays.length, HIVE.bays);
+  assert.ok(h.deflect, 'shielded while bays stand');
+  const hp = h.hp;
+  g.hitEnemy(h, 999);
+  assert.equal(h.hp, hp, 'shots spark off the shielded core');
+  step(m, g.player, 60 * 4);
+  assert.ok(m.enemies.some(e => e.type === 'drone' && bays.includes(e.parent)), 'bays launch drones');
+  for (const b of bays) assert.ok(Math.abs(Math.hypot(b.x - h.x, b.y - h.y) - HIVE.bayRadius) < 1, 'bays ride the hull');
+  for (const b of bays) g.killEnemy(b);
+  step(m, g.player, 1);
+  assert.equal(h.phase, 2);
+  assert.equal(h.deflect, false, 'core exposed');
+  step(m, g.player, 60);
+  assert.ok(m.enemyBullets.count > 4, 'the exposed core sprays a spiral');
+  step(m, g.player, 60 * HIVE.podEvery);
+  assert.ok(m.enemies.some(e => e.type === 'gunner' && e.parent === h), 'gunner pods');
+  // Killing the core pops anything still mounted.
+  m.queueSpawn('hive_bay', h.x, h.y, 1, { instant: true, attach: { mount: h, mountA: 0, mountR: 50 } });
+  step(m, g.player, 2);
+  g.killEnemy(h);
+  for (let i = 0; i < 30; i++) g.update(1 / 60);
+  assert.ok(!m.enemies.some(e => e.mount === h));
+});

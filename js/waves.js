@@ -16,6 +16,7 @@ export const WAVE_PACKS = [
   { id: 'blinker', lead: 'blinker', weightKey: 'spawnWeightBlinker' },
   { id: 'kestrel', lead: 'kestrel', weightKey: 'spawnWeightKestrel' },
   { id: 'gunner', lead: 'gunner', weightKey: 'spawnWeightGunner' },
+  { id: 'carrier', lead: 'carrier', weightKey: 'spawnWeightCarrier' },
   { id: 'blackhole', lead: 'blackhole', weightKey: 'spawnWeightBlackhole' },
   { id: 'hulk', lead: 'hulk', weightKey: 'spawnWeightHulk' },
   { id: 'shielder', lead: 'shielder', weightKey: 'spawnWeightShielder' },
@@ -67,6 +68,11 @@ export function packRoster(id, wave, legacy = false) {
     case 'mayfly': return [['mayfly', packSize(Math.min(TUNING.mayflyPackMax ?? 30, 12 + Math.floor(s('mayfly') * (TUNING.mayflyPackPerWave ?? 0.8))))]];
     case 'blackhole': return [['blackhole', 1]];
     case 'bruiser': return [['bruiser', packSize(Math.min(3, 1 + Math.floor(s('bruiser') / 4)))]];
+    // Carriers, plus the drones they launch over their life (counted for the HP budget, not spawned here).
+    case 'carrier': {
+      const n = Math.min(2, 1 + Math.floor(s('carrier') / 9));
+      return [['carrier', n], ['drone', n * 4]];
+    }
     case 'gunner': return [['gunner', packSize(Math.min(5, 2 + Math.floor(s('gunner') / 4)))]];
     case 'hulk': return [['hulk', Math.min(3, 1 + Math.floor(s('hulk') / 8))]];
     // Serpents count their head only: the body cannot be hurt, and dies with it.
