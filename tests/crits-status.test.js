@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { levelBuild } from '../js/weapon-levels.js';
 
-// Crits, weapon tags and damage types (BURN / CHILL / CORRODE). Browser services are stubbed;
+// Crits, weapon tags and element statuses (BURN / CHILL / CORRODE; SHOCK has its own file). Browser services are stubbed;
 // the game fixtures run the production hitEnemy / status / firing code.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
@@ -32,7 +32,7 @@ function makePlayer() {
       magnetRadius: 145, xpMultiplier: 1, luck: 1, coreDropMult: 1, miningSpeed: 75, miningRange: 43, drillScale: 1.15,
       critChance: 0.05, critDamage: 1.5, tagDamage: { kinetic: 1, explosive: 1, electric: 1 }, areaMult: 1
     },
-    weapons: { missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0, thermite: 0, cryo: 0, nanite: 0, supercritical: 0 }
+    weapons: { missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0, supercritical: 0 }
   };
 }
 
@@ -113,10 +113,10 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   assert.equal(p.stats.critChance.toFixed(2), '0.15');
   assert.equal(p.stats.critDamage, 1.75);
 
-  // Supercritical needs crit chance LV 2 and a damage-type card.
+  // Supercritical needs crit chance LV 2 and a weapon with an element.
   const syn = byId('evo_supercrit');
   assert.equal(syn.req(p), false);
-  applyUpgradeLevels(p, byId('thermite'));
+  applyUpgradeLevels(p, byId('blaster_fire'));
   assert.equal(syn.req(p), true);
   const card = describeUpgrade(p, syn);
   assert.equal(card.rarity, 'evolution');
@@ -139,12 +139,12 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
 test('BURN stacks to its cap, ticks every half second as burn damage and expires on time', () => {
   reset();
   const p = makePlayer();
-  applyUpgradeLevels(p, byId('thermite'));
+  applyUpgradeLevels(p, byId('blaster_fire'));
   const e = enemy();
   const g = game([e], p);
   for (let i = 0; i < 10; i++) withRandom(0.99, () => g.hitEnemy(e, 1, 'blaster'));
   assert.equal(e.st.burn, W.burnMaxStacks(1));
-  const preview = row('burnMax').get(p);
+  const preview = row('blaster:burnMax').get(p);
   assert.equal(preview, p.stats.damage * W.burnStackDpsMult(1) * W.burnMaxStacks(1));
 
   const hp = e.hp;
@@ -179,7 +179,7 @@ test('burn ticks merge into one rising total instead of a new number every half 
 test('BURN can kill, and a burning enemy dying mid-sweep is never ticked twice', () => {
   reset();
   const p = makePlayer();
-  applyUpgradeLevels(p, byId('thermite'));
+  applyUpgradeLevels(p, byId('blaster_fire'));
   const enemies = [enemy({ hp: 1 }), enemy({ hp: 1 }), enemy()];
   const g = game(enemies, p);
   for (const e of [...enemies]) withRandom(0.99, () => g.hitEnemy(e, 0.5, 'blaster'));
@@ -192,8 +192,8 @@ test('CHILL from missile blasts slows movement, bosses resist, and it wears off'
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('missiles'));
-  applyUpgradeLevels(p, byId('cryo'));
-  const card = describeUpgrade(p, byId('cryo'));
+  applyUpgradeLevels(p, byId('missiles_frost'));
+  const card = describeUpgrade(p, byId('missiles_frost'));
   assert.equal(card.headline, '+5% CHILL SLOW');
 
   const manager = new EnemyManager();
@@ -206,7 +206,7 @@ test('CHILL from missile blasts slows movement, bosses resist, and it wears off'
   const slow = W.chillSlow(1);
   assert.equal(e.speedScale, 1 - slow);
   assert.equal(boss.speedScale, 1 - slow * TUNING.chillBossMult);
-  assert.equal(row('chillBoss').get(p), slow * TUNING.chillBossMult);
+  assert.equal(row('missiles:chill').get(p), slow);
 
   manager.update(DT, { x: 9999, y: 2000 }, [], silent, silent, 4200, 4200);
   assert.ok(Math.abs(Math.hypot(e.vx, e.vy) - 2 * (1 - slow)) < 1e-9, 'speed capped by the chill');
@@ -221,14 +221,14 @@ test('CORRODE from arcs stacks to a cap and amplifies every source, burn include
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('lightning'));
-  applyUpgradeLevels(p, byId('nanite'));
+  applyUpgradeLevels(p, byId('lightning_corrode'));
   const e = enemy();
   const g = game([e], p);
   for (let i = 0; i < 12; i++) withRandom(0.99, () => g.hitEnemy(e, 1, 'lightning'));
   assert.equal(e.st.corrode, W.corrodeMaxStacks(1));
   const amp = 1 + W.corrodePerStack * W.corrodeMaxStacks(1);
   assert.equal(damageTakenMult(e), amp);
-  assert.equal(row('corrodeMax').get(p), amp - 1);
+  assert.ok(Math.abs(row('lightning:corrodeMax').get(p) - (amp - 1)) < 1e-12);
 
   const hp = e.hp;
   withRandom(0.99, () => g.hitEnemy(e, 10, 'orbital'));
@@ -244,7 +244,7 @@ test('CORRODE from arcs stacks to a cap and amplifies every source, burn include
 test('vortexes take statuses like any enemy; only invulnerable hulls are immune', () => {
   reset();
   const p = makePlayer();
-  p.weapons.thermite = 1; p.weapons.cryo = 1; p.weapons.nanite = 1;
+  p.weapons.blaster_fire = 1; p.weapons.missiles_frost = 1; p.weapons.lightning_corrode = 1;
   const vortex = enemy({ type: 'blackhole', hp: 1e6, maxHp: 1e6 });
   const shielded = enemy({ invulnerable: true, hp: 1e6, maxHp: 1e6 });
   const g = game([vortex, shielded], p);
@@ -252,7 +252,8 @@ test('vortexes take statuses like any enemy; only invulnerable hulls are immune'
     withRandom(0.99, () => g.hitEnemy(vortex, 1, source));
     withRandom(0.99, () => g.hitEnemy(shielded, 1, source));
   }
-  assert.ok(vortex.st && vortex.st.burn > 0, 'thermite ignites a vortex');
+  assert.ok(vortex.st && vortex.st.burn > 0, 'a FIRE Autocannon ignites a vortex');
+  assert.ok(vortex.st.chillT > 0 && vortex.st.corrode > 0, 'FROST missiles chill it, CORROSIVE arcs corrode it');
   assert.equal(shielded.st, undefined);
 });
 
@@ -291,16 +292,16 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
   const p = makePlayer(); // equips only Autocannon (PROJECTILE KINETIC)
   for (const id of ['tag_explosive', 'tag_electric', 'tag_area']) assert.equal(byId(id).req(p), false, id);
-  for (const id of ['cryo', 'nanite']) assert.equal(loadoutAllows(p, byId(id)), false, id);
+  for (const id of ['rockets_frost', 'lightning_corrode']) assert.equal(loadoutAllows(p, byId(id)), false, id);
   assert.equal(byId('tag_kinetic').req(p), true, 'the Autocannon is kinetic');
-  assert.equal(loadoutAllows(p, byId('thermite')), true, 'Autocannon bolts ignite');
+  assert.equal(loadoutAllows(p, byId('blaster_fire')), true, 'Autocannon bolts can burn');
   p.loadout = ['blaster', 'rockets'];
   assert.equal(byId('tag_explosive').req(p), true, 'rocket pods are explosive');
   assert.equal(byId('tag_area').req(p), true, 'rocket pods are area');
-  assert.equal(loadoutAllows(p, byId('cryo')), true, 'rocket pods carry cryo');
+  assert.equal(loadoutAllows(p, byId('rockets_frost')), true, 'rocket pods can take FROST');
   p.loadout = ['rockets'];
   assert.equal(byId('tag_kinetic').req(p), false, 'no kinetic weapon equipped');
-  assert.equal(loadoutAllows(p, byId('thermite')), false, 'no Autocannon, no thermite');
+  assert.equal(loadoutAllows(p, byId('blaster_fire')), false, 'no Autocannon, no Autocannon element');
 });
 
 test('every weapon card carries tags rendered as chips, and every tag has a chip style', () => {
@@ -336,7 +337,7 @@ test('resetRun seeds crit stats from tuning and clears status bookkeeping', () =
   assert.equal(g.player.stats.critDamage, TUNING.baseCritDamage);
   assert.deepEqual(g.player.stats.tagDamage, { kinetic: 1, explosive: 1, electric: 1 });
   assert.equal(g.player.stats.areaMult, 1);
-  assert.equal(g.player.weapons.thermite, 0);
+  assert.ok(!Object.keys(g.player.weapons).some((k) => /_(fire|frost|corrode|shock)$/.test(k)), 'no weapon starts with an element');
   assert.equal(g.statusStamp, 0);
   reset();
 });
@@ -346,7 +347,7 @@ test('live tuning re-derives crit stats from the tuned base plus owned crit card
   const p = makePlayer();
   applyUpgradeLevels(p, { ...byId('crit_chance'), levelJump: 2 });
   applyUpgradeLevels(p, byId('crit_damage'));
-  applyUpgradeLevels(p, byId('thermite'));
+  applyUpgradeLevels(p, byId('blaster_fire'));
   applyUpgradeLevels(p, byId('evo_supercrit'));
   const g = Object.assign(game([], p), {
     progression: { getBonuses: () => ({ moveSpeedMult: 1, fireRateMult: 1, damageMult: 1, magnetMult: 1, xpMult: 1, coreMult: 1 }) }

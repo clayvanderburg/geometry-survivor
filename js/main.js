@@ -24,7 +24,7 @@ import {
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
@@ -415,9 +415,6 @@ export class Game {
         grenades: 0,
         siegeBattery: 0,
         empGrenades: 0,
-        thermite: 0,
-        cryo: 0,
-        nanite: 0,
         supercritical: 0
       }
     };
@@ -1752,7 +1749,8 @@ export class Game {
     const compact = rewardCount > 3;
     const awarded = [];
     for (let i = 0; i < rewardCount; i++) {
-      const pool = rollUpgrades(this.player, 3);
+      // Never a weapon's element card: the element is the player's own pick from a level-up hand.
+      const pool = rollUpgrades(this.player, 3, { cache: true });
       if (pool.length === 0) break;
       const chosen = pool[0];
       awarded.push(describeUpgrade(this.player, chosen, compact ? COMPACT_MAX_ROWS : undefined));
@@ -4326,10 +4324,11 @@ export class Game {
       const bt = Object.entries(p.breakthroughs?.[id] || {})
         .map(([m, kind]) => `<span class="loadout-line bt">⚛ ${kind === 'transform' ? TRANSFORMS[id][m].name : BOOST_NAME}</span>`).join('');
       const lines = bt + lineList
-        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
+        // Element cards drop their "Autocannon: " prefix here: the slot already names the weapon.
+        .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '').replace(/^[^:]+: /, '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
       const pending = this.discardPending === id;
       const blocked = this.discardBlocked === id;
-      // Lines another equipped weapon still uses (e.g. Cryo Payload with rockets and missiles) stay.
+      // Lines another equipped weapon still uses (weapon-specific lines shared by two weapons) stay.
       const removes = lineList.filter((l) => !(UPGRADE_BY_ID[l.id].owners || []).some((o) => o !== id && owned.includes(o)));
       const removeText = removes.length ? ` and ${removes.map((l) => l.name.replace('SYNERGY: ', '')).join(', ')}` : '';
       const actions = blocked
@@ -4937,7 +4936,11 @@ export class Game {
         const source = m.source || 'missile';
         if (m.nuke) this.weaponFx.detonate(this, { x: m.x, y: m.y, radius: blast, damage: 0, hue: 30, source, style: 'nuke', knock: 0, falloff: 0 });
         this.missileBlastFx(m, blast);
-        if (p.weapons.cryo && source === 'missile') this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
+        if (source === 'missile') {
+          const el = sourceElement(p, 'missile');
+          if (el === 'frost') this.particles.spawnShockwave(m.x, m.y, blast * 0.8, 192, 2.5, 0.4);
+          else if (el === 'shock') this.particles.spawnShockwave(m.x, m.y, blast * 0.7, 62, 2, 0.25);
+        }
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, source, KNOCKBACK.missile);
         if (m.cluster) {
           const c = m.cluster;
@@ -4961,7 +4964,7 @@ export class Game {
     this.updateSingularities(dt);
     this.updateWellEffects();
 
-    // 7b. Damage types: burn ticks, chill and corrode timers (status-effects.js)
+    // 7b. Element statuses: burn ticks, chill, corrode and stun timers (status-effects.js)
     updateStatusEffects(this, dt);
 
     // 8. Update Enemies & Asteroid Clusters + Auto-Mining Lasers

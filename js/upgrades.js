@@ -5,7 +5,10 @@ import { WEAPON_SCALING as W } from './weapon-scaling.js';
 import {
   WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
 } from './loadout.js';
-import { STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
+import {
+  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
+  levelCardWeapon, weaponElement, elementsOf
+} from './weapon-levels.js';
 
 // Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
 // +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
@@ -47,6 +50,9 @@ const CORE_INFO = {
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' }
 };
 
+// The card preview row (upgrade-cards.js elementRows) an element card leads with.
+const ELEMENT_HEADLINE = { fire: 'burnMax', frost: 'chill', corrode: 'corrodeMax', shock: 'stun' };
+
 function weaponGroup(id) {
   const w = WEAPON_BY_ID[id];
   const key = w.levelKey;
@@ -57,8 +63,60 @@ function weaponGroup(id) {
     id: c.id, name: c.name, category: WEAPON_BADGE[id], owners: [id], tags, maxLevel: c.maxLevel, headline: c.headline,
     summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump
   }));
-  return [core, ...stats];
+  // Element cards (weapon-levels.js ELEMENT_CARDS): level cards like the stat cards, plus the element's
+  // rank in player.weapons. `req` is the element lock: once the weapon has an element, only that one's
+  // card is offered (as a rank-up). They never come from supply caches (rollUpgrades { cache: true }).
+  const elements = (ELEMENT_CARDS[id] || []).map((c) => ({
+    id: c.id, name: c.name, category: WEAPON_BADGE[id], owners: [id], tags: [ELEMENT_INFO[c.element].status], maxLevel: c.maxLevel,
+    headline: `${id}:${ELEMENT_HEADLINE[c.element]}`, summary: c.summary, elementCard: true, weapon: id, element: c.element,
+    req: (player) => {
+      const cur = weaponElement(player, id);
+      return !cur || cur.element === c.element;
+    },
+    apply(player) {
+      bump(player);
+      player.weapons[c.id] = (player.weapons[c.id] || 0) + 1;
+    }
+  }));
+  return [core, ...stats, ...elements];
 }
+
+// Elements carried by the player's equipped weapons (STATUS cards are only offered for these).
+export const ownedElements = (player) => elementsOf(player, ownedWeapons(player));
+const hasElement = (player, ...els) => {
+  const owned = ownedElements(player);
+  return els.length ? els.some((el) => owned.has(el)) : owned.size > 0;
+};
+
+// Global STATUS cards: they strengthen every element-infused weapon and never raise a weapon's level.
+const statusCard = (id, name, maxLevel, headline, tags, summary, req, apply) =>
+  ({ id, name, category: 'STATUS', tags, maxLevel, headline, summary, statusCard: true, req, apply });
+const elementDamageCard = (element, name) => statusCard(`${element}_damage`, name, 5, `${element}Damage`, [ELEMENT_INFO[element].status],
+  `${ELEMENT_INFO[element].label} weapons hit harder${element === 'fire' ? ', and their burn ticks too' : ''}.`,
+  (player) => hasElement(player, element),
+  (player) => {
+    const m = player.stats.elementDamage || (player.stats.elementDamage = {});
+    m[element] = (m[element] ?? 1) + W.elementDamageStep;
+  });
+const addRank = (key) => (player) => { player.stats[key] = (player.stats[key] || 0) + 1; };
+const STATUS_CARDS = [
+  statusCard('status_potency', 'Status Potency', 5, 'statusPotency', ['burn', 'chill', 'corrode', 'shock'],
+    'Every element hits harder: more burn damage, deeper chill, more damage taken per corrode stack and longer stuns.',
+    (player) => hasElement(player), addRank('statusPotency')),
+  statusCard('status_application', 'Status Application', 5, 'statusApplication', ['burn', 'corrode', 'shock'],
+    'Burn and corrode stack higher and hits can add two stacks at once; SHOCK rolls more long stuns.',
+    (player) => hasElement(player, 'fire', 'corrode', 'shock'), addRank('statusApplication')),
+  statusCard('status_duration', 'Status Duration', 5, 'statusDuration', ['burn', 'chill', 'corrode', 'shock'],
+    'Burn, chill and corrode last longer, and stuns a little longer.',
+    (player) => hasElement(player), addRank('statusDuration')),
+  statusCard('shock_conductor', 'Shock Conductor', 5, 'stunLongChance', ['shock'],
+    'SHOCK weapons land long stuns more often, and every stun lasts longer.',
+    (player) => hasElement(player, 'shock'), addRank('shockConductor')),
+  elementDamageCard('fire', 'Fire Amplifier'),
+  elementDamageCard('frost', 'Frost Amplifier'),
+  elementDamageCard('corrode', 'Corrosive Amplifier'),
+  elementDamageCard('shock', 'Shock Amplifier')
+];
 
 // Each entry: headline (the STAT_ROWS id shown enlarged on its card, see upgrade-cards.js),
 // a number-free summary and optional tags (TAG_INFO keys in weapon-scaling.js, shown as chips:
@@ -256,46 +314,8 @@ export const UPGRADE_POOL = [
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }
   },
-  // Damage types: each card adds a status effect to one weapon
-  {
-    id: 'thermite',
-    name: 'Thermite Rounds',
-    category: 'DAMAGE TYPE',
-    owners: ['blaster', 'grenades'],
-    tags: ['burn', 'projectile'],
-    maxLevel: 5,
-    headline: 'burnMax',
-    summary: 'Autocannon and helix bolts ignite targets, and Plasma Grenades become FIRE grenades. Each hit adds a burn stack and refreshes the fire.',
-    apply(player) {
-      player.weapons.thermite = (player.weapons.thermite || 0) + 1;
-    }
-  },
-  {
-    id: 'cryo',
-    name: 'Cryo Payload',
-    category: 'DAMAGE TYPE',
-    tags: ['chill', 'explosive'],
-    maxLevel: 5,
-    headline: 'chillSlow',
-    owners: ['rockets', 'missiles', 'grenades'],
-    summary: 'Rocket, missile and Plasma Grenade blasts chill everything they catch, slowing it (Plasma Grenades become FROST grenades). Bosses resist most of the slow.',
-    apply(player) {
-      player.weapons.cryo = (player.weapons.cryo || 0) + 1;
-    }
-  },
-  {
-    id: 'nanite',
-    name: 'Nanite Swarm',
-    category: 'DAMAGE TYPE',
-    tags: ['corrode', 'electric'],
-    maxLevel: 5,
-    headline: 'corrodeMax',
-    owners: ['lightning', 'grenades'],
-    summary: 'Tesla arcs and Plasma Grenade blasts seed corroding nanites (Plasma Grenades become CORROSIVE): each stack makes the target take more damage from everything.',
-    apply(player) {
-      player.weapons.nanite = (player.weapons.nanite || 0) + 1;
-    }
-  },
+  // Status cards (elements are per weapon: their cards come with each weapon group above)
+  ...STATUS_CARDS,
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
@@ -395,10 +415,10 @@ export const UPGRADE_POOL = [
     maxLevel: 1,
     req(player) {
       const lv = player.upgradeLevels;
-      return lv.crit_chance >= 2 && (lv.thermite >= 1 || lv.cryo >= 1 || lv.nanite >= 1);
+      return lv.crit_chance >= 2 && ownedElements(player).size > 0;
     },
     headline: 'critAfflicted',
-    summary: 'EVOLUTION: Upgrades your critical hits: more crits, and crits against burning, chilled or corroded targets get a far bigger bonus.',
+    summary: 'EVOLUTION: Upgrades your critical hits: more crits, and crits against burning, chilled, corroded or stunned targets get a far bigger bonus.',
     apply(player) {
       player.weapons.supercritical = 1;
       player.stats.critChance = (player.stats.critChance ?? 0) + W.supercritChance;
@@ -420,12 +440,15 @@ function hasTag(player, tag) {
 export const UPGRADE_BY_ID = Object.fromEntries(UPGRADE_POOL.map((u) => [u.id, u]));
 
 // What kind of card an upgrade is in a level-up hand: 'weapon' (a stat card: raises an equipped
-// weapon's level), 'core' (a weapon's equip line, installed by NEW WEAPON, never in a hand), 'line'
-// (a weapon-specific upgrade that is not a level, e.g. Thermite Rounds), 'tag', 'evolution' or
-// 'general'. Kinds set the hand weights.
+// weapon's level), 'element' (a weapon's element card: raises its level too, level-up hands only),
+// 'core' (a weapon's equip line, installed by NEW WEAPON, never in a hand), 'line' (a weapon-specific
+// upgrade that is not a level), 'status' (a global STATUS card), 'tag', 'evolution' or 'general'.
+// Kinds set the hand weights.
 export function upgradeKind(u) {
   if (WEAPON_BY_LEVEL_ID[u.id]) return 'core';
   if (STAT_CARD_BY_ID[u.id]) return 'weapon';
+  if (ELEMENT_CARD_BY_ID[u.id]) return 'element';
+  if (u.statusCard) return 'status';
   if (u.isSynergy) return 'evolution';
   if (u.category === 'SPECIALIST') return 'tag';
   if (u.owners) return 'line';
@@ -440,7 +463,7 @@ export function runUpgradeLines(player) {
   for (const u of UPGRADE_POOL) {
     const level = player.upgradeLevels?.[u.id] || 0;
     const kind = upgradeKind(u);
-    if (level > 0 && kind !== 'core' && kind !== 'weapon') {
+    if (level > 0 && kind !== 'core' && kind !== 'weapon' && kind !== 'element') {
       out.push({ id: u.id, name: u.name, level, maxLevel: u.maxLevel, kind, category: u.category, summary: u.summary, isSynergy: !!u.isSynergy });
     }
   }
@@ -466,11 +489,14 @@ export function loadoutAllows(player, u) {
 
 // Relative chance of a card appearing in a hand. Every weapon's stat cards share TUNING.weaponLevelWeight
 // x 2 between them (a 4-card weapon offers each at 1.5), so the weapons you carry keep climbing (and roll
-// their +3/+4/+5 jumps). Evolutions are semi-rare: TUNING.evolutionWeight (1) x luck. Every weight is a
-// TUNING value.
-export function cardWeight(u, luck = 1) {
+// their +3/+4/+5 jumps). A weapon's element cards share TUNING.elementCardWeight between the ones on
+// offer (all four while it has no element, then its one rank-up card). Evolutions are semi-rare:
+// TUNING.evolutionWeight (1) x luck. Every weight is a TUNING value.
+export function cardWeight(u, luck = 1, player = null) {
   switch (upgradeKind(u)) {
     case 'weapon': return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[STAT_CARD_BY_ID[u.id].weapon].length || 1);
+    case 'element': return (TUNING.elementCardWeight ?? 1.5) / (player && weaponElement(player, u.weapon) ? 1 : ELEMENTS.length);
+    case 'status': return TUNING.statusCardWeight ?? 0.7;
     case 'core': return 0;
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
     case 'tag': return TUNING.tagCardWeight ?? 0.7;
@@ -488,13 +514,13 @@ export function levelJumpChances(luck) {
   return { pentaChance, quadChance, tripleChance, doubleChance };
 }
 
-// Levels a card can still add: its own cap, and for a stat card also the room left under the weapon's
-// LV 18 cap (so a +5 roll on a LV 16 weapon installs +2).
+// Levels a card can still add: its own cap, and for a level card (stat or element) also the room left
+// under the weapon's LV 18 cap (so a +5 roll on a LV 16 weapon installs +2).
 export function levelRoom(player, u) {
   const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
-  const sc = STAT_CARD_BY_ID[u.id];
-  if (!sc) return Math.max(0, own);
-  const lv = Math.max(1, weaponLevel(player, sc.weapon));
+  const weapon = levelCardWeapon(u.id);
+  if (!weapon) return Math.max(0, own);
+  const lv = Math.max(1, weaponLevel(player, weapon));
   return Math.max(0, Math.min(own, WEAPON_MAX_LEVEL - lv));
 }
 
@@ -503,7 +529,7 @@ export function levelRoom(player, u) {
 // Installing a stat card (or equip line) of an unequipped weapon equips it at LV 1 first (stat cards
 // are only offered once equipped, so this matters only for direct installs such as the balance bench).
 export function applyUpgradeLevels(player, upg) {
-  const owner = WEAPON_BY_LEVEL_ID[upg.id] || WEAPON_BY_ID[STAT_CARD_BY_ID[upg.id]?.weapon];
+  const owner = WEAPON_BY_LEVEL_ID[upg.id] || WEAPON_BY_ID[levelCardWeapon(upg.id)];
   if (owner && Array.isArray(player.loadout) && !player.loadout.includes(owner.id)) {
     player.loadout.push(owner.id);
     const core = UPGRADE_BY_ID[owner.levelId];
@@ -524,15 +550,17 @@ export function applyUpgradeLevels(player, upg) {
 
 // Cards the player can be offered right now (level-up hands and caches): with room under their level caps
 // (a weapon's LV 18 included), allowed by the loadout, the run's mode and their own requirements.
-export function eligibleUpgrades(player) {
+// `cache: true` (supply caches) leaves out the per-weapon element cards: the element is the player's pick.
+export function eligibleUpgrades(player, { cache = false } = {}) {
   const shieldCards = modeRules(player).shieldCards;
   return UPGRADE_POOL.filter((u) => {
     if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
     if (u.shieldCard && !shieldCards) return false; // HARDCORE: nothing raises or restores the shield
+    if (cache && u.elementCard) return false; // element choices come from level-up hands only
     if (!loadoutAllows(player, u)) return false;
     if (levelRoom(player, u) <= 0) return false;
     if (u.req && !u.req(player)) return false;
-    return cardWeight(u) > 0;
+    return cardWeight(u, 1, player) > 0;
   });
 }
 
@@ -541,7 +569,7 @@ export function eligibleUpgrades(player) {
 // excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 4 slots, O(n^slots).
 export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   const luck = player.stats.luck || 1.0;
-  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck) }));
+  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck, player) }));
   const odds = new Map(pool.map((c) => [c.id, 0]));
   const k = Math.min(Math.max(0, Math.floor(slots)), 4, pool.length);
   const total = pool.reduce((a, c) => a + c.w, 0);
@@ -564,12 +592,14 @@ export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   return odds;
 }
 
-export function rollUpgrades(player, count = 3) {
+// A random hand of `count` eligible cards with their rolled level jumps. Supply caches pass
+// { cache: true }, which never draws a weapon's element cards.
+export function rollUpgrades(player, count = 3, { cache = false } = {}) {
   const luck = player.stats.luck || 1.0;
 
   // Weighted sample without replacement: one draw per candidate, key = r^(1/weight), highest keys win.
-  const shuffled = eligibleUpgrades(player)
-    .map((upgrade) => ({ upgrade, score: Math.pow(Math.random(), 1 / cardWeight(upgrade, luck)) }))
+  const shuffled = eligibleUpgrades(player, { cache })
+    .map((upgrade) => ({ upgrade, score: Math.pow(Math.random(), 1 / cardWeight(upgrade, luck, player)) }))
     .sort((a, b) => b.score - a.score)
     .map(({ upgrade }) => upgrade);
 

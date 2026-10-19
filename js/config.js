@@ -172,6 +172,8 @@ export const DEFAULT_TUNING = {
   chillSlowMult: 1.0,
   chillBossMult: 0.4,
   corrodeMult: 1.0,
+  shockBossMult: 0.2,       // share of a SHOCK stun a boss keeps
+  shockLieutenantMult: 0.5, // share of a SHOCK stun a lieutenant keeps
 
   // 12. Leveling & Weapon Loadout (XP to next level = base + step per level, steeper from LV 20 / LV 40;
   // hand weights are relative: general upgrades weigh 1)
@@ -191,7 +193,9 @@ export const DEFAULT_TUNING = {
   newWeaponPity: 4,
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
+  elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.7,
+  statusCardWeight: 0.7,    // each global STATUS card
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
@@ -420,10 +424,12 @@ export const TUNING_SCHEMA = [
     items: [
       { key: 'baseCritChance', label: 'Base Crit Chance', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'baseCritDamage', label: 'Base Crit Damage', type: 'range', min: 1.1, max: 4.0, step: 0.05, unit: 'x' },
-      { key: 'burnDamageMult', label: 'Burn (Thermite) DoT Strength', type: 'range', min: 0, max: 4.0, step: 0.1, unit: 'x' },
-      { key: 'chillSlowMult', label: 'Chill (Cryo) Slow Strength', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'x' },
+      { key: 'burnDamageMult', label: 'Burn (FIRE) DoT Strength', type: 'range', min: 0, max: 4.0, step: 0.1, unit: 'x' },
+      { key: 'chillSlowMult', label: 'Chill (FROST) Slow Strength', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 'x' },
       { key: 'chillBossMult', label: 'Chill Slow Applied to Bosses', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' },
-      { key: 'corrodeMult', label: 'Corrode Damage-Taken / Stack', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 'x' }
+      { key: 'corrodeMult', label: 'Corrode Damage-Taken / Stack', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 'x' },
+      { key: 'shockBossMult', label: 'Stun (SHOCK) Kept by Bosses', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'shockLieutenantMult', label: 'Stun (SHOCK) Kept by Lieutenants', type: 'range', min: 0, max: 1.0, step: 0.05, unit: 'x' }
     ]
   },
   {
@@ -443,7 +449,9 @@ export const TUNING_SCHEMA = [
       { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands (2+ Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]
   },

@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS } from './weapon-levels.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
 // stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
@@ -305,8 +305,8 @@ export const WEAPON_SCALING = {
   // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------
   // Autonomous: every throw interval the ship lobs `count` grenades at the nearest enemies in throw
   // range (or along its aim). Each one arcs for grenadeFlight s, sits armed for grenadeFuse s with a
-  // blinking light, then bursts. Its element (and hue) comes from the damage-type cards owned
-  // (grenades.js grenadeElement): Thermite burns, Cryo Payload chills, Nanite Swarm corrodes.
+  // blinking light, then bursts. Its element (and hue) is the one its element card locked in
+  // (grenades.js grenadeElement): FIRE burns, FROST chills, CORROSIVE corrodes, SHOCK stuns.
   grenadeCount: (b) => 2 + b.r.count,
   grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate),
   grenadeBlastRadius: (b) => 95 * (1 + 0.12 * b.r.radius),
@@ -360,21 +360,53 @@ export const WEAPON_SCALING = {
   tagDamageStep: { kinetic: 0.2, explosive: 0.3, electric: 0.3 },
   areaStep: 0.15,
 
-  // BURN (Thermite Rounds): each primary-bolt hit adds a stack and refreshes the timer;
-  // stacks tick together every burnTickInterval seconds.
+  // Elements (weapon-levels.js ELEMENT_CARDS): `lv` below is the rank of a weapon's element card (1-5).
+  // BURN (FIRE): each hit adds a stack and refreshes the timer; stacks tick together every burnTickInterval s.
   burnStackDpsMult: (lv) => 0.3 + lv * 0.15,
   burnMaxStacks: (lv) => 3 + lv,
   burnDuration: 3,
   burnTickInterval: 0.5,
 
-  // CHILL (Cryo Payload): missile blasts slow movement; it refreshes, it does not stack.
+  // CHILL (FROST): blasts and hits slow movement; it refreshes, it does not stack.
   chillSlow: (lv) => 0.25 + lv * 0.05,
   chillDuration: (lv) => 1.8 + lv * 0.3,
 
-  // CORRODE (Nanite Swarm): each arc hit adds a stack of +damage taken from every source, up to a cap.
-  corrodePerStack: 0.05,
+  // CORRODE (CORROSIVE): each hit adds a stack of +damage taken from every source, up to a cap.
+  corrodePerStack: 0.07, // 0.05 while it was a free global card (Nanite Swarm, before v0.34); element ranks now cost weapon levels
   corrodeMaxStacks: (lv) => 4 + lv,
-  corrodeDuration: 4
+  corrodeDuration: 4,
+
+  // STUN (SHOCK): a hit on an enemy that is neither stunned nor stun-immune stuns it for shockStun(lv) s,
+  // or for shockLongStun s with chance shockLongChance(lv). Stunned enemies stop moving and attacking.
+  // When a stun ends the enemy is immune to stuns for stunImmunity s, so nothing is stun-locked:
+  // at rank 1 an enemy under constant fire is stunned ~40% of the time, ~60% with every Shock card maxed.
+  // Bosses and lieutenants resist (TUNING shockBossMult / shockLieutenantMult of the duration) and
+  // shake stuns off for longer (stunImmunityBoss / stunImmunityLieutenant).
+  shockStun: (lv) => 0.3 + (Math.max(1, lv) - 1) * 0.05,
+  shockLongChance: (lv) => 0.3 + (Math.max(1, lv) - 1) * 0.03,
+  shockLongStun: 1.5,
+  stunImmunity: 1,
+  stunImmunityLieutenant: 1.5,
+  stunImmunityBoss: 3,
+  shockLongChanceMax: 0.75,
+
+  // Global status cards (upgrades.js, category STATUS). None of them raises a weapon's level.
+  // Status Potency: burn DPS and damage taken per corrode stack +20%, chill slow +10% (relative), stuns +5% longer.
+  potencyStep: 0.2,
+  potencyChillStep: 0.1,
+  potencyStunStep: 0.05,
+  // Status Application: +1 burn / corrode max stack, +10% chance a hit adds two stacks, +2% long-stun chance.
+  applicationStacks: 1,
+  applicationDoubleStep: 0.1,
+  applicationShockStep: 0.02,
+  // Status Duration: burn, chill and corrode last +20% longer, stuns +5%.
+  durationStep: 0.2,
+  durationStunStep: 0.05,
+  // Shock Conductor: +4% long-stun chance and stuns +10% longer per rank.
+  conductorChanceStep: 0.04,
+  conductorDurationStep: 0.1,
+  // Element damage cards: weapons of that element hit +15% harder per rank (FIRE: burn ticks too).
+  elementDamageStep: 0.15
 };
 
 const W = WEAPON_SCALING;
@@ -501,6 +533,7 @@ export const TAG_INFO = {
   burn: { label: 'BURN', color: '#ff5a2e' },
   chill: { label: 'CHILL', color: '#8fe8ff' },
   corrode: { label: 'CORRODE', color: '#7dff4a' },
+  shock: { label: 'SHOCK', color: '#f4ff52' },
   deployable: { label: 'DEPLOYABLE', color: '#5aa8ff' }
 };
 
@@ -560,7 +593,7 @@ export function weaponDamage(p, weapon, b) {
     case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
-  return base * tagDamageMult(p, weapon);
+  return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
 }
 
 // Radii scaled by the AREA tag (missile blasts, singularity pull/collapse, dash nova, tectonic blast).
@@ -581,7 +614,43 @@ export function critMultiplier(p, afflicted = false) {
   return afflicted && p.weapons.supercritical ? 1 + (cd - 1) * W.supercritBonusMult : cd;
 }
 
-// Damage-type numbers at a given card level, including their tuner multipliers.
-export const burnStackDps = (p, lv) => p.stats.damage * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1);
-export const chillSlow = (lv, isBoss = false) => Math.min(0.9, W.chillSlow(lv) * (TUNING.chillSlowMult ?? 1)) * (isBoss ? (TUNING.chillBossMult ?? 0.4) : 1);
-export const corrodePerStack = () => W.corrodePerStack * (TUNING.corrodeMult ?? 1);
+// --- Elements and status effects -------------------------------------------------------------------
+// Numbers at a weapon's element rank `lv`, including the tuner multipliers and the global STATUS cards
+// (player.stats: statusPotency / statusApplication / statusDuration / shockConductor ranks and
+// elementDamage multipliers). `p` may be omitted for the bare card numbers.
+const rk = (p, key) => p?.stats?.[key] || 0;
+export const statusPotency = (p) => 1 + W.potencyStep * rk(p, 'statusPotency');
+export const statusDurationMult = (p) => 1 + W.durationStep * rk(p, 'statusDuration');
+// Weapons of `element` deal this multiple of their damage (Element damage cards).
+export const elementDamageMult = (p, element) => (element ? p?.stats?.elementDamage?.[element] ?? 1 : 1);
+// Element of the weapon a damage source belongs to, or null ('helix' -> blaster's, 'rocket' -> rockets'...).
+export function sourceElement(p, source) {
+  const id = SOURCE_WEAPON[source];
+  const keys = id && ELEMENT_KEYS[id];
+  const w = p?.weapons;
+  if (!keys || !w) return null;
+  for (let i = 0; i < keys.length; i++) if (w[keys[i]] > 0) return ELEMENTS[i];
+  return null;
+}
+
+export const burnStackDps = (p, lv) => p.stats.damage * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire');
+export const burnMaxStacks = (p, lv) => W.burnMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
+export const burnDuration = (p) => W.burnDuration * statusDurationMult(p);
+export const chillSlow = (lv, isBoss = false, p = null) =>
+  Math.min(0.9, W.chillSlow(lv) * (TUNING.chillSlowMult ?? 1) * (1 + W.potencyChillStep * rk(p, 'statusPotency'))) * (isBoss ? (TUNING.chillBossMult ?? 0.4) : 1);
+export const chillDuration = (p, lv) => W.chillDuration(lv) * statusDurationMult(p);
+export const corrodePerStack = (p = null) => W.corrodePerStack * (TUNING.corrodeMult ?? 1) * statusPotency(p);
+export const corrodeMaxStacks = (p, lv) => W.corrodeMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
+export const corrodeDuration = (p) => W.corrodeDuration * statusDurationMult(p);
+// Chance that a burn / corrode hit adds two stacks instead of one (Status Application).
+export const doubleStackChance = (p) => Math.min(1, W.applicationDoubleStep * rk(p, 'statusApplication'));
+// Stun lengths (before boss / lieutenant resistance) and the long-stun chance.
+export const stunDurationMult = (p) => 1 + W.potencyStunStep * rk(p, 'statusPotency') + W.durationStunStep * rk(p, 'statusDuration')
+  + W.conductorDurationStep * rk(p, 'shockConductor');
+export const shockStun = (p, lv) => W.shockStun(lv) * stunDurationMult(p);
+export const shockLongStun = (p) => W.shockLongStun * stunDurationMult(p);
+export const shockLongChance = (p, lv) => Math.min(W.shockLongChanceMax, W.shockLongChance(lv)
+  + W.applicationShockStep * rk(p, 'statusApplication') + W.conductorChanceStep * rk(p, 'shockConductor'));
+// Share of a stun an elite keeps (bosses barely feel it) and how long it then shrugs stuns off.
+export const stunResist = (e) => (e?.isBoss ? TUNING.shockBossMult ?? 0.2 : e?.isLieutenant ? TUNING.shockLieutenantMult ?? 0.5 : 1);
+export const stunImmunity = (e) => (e?.isBoss ? W.stunImmunityBoss : e?.isLieutenant ? W.stunImmunityLieutenant : W.stunImmunity);

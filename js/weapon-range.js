@@ -1,5 +1,5 @@
 // Weapon Range: a sandbox on top of the real Game simulation. Pick a loadout (levels, stat ranks,
-// Breakthroughs, damage types and synergies), throw out target dummies and read live DPS per damage
+// elements, Breakthroughs, status cards and synergies), throw out target dummies and read live DPS per damage
 // source against each weapon's potential DPS. Weapons fire through the normal code paths, so they
 // behave exactly as in a run.
 //
@@ -7,7 +7,7 @@
 // be hurt; kills drop nothing (no XP, caches, cores or score) and the run is never recorded or uploaded.
 // main.js keeps a handful of one-line hooks (startGame, update, hitEnemy, killEnemy, game over); the
 // panel lives in js/weapon-range-ui.js. Everything else here is DOM-free, so tests drive it headless.
-import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, makeBuild } from './weapon-levels.js';
+import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, elementKey, makeBuild } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponSlots, weaponLevel } from './loadout.js';
 import { UPGRADE_BY_ID, acquireWeapon, applyUpgradeLevels, applyBreakthrough, markBreakthroughOffered, loadoutAllows } from './upgrades.js';
 import { waveScaleAt, LIGHT_ENEMY_TYPES } from './enemies.js';
@@ -60,7 +60,8 @@ export const DUMMY_COUNTS = [1, 3, 6, 12, 24, 40, 60];
 // Non-weapon cards the panel can install, by group. Tectonic Claw Bore is left out: it needs asteroids,
 // and the range has none.
 export const RANGE_MOD_GROUPS = [
-  { id: 'types', label: 'DAMAGE TYPES', ids: ['thermite', 'cryo', 'nanite'] },
+  // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.
+  { id: 'status', label: 'STATUS', ids: ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'fire_damage', 'frost_damage', 'corrode_damage', 'shock_damage'] },
   { id: 'synergies', label: 'SYNERGIES', ids: ['evo_pulsar', 'evo_tempest', 'evo_siege', 'evo_emp', 'evo_supercrit'] },
   { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'thrusters'] }
 ];
@@ -71,12 +72,13 @@ const STAT_LABELS = {
   blaster: 'Autocannon', helix: 'Pulsar Helix', rocket: 'Rocket Pods', missile: 'Swarm Missiles', storm: 'Storm Protocol',
   lightning: 'Tesla Arc', emp: 'EMP Grenades', singularity: 'Vortex Core', collapse: 'Vortex Collapse', orbital: 'Orbit Blades',
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades',
-  burn: 'Thermite Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
+  burn_grenades: 'Grenade Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
 const STAT_GROUP = buildSourceGroups(WEAPONS);
-// Weapon credited with each stat in the LIVE / POTENTIAL compare. Burn ticks are left out: Thermite
-// sets both Autocannon bolts and Plasma Grenades alight, and the potential counts neither.
-const WEAPON_OF = { ...STAT_GROUP, burn: null };
+// Weapon credited with each stat in the LIVE / POTENTIAL compare. Burn ticks are left out: a weapon's
+// potential DPS does not count its element.
+const WEAPON_OF = { ...STAT_GROUP, burn: null, ...Object.fromEntries(ELEMENT_WEAPONS.map((id) => [`burn_${id}`, null])) };
 
 const clampInt = (v, lo, hi, fallback = lo) => {
   const n = Math.round(Number(v));
@@ -107,8 +109,8 @@ export function autoRanks(id, level) {
 }
 
 // CUSTOM ranks, each within its card cap and all together within the LV 18 weapon cap (card order wins).
-export function clampRanks(id, ranks = {}) {
-  let budget = WEAPON_MAX_LEVEL - 1;
+// `budget` is the ranks left for stat cards (an element's ranks take their share first).
+export function clampRanks(id, ranks = {}, budget = WEAPON_MAX_LEVEL - 1) {
   const out = {};
   for (const c of STAT_CARDS[id] || []) {
     const n = Math.min(clampInt(ranks[c.id], 0, c.maxLevel, 0), budget);
@@ -118,9 +120,20 @@ export function clampRanks(id, ranks = {}) {
   return out;
 }
 
-// Stat card ranks an entry installs, and the weapon level they give (LV 1 for equipping it).
-export const entryRanks = (w) => (w.custom ? clampRanks(w.id, w.ranks) : autoRanks(w.id, w.level));
-export const entryLevel = (w) => 1 + Object.values(entryRanks(w)).reduce((a, b) => a + b, 0);
+// The entry's element ({ element, rank }) or null: only element-capable weapons take one. Its rank counts
+// toward the weapon level like a stat card's (weapon-levels.js ELEMENT_CARDS).
+export function entryElement(w) {
+  if (!ELEMENT_CARDS[w?.id] || !ELEMENTS.includes(w.element)) return null;
+  return { element: w.element, rank: clampInt(w.elementRank, 1, ELEMENT_MAX_RANKS, 1) };
+}
+const elementRanks = (w) => entryElement(w)?.rank || 0;
+
+// Stat card ranks an entry installs, and the weapon level they give (LV 1 for equipping it, plus its
+// element's ranks). AUTO deals the level's ranks to the element first, then round-robin to the stats.
+export const entryRanks = (w) => (w.custom
+  ? clampRanks(w.id, w.ranks, WEAPON_MAX_LEVEL - 1 - elementRanks(w))
+  : autoRanks(w.id, Math.max(1, w.level - elementRanks(w))));
+export const entryLevel = (w) => 1 + Object.values(entryRanks(w)).reduce((a, b) => a + b, 0) + elementRanks(w);
 
 // Breakthroughs an entry has at its level (each milestone reached: its choice, TRANSFORM by default).
 export function entryBreakthroughs(w) {
@@ -140,7 +153,7 @@ export function entryBuild(w) {
 
 export function defaultRangeConfig() {
   return {
-    weapons: STARTING_WEAPONS.map((id) => ({ id, level: 1, custom: false, ranks: clampRanks(id), bt: {} })),
+    weapons: STARTING_WEAPONS.map((id) => ({ id, level: 1, custom: false, ranks: clampRanks(id), bt: {}, element: null, elementRank: 1 })),
     mods: {},
     dummies: { count: 12, formation: 'ring', type: 'swarmer', hp: 'infinite', wave: 6, move: 'still', respawn: true }
   };
@@ -156,8 +169,10 @@ export function sanitizeRangeConfig(raw) {
     const bt = {};
     for (const m of BREAKTHROUGH_LEVELS) if (w.bt?.[m] === 'boost' || w.bt?.[m] === 'transform') bt[m] = w.bt[m];
     const custom = w.custom === true;
-    const ranks = clampRanks(w.id, w.ranks && typeof w.ranks === 'object' ? w.ranks : {});
-    weapons.push({ id: w.id, level: clampInt(w.level, 1, WEAPON_MAX_LEVEL, 1), custom, ranks, bt });
+    const element = ELEMENT_CARDS[w.id] && ELEMENTS.includes(w.element) ? w.element : null;
+    const elementRank = clampInt(w.elementRank, 1, ELEMENT_MAX_RANKS, 1);
+    const ranks = clampRanks(w.id, w.ranks && typeof w.ranks === 'object' ? w.ranks : {}, WEAPON_MAX_LEVEL - 1 - (element ? elementRank : 0));
+    weapons.push({ id: w.id, level: clampInt(w.level, 1, WEAPON_MAX_LEVEL, 1), custom, ranks, bt, element, elementRank });
   }
   const mods = {};
   for (const id of RANGE_MOD_IDS) {
@@ -212,6 +227,8 @@ export function applyRangeLoadout(p, config) {
     for (const [cardId, n] of Object.entries(entryRanks(w))) {
       if (n > 0) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[cardId], levelJump: n });
     }
+    const el = entryElement(w);
+    if (el) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[elementKey(w.id, el.element)], levelJump: el.rank });
     const lv = weaponLevel(p, w.id);
     for (const [m, kind] of Object.entries(entryBreakthroughs(w))) {
       if (lv < Number(m)) continue;

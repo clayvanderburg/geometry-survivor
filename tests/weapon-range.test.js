@@ -59,15 +59,17 @@ test('sanitizeRangeConfig: junk becomes the defaults; unknown, duplicate and ext
   assert.deepEqual(sanitizeRangeConfig('nope'), defaultRangeConfig());
   const ids = WEAPONS.map((w) => w.id);
   const cfg = sanitizeRangeConfig({
-    weapons: [{ id: 'laser' }, ...ids.map((id) => ({ id, level: 40, bt: { 6: 'boost', 12: 'bogus' } })), { id: 'blaster' }],
-    mods: { evo_emp: 5, thermite: 3, nope: 2, cryo: -1 },
+    weapons: [{ id: 'laser' }, ...ids.map((id) => ({ id, level: 40, bt: { 6: 'boost', 12: 'bogus' }, element: id === 'rockets' ? 'shock' : 'plasma', elementRank: 9 })), { id: 'blaster' }],
+    mods: { evo_emp: 5, status_potency: 3, nope: 2, shock_conductor: -1, thermite: 2 },
     dummies: { count: 999, formation: 'spiral', type: 'boss', hp: 'wave', wave: 0, move: 'ai', respawn: false }
   });
   assert.equal(cfg.weapons.length, weaponSlots());
   assert.deepEqual(cfg.weapons.map((w) => w.id), ids.slice(0, weaponSlots()));
   assert.equal(cfg.weapons[0].level, WEAPON_MAX_LEVEL);
   assert.deepEqual(cfg.weapons[0].bt, { 6: 'boost' });
-  assert.deepEqual(cfg.mods, { evo_emp: 1, thermite: 3 });
+  assert.equal(cfg.weapons[0].element, null, 'unknown elements are dropped');
+  assert.deepEqual([cfg.weapons[1].element, cfg.weapons[1].elementRank], ['shock', 5], 'element rank clamped to 5');
+  assert.deepEqual(cfg.mods, { evo_emp: 1, status_potency: 3 }, 'the old damage-type cards are gone');
   assert.deepEqual(cfg.dummies, { count: 60, formation: 'ring', type: 'swarmer', hp: 'wave', wave: 1, move: 'ai', respawn: false });
   assert.ok(RANGE_MOD_IDS.every((id) => UPGRADE_BY_ID[id]), 'every mod is a real card');
   assert.ok(!RANGE_TARGETS.some((t) => t.id === 'boss'), 'bosses are not range dummies');
@@ -76,7 +78,7 @@ test('sanitizeRangeConfig: junk becomes the defaults; unknown, duplicate and ext
 test('range config round-trips through storage, and blocked storage falls back to the defaults', () => {
   const store = new Map();
   const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
-  const cfg = sanitizeRangeConfig({ weapons: [{ id: 'grenades', level: 9 }], mods: { cryo: 2 } });
+  const cfg = sanitizeRangeConfig({ weapons: [{ id: 'grenades', level: 9, element: 'frost', elementRank: 2 }], mods: { status_duration: 2 } });
   saveRangeConfig(cfg, storage);
   assert.deepEqual(loadRangeConfig(storage), cfg);
   const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
@@ -89,9 +91,9 @@ test('applyRangeLoadout installs exactly the panel build: levels, ranks, Breakth
   const cfg = sanitizeRangeConfig({
     weapons: [
       { id: 'grenades', level: 13, bt: { 12: 'boost' } },
-      { id: 'blaster', custom: true, ranks: { multishot: 3, firerate: 2 }, bt: { 6: 'boost' } }
+      { id: 'blaster', custom: true, ranks: { multishot: 3, firerate: 2 }, bt: { 6: 'boost' }, element: 'fire', elementRank: 2 }
     ],
-    mods: { thermite: 2, evo_emp: 1, evo_tempest: 1, overdrive: 3 }
+    mods: { status_potency: 2, evo_emp: 1, evo_tempest: 1, overdrive: 3 }
   });
   applyRangeLoadout(p, cfg);
   assert.deepEqual(p.loadout, ['grenades', 'blaster']);
@@ -99,9 +101,10 @@ test('applyRangeLoadout installs exactly the panel build: levels, ranks, Breakth
     assert.equal(weaponLevel(p, w.id), entryLevel(w), w.id);
     assert.deepEqual(weaponBuild(p, w.id), entryBuild(w), `${w.id}: the formulas see the panel build`);
   }
-  assert.equal(weaponLevel(p, 'blaster'), 6, 'CUSTOM: 1 + 5 ranks');
+  assert.equal(weaponLevel(p, 'blaster'), 8, 'CUSTOM: 1 + 5 stat ranks + 2 FIRE ranks');
   assert.deepEqual(p.breakthroughs, { grenades: { 6: 'transform', 12: 'boost' }, blaster: { 6: 'boost' } });
-  assert.equal(p.weapons.thermite, 2);
+  assert.equal(p.weapons.blaster_fire, 2);
+  assert.equal(p.upgradeLevels.status_potency, 2);
   assert.ok(!p.weapons.empGrenades, 'EMP Grenades needs Tesla Arc too');
   assert.ok(!p.weapons.stormProtocol && !p.weapons.missiles, 'Storm Protocol never installs missiles on its own');
   assert.equal(p.upgradeLevels.overdrive, 3);

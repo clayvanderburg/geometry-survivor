@@ -9,7 +9,7 @@
 import { TUNING } from './config.js';
 import { runStartPlayer, runUpgradeLines, HIT_INVULN_BASE } from './upgrades.js';
 import { WEAPON_SCALING as W, blasterFireRate } from './weapon-scaling.js';
-import { weaponBuild } from './weapon-levels.js';
+import { weaponBuild, weaponElement, ELEMENT_INFO } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
 import { weaponPotentialDps, bonusLevels, bonusText } from './upgrade-cards.js';
 import { formatCompact, OTHER_GROUP_INFO } from './run-report.js';
@@ -180,7 +180,7 @@ export function weaponReadoutHtml(r) {
 
 const UPGRADE_GROUPS = [
   { kind: 'evolution', label: 'EVOLUTIONS' },
-  { kind: 'line', label: 'DAMAGE TYPES' },
+  { kind: 'status', label: 'STATUS EFFECTS' },
   { kind: 'tag', label: 'SPECIALISTS' },
   { kind: 'general', label: 'SHIP SYSTEMS & PASSIVES' }
 ];
@@ -196,7 +196,7 @@ const levelLabel = (u) => (u.isSynergy ? '★ EVOLVED' : `LV ${u.level}<span cla
 
 export function upgradesHtml(player) {
   const groups = upgradeGroups(player);
-  if (!groups.length) return '<div class="ro-empty">No upgrades yet beyond your weapon levels. Level up to pick some: damage types, specialists, ship systems and evolutions all show up here.</div>';
+  if (!groups.length) return '<div class="ro-empty">No upgrades yet beyond your weapon levels. Level up to pick some: status cards, specialists, ship systems and evolutions all show up here.</div>';
   return groups.map((g) => `<section class="ro-section"><h4 class="ro-section-title">${g.label}</h4><div class="ro-upgrades">${g.items.map((u) => `
     <div class="ro-upgrade${u.isSynergy ? ' evo' : ''}">
       <div class="ro-upgrade-head"><span class="ro-upgrade-name">${esc(upgradeName(u.name))}</span><span class="ro-upgrade-lv">${levelLabel(u)}</span></div>
@@ -274,7 +274,11 @@ export function weaponChipsHtml(p) {
       continue;
     }
     const lv = w.levelId ? ` LV ${weaponLevel(p, w.id)}${bonusText(bonusLevels(p, w.levelId))}` : '';
-    chips.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${esc(w.name)}">${w.hudName}${lv}</span>`);
+    // An element-infused weapon carries its element after the level (FIRE, FROST, CORROSIVE, SHOCK).
+    const el = weaponElement(p, w.id);
+    const elTag = el ? ` <span class="weapon-el" style="--ec:${ELEMENT_INFO[el.element].color}">${ELEMENT_INFO[el.element].label}</span>` : '';
+    const title = el ? `${w.name} (${ELEMENT_INFO[el.element].label} ${el.rank})` : w.name;
+    chips.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${esc(title)}">${w.hudName}${lv}${elTag}</span>`);
   }
   return chips.join('');
 }
