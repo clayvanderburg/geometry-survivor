@@ -11,7 +11,7 @@ import { runStartPlayer, runUpgradeLines, HIT_INVULN_BASE } from './upgrades.js'
 import { WEAPON_SCALING as W, blasterFireRate, baseDamage } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
-import { weaponPotentialDps, bonusLevels, bonusText } from './upgrade-cards.js';
+import { weaponPotentialDps, bonusLevels, bonusText, maxText } from './upgrade-cards.js';
 import { formatCompact, OTHER_GROUP_INFO } from './run-report.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { modeRules } from './modes.js';
@@ -192,7 +192,7 @@ export function upgradeGroups(player) {
 }
 
 const upgradeName = (name) => name.replace(/^SYNERGY:\s*/, '');
-const levelLabel = (u) => (u.isSynergy ? '★ EVOLVED' : `LV ${u.level}<span class="upg-max"> / ${u.maxLevel}</span>`);
+const levelLabel = (u) => (u.isSynergy ? '★ EVOLVED' : `LV ${u.level}${maxText(u.level, u.maxLevel)}`);
 
 export function upgradesHtml(player) {
   const groups = upgradeGroups(player);

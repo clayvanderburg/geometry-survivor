@@ -119,6 +119,7 @@ export const UPGRADE_POOL = [
     category: 'PASSIVE',
     tags: ['projectile', 'kinetic'],
     maxLevel: 8,
+    overcharge: false, // a passive's level is its own, like a weapon's
     headline: 'shrapnelShards',
     summary: 'Passive, no slot: kills burst into ricochet shards that trigger chain-reaction kills.',
     apply(player) {
@@ -177,6 +178,7 @@ export const UPGRADE_POOL = [
     category: 'CRITICAL',
     tags: ['crit'],
     maxLevel: 6,
+    overchargeReq: (player) => (player.stats.critChance ?? 0) < 1, // nothing past 100%
     headline: 'critChance',
     summary: 'Every weapon finds weak points more often. Crits hit harder and flash gold.',
     apply(player) {
@@ -489,11 +491,25 @@ export function levelJumpChances(luck) {
   return { pentaChance, quadChance, tripleChance, doubleChance };
 }
 
+// OVERCHARGE: once every equipped weapon is LV 18, cards that don't raise a weapon's level (general, tag
+// and damage-type cards) keep coming past their own max and keep stacking. Evolutions (one-time unlocks)
+// and passives (their level is their own) don't; overchargeReq can stop a card early (crit chance at 100%).
+export function overchargeReady(player) {
+  const owned = ownedWeapons(player);
+  return owned.length > 0 && owned.every((id) => weaponLevel(player, id) >= WEAPON_MAX_LEVEL);
+}
+
+export function canOvercharge(u) {
+  const kind = upgradeKind(u);
+  return u.overcharge !== false && (kind === 'general' || kind === 'tag' || kind === 'line');
+}
+
 // Levels a card can still add: its own cap, and for a stat card also the room left under the weapon's
-// LV 18 cap (so a +5 roll on a LV 16 weapon installs +2).
+// LV 18 cap (so a +5 roll on a LV 16 weapon installs +2). An OVERCHARGE card has no cap.
 export function levelRoom(player, u) {
   const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
   const sc = STAT_CARD_BY_ID[u.id];
+  if (!sc && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
   if (!sc) return Math.max(0, own);
   const lv = Math.max(1, weaponLevel(player, sc.weapon));
   return Math.max(0, Math.min(own, WEAPON_MAX_LEVEL - lv));
@@ -754,7 +770,7 @@ function replayLevels(player, levels) {
     upgradeLevels: {}
   };
   for (const u of UPGRADE_POOL) {
-    const lv = Math.min(levels[u.id] || 0, u.maxLevel);
+    const lv = canOvercharge(u) ? levels[u.id] || 0 : Math.min(levels[u.id] || 0, u.maxLevel);
     for (let k = 0; k < lv; k++) {
       scratch.upgradeLevels[u.id] = k + 1;
       u.apply(scratch);

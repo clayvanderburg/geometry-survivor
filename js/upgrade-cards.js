@@ -386,11 +386,14 @@ export function bonusText(bonus) {
 }
 
 // Same wording everywhere: level cards "LV 2 → LV 3", caches "INSTALLED // LV 2 → LV 3", HUD "LV 3".
+// " / 5", or " / 5 · ⚡ OVERCHARGE" for a card stacked past its max (upgrades.js overchargeReady).
+export const maxText = (level, maxLevel) => `<span class="upg-max"> / ${maxLevel}${level > maxLevel ? ' · <span class="upg-overcharge">⚡ OVERCHARGE</span>' : ''}</span>`;
+
 export function levelText(d, installed = false) {
   if (d.levelHtml) return d.levelHtml;
   if (d.isSynergy) return installed ? '★ EVOLUTION INSTALLED ★' : '★ EVOLUTION // UNLOCK ★';
   const from = d.fromLevel === 0 ? 'NEW' : `LV ${d.fromLevel}`;
-  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}<span class="upg-max"> / ${d.maxLevel}</span>`;
+  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}${maxText(d.toLevel, d.maxLevel)}`;
 }
 
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).

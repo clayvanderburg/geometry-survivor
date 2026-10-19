@@ -380,6 +380,9 @@ test('when everything is maxed and the loadout is full, level-ups fall back to a
   const p = g.player;
   fill(p, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
   for (const u of UPGRADE_POOL) p.upgradeLevels[u.id] = u.maxLevel;
+  // Every weapon is LV 18, so OVERCHARGE cards still come; with those banished nothing is left.
+  assert.ok(rollLevelUpHand(p, 3).length > 0, 'OVERCHARGE cards are still offered');
+  for (const u of eligibleUpgrades(p)) p.banished[u.id] = true;
   p.hp = 10;
   g.triggerLevelUp();
   assert.equal(g.state, 'PLAYING');
@@ -445,7 +448,8 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
   let offered = 0;
   withRandom(() => { for (let i = 0; i < 300; i++) if (rollLevelUpHand(p, 3).some((c) => c.id === 'shrapnel')) offered++; }, lcg(21));
   assert.ok(offered > 20, `Shatter in ${offered} of 300 hands`);
-  const rare = withRandom(() => rollUpgrades({ ...p, upgradeLevels: Object.fromEntries(UPGRADE_POOL.filter((u) => u.id !== 'shrapnel').map((u) => [u.id, u.maxLevel])) }, 1), () => 0.02);
+  const others = UPGRADE_POOL.filter((u) => u.id !== 'shrapnel');
+  const rare = withRandom(() => rollUpgrades({ ...p, upgradeLevels: Object.fromEntries(others.map((u) => [u.id, u.maxLevel])), banished: Object.fromEntries(others.map((u) => [u.id, true])) }, 1), () => 0.02);
   assert.equal(rare[0].id, 'shrapnel');
   assert.equal(rare[0].levelJump, 3, 'a +3 (rare) roll');
 

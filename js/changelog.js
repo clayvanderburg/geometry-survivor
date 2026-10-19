@@ -19,6 +19,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'balance', text: 'Level-ups offer 2 cards while you carry one weapon, 3 with two or three, and 4 from four weapons. Riding one weapon to LV 12 is no longer the easy way.' },
       { type: 'new', text: 'SLOT REWARDS: your 3rd and 5th weapons each give +5% damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick.' },
       { type: 'new', text: 'The NEW WEAPON card now shows what its slot unlocks.' },
+      { type: 'new', text: 'OVERCHARGE: once every weapon is LV 18, general, crit, tag and damage-type cards keep coming past their max and keep stacking.' },
       { type: 'new', text: 'Don\'t like the 3 weapons on offer? REROLL them for 40 gold (80, then 160 within one pick).' }
     ]
   },

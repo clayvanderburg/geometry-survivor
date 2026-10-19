@@ -1764,6 +1764,9 @@ html, body {
   color: var(--rarity);
 }
 
+/* A card stacked past its max once every weapon is LV 18 (upgrades.js overchargeReady). */
+.upg-overcharge { color: #7dffe6; font-weight: 900; text-shadow: 0 0 8px rgba(56, 242, 208, 0.6); }
+
 /* Slot reward banner: what filling the next slot unlocks (NEW WEAPON card, weapon pick header). */
 .upg-slot-reward {
   display: flex;

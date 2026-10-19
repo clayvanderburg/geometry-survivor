@@ -6,7 +6,7 @@
 // Pure helpers over a player and plain objects, so tests and the balance harness can use them without
 // a DOM. The hand itself is still rolled by upgrades.js rollLevelUpHand: rollHandAround only wraps it.
 import { TUNING } from './config.js';
-import { rollLevelUpHand, rollUpgrades, eligibleUpgrades, canOfferNewWeapon, newWeaponCard } from './upgrades.js';
+import { rollLevelUpHand, rollUpgrades, eligibleUpgrades, canOfferNewWeapon, newWeaponCard, levelRoom } from './upgrades.js';
 
 export const GOLD_ICON = '◆';
 export const MAX_COINS_PER_VEIN = 6; // a vein's gold is split into at most this many pickups
@@ -54,8 +54,7 @@ export function refreshLockedCard(player, card) {
   if (card.isNewWeapon) return canOfferNewWeapon(player) ? newWeaponCard(player) : null;
   const upgrade = eligibleUpgrades(player).find((u) => u.id === card.id);
   if (!upgrade) return null;
-  const remaining = upgrade.maxLevel - (player.upgradeLevels[upgrade.id] || 0);
-  return { ...upgrade, levelJump: Math.max(1, Math.min(card.levelJump || 1, remaining)) };
+  return { ...upgrade, levelJump: Math.max(1, Math.min(card.levelJump || 1, levelRoom(player, upgrade))) };
 }
 
 // The level-up hand hook. With no lock it is exactly roll(player, count). With a lock ({ card, slot })
