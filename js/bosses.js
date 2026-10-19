@@ -847,6 +847,122 @@ const progenitor = {
   }
 };
 
+// --- THE CONDUCTOR (wave 24, major) ---------------------------------------------------------
+// Hangs back and beam-links up to 8 hostiles round it: linked hulls take less damage and move faster
+// (the Conduit buff), and while 4 or more links hold the Conductor itself is untouchable. Kill what it
+// is linked to and the shield drops. It keeps calling in a choir to relink, led by a Repulsor. At half
+// HP it plays the CRESCENDO: every few seconds each linked hull fires an orb at you.
+export const COND = {
+  links: 8, linkRange: 600, shieldLinks: 4, hold: 360, choirEvery: 6, choirCap: 10, rageAt: 0.5,
+  crescendoEvery: 3, orbSpeed: 3.6
+};
+
+const conductor = {
+  name: 'THE CONDUCTOR', epithet: 'EVERY HULL IS AN INSTRUMENT', tier: 'major', hue: 165, debut: ['conduit', 'repulsor'],
+  stats: () => ({ speed: 1.5, radius: 30, sides: 5, vRot: 0 }),
+  onArrive(e, m) {
+    e.links = [];
+    e.aiTimer = 1;
+    e.crescendoT = COND.crescendoEvery;
+    e.enraged = false;
+    callChoir(e, m, true);
+  },
+  update(e, m, env) {
+    const { dt, dirX, dirY, dist, player } = env;
+    const radial = dist > COND.hold + 60 ? 0.16 : dist < COND.hold - 60 ? -0.2 : 0;
+    e.vx = (e.vx + (radial > 0 ? env.moveX : dirX) * radial - dirY * e.strafeSign * 0.06) * 0.92;
+    e.vy = (e.vy + (radial > 0 ? env.moveY : dirY) * radial + dirX * e.strafeSign * 0.06) * 0.92;
+    e.rotation += 0.5 * dt;
+    // Relink every tick: the nearest hostiles in range (no bosses, parts or body plates).
+    e.links.length = 0;
+    const near = [];
+    for (const o of m.enemyIndex.query(e.x, e.y, COND.linkRange)) {
+      if (o === e || o.dead || o.isBoss || o.leader || o.mount || o.type === 'blackhole' || o.type === 'gate') continue;
+      const d = Math.hypot(o.x - e.x, o.y - e.y);
+      if (d <= COND.linkRange) near.push([d, o]);
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    for (let k = 0; k < near.length && k < COND.links; k++) {
+      const o = near[k][1];
+      o.linked = 0.25; // the Conduit buff: less damage taken, more speed
+      e.links.push(o);
+    }
+    e.deflect = e.links.length >= COND.shieldLinks;
+    if (!e.enraged && e.hp <= e.maxHp * COND.rageAt) {
+      e.enraged = true;
+      env.particles?.spawnShockwave?.(e.x, e.y, 300, e.hue, 5, 0.5);
+    }
+    e.aiTimer -= dt;
+    if (e.aiTimer <= 0) {
+      e.aiTimer = COND.choirEvery;
+      callChoir(e, m, false);
+    }
+    if (!e.enraged) return;
+    e.crescendoT -= dt;
+    if (e.crescendoT <= 0) {
+      e.crescendoT = COND.crescendoEvery;
+      for (const o of e.links) {
+        const a = Math.atan2(player.y - o.y, player.x - o.x);
+        fireOrb(m, o, a, COND.orbSpeed);
+      }
+      m.shotsFired = (m.shotsFired || 0) + 1;
+    }
+  },
+  trace(ctx, e, r) {
+    // A pentagonal podium with a baton through it and five strings to its corners.
+    for (let k = 0; k < 5; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI * 2) / 5;
+      if (k === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.moveTo(-r * 1.3, r * 0.3);
+    ctx.lineTo(r * 1.3, -r * 0.3);
+    for (let k = 0; k < 5; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI * 2) / 5;
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
+    }
+  },
+  overlay(ctx, e, r) {
+    // Link beams to every instrument, and the shield bubble while enough of them hold.
+    const flicker = 0.55 + Math.sin(e.pulsePhase * 2.2) * 0.25;
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.strokeStyle = pass === 0 ? `hsla(${e.hue}, 100%, 55%, ${0.2 * flicker})` : `hsla(${e.hue}, 100%, 82%, ${0.7 * flicker})`;
+      ctx.lineWidth = pass === 0 ? 5 : 1.3;
+      ctx.beginPath();
+      for (const o of e.links || []) {
+        if (o.dead) continue;
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(o.x, o.y);
+      }
+      ctx.stroke();
+    }
+    if (e.deflect) {
+      ctx.strokeStyle = `hsla(${e.hue}, 100%, 80%, ${0.35 + (e.hitFlash || 0) * 0.5})`;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+};
+
+// The choir: pinwheels and weavers round a Repulsor (a Conduit too on arrival), kept under a cap.
+function callChoir(e, m, arrival) {
+  let n = 0;
+  for (const o of m.enemies) if (o.parent === e && !o.dead) n++;
+  const room = COND.choirCap - n;
+  if (room <= 0) return;
+  const types = arrival ? ['repulsor', 'conduit', 'pinwheel', 'pinwheel', 'weaver', 'weaver'] : ['repulsor', 'pinwheel', 'weaver', 'pinwheel'];
+  types.slice(0, room).forEach((type, k) => {
+    const a = (k / types.length) * Math.PI * 2 + Math.random();
+    m.queueSpawn(type, e.x + Math.cos(a) * 90, e.y + Math.sin(a) * 90, m.waveScaleFor(type, e.bossWave), {
+      instant: true, vx: Math.cos(a) * 2, vy: Math.sin(a) * 2, attach: { parent: e }
+    });
+  });
+}
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -907,7 +1023,8 @@ export const BOSS_DEFS = {
   hive_carrier: hiveCarrier,
   event_horizon: eventHorizon,
   architect,
-  progenitor
+  progenitor,
+  conductor
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

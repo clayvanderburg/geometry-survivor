@@ -567,3 +567,58 @@ test('Progenitor: splits 1 → 2 → 4 → mitosis cells; pieces merge when left
   assert.equal(g.chests.length, 1, 'exactly one boss payout');
   assert.ok(m.enemies.some(e => e.type === 'mitosis'), 'the last generation bursts into mitosis cells');
 });
+
+test('repulsor fields swing bolts away until twelve of them overload the field', async () => {
+  resetTuning();
+  const { REPULSOR } = await import('../js/hostiles.js');
+  const g = campaignGame({ wave: 24 });
+  const m = g.enemyManager;
+  m.queueSpawn('repulsor', 2400, 2000, 1, { instant: true });
+  step(m, g.player, 2);
+  const f = m.enemies.find(e => e.type === 'repulsor');
+  const bolt = () => ({ x: f.x - REPULSOR.field + 5, y: f.y, vx: 9, vy: 0 });
+  const b = bolt();
+  g.bullets = [b];
+  for (let i = 0; i < 12; i++) { b.x += b.vx; b.y += b.vy; g.repelProjectiles(); }
+  assert.ok(Math.hypot(b.x - f.x, b.y - f.y) > f.radius * 2, 'a head-on bolt is swung away');
+  assert.ok(f.fieldCharge < REPULSOR.charge);
+  g.bullets = Array.from({ length: REPULSOR.charge }, bolt);
+  g.repelProjectiles();
+  assert.ok(f.overloadT > 0, 'enough bolts overload the field');
+  const c = bolt();
+  g.bullets = [c];
+  g.repelProjectiles();
+  assert.equal(c.vy, 0, 'an overloaded field turns nothing');
+});
+
+test('the Conductor links hostiles, is shielded while four links hold, and plays the crescendo at half HP', async () => {
+  resetTuning();
+  const { COND } = await import('../js/bosses.js');
+  const g = campaignGame({ wave: 24 });
+  const m = g.enemyManager;
+  m.queueSpawn('conductor', 2300, 2000, waveScaleAt(24), { instant: true, wave: 24 });
+  step(m, g.player, 5);
+  const c = m.enemies.find(e => e.type === 'conductor');
+  assert.ok(m.enemies.some(e => e.type === 'repulsor' && e.parent === c), 'its choir has a Repulsor');
+  step(m, g.player, 2);
+  assert.ok(c.links.length >= COND.shieldLinks && c.deflect, 'linked and shielded');
+  assert.ok(c.links.every(o => o.linked > 0), 'links carry the Conduit buff');
+  const hp = c.hp;
+  g.hitEnemy(c, 999);
+  assert.equal(c.hp, hp, 'untouchable while conducting');
+  // Silence the choir: the shield drops.
+  for (const o of [...c.links]) g.killEnemy(o);
+  for (const o of m.enemies.filter(o => o !== c && !o.isBoss)) g.killEnemy(o);
+  m.spawnIndicators.length = 0;
+  step(m, g.player, 1);
+  assert.equal(c.deflect, false);
+  g.hitEnemy(c, 10);
+  assert.ok(c.hp < hp);
+  // Crescendo: linked hulls fire at the ship.
+  c.hp = c.maxHp * 0.49;
+  c.aiTimer = 0; // call the choir back
+  step(m, g.player, 4);
+  m.enemyBullets.clear();
+  step(m, g.player, Math.ceil(COND.crescendoEvery * 60) + 2);
+  assert.ok(c.enraged && m.enemyBullets.count > 0, 'linked hulls fire orbs');
+});

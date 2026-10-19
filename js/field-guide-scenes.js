@@ -10,7 +10,8 @@ import { drawCrabShip, drawPlayerShield, shieldTouches } from './ship-renderer.j
 import { BRUISER, shieldBlocks, bounceFromShip, lieutenantTypes } from './archetypes.js';
 import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
 import { bossDef } from './bosses.js';
-import { SERPENT, spawnSerpent } from './serpents.js';
+import { SERPENT, spawnSerpent, turnToward } from './serpents.js';
+import { REPULSOR } from './hostiles.js';
 import { spawnWing } from './squadrons.js';
 import { wellPullScale, playerPullShare } from './gravity.js';
 
@@ -411,6 +412,35 @@ const SCENES = {
     onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
+  repulsor: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.82, 0.5); s.spawn('repulsor', s.W * 0.35, s.H * 0.5); },
+    tick(s) {
+      s.hold();
+      s.autoFire(0.07);
+      // The scene has no game loop: swing bolts out of the field the way Game.repelProjectiles does.
+      const f = s.find('repulsor');
+      if (f) s.repel(f);
+      if (s.count('repulsor') === 0 && s.every(1.2)) s.spawn('repulsor', s.W * 0.3, s.H * 0.5);
+    }
+  },
+  conductor: {
+    w: 900, loop: 13,
+    setup(s) {
+      s.home(0.85, 0.5);
+      s.manager.queueSpawn('conductor', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.85, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.1, e => !e.isBoss);
+      const q = s.find('conductor');
+      if (q && s.t > 7 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12) s.kill(q);
+      for (const f of s.manager.enemies) if (f.type === 'repulsor') s.repel(f);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -545,6 +575,21 @@ export class GuidePreview {
   // A serpent winding in from the left edge.
   serpent() {
     spawnSerpent(this.manager, 'serpent', this.W * 0.12, this.H * 0.5, 1, SERPENT.segments, { angle: 0, extra: { instant: true } });
+  }
+
+  // Game.repelProjectiles for the preview's own bolts (no charge: the field always holds here).
+  repel(f) {
+    for (const b of this.bolts) {
+      const dx = b.x - f.x;
+      const dy = b.y - f.y;
+      const d = Math.hypot(dx, dy);
+      if (d > REPULSOR.field || d < 1 || b.vx * dx + b.vy * dy >= 0) continue;
+      const speed = Math.hypot(b.vx, b.vy);
+      const a = turnToward(Math.atan2(b.vy, b.vx), Math.atan2(dy, dx), REPULSOR.push * (1 - d / REPULSOR.field) + 0.05);
+      b.vx = Math.cos(a) * speed;
+      b.vy = Math.sin(a) * speed;
+      f.repelFlash = 1;
+    }
   }
 
   // A mayfly cloud drifting in from the left edge.
@@ -739,7 +784,8 @@ const SILHOUETTE = {
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
   carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
-  gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300]
+  gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300],
+  repulsor: ['repulsor', 160], conductor: ['conductor', 280]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

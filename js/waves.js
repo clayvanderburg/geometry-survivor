@@ -22,7 +22,8 @@ export const WAVE_PACKS = [
   { id: 'shielder', lead: 'shielder', weightKey: 'spawnWeightShielder' },
   { id: 'gate', lead: 'gate', weightKey: 'spawnWeightGate' },
   { id: 'mitosis', lead: 'mitosis', weightKey: 'spawnWeightMitosis' },
-  { id: 'conduit', lead: 'conduit', weightKey: 'spawnWeightConduit' }
+  { id: 'conduit', lead: 'conduit', weightKey: 'spawnWeightConduit' },
+  { id: 'repulsor', lead: 'repulsor', weightKey: 'spawnWeightRepulsor' }
 ].map(p => ({ ...p, get unlockWave() { return unlockWaveOf(p.lead); } }));
 
 // The spawn table before the campaign (v0.33): every pack but these from wave 1. The HP budget
@@ -90,6 +91,8 @@ export function packRoster(id, wave, legacy = false) {
     case 'mitosis': return [['mitosis', Math.min(6, 3 + Math.floor(s('mitosis') / 6)) * 2]];
     case 'gate': return [['gate', Math.min(4, 2 + Math.floor(s('gate') / 6))]];
     case 'blinker': return [['blinker', packSize(Math.min(7, 3 + Math.floor(s('blinker') / 3)))]];
+    // A repulsor shielding a skirmish line.
+    case 'repulsor': return [['repulsor', 1], ['pinwheel', 2], ['weaver', 2]];
     case 'conduit': return [['conduit', 1], ['pinwheel', 3], ['bruiser', wave >= 8 ? 1 : 0]];
     default: return [];
   }

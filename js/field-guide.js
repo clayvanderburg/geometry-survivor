@@ -7,8 +7,8 @@
 import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
-import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, bossBuilt } from './bosses.js';
+import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, bossBuilt } from './bosses.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
@@ -155,6 +155,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Do not shoot every gate: lure a crowd (or a boss) next to one, then fly through the beam. Mind the pylons at the ends.'
   },
   {
+    id: 'repulsor', name: 'REPULSOR', group: 'archetype', unlockWave: unlockWaveOf('repulsor'),
+    what: () => `An azure hexagon inside a ${REPULSOR.field} px field that swings your bolts away, guarding itself and anything standing in it. Each bolt it turns drains the field; after ${REPULSOR.charge} it overloads and drops for ${secs(REPULSOR.overload)}. Missiles, arcs, blasts, orbit blades, singularities and ramming ignore it. Debuts with the Conductor.`,
+    tip: 'Pour fire into it to overload the field, then finish it fast, or hit it with area damage and arcs. Kill it before its escort.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -194,6 +199,11 @@ export const HOSTILE_ENTRIES = [
     id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
     what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${bossGrindText()}`,
     tip: 'Keep up the pressure on every piece: one left alone heals and finds a partner. Finish the smallest ones before they merge.'
+  },
+  {
+    id: 'conductor', name: BOSS_DEFS.conductor.name, group: 'boss', boss: true, unlockWave: bossWave('conductor'),
+    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that hangs back and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: linked hulls take less damage and move faster, and while ${COND.shieldLinks} or more links hold, the Conductor is untouchable. Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor. At ${pct(COND.rageAt)} HP it plays the crescendo: every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${bossGrindText()}`,
+    tip: 'Follow the beams: thin its choir below four links and its shield drops. Take out the Repulsors first, then burst it while the choir regroups.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

@@ -7,8 +7,8 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from './wave-plan.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
-import { HOSTILE_INFO, HOSTILE_DEATH_TIER } from './hostiles.js';
-import { SERPENT, spawnSerpent } from './serpents.js';
+import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
+import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
 import { spawnWing } from './squadrons.js';
 import { GATE, gatePylons, beamDistance } from './gates.js';
 import { DamageNumbers } from './damage-numbers.js';
@@ -178,7 +178,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -2642,6 +2642,14 @@ export class Game {
           em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
         }
       }
+    } else if (pack === 'repulsor') {
+      // The repulsor walks its skirmish line in behind its field.
+      em.queueSpawn('repulsor', pt.x, pt.y, this.getWaveScale('repulsor'), this.placedSpawn(pt));
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2 + Math.PI / 4;
+        const esc = packMemberPoint(this, pt, Math.cos(a) * 55, Math.sin(a) * 55);
+        em.queueSpawn(k % 2 ? 'weaver' : 'pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
+      }
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
       em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
@@ -3553,6 +3561,47 @@ export class Game {
       const bent = Math.hypot(b.vx, b.vy) || 1;
       b.vx *= speed / bent;
       b.vy *= speed / bent;
+    }
+  }
+
+  // Repulsor fields shove the ship's bullets outward (speed kept), so they curve away from anything
+  // inside. Missiles, arcs, blasts, orbit blades and singularities are not bullets and get through.
+  repelProjectiles() {
+    const enemies = this.enemyManager.enemies;
+    let fields = null;
+    for (let i = 0; i < enemies.length; i++) {
+      const f = enemies[i];
+      if (f.type === 'repulsor' && !f.dead && !(f.overloadT > 0)) (fields ||= []).push(f);
+    }
+    if (!fields) return;
+    const R = REPULSOR.field;
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      for (let j = 0; j < fields.length; j++) {
+        const f = fields[j];
+        const dx = b.x - f.x;
+        const dy = b.y - f.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > R * R || d2 < 1) continue;
+        if (b.vx * dx + b.vy * dy >= 0) continue; // already heading out
+        if (f.overloadT > 0) continue;
+        if (b.repelledBy !== f) {
+          // A new bolt costs the field a point of charge; at zero it overloads and drops.
+          b.repelledBy = f;
+          f.fieldCharge = (f.fieldCharge ?? REPULSOR.charge) - 1;
+          if (f.fieldCharge <= 0) {
+            f.overloadT = REPULSOR.overload;
+            this.particles.spawnShockwave(f.x, f.y, REPULSOR.field, f.hue, 3, 0.3);
+            continue;
+          }
+        }
+        // Swing the heading toward straight out, harder the deeper it gets (head-on shots swerve too).
+        const speed = Math.hypot(b.vx, b.vy);
+        const a = turnAngleToward(Math.atan2(b.vy, b.vx), Math.atan2(dy, dx), REPULSOR.push * (1 - Math.sqrt(d2) / R) + 0.05);
+        b.vx = Math.cos(a) * speed;
+        b.vy = Math.sin(a) * speed;
+        f.repelFlash = 1;
+      }
     }
   }
 
@@ -4833,6 +4882,7 @@ export class Game {
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
+    this.repelProjectiles();
     this.updateBullets(dt);
     const enemies = this.enemyManager.enemies;
 

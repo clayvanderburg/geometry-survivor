@@ -18,7 +18,7 @@ export const UNLOCK_WAVE = {
   blackhole: 15, hulk: 15,
   mitosis: 21,
   shielder: 18, gate: 18,
-  conduit: 24
+  conduit: 24, repulsor: 24
 };
 
 export const unlockWaveOf = (type) => UNLOCK_WAVE[type] ?? 1;
