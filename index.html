@@ -150,6 +150,20 @@
         <span class="guide-toast-body"><b>FIELD GUIDE UPDATED</b><span id="guide-toast-text" class="guide-toast-text"></span></span>
       </div>
 
+      <!-- First boss of a run: a big reminder with an arrow to the Supernova bomb counter -->
+      <svg id="nova-callout-arrow" class="nova-callout-arrow hidden" aria-hidden="true">
+        <defs>
+          <marker id="nova-callout-head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#ffcc00" />
+          </marker>
+        </defs>
+        <path id="nova-callout-path" d="" marker-end="url(#nova-callout-head)" />
+      </svg>
+      <div id="nova-callout" class="nova-callout hidden" role="status" aria-live="polite">
+        <div class="nova-callout-title">DON'T FORGET YOUR SUPERNOVA BOMBS!</div>
+        <div id="nova-callout-sub" class="nova-callout-sub"></div>
+      </div>
+
     </div>
 
     <!-- Shown while the HUD is hidden with [H]: bright for a moment, then faint (click or [H] brings the HUD back) -->

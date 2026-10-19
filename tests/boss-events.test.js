@@ -310,3 +310,34 @@ test('an off-screen boss arrow above the player sits just under the measured HUD
   assert.deepEqual(translates, [[g.width / 2, g.height / 2 - 40]]);
   delete document.querySelector;
 });
+
+test('the first boss of a run shows the Supernova bomb reminder once, pointing at the bomb counter', () => {
+  Object.assign(TUNING, DEFAULT_TUNING);
+  const { g } = bossGame();
+  g.novaCalloutTimer = 0;
+  g.novaCalloutDone = false;
+  g.waveTimer = TUNING.waveLength;
+  let ticks = 0;
+  while (liveBosses(g).length === 0 && ticks < 400) { tick(g); ticks++; }
+  assert.ok(g.novaCalloutTimer > 0, 'the first boss arrival starts the reminder');
+  g.updateNovaCallout();
+  assert.ok(!hidden('nova-callout') && !hidden('nova-callout-arrow'), 'banner and arrow are on screen');
+  assert.ok(document.getElementById('nova-indicator').classList.contains('nova-callout-target'), 'the bomb counter glows');
+  assert.equal(document.getElementById('nova-callout-sub').textContent, 'PRESS E · YOU HAVE 2 · EACH ONE TEARS 40% OFF A BOSS');
+
+  tick(g, 5 * 60 + 2);
+  g.updateNovaCallout();
+  assert.ok(hidden('nova-callout') && hidden('nova-callout-arrow'), 'gone after 5 seconds');
+  assert.ok(!document.getElementById('nova-indicator').classList.contains('nova-callout-target'));
+
+  g.onBossArrived(liveBosses(g)[0]);
+  assert.equal(g.novaCalloutTimer, 0, 'only the first boss of a run gets it');
+
+  const fresh = bossGame().g;
+  fresh.novaCalloutDone = false;
+  fresh.player.bombs = 0;
+  fresh.waveTimer = TUNING.waveLength;
+  ticks = 0;
+  while (liveBosses(fresh).length === 0 && ticks < 400) { tick(fresh); ticks++; }
+  assert.ok(!(fresh.novaCalloutTimer > 0), 'no reminder with no bombs to use');
+});

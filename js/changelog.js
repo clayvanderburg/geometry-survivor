@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.37.2',
+    date: '2026-10-19',
+    title: 'Bomb Reminder',
+    notes: [
+      { type: 'new', text: 'When the first boss of a run arrives, a big DON\'T FORGET YOUR SUPERNOVA BOMBS! banner points at your bomb counter. Each bomb tears 40% off a boss.' }
+    ]
+  },
+  {
     version: '0.37.1',
     date: '2026-10-19',
     title: 'Boss HP Retune',
