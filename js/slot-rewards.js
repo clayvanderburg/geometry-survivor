@@ -27,20 +27,42 @@ export const loadoutDamageMult = (p) => loadoutDamageMultFor(Array.isArray(p?.lo
 
 const pct = (x) => `+${Math.round(x * 100)}%`;
 
-// What equipping weapon number `slot` unlocks, or null for slots with no reward. `short` fits the
-// NEW WEAPON card's banner; `text` is the longer line under it and on the weapon pick screen.
+// What equipping weapon number `slot` unlocks, or null for slots with no reward. `short` is the big line
+// on the NEW WEAPON card; `text` the one short line under it (and on the weapon pick screen).
 export function slotReward(slot) {
   const hand = handSizeFor(slot);
   if (slot > 1 && hand > handSizeFor(slot - 1)) {
-    return { kind: 'hand', short: `${hand} CARD CHOICES`, text: `Level-ups offer ${hand} cards instead of ${handSizeFor(slot - 1)}.` };
+    const more = hand - handSizeFor(slot - 1);
+    return { kind: 'hand', short: `+${more} CARD CHOICE${more > 1 ? 'S' : ''}`, text: `Level-ups offer ${hand} cards instead of ${handSizeFor(slot - 1)}.` };
   }
   const k = DAMAGE_SLOTS.indexOf(slot);
   if (k >= 0) {
     const each = slotDamageBonus();
-    return { kind: 'damage', short: `${pct(each)} DAMAGE`, text: `Every weapon deals ${pct(each)} damage${k > 0 ? ` (${pct(each * (k + 1))} total)` : ''}.` };
+    return { kind: 'damage', short: `${pct(each)} DAMAGE`, text: `To every weapon${k > 0 ? ` (${pct(each * (k + 1))} total)` : ''}.` };
   }
   if (slot === BREAKTHROUGH_SLOT) {
-    return { kind: 'breakthrough', short: 'FREE BREAKTHROUGH', text: 'This weapon starts with its LV 6 Breakthrough.' };
+    return { kind: 'breakthrough', short: 'FREE BREAKTHROUGH', text: 'The new weapon starts with its LV 6 Breakthrough.' };
   }
   return null;
+}
+
+// The one-time tip shown the first time a NEW WEAPON card turns up (main.js openSlotTip): one line and
+// the bonus of every slot that has one.
+export const SLOT_TIP_SEEN_KEY = 'vexolith_slot_tip_seen';
+export function slotTip(slots = 6) {
+  const rewards = [];
+  for (let s = 2; s <= slots; s++) {
+    const r = slotReward(s);
+    if (r) rewards.push({ slot: s, ...r });
+  }
+  return { title: 'MORE WEAPONS, MORE POWER', line: 'Every NEW WEAPON you take unlocks a bonus. The card shows the next one.', rewards };
+}
+
+// Storage may be blocked (reading localStorage itself can throw): the tip then shows once per page load.
+export function readSlotTipSeen(storage) {
+  try { return !!(storage ?? globalThis.localStorage)?.getItem(SLOT_TIP_SEEN_KEY); } catch { return false; }
+}
+
+export function writeSlotTipSeen(storage) {
+  try { (storage ?? globalThis.localStorage)?.setItem(SLOT_TIP_SEEN_KEY, '1'); } catch { /* blocked */ }
 }

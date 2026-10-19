@@ -268,6 +268,7 @@ export function createHeadlessGame({ metaRank = 0, mode = 'normal' } = {}) {
     keys: {}, mouse: { x: 640, y: 360, down: false },
     shake: 0, chromaFlash: 0, hitStopTicks: 0, shieldRotation: 0,
     gpButtons: [], gpActive: false, menuNav: null, menuState: null, menuGrace: 0,
+    slotTipSeen: true, // the one-time slot bonus tip is UI only (tests that want it reset this)
     currentChoices: [],
     updateHUD() {}, updateBossHUD() {}, showBanner() {}, renderHubUI() {}
   });

@@ -12,7 +12,7 @@ const { acquireWeapon, discardWeapon, pendingBreakthroughs, applyUpgradeLevels, 
 const { ownedWeapons, unownedWeapons, weaponLevel } = await import('../js/loadout.js');
 const { weaponDamage } = await import('../js/weapon-scaling.js');
 const { describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
-const { handSizeFor, loadoutDamageMult, loadoutDamageMultFor, slotReward } = await import('../js/slot-rewards.js');
+const { handSizeFor, loadoutDamageMult, loadoutDamageMultFor, slotReward, slotTip, SLOT_TIP_SEEN_KEY, readSlotTipSeen } = await import('../js/slot-rewards.js');
 const { weaponRerollCost } = await import('../js/gold.js');
 
 const odds = (chance, pity = 99) => ({
@@ -111,22 +111,68 @@ test('slot 6: that weapon starts with its LV 6 Breakthrough, once per run, in pl
   assert.deepEqual(pendingBreakthroughs(p, next), []);
 });
 
-test('NEW WEAPON card: a banner says what the slot unlocks', () => {
+test('NEW WEAPON card: the slot bonus is the message, with no summary or stat rows', () => {
   const g = freshGame();
   const p = g.player;
-  const expect = { 2: '3 CARD CHOICES', 3: '+5% DAMAGE', 4: '4 CARD CHOICES', 5: '+5% DAMAGE', 6: 'FREE BREAKTHROUGH' };
+  const expect = { 2: '+1 CARD CHOICE', 3: '+5% DAMAGE', 4: '+1 CARD CHOICE', 5: '+5% DAMAGE', 6: 'FREE BREAKTHROUGH' };
   for (const [slot, short] of Object.entries(expect)) {
     const d = describeNewWeapon(p);
     assert.equal(d.reward.slot, Number(slot));
     assert.equal(d.reward.short, short);
+    assert.deepEqual(d.rows, []);
     const html = renderUpgradeCard(d, '[1]').html;
-    assert.match(html, new RegExp(`SLOT ${slot} UNLOCKS`));
+    assert.match(html, new RegExp(`SLOT ${slot} BONUS`));
     assert.ok(html.includes(short));
+    assert.ok(!html.includes('upg-summary') && !html.includes('upg-stats') && !html.includes('upg-headline'), 'no extra text');
     acquireWeapon(p, unownedWeapons(p)[0]);
   }
+  assert.match(slotReward(2).text, /3 cards instead of 2/);
   assert.match(slotReward(5).text, /\+10% total/);
   assert.equal(slotReward(1), null);
   assert.equal(slotReward(7), null);
+});
+
+test('slot tip: opens once over the first hand with a NEW WEAPON card, and only GOT IT / a key / a button closes it', () => {
+  const tip = slotTip(6);
+  assert.deepEqual(tip.rewards.map((r) => r.slot), [2, 3, 4, 5, 6]);
+  const store = new Map();
+  const saved = globalThis.localStorage;
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    const g = freshGame();
+    g.slotTipSeen = undefined; // a device that has never seen it
+    withTuning(odds(0), () => g.triggerLevelUp());
+    assert.ok(!g.slotTipOpen, 'no NEW WEAPON card: no tip');
+    g.selectUpgrade(0);
+    withTuning(odds(1), () => g.triggerLevelUp());
+    assert.equal(g.slotTipOpen, true);
+    assert.equal(store.get(SLOT_TIP_SEEN_KEY), '1');
+    assert.ok(readSlotTipSeen());
+    // Picks, digits and pad buttons don't go through to the cards while it is open.
+    const choices = g.currentChoices;
+    g.selectUpgrade(0);
+    assert.equal(g.currentChoices, choices);
+    assert.equal(g.handleUpgradeKey('Digit1'), true);
+    assert.equal(g.slotTipOpen, false, 'a digit closes it');
+    assert.equal(g.state, 'UPGRADE', '...without picking a card');
+    // Never again, on this game or a new one on the same device.
+    g.slotTipSeen = true;
+    const g2 = freshGame();
+    g2.slotTipSeen = undefined;
+    withTuning(odds(1), () => g2.triggerLevelUp());
+    assert.ok(!g2.slotTipOpen);
+    // Controller: A closes it without picking.
+    store.clear();
+    const g3 = freshGame();
+    g3.slotTipSeen = undefined;
+    withTuning(odds(1), () => g3.triggerLevelUp());
+    assert.equal(g3.slotTipOpen, true);
+    assert.equal(g3.handleUpgradePad({ pressed: (b) => b === PAD.A, buttons: [] }), true);
+    assert.equal(g3.slotTipOpen, false);
+    assert.equal(g3.state, 'UPGRADE');
+  } finally {
+    globalThis.localStorage = saved;
+  }
 });
 
 test('weapon pick reroll: 40 then 80 gold, fresh weapons first, off when nothing new is left', () => {

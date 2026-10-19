@@ -25,6 +25,7 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => {
       window.__pad = { buttons: Array(17).fill(false), axes: [0, 0, 0, 0] };
+      try { localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {} // the one-time slot bonus tip
       navigator.getGamepads = () => [{ connected: true, axes: window.__pad.axes, buttons: window.__pad.buttons.map(pressed => ({ pressed })) }];
     });
     await page.goto('http://127.0.0.1:8096');

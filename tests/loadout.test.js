@@ -211,8 +211,7 @@ test('weapon pick cards preview exact LV 1 stats, tags and summary without touch
     assert.match(html.html, /EQUIP/);
   }
   const nw = describeNewWeapon(freshGame().player);
-  assert.equal(nw.rows[0].before, '1 / 6');
-  assert.equal(nw.rows[0].after, '2 / 6');
+  assert.match(nw.levelHtml, /SLOT 2 OF 6/, 'the slot it fills (the slot bonus is the rest of the card)');
   assert.match(renderUpgradeCard(nw, '[2]').className, /new-weapon-card/);
   assert.equal(rollWeaponPicks(freshGame().player, 3).length, 3);
 });

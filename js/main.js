@@ -35,9 +35,9 @@ import {
 } from './status-effects.js';
 import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText,
-  slotRewardHtml
+  slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
-import { handSizeFor, slotReward } from './slot-rewards.js';
+import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
@@ -3855,6 +3855,36 @@ export class Game {
   renderHand() {
     this.renderChoiceCards(this.currentChoices.map((upg) => (upg.isNewWeapon ? describeNewWeapon(this.player) : describeUpgrade(this.player, upg))));
     this.renderHandControls();
+    if (this.currentChoices.some((c) => c.isNewWeapon)) this.maybeOpenSlotTip();
+  }
+
+  // The first NEW WEAPON card on a device opens a short tip on slot bonuses over the hand (once: the flag
+  // is stored, js/slot-rewards.js). While it is open, keys and pad buttons only close it.
+  maybeOpenSlotTip() {
+    this.slotTipSeen ??= readSlotTipSeen();
+    if (this.slotTipSeen || this.slotTipOpen) return;
+    const doc = globalThis.document;
+    const modal = doc?.getElementById?.('upgrade-modal');
+    if (!modal || !doc.createElement) return;
+    this.slotTipSeen = true;
+    writeSlotTipSeen();
+    this.slotTipOpen = true;
+    const wrap = doc.createElement('div');
+    wrap.id = 'slot-tip';
+    wrap.className = 'slot-tip';
+    wrap.innerHTML = slotTipHtml(slotTip(weaponSlots()));
+    wrap.querySelector?.('[data-slot-tip-ok]')?.addEventListener('click', () => this.closeSlotTip());
+    modal.appendChild(wrap);
+    this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
+  }
+
+  closeSlotTip() {
+    if (!this.slotTipOpen) return;
+    this.slotTipOpen = false;
+    globalThis.document?.getElementById?.('slot-tip')?.remove?.();
+    // A held key or button that closed the tip must not also pick the card under the cursor.
+    this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
+    this.sound?.playUiSelect?.();
   }
 
   addGold(amount) {
@@ -3894,6 +3924,10 @@ export class Game {
   // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels).
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
+    if (this.slotTipOpen) {
+      if (/^(?:Enter|Space|Escape|(?:Digit|Numpad)\d)$/.test(code)) this.closeSlotTip();
+      return true;
+    }
     const digit = /^(?:Digit|Numpad)([1-4])$/.exec(code);
     if (digit) {
       const idx = Number(digit[1]) - 1;
@@ -3922,6 +3956,10 @@ export class Game {
   // the focused card. Neither button does anything else in this modal.
   handleUpgradePad(gp) {
     if (this.state !== 'UPGRADE' || !gp) return false;
+    if (this.slotTipOpen) {
+      if ([PAD.A, PAD.B, PAD.X, PAD.Y, PAD.START].some((b) => gp.pressed(b))) this.closeSlotTip();
+      return true; // nothing under the tip can be picked while it is open
+    }
     if (gp.pressed(PAD.X)) return this.rerollHand();
     if (gp.pressed(PAD.Y)) {
       const idx = (this.choiceCardEls || []).indexOf(this.menuNav?.focused);
@@ -4311,6 +4349,7 @@ export class Game {
     this.handPhase = null;
     this.handLock = null;
     this.closeCardDetail();
+    this.closeSlotTip();
     document.getElementById('upgrade-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.remove?.('phase-weapon');
     this.state = 'PLAYING';
@@ -4320,7 +4359,7 @@ export class Game {
   }
 
   selectUpgrade(index) {
-    if (this.state !== 'UPGRADE') return;
+    if (this.state !== 'UPGRADE' || this.slotTipOpen) return;
     const upg = this.currentChoices[index];
     if (!upg) return;
     const p = this.player;

@@ -318,26 +318,36 @@ export function describeNewWeapon(player) {
     name: 'NEW WEAPON',
     category: 'LOADOUT',
     tags: [],
-    summary: 'Choose 1 of 3 weapons for a free slot. Its level-ups and upgrades join your hands from then on.',
+    // The slot's bonus is the whole message: no headline, summary or stat rows next to it.
+    summary: reward ? '' : 'Choose 1 of 3 weapons for a free slot.',
     isSynergy: false,
     isNewWeapon: true,
     rarity: 'weapon',
     rarityLabel: 'LOADOUT',
     color: RARITY.weapon.color,
     jump: 1,
-    headline: 'CHOOSE 1 OF 3 WEAPONS',
-    rows: [{ id: 'slots', label: 'Weapon slots used', before: `${used} / ${slots}`, after: `${used + 1} / ${slots}` }],
+    headline: reward ? '' : 'CHOOSE 1 OF 3 WEAPONS',
+    rows: [],
     hiddenRows: 0,
     levelHtml: `SLOT ${used + 1} OF ${slots}`,
-    // What filling this slot unlocks (slot-rewards.js), shown as a banner on the card.
+    // What filling this slot unlocks (slot-rewards.js), shown big on the card.
     reward: reward && { ...reward, slot: used + 1 }
   };
 }
 
 // Banner for a slot reward ({ slot, short, text, kind }): the NEW WEAPON card and the weapon pick header.
 export const slotRewardHtml = (r) => (r
-  ? `<div class="upg-slot-reward reward-${r.kind}"><span class="upg-slot-reward-label">SLOT ${r.slot} UNLOCKS</span><b>${r.short}</b><span class="upg-slot-reward-text">${r.text}</span></div>`
+  ? `<div class="upg-slot-reward reward-${r.kind}"><span class="upg-slot-reward-label">SLOT ${r.slot} BONUS</span><b>${r.short}</b><span class="upg-slot-reward-text">${r.text}</span></div>`
   : '');
+
+// The one-time slot rewards tip (slot-rewards.js slotTip): title, one line, a chip per slot bonus, GOT IT.
+export const slotTipHtml = (tip) => `<div class="slot-tip-card" role="dialog" aria-labelledby="slot-tip-title">
+    <div class="slot-tip-kicker">⬡ NEW: SLOT BONUSES</div>
+    <h3 id="slot-tip-title" class="slot-tip-title">${tip.title}</h3>
+    <p class="slot-tip-line">${tip.line}</p>
+    <div class="slot-tip-rewards">${tip.rewards.map((r) => `<div class="slot-tip-reward reward-${r.kind}"><span>WEAPON ${r.slot}</span><b>${r.short}</b></div>`).join('')}</div>
+    <button type="button" class="neon-btn primary-btn slot-tip-ok" data-slot-tip-ok>GOT IT</button>
+  </div>`;
 
 // A weapon offered after NEW WEAPON: its summary, tags and exact LV 1 stats (installed on a copy).
 export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
@@ -462,10 +472,10 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
           <span class="upg-badge">${d.rarityLabel === d.category ? d.category : `${d.rarityLabel} · ${d.category}`}</span>
         </div>
         <div class="upg-name">${d.name}</div>${tags}
-        <div class="upg-headline">${d.headline}</div>${slotRewardHtml(d.reward)}
-        <div class="upg-summary">${d.summary}</div>
-        <div class="upg-stats">${rows}${more}
-        </div>
+        ${d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
+        ${d.summary ? `<div class="upg-summary">${d.summary}</div>` : ''}
+        ${rows || more ? `<div class="upg-stats">${rows}${more}
+        </div>` : ''}
       </div>
       <div class="upg-level">${levelText(d, installed)}</div>
     `
