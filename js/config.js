@@ -231,7 +231,7 @@ export const DEFAULT_TUNING = {
   hpBudgetMax: 2.5,
   bossHpMult: 0.5,
   // Campaign bosses only (js/bosses.js), on top of bossHpMult; lieutenants and boss XP are unaffected.
-  campaignBossHpMult: 3,
+  campaignBossHpMult: 2, // 3 in v0.34.1
   damageRampBase: 0.45, // 0.5 before v0.29, 0.55 before v0.31, 0.6 before v0.32 (gentler start, same late game)
   damageRampFrom: 10,
   damageRampPerWave: 0.07, // 0.04 before v0.29, 0.044 before v0.31

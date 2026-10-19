@@ -107,7 +107,7 @@ test('campaign boss HP multiplier scales the named bosses only, not their XP, li
   assert.equal(b.hive.maxHp, 3 * a.hive.maxHp);
   assert.equal(b.queen.xp, a.queen.xp, 'boss XP is unchanged');
   assert.deepEqual([b.lt, b.hulk, b.swarmer], [a.lt, a.hulk, a.swarmer], 'lieutenants and regular hulls are unaffected');
-  assert.equal(DEFAULT_TUNING.campaignBossHpMult, 3);
+  assert.equal(DEFAULT_TUNING.campaignBossHpMult, 2);
 });
 
 test('waves advance every waveLength seconds and bosses stay on every third wave', () => {
