@@ -28,8 +28,10 @@ const { EnemyManager, damageRampAt, emergeFactor } = await import('../js/enemies
 const { EnemyBulletPool } = await import('../js/enemy-bullets.js');
 const { DamageNumbers } = await import('../js/damage-numbers.js');
 const {
-  ARCHETYPE_INFO, BRUISER, GUNNER, BLINKER, CONDUIT, WAVE_PACKS, pickWavePack, lieutenantTypes, shieldBlocks, bruiserChargeLength
+  ARCHETYPE_INFO, BRUISER, GUNNER, BLINKER, CONDUIT, lieutenantTypes, shieldBlocks, bruiserChargeLength
 } = await import('../js/archetypes.js');
+const { WAVE_PACKS, pickWavePack } = await import('../js/waves.js');
+const { UNLOCK_WAVE, isBossWave } = await import('../js/wave-plan.js');
 const { rollLieutenant, LIEUTENANT_WARMUP, LT_MODIFIERS } = await import('../js/lieutenants.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 
@@ -103,13 +105,14 @@ test('archetypes join the spawn table progressively, and a zero weight disables 
     for (let i = 0; i < 4000; i++) packs.add(pickWavePack(wave, rand));
     return packs;
   };
-  assert.deepEqual([...seen(1)].sort(), ['blackhole', 'skirmish', 'splitter', 'swarm']);
-  for (const type of NEW_TYPES) {
-    const unlock = ARCHETYPE_INFO[type].unlockWave;
-    assert.ok(!seen(unlock - 1).has(type), `${type} never spawns before wave ${unlock}`);
-    assert.ok(seen(unlock).has(type), `${type} spawns from wave ${unlock}`);
+  assert.deepEqual([...seen(1)].sort(), ['skirmish', 'splitter', 'swarm']);
+  for (const pack of WAVE_PACKS.filter(p => p.unlockWave > 1)) {
+    const unlock = pack.unlockWave;
+    assert.ok(!seen(unlock - 1).has(pack.id), `${pack.id} never spawns before wave ${unlock}`);
+    assert.ok(seen(unlock).has(pack.id), `${pack.id} spawns from wave ${unlock}`);
+    assert.ok(isBossWave(unlock), `${pack.id} debuts on a boss wave (${unlock})`);
   }
-  assert.deepEqual(NEW_TYPES.map(t => ARCHETYPE_INFO[t].unlockWave), [2, 3, 4, 5, 6], 'one new archetype per wave');
+  for (const type of NEW_TYPES) assert.equal(ARCHETYPE_INFO[type].unlockWave, UNLOCK_WAVE[type], `${type} unlock comes from the wave plan`);
   TUNING.spawnWeightGunner = 0;
   assert.ok(!seen(9).has('gunner'));
   for (const pack of WAVE_PACKS) TUNING[pack.weightKey] = 0;

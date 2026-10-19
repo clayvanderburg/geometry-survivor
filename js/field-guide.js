@@ -7,6 +7,9 @@
 import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
+import { HOSTILE_INFO, MAYFLY } from './hostiles.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, bossBuilt } from './bosses.js';
+import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
@@ -20,8 +23,15 @@ export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
   { id: 'hazard', label: 'HAZARDS' },
   { id: 'archetype', label: 'COMBAT ARCHETYPES' },
-  { id: 'elite', label: 'ELITES' }
+  { id: 'elite', label: 'ELITES' },
+  { id: 'boss', label: 'BOSSES' }
 ];
+
+// Wave a named boss leads (from the campaign schedule).
+const bossWave = (id) => +(Object.keys(BOSS_SCHEDULE).find(w => BOSS_SCHEDULE[w] === id) ?? 3);
+// First boss wave still flown by the Dreadnought stand-in (no named boss yet); 3 if every slot is named.
+const dreadnoughtWave = () => +(Object.keys(BOSS_SCHEDULE).find(w => !bossBuilt(BOSS_SCHEDULE[w])) ?? 3);
+const veteranNote = ' From wave 11 they field a veteran form with an extra edge, and from wave 21 another, each a little faster.';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const secs = (v) => `${+v.toFixed(2)} s`;
@@ -41,12 +51,12 @@ function eliteGrindText() {
 export const HOSTILE_ENTRIES = [
   {
     id: 'swarmer', name: 'BOID SWARMER', group: 'swarm', unlockWave: 1,
-    what: 'Magenta diamonds that flock: they keep apart, match heading, pull together and swirl in on your ship. Packs grow every wave.',
+    what: 'Magenta diamonds that flock: they keep apart, match heading, pull together and swirl in on your ship. Packs grow every wave.' + veteranNote,
     tip: 'Fodder that pops on contact. Keep moving and sweep the pack with the blaster; chain lightning and orbit blades shred them.'
   },
   {
     id: 'pinwheel', name: 'PINWHEEL', group: 'swarm', unlockWave: 1,
-    what: 'Violet spinning squares that grind straight at you. Slower than swarmers but much tougher.',
+    what: 'Violet spinning squares that grind straight at you. Slower than swarmers but much tougher. Veterans spin a pentagon of blades from wave 11 and a hexagon from wave 21.',
     tip: 'Kite them in a wide circle so they bunch up, then let piercing bolts run down the line.'
   },
   {
@@ -56,7 +66,7 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'splitter', name: 'SPLITTER', group: 'swarm', unlockWave: 1,
-    what: 'Golden hexagons with a spinning inner core. When destroyed they fracture into three fast mini-splitters.',
+    what: 'Golden hexagons with a spinning inner core. When destroyed they fracture into three fast mini-splitters. Veterans gain a side every 10 waves; from wave 21 they burst into four.',
     tip: 'Kill them away from your ship so the burst has room. Supernova kills do not split.'
   },
   {
@@ -65,7 +75,12 @@ export const HOSTILE_ENTRIES = [
     tip: 'Expect three of them where a splitter dies: back off a step, then sweep.'
   },
   {
-    id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: 1,
+    id: 'mayfly', name: 'MAYFLY', group: 'swarm', unlockWave: unlockWaveOf('mayfly'),
+    what: () => `Lime specks that come in clouds of a dozen or more. Every ${secs(MAYFLY.jitterMin)}–${secs(MAYFLY.jitterMax)} each one snaps to a new heading within about ${Math.round(MAYFLY.spread * 180 / Math.PI)}° of your ship, so the cloud twitches in without a line to lead. One hit kills; contact stings for half a normal hit. Debuts with the Brood Queen.`,
+    tip: 'Never park in a cloud. Strafe across its edge and sweep it: spread shots, lightning and orbit blades clear them fast.'
+  },
+  {
+    id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: unlockWaveOf('blackhole'),
     what: () => `A crimson singularity. Inside its ${TUNING.blackholePullRadius ?? 200} px dashed rim it drags enemies, sparks, Geoms and your shots into orbit and tugs your ship. It collapses in a 175 px burst that damages nearby hostiles when it dies.`,
     tip: () => `The tug is ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust at the rim, rising to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} from ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the way in. It never matches your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
   },
@@ -95,14 +110,24 @@ export const HOSTILE_ENTRIES = [
     tip: 'Kill it first. Follow the beams back to the pylon; its pack goes soft the moment it dies.'
   },
   {
+    id: 'hulk', name: 'HULK', group: 'archetype', unlockWave: unlockWaveOf('hulk'),
+    what: () => `The old Prismatic Dreadnought hull, pressed into line service: a huge slow cyan octagon that soaks fire, takes ${pct(0.1)} knockback, shrugs off ramming and hits for ${(1.8).toFixed(1)}× contact damage. Debuts with Event Horizon.`,
+    tip: 'Do not try to out-trade it head-on. Kite it in a loop, let it body-block its own pack, and burn it down with sustained damage.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
     modifiers: true
   },
   {
-    id: 'boss', name: BOSS_NAME, group: 'elite', unlockWave: 3,
-    what: () => `Arrives every 3 waves after a ${secs(TUNING.bossWarningTime ?? 3)} warning: hazard strip, klaxon and a radar ring at the spawn point. A cyan octagon with a gold spike crown and magenta halo; health bars at the top of the screen.${eliteGrindText()}`,
+    id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
+    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${eliteGrindText()}`,
+    tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
+  },
+  {
+    id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,
+    what: () => `The fleet's line boss: it takes any boss wave whose named boss has not arrived yet. A cyan octagon with a gold spike crown and magenta halo that drives straight at you; health bars at the top of the screen.${eliteGrindText()}`,
     tip: 'Clear the fodder during the warning, then kite in wide circles. A kill drops a guaranteed Super Relic Cache and a spare Supernova.'
   }
 ];
@@ -124,9 +149,9 @@ export function hostileStats(id) {
   if (!entry) return null;
   statsManager ||= new EnemyManager({ maxEnemies: 1 });
   const unlockWave = resolveText(entry.unlockWave);
-  const wave = id === 'boss' ? 3 : id === 'lieutenant' ? unlockWave : 1;
+  const wave = entry.boss || id === 'lieutenant' ? unlockWave : 1;
   const type = id === 'lieutenant' ? 'pinwheel' : id;
-  const cfg = statsManager.getArchetype(type, waveScaleAt(wave), id === 'boss' ? { name: BOSS_NAME } : {});
+  const cfg = statsManager.getArchetype(type, waveScaleAt(wave), id === 'boss' ? { name: BOSS_NAME, wave } : { wave });
   const hp = cfg.maxHp * (TUNING.enemyHpMult ?? 1);
   const speed = cfg.speed * (type === 'blackhole' ? 1 : (TUNING.enemySpeedMult ?? 1)) * 60;
   const ship = (TUNING.moveSpeed ?? 5) * 60;
@@ -153,7 +178,10 @@ export function hostileStatRows(id) {
   if (s.speed !== null) rows.push(['SPEED', `${s.speed} px/s · ${s.speedVsShip.toFixed(2)}× SHIP`]);
   rows.push(['CONTACT', String(s.contact)]);
   if (s.xp !== null) rows.push(['XP', String(s.xp)]);
-  rows.push([id === 'boss' ? 'EVERY' : 'FROM', id === 'boss' ? '3 WAVES' : `WAVE ${s.unlockWave}`]);
+  const entry = hostileEntry(id);
+  if (id === 'boss') rows.push(['LEADS', 'UNNAMED BOSS WAVES']);
+  else if (entry.boss) rows.push([`${(BOSS_DEFS[id]?.tier || 'minor').toUpperCase()} BOSS`, `WAVE ${s.unlockWave}`]);
+  else rows.push(['FROM', `WAVE ${s.unlockWave}`]);
   return rows;
 }
 
@@ -161,10 +189,11 @@ export function lieutenantModifierRows() {
   return Object.entries(LT_MODIFIERS).map(([id, m]) => ({ id, label: m.label, detail: m.detail, hue: m.hue }));
 }
 
-// Guide id(s) for a live enemy: its type, plus 'lieutenant' for elites; bosses are 'boss'.
+// Guide id(s) for a live enemy: its type, plus 'lieutenant' for elites. Bosses are their own type
+// (the Dreadnought stand-in is 'boss').
 export function guideIdsFor(e) {
   if (!e) return [];
-  if (e.isBoss) return ['boss'];
+  if (e.isBoss) return [e.type];
   return e.isLieutenant ? ['lieutenant', e.type] : [e.type];
 }
 
@@ -242,8 +271,10 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
-      `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Packs are picked by weight and new archetypes join at their unlock wave, each announced once per run by a NEW HOSTILE SIGNATURE card.`,
-      `Bosses every 3 waves; a lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}. Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
+      `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
+      `A minor boss every 3rd wave and a major boss every 6th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Past wave 30 bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
+      `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
+      `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
     ]
   },
   {
@@ -364,7 +395,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'cores', icon: '❖', title: 'VOID CORES & ARMORY',
     body: () => [
-      `Void Cores persist between runs. Earn them from each new wave, vortexes and splitters (up to ${TUNING.maxWaveCores ?? 3} per wave), bosses (3), lieutenants, deep core veins and an end-of-run bounty.`,
+      `Void Cores persist between runs. Earn them from each new wave, vortexes, hulks and splitters (up to ${TUNING.maxWaveCores ?? 3} per wave), bosses (${BOSS_TIER.minor.cores}, major bosses ${BOSS_TIER.major.cores}), lieutenants, deep core veins and an end-of-run bounty.`,
       'Spend them in the Void Armory on the title and game-over screens: shield, damage, fire rate, luck and magnet, extra Supernovas and mining.'
     ]
   }

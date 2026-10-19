@@ -7,14 +7,16 @@
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { TUNING } from './config.js';
 import { enemyKind } from './run-stats.js';
+import { unlockWaveOf } from './wave-plan.js';
 
-// Introduced progressively: a type never spawns before its unlock wave (the first spawn shows an intel card).
+// Introduced on boss waves (js/wave-plan.js): a type never spawns before its unlock wave, and its first
+// spawn in a run shows an intel card.
 export const ARCHETYPE_INFO = {
-  bruiser: { label: 'BRUISER', unlockWave: 2, intro: 'HEAVY HULL · CHARGES DOWN A MARKED LANE — SIDESTEP IT' },
-  gunner: { label: 'GUNNER', unlockWave: 3, intro: 'HOLDS RANGE · FIRES SLOW PLASMA ORBS — DODGE OR HIDE BEHIND ROCK' },
-  shielder: { label: 'AEGIS SHIELDER', unlockWave: 4, intro: 'FRONT PLATES BLOCK SHOTS — FLANK IT OR USE AREA DAMAGE' },
-  blinker: { label: 'BLINKER', unlockWave: 5, intro: 'FLICKERS, THEN TELEPORTS TO THE MARKED RING — KEEP MOVING' },
-  conduit: { label: 'CONDUIT', unlockWave: 6, intro: 'LINKED ALLIES TAKE 30% LESS DAMAGE AND MOVE 20% FASTER — KILL IT FIRST' }
+  bruiser: { label: 'BRUISER', unlockWave: unlockWaveOf('bruiser'), intro: 'HEAVY HULL · CHARGES DOWN A MARKED LANE — SIDESTEP IT' },
+  gunner: { label: 'GUNNER', unlockWave: unlockWaveOf('gunner'), intro: 'HOLDS RANGE · FIRES SLOW PLASMA ORBS — DODGE OR HIDE BEHIND ROCK' },
+  shielder: { label: 'AEGIS SHIELDER', unlockWave: unlockWaveOf('shielder'), intro: 'FRONT PLATES BLOCK SHOTS — FLANK IT OR USE AREA DAMAGE' },
+  blinker: { label: 'BLINKER', unlockWave: unlockWaveOf('blinker'), intro: 'FLICKERS, THEN TELEPORTS TO THE MARKED RING — KEEP MOVING' },
+  conduit: { label: 'CONDUIT', unlockWave: unlockWaveOf('conduit'), intro: 'LINKED ALLIES TAKE 30% LESS DAMAGE AND MOVE 20% FASTER — KILL IT FIRST' }
 };
 
 // Kill-feedback tiers (see DEATH_FX in main.js): heavy hulls die harder than skirmishers.
@@ -28,34 +30,6 @@ export const GUNNER = { range: 380, band: 60, aimTime: 0.6, cooldown: 2.6, fireR
 export const SHIELDER = { arcHalf: 1.05, turnRate: 0.9, plateGap: 11, plates: 3 };
 export const BLINKER = { cooldown: 2.6, telegraph: 0.6, minDist: 130, maxDist: 250, lunge: 1.6 };
 export const CONDUIT = { linkRadius: 240, maxLinks: 4, armor: 0.3, haste: 0.2, keepAway: 320, linkHold: 0.25 };
-
-// Wave packs: weights are TUNING keys (0 disables a pack); packs unlock with their archetype.
-export const WAVE_PACKS = [
-  { id: 'swarm', unlockWave: 1, weightKey: 'spawnWeightSwarm' },
-  { id: 'skirmish', unlockWave: 1, weightKey: 'spawnWeightSkirmish' },
-  { id: 'splitter', unlockWave: 1, weightKey: 'spawnWeightSplitter' },
-  { id: 'blackhole', unlockWave: 1, weightKey: 'spawnWeightBlackhole' },
-  { id: 'bruiser', unlockWave: ARCHETYPE_INFO.bruiser.unlockWave, weightKey: 'spawnWeightBruiser' },
-  { id: 'gunner', unlockWave: ARCHETYPE_INFO.gunner.unlockWave, weightKey: 'spawnWeightGunner' },
-  { id: 'shielder', unlockWave: ARCHETYPE_INFO.shielder.unlockWave, weightKey: 'spawnWeightShielder' },
-  { id: 'blinker', unlockWave: ARCHETYPE_INFO.blinker.unlockWave, weightKey: 'spawnWeightBlinker' },
-  { id: 'conduit', unlockWave: ARCHETYPE_INFO.conduit.unlockWave, weightKey: 'spawnWeightConduit' }
-];
-
-export function pickWavePack(wave, rand = Math.random) {
-  let total = 0;
-  for (const pack of WAVE_PACKS) {
-    if (wave >= pack.unlockWave) total += Math.max(0, TUNING[pack.weightKey] ?? 0);
-  }
-  if (total <= 0) return 'swarm';
-  let r = rand() * total;
-  for (const pack of WAVE_PACKS) {
-    if (wave < pack.unlockWave) continue;
-    r -= Math.max(0, TUNING[pack.weightKey] ?? 0);
-    if (r < 0) return pack.id;
-  }
-  return 'swarm';
-}
 
 // Archetypes a lieutenant can be built from at this wave (fodder and vortexes never lead).
 export function lieutenantTypes(wave) {

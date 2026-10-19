@@ -3,7 +3,11 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize, LIGHT_ENEMY_TYPES } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
+import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
+import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from './wave-plan.js';
+import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
+import { HOSTILE_INFO, HOSTILE_DEATH_TIER } from './hostiles.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -40,7 +44,7 @@ import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.
 import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
-  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
+  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
 import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
@@ -170,8 +174,11 @@ const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
-  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
+  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk'
 };
+// Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
+const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
 
 // Field Guide: how long the in-run "FIELD GUIDE UPDATED" toast stays up, and how often (fixed ticks)
 // the camera view is scanned for hostiles the player has never logged.
@@ -1075,9 +1082,11 @@ export class Game {
         this.renderHubUI();
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
-        // Same warning -> entrance event as a scheduled boss.
+        // Same warning -> entrance event as a scheduled boss; each press cycles to the next boss.
+        const roster = [...Object.keys(BOSS_DEFS), 'boss'];
+        const id = roster[(this.sandboxBossIndex = ((this.sandboxBossIndex ?? -1) + 1) % roster.length)];
         const bp = this.spawnPointOnscreen(40);
-        if (!this.queueBossEncounter(bp, this.getWaveScale(), `WAVE ${this.wave} SANDBOX SIMULACRUM`)) {
+        if (!this.queueBossEncounter(bp, this.getWaveScale(), { id, wave: this.wave, epithet: id === 'boss' ? `WAVE ${this.wave} SANDBOX SIMULACRUM` : '' })) {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
@@ -1091,7 +1100,7 @@ export class Game {
         const type = SANDBOX_ARCHETYPES[sandboxAction];
         const bp = this.spawnPointOnscreen(30);
         if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(), this.placedSpawn(bp))) {
-          this.showBanner(`⚠ ENEMY CAP REACHED — ${ARCHETYPE_INFO[type].label} NOT SPAWNED ⚠`);
+          this.showBanner(`⚠ ENEMY CAP REACHED — ${INTEL_INFO[type].label} NOT SPAWNED ⚠`);
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -2028,7 +2037,7 @@ export class Game {
       this.runStats.kill(by, e, this.elapsedTime);
     }
 
-    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
+    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? HOSTILE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
     const intensity = fx.intensity;
     if (this.sound.playEnemyDeath) this.sound.playEnemyDeath(intensity);
@@ -2058,8 +2067,9 @@ export class Game {
 
     if (e.type === 'splitter' && !fromBomb) {
       const waveScale = this.getWaveScale('mini_splitter');
-      for (let k = 0; k < 3; k++) {
-        const a = e.rotation + (k * Math.PI * 2) / 3;
+      const frags = (e.tier || 1) >= 3 ? 4 : 3; // tier-3 veterans burst into four
+      for (let k = 0; k < frags; k++) {
+        const a = e.rotation + (k * Math.PI * 2) / frags;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
           instant: true,
           vx: Math.cos(a) * 5,
@@ -2085,6 +2095,7 @@ export class Game {
     // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
     const ranged = !!this.range?.active;
     if (ranged) this.range.onKill(e);
+    if (e.isBoss) bossDef(e.type)?.onDeath?.(e, this.enemyManager);
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
@@ -2161,12 +2172,13 @@ export class Game {
       const coreChance = (
         e.isBoss ? 1.0 :
         e.type === 'blackhole' ? 0.55 :
+        e.type === 'hulk' ? 0.3 :
         e.type === 'splitter' ? 0.08 :
         0
       ) * this.player.stats.coreDropMult;
 
       if (Math.random() < coreChance) {
-        const coreDrops = e.isBoss ? 3 : 1;
+        const coreDrops = e.isBoss ? (BOSS_TIER[e.bossTier]?.cores ?? 3) : 1;
         this.coresDroppedThisWave += coreDrops;
         for (let c = 0; c < coreDrops; c++) {
           const ca = Math.random() * Math.PI * 2;
@@ -2243,16 +2255,23 @@ export class Game {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3);
-      if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
+      if (!this.queueBossEncounter(bp, scheduled.waveScale, scheduled)) break;
       this.pendingBossSpawns.shift();
     }
   }
 
   // Admission reserves the boss's enemy slot at once and the warning plays out on that reserved
   // spawn ring, so a boss that has been announced can never be refused by the cap on arrival.
-  queueBossEncounter(pos, waveScale, epithet) {
+  // `boss` is { id, wave, epithet? }: a named boss from js/bosses.js, or 'boss' (the Dreadnought).
+  queueBossEncounter(pos, waveScale, boss = {}) {
+    if (typeof boss === 'string') boss = { epithet: boss }; // a bare epithet: the Dreadnought
     const warmup = TUNING.bossWarningTime ?? 3.0;
-    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, this.placedSpawn(pos, { warmup, name: BOSS_NAME, epithet }))) return false;
+    const wave = boss.wave ?? this.wave;
+    const id = boss.id && (boss.id === 'boss' || bossBuilt(boss.id)) ? boss.id : 'boss';
+    const extra = id === 'boss'
+      ? { warmup, wave, name: BOSS_NAME, epithet: boss.epithet || bossEpithet(wave), bossTier: bossTier(wave) || 'minor' }
+      : { warmup, wave, ...(boss.epithet ? { epithet: boss.epithet } : {}) };
+    if (!this.enemyManager.queueSpawn(id, pos.x, pos.y, waveScale, this.placedSpawn(pos, extra))) return false;
     this.sound.playBossWarning();
     return true;
   }
@@ -2310,7 +2329,7 @@ export class Game {
   // One lieutenant per non-boss wave, `lieutenantDelay` seconds in. A pending boss keeps priority on
   // free enemy slots, and a lieutenant blocked by the cap simply retries on later ticks of the wave.
   updateLieutenantSchedule() {
-    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || this.wave % 3 === 0) return;
+    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || isBossWave(this.wave)) return;
     if (this.lieutenantWave === this.wave || this.waveTimer < (TUNING.lieutenantDelay ?? 6)) return;
     if (this.pendingBossSpawns.length > 0) return;
     if (this.spawnLieutenant()) this.lieutenantWave = this.wave;
@@ -2361,7 +2380,7 @@ export class Game {
 
   // First appearance of a new archetype this run: a one-line intel card on what it does.
   announceArchetype(type) {
-    const info = ARCHETYPE_INFO[type];
+    const info = INTEL_INFO[type];
     if (!info || this.seenArchetypes.has(type)) return;
     if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
     this.seenArchetypes.add(type);
@@ -2409,8 +2428,9 @@ export class Game {
     this.grid.ripple?.(e.x, e.y, 560, 48);
     this.sound.playBossArrival();
     const hp = Math.round(e.maxHp).toLocaleString();
-    this.logGuideEntries(['boss']);
-    this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+    this.logGuideEntries([e.type]);
+    const kicker = (BOSS_TIER[e.bossTier] || BOSS_TIER.minor).kicker;
+    this.showBossCard('arrival', kicker, e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
   }
 
   // Defeat payoff: hit-stop then half-speed slow-mo (counted in fixed ticks), a gold flash,
@@ -2427,7 +2447,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 140, 600, 48);
     this.grid.ripple?.(e.x, e.y, 680, 48, 1.3);
     this.sound.playBossDefeat();
-    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE'];
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
   }
@@ -2538,39 +2558,39 @@ export class Game {
     const waveScale = this.getWaveScale();
     const pt = this.spawnPoint(90); // pack centre: room for the widest formation around it
 
-    // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
+    // Weighted pack (TUNING spawnWeight* × the wave theme, js/waves.js); new types join on their boss wave.
     const pack = pickWavePack(this.wave);
+    const roster = new Map(packRoster(pack, this.wave));
+    const count = (type) => roster.get(type) || 0;
     const em = this.enemyManager;
     const queuedBefore = em.spawnIndicators.length;
-    // Each member gets its own off-screen ring point (trailing distance args at call sites are unused).
-    const spread = (type, count) => {
-      for (let i = 0; i < count; i++) {
+    // Each member gets its own off-screen ring point.
+    const spread = (type, n) => {
+      for (let i = 0; i < n; i++) {
         const p2 = this.spawnPoint(30);
         em.queueSpawn(type, p2.x, p2.y, this.getWaveScale(type), this.placedSpawn(p2));
       }
     };
-    const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
-      const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
-      em.spawnBoidSwarm(pt.x, pt.y, count, this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
+      em.spawnBoidSwarm(pt.x, pt.y, count('swarmer'), this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
-      const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
-      for (let i = 0; i < count; i++) {
+      const n = count('pinwheel') + count('weaver');
+      for (let i = 0; i < n; i++) {
         const p2 = this.spawnPoint(30);
         em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, this.getWaveScale('pinwheel'), this.placedSpawn(p2));
       }
-    } else if (pack === 'splitter') {
-      spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
+    } else if (pack === 'mayfly') {
+      // One cloud: tight around a single ring point, so it arrives as a swarm of specks.
+      const n = count('mayfly');
+      for (let i = 0; i < n; i++) {
+        const m = packMemberPoint(this, pt, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120);
+        em.queueSpawn('mayfly', m.x, m.y, this.getWaveScale('mayfly'), this.placedSpawn(m));
+      }
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
-    } else if (pack === 'bruiser') {
-      spread('bruiser', packSize(Math.min(3, 1 + Math.floor(since('bruiser') / 4))), 460, 720);
-    } else if (pack === 'gunner') {
-      spread('gunner', packSize(Math.min(5, 2 + Math.floor(since('gunner') / 4))), 520, 760);
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
-      const count = packSize(Math.min(3, 1 + Math.floor(since('shielder') / 5)));
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < count('shielder'); i++) {
         const p2 = this.spawnPoint(70);
         em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
         for (let k = 0; k < 2; k++) {
@@ -2578,23 +2598,38 @@ export class Game {
           em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
         }
       }
-    } else if (pack === 'blinker') {
-      spread('blinker', packSize(Math.min(7, 3 + Math.floor(since('blinker') / 3))), 480, 760);
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
       em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < count('pinwheel'); k++) {
         const a = (k * Math.PI * 2) / 3;
         const esc = packMemberPoint(this, pt, Math.cos(a) * 60, Math.sin(a) * 60);
         em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
       }
-      if (this.wave >= 8) {
+      if (count('bruiser') > 0) {
         const esc = packMemberPoint(this, pt, 80, 0);
         em.queueSpawn('bruiser', esc.x, esc.y, waveScale, this.placedSpawn(esc));
       }
+    } else {
+      for (const [type, n] of roster) spread(type, n);
     }
     // Only announce a newcomer that actually made it past the enemy cap.
-    if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+    if (INTEL_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+  }
+
+  // Seconds until the next pack: the wave's base interval, stretched or shrunk by the HP budget, and
+  // slowed (bossPackRate) while this boss wave's boss is still warning in or alive. The lull lasts only
+  // until the wave timer runs out: an unbeaten boss then faces full-rate packs.
+  packInterval() {
+    const lull = isBossWave(this.wave) && this.bossWaveFightActive() ? Math.max(0.05, TUNING.bossPackRate ?? 0.7) : 1;
+    return spawnIntervalAt(this.wave) * hpBudgetScale(this.wave) / lull;
+  }
+
+  bossWaveFightActive() {
+    if (this.pendingBossSpawns.some(b => b.wave === this.wave)) return true;
+    const em = this.enemyManager;
+    return em.enemies.some(e => e.isBoss && !e.dead && e.bossWave === this.wave)
+      || em.spawnIndicators.some(sp => sp.config?.isBoss && sp.config.bossWave === this.wave);
   }
 
   // Auto-aim: nearest target, but a hull whose shield plates face the ship counts as 260 px further
@@ -4518,7 +4553,9 @@ export class Game {
       this.coresDroppedThisWave = 0;
       this.sessionCores += 1;
       this.progression.addCores(1);
-      this.showBanner(`WAVE ${this.wave} // +1 ❖ VOID CORE`);
+      const tier = bossTier(this.wave);
+      const flag = tier === 'major' ? '☠ ' : tier ? '⚠ ' : '';
+      this.showBanner(`${flag}WAVE ${this.wave} // ${waveTheme(this.wave).name} // +1 ❖ VOID CORE`);
 
       if (this.asteroidManager.needsReplenish?.()) {
         const repPt = this.spawnAroundPlayer(850, 1400);
@@ -4526,19 +4563,20 @@ export class Game {
         this.asteroidManager.rebuildSpatialHash();
       }
 
-      if (this.wave % 3 === 0) {
-        this.pendingBossSpawns.push({ wave: this.wave, waveScale: this.getWaveScale() });
+      for (const id of bossesForWave(this.wave, bossBuilt)) {
+        this.pendingBossSpawns.push({ id, wave: this.wave, waveScale: this.getWaveScale() });
       }
     }
 
     // Scheduled encounters retain their wave scaling and get the first free slots.
     if (!range) {
+      this.enemyManager.wave = this.wave;
       this.processPendingBossSpawns();
       this.updateLieutenantSchedule();
       this.spawnCooldown -= dt;
       if (this.spawnCooldown <= 0) {
         this.spawnWavePack();
-        this.spawnCooldown = spawnIntervalAt(this.wave);
+        this.spawnCooldown = this.packInterval();
       }
     }
 

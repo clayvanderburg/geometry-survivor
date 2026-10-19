@@ -38,7 +38,8 @@ const {
 } = await import('../js/field-guide.js');
 const { GuidePreview, PREVIEW_IDS, drawSilhouette } = await import('../js/field-guide-scenes.js');
 const { hostileCardHTML, tabHTML, GUIDE_TABS } = await import('../js/field-guide-ui.js');
-const { ARCHETYPE_INFO, WAVE_PACKS } = await import('../js/archetypes.js');
+const { ARCHETYPE_INFO } = await import('../js/archetypes.js');
+const { WAVE_PACKS } = await import('../js/waves.js');
 const { UPGRADE_POOL } = await import('../js/upgrades.js');
 const { WEAPON_BY_LEVEL_ID } = await import('../js/loadout.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
@@ -187,7 +188,7 @@ test('every enemy type the game can spawn has a guide entry and a preview', () =
 test('guide stats come from the real spawn config and game formulas', () => {
   resetTuning();
   const em = new EnemyManager();
-  for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && id !== 'boss')) {
+  for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && !HOSTILE_ENTRIES.find(e => e.id === id).boss)) {
     const cfg = em.getArchetype(id, waveScaleAt(1));
     const s = hostileStats(id);
     assert.equal(s.hp, Math.round(cfg.maxHp * TUNING.enemyHpMult), `${id} HP`);
@@ -195,7 +196,8 @@ test('guide stats come from the real spawn config and game formulas', () => {
     assert.equal(s.contact, Math.round(contactDamageAt(cfg, 1)), `${id} contact`);
   }
   assert.equal(hostileStats('bruiser').contact, Math.round(18 * 1.5 * damageRampAt(1)));
-  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult * TUNING.enemyHpMult));
+  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(hostileStats('boss').unlockWave) * TUNING.bossHpMult * TUNING.enemyHpMult));
+  assert.equal(hostileStats('brood_queen').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult * TUNING.enemyHpMult), 'bosses show HP on their own wave');
   assert.equal(hostileStats('gunner').unlockWave, ARCHETYPE_INFO.gunner.unlockWave);
   const g = Object.assign(Object.create(Game.prototype), { wave: 9 });
   assert.equal(g.contactDamage({ contactMult: 1.5 }), contactDamageAt({ contactMult: 1.5 }, 9), 'one contact formula');

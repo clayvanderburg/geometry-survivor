@@ -9,6 +9,7 @@ import { ParticleSystem } from './particles.js';
 import { drawCrabShip, drawPlayerShield, shieldTouches } from './ship-renderer.js';
 import { BRUISER, shieldBlocks, bounceFromShip, lieutenantTypes } from './archetypes.js';
 import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
+import { bossDef } from './bosses.js';
 import { wellPullScale, playerPullShare } from './gravity.js';
 
 export const PREVIEW_DT = 1 / 60;
@@ -207,6 +208,42 @@ const SCENES = {
     },
     onKill(s, e) { s.splitCopies(e); }
   },
+  mayfly: {
+    w: 440, loop: 8,
+    setup(s) { s.home(0.78, 0.5); s.cloud(); },
+    tick(s) {
+      s.kite(s.W * 0.74, s.H * 0.5, 46, 1.5);
+      s.autoFire(0.1);
+      if (s.count() < 4 && s.every(1.6)) s.cloud();
+    }
+  },
+  hulk: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.8, 0.5); s.spawn('hulk', s.W * 0.25, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.78, s.H * 0.5, 50, 0.9);
+      s.autoFire(0.1);
+      if (s.count('hulk') === 0 && s.every(1.2)) s.spawn('hulk', s.W * 0.2, s.H * 0.5);
+    },
+    noContactKill: true
+  },
+  brood_queen: {
+    w: 680, loop: 12,
+    setup(s) {
+      s.home(0.82, 0.5);
+      s.manager.queueSpawn('brood_queen', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.66, s.H * 0.5, s.H * 0.34, 0.8);
+      if (s.t > 1.4) s.autoFire(0.12);
+      // Speed the fight along so the preview reaches her half-HP scatter and the mayfly burst.
+      const q = s.find('brood_queen');
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 9.5) s.kill(q);
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); }
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -216,12 +253,7 @@ const SCENES = {
     tick(s) {
       s.kite(s.W * 0.5, s.H * 0.5, s.H * 0.36, 0.7);
       if (s.t > 1.8) s.autoFire(0.22);
-      for (const e of s.manager.bossArrivals) {
-        s.particles.spawnShockwave(e.x, e.y, 320, 48, 6, 0.6);
-        s.particles.spawnShockwave(e.x, e.y, 200, e.hue, 4, 0.45);
-        s.particles.spawnExplosionSparks(e.x, e.y, 30, 48, 3, 14, 2.4);
-      }
-      s.manager.bossArrivals.length = 0;
+      s.bossEntrance();
     },
     noContactKill: true
   }
@@ -331,6 +363,21 @@ export class GuidePreview {
     if (!best || this.fireTimer > 0) return;
     this.fireTimer = interval;
     this.fireAt(best.x, best.y);
+  }
+
+  // A boss arrival flourish (shockwaves and sparks, like Game.onBossArrived).
+  bossEntrance() {
+    for (const e of this.manager.bossArrivals) {
+      this.particles.spawnShockwave(e.x, e.y, 320, 48, 6, 0.6);
+      this.particles.spawnShockwave(e.x, e.y, 200, e.hue, 4, 0.45);
+      this.particles.spawnExplosionSparks(e.x, e.y, 30, 48, 3, 14, 2.4);
+    }
+    this.manager.bossArrivals.length = 0;
+  }
+
+  // A mayfly cloud drifting in from the left edge.
+  cloud() {
+    for (let k = 0; k < 10; k++) this.spawn('mayfly', this.W * (0.06 + Math.random() * 0.1), this.H * (0.3 + Math.random() * 0.4));
   }
 
   // The splitter death burst from Game.killEnemy: three fast minis thrown outward.
@@ -510,7 +557,8 @@ export class GuidePreview {
 const SILHOUETTE = {
   swarmer: ['swarmer', 120], pinwheel: ['pinwheel', 140], weaver: ['weaver', 130], splitter: ['splitter', 170],
   mini_splitter: ['mini_splitter', 100], blackhole: ['blackhole', 220], bruiser: ['bruiser', 200], gunner: ['gunner', 140],
-  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360]
+  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
+  mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

@@ -8,6 +8,9 @@ import {
 } from './archetypes.js';
 import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph, drawEliteRift } from './lieutenants.js';
 import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
+import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
+import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler } from './bosses.js';
+import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
@@ -33,7 +36,7 @@ export function easeIn(x, r) {
 // compounding phases in past that wave.
 // Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
 // with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
-export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter']);
+export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter', 'mayfly']);
 export function waveScaleAt(wave, { light = false } = {}) {
   const start = light ? (TUNING.waveHpStartLight ?? 1) : (TUNING.waveHpStart ?? 1);
   const perWave = TUNING.waveHpPerWave ?? 0.25;
@@ -69,7 +72,7 @@ export function packSize(count) {
 
 // Contact damage of a hull touching the ship at a given wave (bosses hit harder).
 export function contactDamageAt(e, wave) {
-  return (e.isBoss ? 38 : 18 * (e.contactMult || 1)) * damageRampAt(wave);
+  return (e.isBoss ? 38 * (e.contactMult || 1) : 18 * (e.contactMult || 1)) * damageRampAt(wave);
 }
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
@@ -80,6 +83,52 @@ export function emergeFactor(e) {
   if (!(e.emergeT > 0) || !(e.emergeMax > 0)) return 1;
   const k = 1 - e.emergeT / e.emergeMax;
   return 0.15 + 0.85 * k * k;
+}
+
+// Swarmer silhouette: a sleek diamond; veterans sprout side barbs (tier 2), then a split tail (tier 3).
+function traceSwarmer(ctx, r, tier = 1) {
+  if (tier <= 1) {
+    ctx.moveTo(r * 1.25, 0);
+    ctx.lineTo(0, r * 0.78);
+    ctx.lineTo(-r * 1.25, 0);
+    ctx.lineTo(0, -r * 0.78);
+    ctx.closePath();
+    return;
+  }
+  ctx.moveTo(r * 1.3, 0);
+  ctx.lineTo(r * 0.3, r * 0.5);
+  ctx.lineTo(-r * 0.15, r * 1.0);
+  ctx.lineTo(-r * 0.45, r * 0.4);
+  if (tier >= 3) {
+    ctx.lineTo(-r * 1.35, r * 0.55);
+    ctx.lineTo(-r * 0.95, 0);
+    ctx.lineTo(-r * 1.35, -r * 0.55);
+  } else {
+    ctx.lineTo(-r * 1.25, 0);
+  }
+  ctx.lineTo(-r * 0.45, -r * 0.4);
+  ctx.lineTo(-r * 0.15, -r * 1.0);
+  ctx.lineTo(r * 0.3, -r * 0.5);
+  ctx.closePath();
+}
+
+// Weaver silhouette: a sharp dart; veterans add twin tail fins (tier 2), then a forward spine (tier 3).
+function traceWeaver(ctx, r, tier = 1) {
+  ctx.moveTo(r * 1.3, 0);
+  ctx.lineTo(-r, -r * 0.95);
+  ctx.lineTo(-r * 0.45, 0);
+  ctx.lineTo(-r, r * 0.95);
+  ctx.closePath();
+  if (tier >= 2) {
+    ctx.moveTo(-r * 0.6, -r * 0.55);
+    ctx.lineTo(-r * 1.45, -r * 0.7);
+    ctx.moveTo(-r * 0.6, r * 0.55);
+    ctx.lineTo(-r * 1.45, r * 0.7);
+  }
+  if (tier >= 3) {
+    ctx.moveTo(-r * 0.45, 0);
+    ctx.lineTo(r * 1.7, 0);
+  }
 }
 
 export class EnemyManager {
@@ -104,6 +153,8 @@ export class EnemyManager {
     // (enemy) => void, called as each enemy materializes (the game's run stats); null in unit tests.
     this.onSpawn = null;
     this.tick = 0;
+    // Current wave (set by Game each tick): veteran forms of the core swarm read it at spawn time.
+    this.wave = 1;
     this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
     // moveX/moveY: the direction to steer toward the ship (dirX/dirY bent round blocking rock).
@@ -127,6 +178,16 @@ export class EnemyManager {
   queueSpawn(type, x, y, waveScale = 1, extra = {}) {
     if (this.enemies.length + this.spawnIndicators.length >= this.maxEnemies) return false;
     const config = this.getArchetype(type, waveScale, extra);
+    // Veteran forms (js/wave-plan.js): later waves field the core swarm with an extra edge, a bit faster.
+    const tier = extra.tier ?? (VETERAN_TYPES.has(type) ? veteranTier(this.wave) : 1);
+    if (tier > 1 && VETERAN_TYPES.has(type)) {
+      config.tier = tier;
+      config.sides += tier - 1;
+      config.speed *= VETERAN_SPEED[tier];
+    }
+    if (extra.vx !== undefined) config.vx = extra.vx;
+    if (extra.vy !== undefined) config.vy = extra.vy;
+    if (extra.attach) config.attach = extra.attach;
     const hpMult = TUNING.enemyHpMult ?? 1.0;
     // Vortexes keep their drift: the ship must always be able to escape them (gravity.js escape cap).
     const spdMult = type === 'blackhole' ? 1 : (TUNING.enemySpeedMult ?? 1.0);
@@ -163,6 +224,21 @@ export class EnemyManager {
       return applyLieutenant(this.getArchetype(type, waveScale), extra.lieutenant, this.getArchetype('boss', waveScale).maxHp);
     }
     if (isArchetype(type)) return archetypeStats(type, waveScale);
+    if (isHostileKind(type)) return hostileKindStats(type, waveScale);
+    if (isBossKind(type)) {
+      const def = bossDef(type);
+      const tier = BOSS_TIER[def.tier] || BOSS_TIER.minor;
+      const hp = bossHp(waveScale, def.tier);
+      return {
+        hp, maxHp: hp, speed: 1.35, radius: 36, sides: 8, hue: def.hue, score: tier.score, xp: tier.xp, vRot: 0.03,
+        ...def.stats(waveScale),
+        isBoss: true,
+        bossTier: def.tier,
+        bossWave: extra.wave || 1,
+        name: extra.name || def.name,
+        epithet: extra.epithet || def.epithet
+      };
+    }
     switch (type) {
       case 'swarmer':
         return {
@@ -252,6 +328,8 @@ export class EnemyManager {
           xp: 30,
           vRot: 0.03,
           isBoss: true,
+          bossTier: extra.bossTier || 'minor',
+          bossWave: extra.wave || 1,
           name: extra.name || BOSS_NAME,
           epithet: extra.epithet || ''
         };
@@ -268,6 +346,11 @@ export class EnemyManager {
           vRot: 0.05
         };
     }
+  }
+
+  // Wave scale a boss's escorts are spawned at (the boss's own wave, light fodder kept light).
+  waveScaleFor(type, wave) {
+    return waveScaleAt(Math.max(1, wave || this.wave), { light: LIGHT_ENEMY_TYPES.has(type) });
   }
 
   update(dt, player, bullets, grid, particles, width, height) {
@@ -349,6 +432,14 @@ export class EnemyManager {
           emergeMax: TUNING.eliteEmergeTime ?? 1.2,
           mods: c.mods || null,
           tag: c.tag || null, // set on the spawn config by its spawner (Weapon Range dummies)
+          tier: c.tier || 1, // veteran form of the core swarm (js/wave-plan.js)
+          bossTier: c.bossTier || null,
+          bossWave: c.bossWave || 0,
+          anchor: null, // Brood Queen escorts: the boss whose ring they ride (js/bosses.js)
+          orbitA: 0,
+          orbitR: 0,
+          circleT: 0,
+          circleA: 0,
           pace: c.pace || 1, // movement multiplier on top of steering (lieutenants: lieutenantSpeedMult)
           detourRock: null,
           detourSide: 0,
@@ -357,9 +448,13 @@ export class EnemyManager {
           detourX: 0,
           detourY: 0
         };
+        if (c.attach) Object.assign(spawned, c.attach);
         this.enemies.push(spawned);
         this.onSpawn?.(spawned); // run stats (Game sets it): spawn time and per-type spawn counts
-        if (spawned.isBoss) this.bossArrivals.push(spawned);
+        if (spawned.isBoss) {
+          this.bossArrivals.push(spawned);
+          bossDef(spawned.type)?.onArrive?.(spawned, this);
+        }
         else if (spawned.isLieutenant) this.lieutenantArrivals.push(spawned);
         grid.applyImpulse(sp.x, sp.y, 12, 65, c.hue);
         this.spawnIndicators.splice(i, 1);
@@ -407,6 +502,13 @@ export class EnemyManager {
       if (isArchetype(e.type)) this.softSeparation(e, i, enemyOrder, maxRadius, env);
       if (updateArchetype(e, this, env)) {
         // Driven by archetypes.js (Bruiser, Gunner, Shielder, Blinker, Conduit).
+      } else if (isHostileKind(e.type)) {
+        this.softSeparation(e, i, enemyOrder, maxRadius, env);
+        updateHostileKind(e, this, env);
+      } else if (isBossKind(e.type)) {
+        bossDef(e.type).update(e, this, env);
+      } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
+        // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
       } else if (e.type === 'swarmer') {
         // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
         let sepX = 0, sepY = 0;
@@ -575,7 +677,7 @@ export class EnemyManager {
       this.enemyIndex.update(e);
 
       // Save short neon ribbon trail for fast movers (and charging / hasted elites)
-      if (e.type === 'swarmer' || e.type === 'weaver' || e.type === 'mini_splitter' || e.burstSpeed > 0 || e.cadence > 1) {
+      if (e.type === 'swarmer' || e.type === 'weaver' || e.type === 'mini_splitter' || HOSTILE_TRAILS.has(e.type) || e.burstSpeed > 0 || e.cadence > 1) {
         e.trail.push({ x: e.x, y: e.y });
         if (e.trail.length > 6) e.trail.shift();
       } else if (e.trail.length) {
@@ -681,26 +783,29 @@ export class EnemyManager {
 
         ctx.beginPath();
         if (e.type === 'swarmer') {
-          // Sleek elongated diamond
-          ctx.moveTo(r * 1.25, 0);
-          ctx.lineTo(0, r * 0.78);
-          ctx.lineTo(-r * 1.25, 0);
-          ctx.lineTo(0, -r * 0.78);
-          ctx.closePath();
+          traceSwarmer(ctx, r, e.tier);
         } else if (e.type === 'pinwheel') {
-          // Square + inner pinwheel blades
-          ctx.rect(-r * 0.8, -r * 0.8, r * 1.6, r * 1.6);
-          ctx.moveTo(-r * 0.8, -r * 0.8);
-          ctx.lineTo(r * 0.8, r * 0.8);
-          ctx.moveTo(r * 0.8, -r * 0.8);
-          ctx.lineTo(-r * 0.8, r * 0.8);
-        } else if (e.type === 'weaver') {
-          // Sharp dart arrowhead
-          ctx.moveTo(r * 1.3, 0);
-          ctx.lineTo(-r, -r * 0.95);
-          ctx.lineTo(-r * 0.45, 0);
-          ctx.lineTo(-r, r * 0.95);
+          // Square + inner pinwheel blades; veterans grow a pentagon, then a hexagon of blades.
+          const n = 3 + (e.tier || 1);
+          for (let s = 0; s < n; s++) {
+            const a = Math.PI / 4 + (s * Math.PI * 2) / n;
+            const vx = Math.cos(a) * r * 1.13;
+            const vy = Math.sin(a) * r * 1.13;
+            if (s === 0) ctx.moveTo(vx, vy);
+            else ctx.lineTo(vx, vy);
+          }
           ctx.closePath();
+          for (let s = 0; s < n; s++) {
+            const a = Math.PI / 4 + (s * Math.PI * 2) / n;
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(a) * r * 1.13, Math.sin(a) * r * 1.13);
+          }
+        } else if (e.type === 'weaver') {
+          traceWeaver(ctx, r, e.tier);
+        } else if (isHostileKind(e.type)) {
+          traceHostileKind(ctx, e, r);
+        } else if (isBossKind(e.type)) {
+          bossDef(e.type).trace(ctx, e, r);
         } else if (e.type === 'blackhole') {
           // Pulsing event horizon circle + inner accretion ring
           ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -738,6 +843,8 @@ export class EnemyManager {
       ctx.restore();
 
       drawArchetypeOverlay(ctx, e, r);
+      drawHostileOverlay(ctx, e, r);
+      if (e.isBoss) bossDef(e.type)?.overlay?.(ctx, e, r);
       if (e.isLieutenant) {
         drawLieutenantAura(ctx, e, r);
         drawLieutenantBar(ctx, e, r);

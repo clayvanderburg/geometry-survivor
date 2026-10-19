@@ -33,7 +33,7 @@ test('a scheduled boss waits for a full enemy cap and enters after a slot opens'
   assert.equal(g.enemyManager.enemies.length + g.enemyManager.spawnIndicators.length, 200);
   g.enemyManager.enemies.pop();
   g.update(1 / 60);
-  assert.ok(g.enemyManager.spawnIndicators.some(spawn => spawn.type === 'boss') || g.enemyManager.enemies.some(enemy => enemy.isBoss), 'wave-3 boss must not disappear permanently when admission is temporarily full');
+  assert.ok(g.enemyManager.spawnIndicators.some(spawn => spawn.config.isBoss) || g.enemyManager.enemies.some(enemy => enemy.isBoss), 'wave-3 boss must not disappear permanently when admission is temporarily full');
 });
 
 
@@ -51,7 +51,7 @@ test('multiple delayed bosses retain FIFO wave scaling, announce only admission,
   assert.deepEqual(g.pendingBossSpawns.map(request => request.wave), [3, 6]);
   g.enemyManager.enemies.splice(-2);
   g.update(1 / 60);
-  const bosses = g.enemyManager.spawnIndicators.filter(spawn => spawn.type === 'boss');
+  const bosses = g.enemyManager.spawnIndicators.filter(spawn => spawn.config.isBoss);
   assert.equal(bosses.length, 2);
   assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale * TUNING.bossHpMult * TUNING.enemyHpMult, 650 * wave6Scale * TUNING.bossHpMult * TUNING.enemyHpMult]);
   assert.equal(g.pendingBossSpawns.length, 0);
@@ -79,7 +79,7 @@ test('scheduled bosses receive newly freed slots before ordinary spawning', () =
   g.update(1 / 60);
   g.enemyManager.enemies.pop(); g.spawnCooldown = 0;
   let bossPresentWhenOrdinarySpawned = false;
-  g.spawnWavePack = () => { bossPresentWhenOrdinarySpawned = g.enemyManager.spawnIndicators.some(spawn => spawn.type === 'boss'); };
+  g.spawnWavePack = () => { bossPresentWhenOrdinarySpawned = g.enemyManager.spawnIndicators.some(spawn => spawn.config.isBoss); };
   g.update(1 / 60);
   assert.equal(bossPresentWhenOrdinarySpawned, true);
   assert.equal(g.enemyManager.enemies.length + g.enemyManager.spawnIndicators.length, 200);

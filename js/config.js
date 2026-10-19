@@ -104,10 +104,11 @@ export const DEFAULT_TUNING = {
   pursuitCatchupMax: 1.8,
   lieutenantSpeedMult: 1.35,
 
-  // 7. Boss Encounters (presentation only; boss stats and rewards are unchanged)
+  // 7. Boss Encounters (the warning and kill presentation, plus the pack lull during a boss fight)
   bossWarningTime: 3.0,
   bossHitStop: 0.1,
   bossSlowMo: 0.5,
+  bossPackRate: 0.7, // packs arrive at this share of their usual rate while a boss wave's boss is up
 
   // 8. Hit Feedback & Damage Numbers
   knockbackMult: 1.0,
@@ -115,15 +116,18 @@ export const DEFAULT_TUNING = {
   damageNumberCap: 48,
   damageNumberScale: 1.0,
 
-  // 9. Enemy Variety & Lieutenants (pack weights are relative; a pack joins at its archetype's unlock wave)
+  // 9. Enemy Variety & Lieutenants (pack weights are relative and biased by each wave's theme; a pack
+  // joins on its lead type's unlock wave, js/wave-plan.js)
   spawnWeightSwarm: 40,
   spawnWeightSkirmish: 20,
   spawnWeightSplitter: 18,
+  spawnWeightMayfly: 14,
   spawnWeightBlackhole: 12,
   spawnWeightBruiser: 12,
   spawnWeightGunner: 12,
   spawnWeightShielder: 9,
   spawnWeightBlinker: 10,
+  spawnWeightHulk: 6,
   spawnWeightConduit: 7,
   enemyBulletSpeed: 4.2,
   enemyBulletDamage: 12,
@@ -202,6 +206,13 @@ export const DEFAULT_TUNING = {
   skirmishPackMax: 24,
   splitterPackPerWave: 0.4,
   splitterPackMax: 10,
+  mayflyPackPerWave: 0.8,
+  mayflyPackMax: 30,
+  // HP budget (js/waves.js): pack timing stretches or shrinks so each wave brings the same HP per second
+  // as the pre-campaign spawn table (1 = on, 0 = off), within [hpBudgetMin, hpBudgetMax].
+  hpBudget: 1,
+  hpBudgetMin: 0.5,
+  hpBudgetMax: 2.5,
   bossHpMult: 0.5,
   damageRampBase: 0.45, // 0.5 before v0.29, 0.55 before v0.31, 0.6 before v0.32 (gentler start, same late game)
   damageRampFrom: 10,
@@ -330,7 +341,8 @@ export const TUNING_SCHEMA = [
     items: [
       { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
       { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
-      { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' }
+      { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' },
+      { key: 'bossPackRate', label: 'Pack Rate During a Boss Wave\'s Fight', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' }
     ]
   },
   {
@@ -348,12 +360,14 @@ export const TUNING_SCHEMA = [
       { key: 'spawnWeightSwarm', label: 'Pack Weight: Boid Swarm', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSkirmish', label: 'Pack Weight: Pinwheels + Weavers', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSplitter', label: 'Pack Weight: Splitters', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 2+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 4+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 5+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightMayfly', label: 'Pack Weight: Mayfly Cloud (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 9+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 12+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightHulk', label: 'Pack Weight: Hulk (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 18+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 24+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
       { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
       { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
@@ -431,6 +445,11 @@ export const TUNING_SCHEMA = [
       { key: 'skirmishPackMax', label: 'Skirmish Pack: Max Hulls', type: 'range', min: 3, max: 99, step: 1, unit: '' },
       { key: 'splitterPackPerWave', label: 'Splitter Pack: Extra Splitters / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
       { key: 'splitterPackMax', label: 'Splitter Pack: Max Splitters', type: 'range', min: 2, max: 99, step: 1, unit: '' },
+      { key: 'mayflyPackPerWave', label: 'Mayfly Cloud: Extra Mayflies / Wave', type: 'range', min: 0, max: 4, step: 0.1, unit: '' },
+      { key: 'mayflyPackMax', label: 'Mayfly Cloud: Max Mayflies', type: 'range', min: 4, max: 80, step: 1, unit: '' },
+      { key: 'hpBudget', label: 'HP Budget: Match Pre-Campaign HP per Second', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'hpBudgetMin', label: 'HP Budget: Fastest Pack Pace', type: 'range', min: 0.2, max: 1, step: 0.05, unit: 'x' },
+      { key: 'hpBudgetMax', label: 'HP Budget: Slowest Pack Pace', type: 'range', min: 1, max: 5, step: 0.05, unit: 'x' },
       { key: 'bossHpMult', label: 'Boss HP (lieutenants follow)', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 'x' },
       { key: 'damageRampBase', label: 'Contact/Orb Damage Before the Ramp', type: 'range', min: 0.2, max: 3, step: 0.05, unit: 'x' },
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
