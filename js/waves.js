@@ -21,6 +21,7 @@ export const WAVE_PACKS = [
   { id: 'hulk', lead: 'hulk', weightKey: 'spawnWeightHulk' },
   { id: 'shielder', lead: 'shielder', weightKey: 'spawnWeightShielder' },
   { id: 'gate', lead: 'gate', weightKey: 'spawnWeightGate' },
+  { id: 'mitosis', lead: 'mitosis', weightKey: 'spawnWeightMitosis' },
   { id: 'conduit', lead: 'conduit', weightKey: 'spawnWeightConduit' }
 ].map(p => ({ ...p, get unlockWave() { return unlockWaveOf(p.lead); } }));
 
@@ -85,6 +86,8 @@ export function packRoster(id, wave, legacy = false) {
     }
     // One V: a leader and its wingmen (3 at first, 5 from nine waves after their debut).
     case 'kestrel': return [['kestrel', Math.min(5, 3 + 2 * Math.floor(s('kestrel') / 9))]];
+    // A small colony; each cell counts double for the HP budget (they grow and split if left alone).
+    case 'mitosis': return [['mitosis', Math.min(6, 3 + Math.floor(s('mitosis') / 6)) * 2]];
     case 'gate': return [['gate', Math.min(4, 2 + Math.floor(s('gate') / 6))]];
     case 'blinker': return [['blinker', packSize(Math.min(7, 3 + Math.floor(s('blinker') / 3)))]];
     case 'conduit': return [['conduit', 1], ['pinwheel', 3], ['bruiser', wave >= 8 ? 1 : 0]];

@@ -16,6 +16,7 @@ export const UNLOCK_WAVE = {
   blinker: 9, kestrel: 9,
   gunner: 12, carrier: 12, drone: 12,
   blackhole: 15, hulk: 15,
+  mitosis: 21,
   shielder: 18, gate: 18,
   conduit: 24
 };

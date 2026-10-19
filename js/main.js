@@ -178,7 +178,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -2111,12 +2111,15 @@ export class Game {
     // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
     const ranged = !!this.range?.active;
     if (ranged) this.range.onKill(e);
+    // A split boss (Progenitor) pays out only when its last piece dies; read that before the death burst
+    // queues the next generation.
+    const bossPay = e.isBoss && bossDef(e.type)?.isFinalPiece?.(e, this.enemyManager) !== false;
     if (e.isBoss) bossDef(e.type)?.onDeath?.(e, this.enemyManager);
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
     let bossBombGain = 0;
-    if (e.isBoss && !ranged) {
+    if (bossPay && !ranged) {
       const bombsBefore = this.player.bombs;
       this.player.bombs = Math.min(9, this.player.bombs + 1);
       bossBombGain = this.player.bombs - bombsBefore;
@@ -2162,7 +2165,7 @@ export class Game {
 
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
-    if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
+    if (bossPay) this.onBossDefeated(e, pts, bossBombGain);
     if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
     const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
@@ -2184,9 +2187,9 @@ export class Game {
     }
 
     const maxWaveCores = Math.ceil((TUNING.maxWaveCores ?? 3) * this.player.stats.coreDropMult);
-    if (e.isBoss || this.coresDroppedThisWave < maxWaveCores) {
+    if (bossPay || this.coresDroppedThisWave < maxWaveCores) {
       const coreChance = (
-        e.isBoss ? 1.0 :
+        bossPay ? 1.0 :
         e.type === 'blackhole' ? 0.55 :
         e.type === 'hulk' ? 0.3 :
         e.type === 'splitter' ? 0.08 :
@@ -2194,7 +2197,7 @@ export class Game {
       ) * this.player.stats.coreDropMult;
 
       if (Math.random() < coreChance) {
-        const coreDrops = e.isBoss ? (BOSS_TIER[e.bossTier]?.cores ?? 3) : 1;
+        const coreDrops = bossPay ? (BOSS_TIER[e.bossTier]?.cores ?? 3) : 1;
         this.coresDroppedThisWave += coreDrops;
         for (let c = 0; c < coreDrops; c++) {
           const ca = Math.random() * Math.PI * 2;
@@ -2613,6 +2616,13 @@ export class Game {
         const p2 = this.spawnPoint(SERPENT.gap * SERPENT.segments * 0.5);
         const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
         spawnSerpent(em, 'serpent', p2.x, p2.y, this.getWaveScale('serpent'), SERPENT.segments, { angle, extra: this.placedSpawn(p2) });
+      }
+    } else if (pack === 'mitosis') {
+      // A colony round one point (the roster doubles the head count for the HP budget).
+      const n = Math.ceil(count('mitosis') / 2);
+      for (let i = 0; i < n; i++) {
+        const c = packMemberPoint(this, pt, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90);
+        em.queueSpawn('mitosis', c.x, c.y, this.getWaveScale('mitosis'), this.placedSpawn(c));
       }
     } else if (pack === 'carrier') {
       // The roster's drones are launched by the carriers over time, not spawned with them.

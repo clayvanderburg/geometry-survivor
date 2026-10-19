@@ -146,6 +146,8 @@ export class EnemyManager {
     // Hulls whose time is up without a killing blow (a serpent body unzipping after its head died):
     // the game drains this every tick and pops each through its normal kill path.
     this.doomed = [];
+    // Hulls absorbed this tick (a merging Progenitor piece): removed after the update loop, no kill.
+    this.discarded = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
     // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
@@ -173,6 +175,7 @@ export class EnemyManager {
     this.bossArrivals = [];
     this.lieutenantArrivals = [];
     this.doomed = [];
+    this.discarded = [];
     this.enemyBullets.clear();
   }
 
@@ -354,6 +357,13 @@ export class EnemyManager {
     }
   }
 
+  // Remove a hull without killing it (no rewards, no death burst), safely during the update loop.
+  discard(e) {
+    if (e.dead || e.discarded) return;
+    e.discarded = true;
+    this.discarded.push(e);
+  }
+
   // Wave scale a boss's escorts are spawned at (the boss's own wave, light fodder kept light).
   waveScaleFor(type, wave) {
     return waveScaleAt(Math.max(1, wave || this.wave), { light: LIGHT_ENEMY_TYPES.has(type) });
@@ -464,7 +474,8 @@ export class EnemyManager {
         }
         this.enemies.push(spawned);
         this.onSpawn?.(spawned); // run stats (Game sets it): spawn time and per-type spawn counts
-        if (spawned.isBoss) {
+        if (spawned.isBoss && !spawned.splitChild) {
+          // A split piece of a boss already in play (Progenitor) is not a new arrival.
           this.bossArrivals.push(spawned);
           bossDef(spawned.type)?.onArrive?.(spawned, this);
         }
@@ -708,6 +719,13 @@ export class EnemyManager {
         if (e.trail.length > 6) e.trail.shift();
       } else if (e.trail.length) {
         e.trail.length = 0; // a finished charge drops its ribbon
+      }
+    }
+    if (this.discarded.length) {
+      for (const e of this.discarded.splice(0)) {
+        const i = this.enemies.indexOf(e);
+        if (i !== -1) this.enemies.splice(i, 1);
+        e.dead = true;
       }
     }
   }

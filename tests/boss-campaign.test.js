@@ -517,3 +517,53 @@ test('the Architect builds gates round the ship and, from half HP, drops closing
   step(m, player, 60 * 2);
   assert.ok(Math.hypot(cage[0].x - player.x, cage[0].y - player.y) < r0 - 30, 'the cage closes in');
 });
+
+test('mitosis cells grow, then split in two, up to the field cap', async () => {
+  resetTuning();
+  const { MITOSIS } = await import('../js/hostiles.js');
+  const m = new EnemyManager();
+  const player = { x: 3400, y: 2000 };
+  m.queueSpawn('mitosis', 2000, 2000, 1, { instant: true });
+  step(m, player, 2);
+  const c = m.enemies.find(e => e.type === 'mitosis');
+  const r0 = c.radius;
+  const hp0 = c.maxHp;
+  step(m, player, Math.ceil(MITOSIS.growTime * 60 * 0.5));
+  assert.ok(c.radius > r0 * 1.2 && c.maxHp > hp0 * 1.2, 'it grows');
+  step(m, player, Math.ceil(MITOSIS.growTime * 60 * 0.5) + 4);
+  assert.equal(m.enemies.filter(e => e.type === 'mitosis').length, 2, 'then splits in two');
+  assert.ok(c.radius < r0 * 1.1, 'and shrinks back');
+  step(m, player, Math.ceil(MITOSIS.growTime * 60 * 6));
+  assert.ok(m.enemies.filter(e => e.type === 'mitosis').length <= MITOSIS.cap, 'capped');
+});
+
+test('Progenitor: splits 1 → 2 → 4 → mitosis cells; pieces merge when left alone; only the last piece pays out', async () => {
+  resetTuning();
+  const { PROG } = await import('../js/bosses.js');
+  const g = campaignGame({ wave: 21 });
+  const m = g.enemyManager;
+  m.queueSpawn('progenitor', 2400, 2000, waveScaleAt(21), { instant: true, wave: 21 });
+  step(m, g.player, 3);
+  m.bossArrivals.length = 0;
+  const root = m.enemies.find(e => e.type === 'progenitor');
+  assert.equal(root.gen, 0);
+  const pieces = () => m.enemies.filter(e => e.type === 'progenitor' && !e.dead);
+  g.killEnemy(root);
+  step(m, g.player, 2);
+  assert.equal(pieces().length, PROG.children, 'gen 1');
+  assert.equal(g.chests.length, 0, 'no boss payout yet');
+  assert.equal(m.bossArrivals.length, 0, 'split pieces are not new arrivals');
+  // Left alone, the two gen-1 pieces drift together and merge back into one gen-0 cell.
+  for (const p of pieces()) { p.sinceHit = 99; p.x = 2400; p.y = 2000 + (p === pieces()[0] ? -20 : 20); }
+  step(m, g.player, 3);
+  assert.equal(pieces().length, 1, 'merged');
+  assert.equal(pieces()[0].gen, 0);
+  // Split it all the way down.
+  for (let guard = 0; guard < 20 && pieces().length; guard++) {
+    for (const p of pieces()) g.killEnemy(p);
+    step(m, g.player, 2);
+  }
+  assert.equal(pieces().length, 0);
+  assert.equal(g.chests.length, 1, 'exactly one boss payout');
+  assert.ok(m.enemies.some(e => e.type === 'mitosis'), 'the last generation bursts into mitosis cells');
+});

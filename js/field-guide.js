@@ -7,8 +7,8 @@
 import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
-import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, bossBuilt } from './bosses.js';
+import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS } from './hostiles.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, bossBuilt } from './bosses.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
@@ -88,6 +88,11 @@ export const HOSTILE_ENTRIES = [
     id: 'mayfly', name: 'MAYFLY', group: 'swarm', unlockWave: unlockWaveOf('mayfly'),
     what: () => `Lime specks that come in clouds of a dozen or more. Every ${secs(MAYFLY.jitterMin)}–${secs(MAYFLY.jitterMax)} each one snaps to a new heading within about ${Math.round(MAYFLY.spread * 180 / Math.PI)}° of your ship, so the cloud twitches in without a line to lead. One hit kills; contact stings for half a normal hit. Debuts with the Brood Queen.`,
     tip: 'Never park in a cloud. Strafe across its edge and sweep it: spread shots, lightning and orbit blades clear them fast.'
+  },
+  {
+    id: 'mitosis', name: 'MITOSIS CELL', group: 'swarm', unlockWave: unlockWaveOf('mitosis'),
+    what: () => `A lime cell that wobbles toward you while it grows: over ${secs(MITOSIS.growTime)} it swells to ${MITOSIS.maxScale}× its size and HP, pinches in the middle, and splits into two small cells. Colonies keep doubling until there are ${MITOSIS.cap} on the field. Debuts with the Progenitor.`,
+    tip: 'Kill them small and early. A colony left alone is twice the problem every few seconds.'
   },
   {
     id: 'drone', name: 'DRONE', group: 'swarm', unlockWave: unlockWaveOf('drone'),
@@ -184,6 +189,11 @@ export const HOSTILE_ENTRIES = [
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
     what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${bossGrindText()}`,
     tip: 'Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early, and the blast takes the rest of the ring.'
+  },
+  {
+    id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
+    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${bossGrindText()}`,
+    tip: 'Keep up the pressure on every piece: one left alone heals and finds a partner. Finish the smallest ones before they merge.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

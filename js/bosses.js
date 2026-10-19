@@ -11,7 +11,7 @@
 import { TUNING } from './config.js';
 import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
-import { launchDrones } from './hostiles.js';
+import { launchDrones, traceCell } from './hostiles.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -730,6 +730,123 @@ const architect = {
   }
 };
 
+// --- PROGENITOR (wave 21, minor) -------------------------------------------------------------
+// A giant cell that splits like an Asteroids rock: kill it and it divides into 2 smaller cells, those
+// into 2 more each, and the last generation bursts into Mitosis Cells. Pieces left alone knit back:
+// unhit for a while they heal, then drift together and merge into the generation above. The boss is
+// beaten (and pays out) when its last piece dies. The first cell buds Mitosis Cells as it goes.
+export const PROG = {
+  gens: [ // per generation: share of the boss HP each piece gets, radius, speed
+    { hp: 0.45, radius: 46, speed: 1.1 },
+    { hp: 0.25, radius: 32, speed: 1.6 },
+    { hp: 0.12, radius: 22, speed: 2.1 }
+  ],
+  children: 2, cells: 2, budEvery: 5, mergeAfter: 4, regen: 0.03, mergeSpeed: 0.12
+};
+
+// Live pieces of one Progenitor (every generation), and queued ones.
+function piecesOf(root, m) {
+  let n = 0;
+  for (const o of m.enemies) if (o.root === root && !o.dead) n++;
+  for (const sp of m.spawnIndicators) if (sp.config.attach?.root === root) n++;
+  return n;
+}
+
+function spawnPiece(m, root, gen, x, y, vx, vy, hp) {
+  const g = PROG.gens[gen];
+  return m.queueSpawn('progenitor', x, y, 1, {
+    instant: true, wave: root.bossWave, vx, vy,
+    attach: { root, gen, splitChild: true, hp, maxHp: g.hp * root.fullHp, radius: g.radius, speed: g.speed, regen: PROG.regen, sinceHit: 0 }
+  });
+}
+
+const progenitor = {
+  name: 'PROGENITOR', epithet: 'IT IS ALL OF THEM', tier: 'minor', hue: 95, debut: ['mitosis'],
+  stats: () => ({ speed: PROG.gens[0].speed, radius: PROG.gens[0].radius, sides: 9, vRot: 0.01 }),
+  onArrive(e) {
+    e.root = e;
+    e.gen = 0;
+    e.fullHp = e.maxHp;
+    e.maxHp = e.hp = e.fullHp * PROG.gens[0].hp;
+    e.regen = PROG.regen;
+    e.aiTimer = PROG.budEvery;
+  },
+  // Only the last piece standing counts as the boss going down (rewards, card).
+  isFinalPiece(e, m) {
+    if ((e.gen ?? 0) < PROG.gens.length - 1) return false; // it splits into the next generation
+    return !e.root || piecesOf(e.root, m) === 0;
+  },
+  update(e, m, env) {
+    const { dt } = env;
+    if (e.discarded) return; // absorbed by a sibling this tick
+    const unhit = e.sinceHit > PROG.mergeAfter;
+    let mate = null;
+    if (e.gen > 0 && unhit) {
+      // Left alone: find a sibling of the same generation (also unhit) and drift together to merge.
+      let best = Infinity;
+      for (const o of m.enemies) {
+        if (o === e || o.dead || o.discarded || o.root !== e.root || o.gen !== e.gen || !(o.sinceHit > PROG.mergeAfter)) continue;
+        const d = Math.hypot(o.x - e.x, o.y - e.y);
+        if (d < best) { best = d; mate = o; }
+      }
+      if (mate && best < (e.radius + mate.radius) * 0.8) {
+        // Merge: the pair becomes one piece of the generation above with their summed HP.
+        const up = PROG.gens[e.gen - 1];
+        m.discard(mate); // absorbed: gone at the end of this tick, no kill, no reward
+        e.gen -= 1;
+        e.maxHp = up.hp * e.root.fullHp;
+        e.hp = Math.min(e.maxHp, e.hp + mate.hp);
+        e.radius = up.radius;
+        e.speed = up.speed;
+        env.particles?.spawnShockwave?.(e.x, e.y, e.radius * 3, e.hue, 3, 0.35);
+        return;
+      }
+    }
+    const tx = mate ? (mate.x - e.x) : env.moveX;
+    const ty = mate ? (mate.y - e.y) : env.moveY;
+    const len = Math.hypot(tx, ty) || 1;
+    const gain = mate ? PROG.mergeSpeed * 2 : 0.1;
+    e.vx = (e.vx + (tx / len) * gain) * 0.94;
+    e.vy = (e.vy + (ty / len) * gain) * 0.94;
+    if (e.gen === 0) {
+      e.aiTimer -= dt;
+      if (e.aiTimer <= 0) {
+        e.aiTimer = PROG.budEvery;
+        const a = Math.random() * Math.PI * 2;
+        m.queueSpawn('mitosis', e.x + Math.cos(a) * e.radius, e.y + Math.sin(a) * e.radius, m.waveScaleFor('mitosis', e.bossWave), {
+          instant: true, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3
+        });
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    traceCell(ctx, { pulsePhase: e.pulsePhase, growT: 0 }, r);
+    // A ring of smaller nuclei: the cells it holds.
+    const n = 3 + (2 - (e.gen || 0)) * 2;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + e.pulsePhase * 0.1;
+      const x = Math.cos(a) * r * 0.55;
+      const y = Math.sin(a) * r * 0.55;
+      ctx.moveTo(x + r * 0.12, y);
+      ctx.arc(x, y, r * 0.12, 0, Math.PI * 2);
+    }
+  },
+  onDeath(e, m) {
+    const gen = e.gen || 0;
+    const n = gen + 1 < PROG.gens.length ? PROG.children : PROG.cells;
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const vx = Math.cos(a) * 4;
+      const vy = Math.sin(a) * 4;
+      if (gen + 1 < PROG.gens.length) {
+        spawnPiece(m, e.root || e, gen + 1, e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 12, vx, vy, PROG.gens[gen + 1].hp * (e.root || e).fullHp);
+      } else {
+        m.queueSpawn('mitosis', e.x + Math.cos(a) * 10, e.y + Math.sin(a) * 10, m.waveScaleFor('mitosis', e.bossWave), { instant: true, vx, vy });
+      }
+    }
+  }
+};
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -789,7 +906,8 @@ export const BOSS_DEFS = {
   wing_commander: wingCommander,
   hive_carrier: hiveCarrier,
   event_horizon: eventHorizon,
-  architect
+  architect,
+  progenitor
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

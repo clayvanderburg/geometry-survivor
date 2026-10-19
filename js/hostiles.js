@@ -7,6 +7,7 @@
 //   KESTREL — darts in V formation making strafing runs (js/squadrons.js); kill the leader to scatter them.
 //   CARRIER — hangs back at range and launches homing DRONES (tiny kamikazes that burn out after a while).
 //   GATE    — two pylons and a beam (js/gates.js): fly through the beam to detonate it, shoot the hub to break it.
+//   MITOSIS — a cell that slowly grows and, at full size, splits in two. Kill it early.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
 import { SERPENT, windToward } from './serpents.js';
@@ -16,6 +17,7 @@ import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
 
 export const CARRIER = { range: 430, band: 70, launchEvery: 3.2, launch: 2, maxDrones: 6 };
 export const DRONE = { speed: 4.3, turnRate: 2.6, life: 7, launchKick: 3.5 };
+export const MITOSIS = { growTime: 7, maxScale: 1.8, cap: 26, wobble: 0.35 };
 
 export const MAYFLY = { jitterMin: 0.12, jitterMax: 0.38, spread: 1.25, burst: 1.6 };
 export const HULK = { knockMult: 0.1, contactMult: 1.8 };
@@ -28,6 +30,7 @@ export const HOSTILE_INFO = {
   kestrel: { label: 'KESTREL WING', unlockWave: unlockWaveOf('kestrel'), intro: 'V FORMATIONS ON STRAFING RUNS · SIDESTEP THE LINE — DOWN THE LEADER TO SCATTER THEM' },
   carrier: { label: 'CARRIER', unlockWave: unlockWaveOf('carrier'), intro: 'HANGS BACK AND LAUNCHES HOMING DRONES — CHASE IT DOWN OR OUTRUN THE DRONES' },
   gate: { label: 'LASER GATE', unlockWave: unlockWaveOf('gate'), intro: 'FLY THROUGH THE BEAM TO DETONATE IT · THE PYLONS HURT — LURE A CROWD CLOSE FIRST' },
+  mitosis: { label: 'MITOSIS CELL', unlockWave: unlockWaveOf('mitosis'), intro: 'GROWS, THEN SPLITS IN TWO · KILL IT WHILE IT IS SMALL' },
   drone: { label: 'DRONE', unlockWave: unlockWaveOf('drone'), intro: 'HOMING KAMIKAZE FROM A CARRIER · BURNS OUT AFTER A FEW SECONDS — KEEP MOVING' }
 };
 
@@ -79,6 +82,13 @@ export function hostileKindStats(type, waveScale) {
         radius: 13, sides: 4, hue: 55, // Hazard yellow
         score: 150, xp: 5, vRot: 0, knockMult: 0.2
       };
+    case 'mitosis':
+      return {
+        hp: 22 * waveScale, maxHp: 22 * waveScale,
+        speed: 1.5 + Math.min(0.6, waveScale * 0.04),
+        radius: 11, sides: 7, hue: 95, // Cytoplasm lime
+        score: 50, xp: 2, vRot: 0.02
+      };
     case 'drone':
       return {
         hp: 6 * waveScale, maxHp: 6 * waveScale,
@@ -92,7 +102,7 @@ export function hostileKindStats(type, waveScale) {
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2, mitosis: 1 };
 
 // Fast movers that leave a neon ribbon.
 export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel', 'drone']);
@@ -155,6 +165,40 @@ export function launchDrones(e, m, n, cap, waveScale) {
   }
 }
 
+// Wobbles toward the ship while it grows (radius and max HP scale up together); at full size it splits:
+// it shrinks back and a twin buds off beside it, unless the field already holds MITOSIS.cap cells.
+function updateMitosis(e, m, env) {
+  const { dt } = env;
+  e.baseRadius ||= e.radius;
+  e.baseMaxHp ||= e.maxHp;
+  e.growT = (e.growT || 0) + dt;
+  const k = Math.min(1, e.growT / MITOSIS.growTime);
+  const scale = 1 + (MITOSIS.maxScale - 1) * k;
+  const maxHp = e.baseMaxHp * scale;
+  e.hp += maxHp - e.maxHp; // growing heals by the same amount the max rises
+  e.maxHp = maxHp;
+  e.radius = e.baseRadius * scale;
+  const w = Math.sin(e.pulsePhase * 0.5) * MITOSIS.wobble;
+  e.vx = (e.vx + (env.moveX - env.dirY * w) * 0.12 + env.sepX) * 0.93;
+  e.vy = (e.vy + (env.moveY + env.dirX * w) * 0.12 + env.sepY) * 0.93;
+  if (k < 1) return;
+  let cells = 0;
+  for (const o of m.enemies) if (o.type === 'mitosis' && !o.dead) cells++;
+  for (const sp of m.spawnIndicators) if (sp.type === 'mitosis') cells++;
+  if (cells >= MITOSIS.cap) return; // crowded: it stays big until room frees up
+  const a = Math.random() * Math.PI * 2;
+  const frac = Math.max(0.2, e.hp / e.maxHp);
+  e.growT = 0;
+  e.maxHp = e.baseMaxHp;
+  e.hp = e.baseMaxHp * frac;
+  e.radius = e.baseRadius;
+  e.knockX += Math.cos(a) * 3;
+  e.knockY += Math.sin(a) * 3;
+  m.queueSpawn('mitosis', e.x - Math.cos(a) * e.radius, e.y - Math.sin(a) * e.radius, m.waveScaleFor('mitosis', m.wave), {
+    instant: true, vx: -Math.cos(a) * 3, vy: -Math.sin(a) * 3
+  });
+}
+
 // Homes on the ship with a limited turn rate; burns out (no reward) after DRONE.life seconds.
 function updateDrone(e, m, env) {
   e.lifeT = (e.lifeT ?? DRONE.life) - env.dt;
@@ -169,7 +213,7 @@ function updateDrone(e, m, env) {
   e.rotation = Math.atan2(e.vy, e.vx);
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate };
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate, mitosis: updateMitosis };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {
@@ -213,6 +257,8 @@ export function traceHostileKind(ctx, e, r) {
     ctx.arc(r * 0.6, 0, r * 0.15, 0, Math.PI * 2);
   } else if (e.type === 'gate') {
     traceGate(ctx, e, r);
+  } else if (e.type === 'mitosis') {
+    traceCell(ctx, e, r);
   } else if (e.type === 'drone') {
     ctx.moveTo(r * 1.4, 0);
     ctx.lineTo(-r, r * 0.8);
@@ -244,6 +290,26 @@ export function drawHostileOverlay(ctx, e, r) {
   ctx.beginPath();
   ctx.arc(e.x, e.y, r * 1.3 + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
   ctx.stroke();
+}
+
+// A wobbling membrane round one nucleus that pinches into two as the cell nears its split.
+export function traceCell(ctx, e, r) {
+  const k = Math.min(1, (e.growT || 0) / MITOSIS.growTime);
+  const n = 14;
+  for (let s = 0; s <= n; s++) {
+    const a = (s / n) * Math.PI * 2;
+    const pinch = 1 - 0.25 * k * k * Math.abs(Math.sin(a)); // waist forms across the split axis
+    const wob = 1 + Math.sin(a * 3 + e.pulsePhase) * 0.06;
+    const x = Math.cos(a) * r * wob * (1 + 0.15 * k);
+    const y = Math.sin(a) * r * wob * pinch;
+    if (s === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  const off = r * 0.45 * k;
+  for (const x of off > 1 ? [off, -off] : [0]) {
+    ctx.moveTo(x + r * 0.3, 0);
+    ctx.arc(x, 0, r * 0.3, 0, Math.PI * 2);
+  }
 }
 
 function polygon(ctx, sides, radius, phase) {

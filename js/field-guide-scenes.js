@@ -385,6 +385,32 @@ const SCENES = {
     },
     noContactKill: true
   },
+  mitosis: {
+    w: 520, loop: 12,
+    setup(s) { s.home(0.82, 0.5); s.spawn('mitosis', s.W * 0.25, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.82, s.H * 0.5, 30, 1);
+      // Hold fire a while so the cell grows and splits, then clean up.
+      if (s.t > 8) s.autoFire(0.12);
+      if (s.count() === 0 && s.every(1)) s.spawn('mitosis', s.W * 0.2, s.H * 0.5);
+    }
+  },
+  progenitor: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('progenitor', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.8, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.isBoss);
+      // Split it down quickly: whenever a piece is hit, finish it.
+      if (s.t > 3 && s.every(1.4)) { const q = s.manager.enemies.find(e => e.isBoss && !e.dead); if (q) s.kill(q); }
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -713,7 +739,7 @@ const SILHOUETTE = {
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
   carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
-  gate: ['gate', 200], architect: ['architect', 260]
+  gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {
