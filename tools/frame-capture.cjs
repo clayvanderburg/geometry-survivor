@@ -75,7 +75,7 @@ const SCENES = {
       let s = 1234567;
       Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
       if (range) try { localStorage.setItem('vexolith_weapon_range', range); } catch {}
-      try { localStorage.setItem('vexolith_tutorial_seen', '1'); } catch {}
+      try { localStorage.setItem('vexolith_tutorial_seen', '1'); localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {}
     }, { range });
     const page = await context.newPage();
     const errors = [];

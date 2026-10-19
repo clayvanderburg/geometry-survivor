@@ -1792,6 +1792,55 @@ body.touch-mode .upgrade-slot-reward { margin: 0 0 8px; }
 body.touch-mode .upgrade-slot-reward .upg-slot-reward { min-width: 0; padding: 4px 8px; }
 body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 
+/* On the NEW WEAPON card the slot bonus is the message: big, centred, gently pulsing. */
+.upgrade-option.new-weapon-card .upg-slot-reward {
+  margin: 14px 0 8px;
+  padding: 16px 10px 14px;
+  gap: 6px;
+  border-width: 2px;
+  animation: slot-reward-pulse 1.2s ease-in-out infinite alternate;
+}
+.upgrade-option.new-weapon-card .upg-slot-reward-label { font-size: 11px; letter-spacing: 3px; }
+.upgrade-option.new-weapon-card .upg-slot-reward b { font-size: 30px; line-height: 1.05; letter-spacing: 1.5px; }
+.upgrade-option.new-weapon-card .upg-slot-reward-text { font-size: 12.5px; }
+@keyframes slot-reward-pulse {
+  from { box-shadow: 0 0 10px rgba(255, 216, 77, 0.25), inset 0 0 10px rgba(255, 216, 77, 0.1); }
+  to { box-shadow: 0 0 26px rgba(255, 216, 77, 0.55), inset 0 0 16px rgba(255, 216, 77, 0.2); }
+}
+@media (prefers-reduced-motion: reduce) { .upgrade-option.new-weapon-card .upg-slot-reward { animation: none; } }
+
+/* One-time tip on slot bonuses, over the level-up hand the first time a NEW WEAPON card shows up. */
+.slot-tip {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 4, 12, 0.78);
+  backdrop-filter: blur(3px);
+}
+.slot-tip-card {
+  width: min(520px, 100%);
+  padding: 22px 22px 18px;
+  border-radius: 14px;
+  border: 2px solid #ffd84d;
+  background: linear-gradient(180deg, rgba(44, 28, 8, 0.97), rgba(10, 12, 26, 0.98));
+  box-shadow: 0 0 40px rgba(255, 216, 77, 0.35);
+  text-align: center;
+}
+.slot-tip-kicker { font-size: 11px; font-weight: 800; letter-spacing: 3px; color: #ffb37a; }
+.slot-tip-title { margin: 6px 0 8px; font-size: 26px; letter-spacing: 2px; color: #ffd84d; text-shadow: 0 0 14px rgba(255, 216, 77, 0.6); }
+.slot-tip-line { margin: 0 0 14px; font-size: 14px; color: #ffe9b0; line-height: 1.4; }
+.slot-tip-rewards { display: flex; flex-direction: column; gap: 5px; max-width: 340px; margin: 0 auto 16px; }
+.slot-tip-reward { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 216, 77, 0.55); background: rgba(255, 216, 77, 0.08); }
+.slot-tip-reward span { font-size: 10.5px; font-weight: 800; letter-spacing: 1.5px; color: #ffb37a; }
+.slot-tip-reward b { font-size: 14px; color: #ffd84d; letter-spacing: 0.5px; }
+.slot-tip-reward.reward-breakthrough { border-color: #38f2d0; background: rgba(56, 242, 208, 0.08); }
+.slot-tip-reward.reward-breakthrough b { color: #7dffe6; }
+.slot-tip-ok { margin: 0 auto; min-width: 160px; }
+
 /* The NEW WEAPON pick (1 of 3 weapons): the whole window turns armory orange, and each card leads with
    the weapon's name in its tier colour instead of a white "+N" stat headline. */
 #upgrade-modal.phase-weapon .modal-card {
@@ -4150,9 +4199,13 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline { font-size
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-level { font-size: 10px; margin-top: 6px; padding-top: 5px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-jump-ribbon { font-size: 9px; padding: 2px 8px; }
 /* The slot reward stays on compact cards (it is why to take NEW WEAPON), minus its long line. */
-body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward { margin: 6px 0 2px; padding: 4px 6px; }
-body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward b { font-size: 13px; }
-body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-text { display: none; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward { margin: 6px 0 2px; padding: 8px 6px; gap: 3px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward b { font-size: 18px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-label { font-size: 8.5px; letter-spacing: 1.5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-text { font-size: 10px; }
+body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
+body.touch-mode .slot-tip-title { font-size: 20px; }
+body.touch-mode .slot-tip-line { font-size: 12.5px; margin-bottom: 10px; }
 body.touch-mode .card-lock-toggle,
 body.touch-mode .card-banish-toggle { font-size: 10px; padding: 3px 8px; margin-top: 6px; }
 body.touch-mode .card-more-btn {
