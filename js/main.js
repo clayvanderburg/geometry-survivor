@@ -148,6 +148,7 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 // Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
+const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
 
@@ -361,6 +362,8 @@ export class Game {
     this.pendingBossSpawns = [];
     this.bossCard = null;
     this.bossCardTimer = 0;
+    this.novaCalloutTimer = 0;
+    this.novaCalloutDone = false;
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -2459,6 +2462,50 @@ export class Game {
     this.logGuideEntries([e.type]);
     const kicker = (BOSS_TIER[e.bossTier] || BOSS_TIER.minor).kicker;
     this.showBossCard('arrival', kicker, e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+    // The run's first boss: remind the pilot the Supernova bombs exist (a bomb strips 40% of a boss's HP).
+    if (!this.novaCalloutDone && this.player?.bombs > 0 && !this.range?.active) {
+      this.novaCalloutDone = true;
+      this.novaCalloutTimer = NOVA_CALLOUT_TIME;
+    }
+  }
+
+  // The first-boss bomb reminder: a big banner plus a dashed arrow curving from it to the bomb counter
+  // (the NOVA button on touch), which glows while the arrow points at it.
+  updateNovaCallout() {
+    const el = document.getElementById('nova-callout');
+    const arrow = document.getElementById('nova-callout-arrow');
+    const on = this.novaCalloutTimer > 0;
+    setHidden(el, !on);
+    setHidden(arrow, !on);
+    for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[on ? 'add' : 'remove']('nova-callout-target');
+    if (!on || !el || !arrow) return;
+    const fading = this.novaCalloutTimer < 0.45;
+    el.classList[fading ? 'add' : 'remove']('nova-callout-out');
+    arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
+    const how = this.gpActive ? 'PRESS B' : this.touchMode ? 'TAP NOVA' : 'PRESS E';
+    const n = this.player?.bombs ?? 0;
+    const sub = `${how} · YOU HAVE ${n} · EACH ONE TEARS 40% OFF A BOSS`;
+    const subEl = document.getElementById('nova-callout-sub');
+    if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+
+    // Arrow: leaves the banner edge nearest the target and curves into the target's facing side.
+    const target = document.getElementById(this.touchMode ? 'touch-nova' : 'nova-indicator');
+    const t = target?.getBoundingClientRect?.();
+    const c = el.getBoundingClientRect?.();
+    const box = arrow.getBoundingClientRect?.();
+    let d = '';
+    if (t && c && box && t.width > 0) {
+      const tx = t.left + t.width / 2;
+      const above = t.bottom < c.top;
+      const sx = Math.max(c.left + 40, Math.min(c.right - 40, tx));
+      const sy = above ? c.top - 6 : c.bottom + 6;
+      const ex = tx;
+      const ey = above ? t.bottom + 10 : t.top - 10;
+      const r = (v) => Math.round(v);
+      d = `M${r(sx - box.left)},${r(sy - box.top)} Q${r(ex - box.left)},${r(sy - box.top)} ${r(ex - box.left)},${r(ey - box.top)}`;
+    }
+    const path = document.getElementById('nova-callout-path');
+    if (path && path.getAttribute?.('d') !== d) path.setAttribute?.('d', d);
   }
 
   // Defeat payoff: hit-stop then half-speed slow-mo (counted in fixed ticks), a gold flash,
@@ -4761,6 +4808,7 @@ export class Game {
     }
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
+    if (this.novaCalloutTimer > 0) this.novaCalloutTimer = Math.max(0, this.novaCalloutTimer - dt);
     if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
     if (held) {
       this.updateHUD();
@@ -5273,6 +5321,7 @@ export class Game {
     }
 
     this.updateBossHUD(this.getBossHudModel());
+    this.updateNovaCallout();
     this.updateLieutenantHUD();
     this.updateGuideToast();
   }
