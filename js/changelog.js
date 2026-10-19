@@ -12,6 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.35.0',
+    date: '2026-10-19',
+    title: 'Element Infusion',
+    notes: [
+      { type: 'new', text: 'ELEMENTS: give Autocannon, Rocket Pods, Swarm Missiles, Tesla Arc or Plasma Grenades FIRE, FROST, CORROSIVE or SHOCK from level-up cards. Each rank is a weapon level.' },
+      { type: 'new', text: 'Your pick is locked for that weapon: supply caches never hand out or swap elements. More cards of the same element make it stronger.' },
+      { type: 'new', text: 'SHOCK stuns: 0.3 s per hit, 30% chance of a 1.5 s stun. Stunned enemies stop moving and shooting, then shrug stuns off for 1 s. Bosses barely notice.' },
+      { type: 'new', text: 'STATUS cards: Status Potency, Application, Duration, Shock Conductor and an Amplifier per element. They show up once a weapon has a matching element.' },
+      { type: 'balance', text: 'Thermite Rounds, Cryo Payload and Nanite Swarm are now per-weapon element cards; Supercritical needs crit chance LV 2 plus any weapon with an element.' }
+    ]
+  },
+  {
     version: '0.34.1',
     date: '2026-10-19',
     title: 'Tougher Bosses',

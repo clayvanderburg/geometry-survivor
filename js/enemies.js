@@ -16,6 +16,9 @@ import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './ser
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
 const CHILL_GLOW = 'rgba(120, 225, 255, 0.75)';
+// Stunned (SHOCK) hulls flicker electric yellow-white over their own hue.
+const STUN_GLOW = 'rgba(244, 255, 82, 0.8)';
+const STUN_FLASH = '#fbffc4';
 // A guarded spawn (every placed spawn from Game) never materializes within spawnMinDist of the ship:
 // fully charged, it waits for the ship to back off, and after SPAWN_HOLD_MAX seconds it moves to a
 // fresh point from `relocateSpawn` (set by Game) with a new telegraph.
@@ -505,7 +508,10 @@ export class EnemyManager {
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
       const e = enemies[i];
-      e.rotation += e.vRot;
+      // SHOCK stun (status-effects.js): the hull freezes in place, no steering, no attacks, no spin. Gravity
+      // drift and knockback still move it, and touching it still hurts.
+      const stunned = e.st !== undefined && e.st.stunT > 0;
+      if (!stunned) e.rotation += e.vRot;
       e.pulsePhase += dt * 6;
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt * 6);
       if (e.leader) {
@@ -531,136 +537,144 @@ export class EnemyManager {
         this.enemyIndex.update(e);
         continue;
       }
-      // Chasers bend their approach round rock that blocks the line to the ship (see pursuit.js).
-      steerAroundRocks(e, dirX, dirY, distPlayer, this.terrain, dt, (tick + i) % PROBE_TICKS === 0, steer);
-      const moveX = steer.x;
-      const moveY = steer.y;
-      env.moveX = moveX;
-      env.moveY = moveY;
-      if (isArchetype(e.type)) this.softSeparation(e, i, enemyOrder, maxRadius, env);
-      if (updateArchetype(e, this, env)) {
-        // Driven by archetypes.js (Bruiser, Gunner, Shielder, Blinker, Conduit).
-      } else if (isHostileKind(e.type)) {
-        this.softSeparation(e, i, enemyOrder, maxRadius, env);
-        updateHostileKind(e, this, env);
-      } else if (isBossKind(e.type)) {
-        bossDef(e.type).update(e, this, env);
-      } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
-        // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
-      } else if (e.type === 'swarmer') {
-        // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
-        let sepX = 0, sepY = 0;
-        let alignX = 0, alignY = 0;
-        let cohX = 0, cohY = 0;
-        let neighbors = 0;
-
-        // Query only nearby enemies while retaining the original sampling parity.
-        const step = len > 90 ? 2 : 1;
-        for (const other of this.enemyIndex.query(e.x, e.y, 80)) {
-          const j = enemyOrder.get(other);
-          if (i === j || j % step !== i % step) continue;
-          const ox = other.x - e.x;
-          const oy = other.y - e.y;
-          const dSq = ox * ox + oy * oy;
-          if (dSq < 6400 && dSq > 0.01) { // within 80px
-            const d = Math.sqrt(dSq);
-            if (d < 28) {
-              sepX -= (ox / d) * (28 - d) * 0.12;
-              sepY -= (oy / d) * (28 - d) * 0.12;
-            }
-            if (other.type === 'swarmer') {
-              alignX += other.vx;
-              alignY += other.vy;
-              cohX += other.x;
-              cohY += other.y;
-              neighbors++;
-            }
-          }
-        }
-
-        let steerX = moveX * 0.42 + sepX;
-        let steerY = moveY * 0.42 + sepY;
-
-        if (neighbors > 0) {
-          alignX /= neighbors;
-          alignY /= neighbors;
-          cohX = cohX / neighbors - e.x;
-          cohY = cohY / neighbors - e.y;
-          const cohLen = Math.hypot(cohX, cohY) || 1;
-          steerX += alignX * 0.08 + (cohX / cohLen) * 0.14;
-          steerY += alignY * 0.08 + (cohY / cohLen) * 0.14;
-        }
-
-        // Sinusoidal swarm swirl
-        const swirl = Math.sin(e.pulsePhase * 0.7 + i) * 0.22;
-        steerX += -dirY * swirl;
-        steerY += dirX * swirl;
-
-        e.vx = (e.vx + steerX) * 0.92;
-        e.vy = (e.vy + steerY) * 0.92;
-      } else if (e.type === 'weaver') {
-        // Emerald Weaver: dodges incoming player bullets!
-        let dodgeX = 0;
-        let dodgeY = 0;
-        for (const b of this.bulletIndex.query(e.x, e.y, 120)) {
-          const bx = e.x - b.x;
-          const by = e.y - b.y;
-          const dSq = bx * bx + by * by;
-          if (dSq < 14400) { // within 120px
-            // Check if bullet is heading toward weaver
-            const dot = bx * b.vx + by * b.vy;
-            if (dot > 0) {
-              // Perpendicular dodge vector
-              const cross = bx * b.vy - by * b.vx;
-              const sign = cross >= 0 ? 1 : -1;
-              const bSpd = Math.hypot(b.vx, b.vy) || 1;
-              dodgeX += (-b.vy / bSpd) * sign * 1.35;
-              dodgeY += (b.vx / bSpd) * sign * 1.35;
-            }
-          }
-        }
-        e.vx = (e.vx + moveX * 0.45 + dodgeX) * 0.88;
-        e.vy = (e.vy + moveY * 0.45 + dodgeY) * 0.88;
-        e.rotation = Math.atan2(e.vy, e.vx);
-      } else if (e.type === 'blackhole') {
-        // Crimson Gravity Well: pulls nearby enemies/sparks (grid funnel, ship, bullet & geom pulls live in Game)
-        e.vx = (e.vx + dirX * 0.12) * 0.94;
-        e.vy = (e.vy + dirY * 0.12) * 0.94;
-        const pullRadius = TUNING.blackholePullRadius ?? 200;
-        const enemyPull = TUNING.blackholeEnemyPull ?? 0.45;
-        particles.applyGravityWell(e.x, e.y, 1.4, pullRadius);
-
-        // Drag nearby non-blackhole enemies into a swirling orbit (drift bypasses their speed cap)
-        for (const other of this.enemyIndex.query(e.x, e.y, pullRadius)) {
-          if (e === other) continue;
-          if (other.type === 'blackhole' || other.isBoss) continue;
-          const gx = e.x - other.x;
-          const gy = e.y - other.y;
-          const k = wellPullScale(gx, gy, pullRadius, enemyPull, e.radius);
-          other.gvx = (other.gvx || 0) + (gx - gy * 0.3) * k;
-          other.gvy = (other.gvy || 0) + (gy + gx * 0.3) * k;
-        }
+      if (stunned) {
+        // Bleed off speed fast; archetype timers (gunner aim, bruiser windup, blinker jumps) hold until it ends.
+        e.vx *= 0.6;
+        e.vy *= 0.6;
+        e.sinceHit = (e.sinceHit || 0) + dt;
+        if (e.linked > 0) e.linked = Math.max(0, e.linked - dt);
       } else {
-        // Pinwheels, Splitters, Mini-Splitters, Bosses
-        let softSepX = 0, softSepY = 0;
-        for (const other of this.enemyIndex.query(e.x, e.y, e.radius + maxRadius + 6)) {
-          const j = enemyOrder.get(other);
-          if (i === j) continue;
-          const ox = e.x - other.x;
-          const oy = e.y - other.y;
-          const minD = e.radius + other.radius + 6;
-          const dSq = ox * ox + oy * oy;
-          if (dSq < minD * minD && dSq > 0.1) {
-            const d = Math.sqrt(dSq);
-            softSepX += (ox / d) * 0.35;
-            softSepY += (oy / d) * 0.35;
-          }
-        }
-        e.vx = (e.vx + moveX * 0.32 + softSepX) * 0.91;
-        e.vy = (e.vy + moveY * 0.32 + softSepY) * 0.91;
+        // Chasers bend their approach round rock that blocks the line to the ship (see pursuit.js).
+        steerAroundRocks(e, dirX, dirY, distPlayer, this.terrain, dt, (tick + i) % PROBE_TICKS === 0, steer);
+        const moveX = steer.x;
+        const moveY = steer.y;
+        env.moveX = moveX;
+        env.moveY = moveY;
+        if (isArchetype(e.type)) this.softSeparation(e, i, enemyOrder, maxRadius, env);
+        if (updateArchetype(e, this, env)) {
+          // Driven by archetypes.js (Bruiser, Gunner, Shielder, Blinker, Conduit).
+        } else if (isHostileKind(e.type)) {
+          this.softSeparation(e, i, enemyOrder, maxRadius, env);
+          updateHostileKind(e, this, env);
+        } else if (isBossKind(e.type)) {
+          bossDef(e.type).update(e, this, env);
+        } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
+          // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
+        } else if (e.type === 'swarmer') {
+          // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
+          let sepX = 0, sepY = 0;
+          let alignX = 0, alignY = 0;
+          let cohX = 0, cohY = 0;
+          let neighbors = 0;
 
-        if (e.isBoss && Math.sin(e.pulsePhase) > 0.92) {
-          grid.applyImpulse(e.x, e.y, 10, 120, e.hue);
+          // Query only nearby enemies while retaining the original sampling parity.
+          const step = len > 90 ? 2 : 1;
+          for (const other of this.enemyIndex.query(e.x, e.y, 80)) {
+            const j = enemyOrder.get(other);
+            if (i === j || j % step !== i % step) continue;
+            const ox = other.x - e.x;
+            const oy = other.y - e.y;
+            const dSq = ox * ox + oy * oy;
+            if (dSq < 6400 && dSq > 0.01) { // within 80px
+              const d = Math.sqrt(dSq);
+              if (d < 28) {
+                sepX -= (ox / d) * (28 - d) * 0.12;
+                sepY -= (oy / d) * (28 - d) * 0.12;
+              }
+              if (other.type === 'swarmer') {
+                alignX += other.vx;
+                alignY += other.vy;
+                cohX += other.x;
+                cohY += other.y;
+                neighbors++;
+              }
+            }
+          }
+
+          let steerX = moveX * 0.42 + sepX;
+          let steerY = moveY * 0.42 + sepY;
+
+          if (neighbors > 0) {
+            alignX /= neighbors;
+            alignY /= neighbors;
+            cohX = cohX / neighbors - e.x;
+            cohY = cohY / neighbors - e.y;
+            const cohLen = Math.hypot(cohX, cohY) || 1;
+            steerX += alignX * 0.08 + (cohX / cohLen) * 0.14;
+            steerY += alignY * 0.08 + (cohY / cohLen) * 0.14;
+          }
+
+          // Sinusoidal swarm swirl
+          const swirl = Math.sin(e.pulsePhase * 0.7 + i) * 0.22;
+          steerX += -dirY * swirl;
+          steerY += dirX * swirl;
+
+          e.vx = (e.vx + steerX) * 0.92;
+          e.vy = (e.vy + steerY) * 0.92;
+        } else if (e.type === 'weaver') {
+          // Emerald Weaver: dodges incoming player bullets!
+          let dodgeX = 0;
+          let dodgeY = 0;
+          for (const b of this.bulletIndex.query(e.x, e.y, 120)) {
+            const bx = e.x - b.x;
+            const by = e.y - b.y;
+            const dSq = bx * bx + by * by;
+            if (dSq < 14400) { // within 120px
+              // Check if bullet is heading toward weaver
+              const dot = bx * b.vx + by * b.vy;
+              if (dot > 0) {
+                // Perpendicular dodge vector
+                const cross = bx * b.vy - by * b.vx;
+                const sign = cross >= 0 ? 1 : -1;
+                const bSpd = Math.hypot(b.vx, b.vy) || 1;
+                dodgeX += (-b.vy / bSpd) * sign * 1.35;
+                dodgeY += (b.vx / bSpd) * sign * 1.35;
+              }
+            }
+          }
+          e.vx = (e.vx + moveX * 0.45 + dodgeX) * 0.88;
+          e.vy = (e.vy + moveY * 0.45 + dodgeY) * 0.88;
+          e.rotation = Math.atan2(e.vy, e.vx);
+        } else if (e.type === 'blackhole') {
+          // Crimson Gravity Well: pulls nearby enemies/sparks (grid funnel, ship, bullet & geom pulls live in Game)
+          e.vx = (e.vx + dirX * 0.12) * 0.94;
+          e.vy = (e.vy + dirY * 0.12) * 0.94;
+          const pullRadius = TUNING.blackholePullRadius ?? 200;
+          const enemyPull = TUNING.blackholeEnemyPull ?? 0.45;
+          particles.applyGravityWell(e.x, e.y, 1.4, pullRadius);
+
+          // Drag nearby non-blackhole enemies into a swirling orbit (drift bypasses their speed cap)
+          for (const other of this.enemyIndex.query(e.x, e.y, pullRadius)) {
+            if (e === other) continue;
+            if (other.type === 'blackhole' || other.isBoss) continue;
+            const gx = e.x - other.x;
+            const gy = e.y - other.y;
+            const k = wellPullScale(gx, gy, pullRadius, enemyPull, e.radius);
+            other.gvx = (other.gvx || 0) + (gx - gy * 0.3) * k;
+            other.gvy = (other.gvy || 0) + (gy + gx * 0.3) * k;
+          }
+        } else {
+          // Pinwheels, Splitters, Mini-Splitters, Bosses
+          let softSepX = 0, softSepY = 0;
+          for (const other of this.enemyIndex.query(e.x, e.y, e.radius + maxRadius + 6)) {
+            const j = enemyOrder.get(other);
+            if (i === j) continue;
+            const ox = e.x - other.x;
+            const oy = e.y - other.y;
+            const minD = e.radius + other.radius + 6;
+            const dSq = ox * ox + oy * oy;
+            if (dSq < minD * minD && dSq > 0.1) {
+              const d = Math.sqrt(dSq);
+              softSepX += (ox / d) * 0.35;
+              softSepY += (oy / d) * 0.35;
+            }
+          }
+          e.vx = (e.vx + moveX * 0.32 + softSepX) * 0.91;
+          e.vy = (e.vy + moveY * 0.32 + softSepY) * 0.91;
+
+          if (e.isBoss && Math.sin(e.pulsePhase) > 0.92) {
+            grid.applyImpulse(e.x, e.y, 10, 120, e.hue);
+          }
         }
       }
 
@@ -800,10 +814,12 @@ export class EnemyManager {
       // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
       // version of their own hue, so the archetype stays recognisable.
       const chilled = e.st && e.st.chillT > 0;
+      const stunned = e.st && e.st.stunT > 0;
+      const zap = stunned && Math.floor(e.st.stunT * 14) % 2 === 0;
       const color = e.hitFlash > 0
         ? '#ffffff'
-        : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, 62%)`;
-      const glowColor = chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
+        : zap ? STUN_FLASH : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, 62%)`;
+      const glowColor = stunned ? STUN_GLOW : chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
 
       // Ribbon Trail
       // Tapered ribbon: fades toward the tail, brightest at the enemy.

@@ -25,7 +25,7 @@ const { TUNING } = await import('../js/config.js');
 const { UPGRADE_POOL, RARITY, applyUpgradeLevels, rollUpgrades, levelJumpChances } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, blasterStreams } = await import('../js/weapon-scaling.js');
-const { STAT_CARD_BY_ID, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
+const { STAT_CARD_BY_ID, ELEMENT_CARD_BY_ID, levelCardWeapon, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
 const { weaponLevel } = await import('../js/loadout.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
@@ -44,7 +44,7 @@ function makePlayer() {
     },
     weapons: {
       missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0,
-      thermite: 0, cryo: 0, nanite: 0, supercritical: 0
+      supercritical: 0
     }
   };
 }
@@ -59,7 +59,7 @@ function game() {
 }
 
 const byId = (id) => UPGRADE_POOL.find((u) => u.id === id);
-const sc0 = (u) => STAT_CARD_BY_ID[u.id];
+const sc0 = (u) => (levelCardWeapon(u.id) ? { weapon: levelCardWeapon(u.id) } : null); // stat and element cards
 function withRandom(draws, fn) {
   const original = Math.random;
   Math.random = () => (draws.length ? draws.shift() : 0.99);
@@ -70,8 +70,8 @@ test('a supply-cache level is the starting level of the next level-up card and t
   const g = game();
   // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Autocannon
   // cards are banished: maxing them would fill the weapon's LV 12 cap).
-  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
-  g.player.banished = Object.fromEntries(Object.keys(STAT_CARD_BY_ID).filter((id) => id !== 'multishot').map((id) => [id, true]));
+  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
+  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID)].filter((id) => id !== 'multishot').map((id) => [id, true]));
 
   // Draws: 1x cache tier, Prism Split's shuffle score, then a lucky +2 level roll.
   withRandom([0.99, 0.5, 0.05], () => g.openRelicChest({ guaranteedSuper: false }));
@@ -124,7 +124,7 @@ test('card previews match the real install for every upgrade and level jump, wit
       const beforeText = STAT_ROWS.map((row) => { const v = row.get(player); return v === null ? '—' : row.fmt(v); });
       const jump = applyUpgradeLevels(player, card);
       assert.equal(d.jump, jump);
-      const sc = STAT_CARD_BY_ID[upg.id];
+      const sc = sc0(upg);
       assert.equal(d.toLevel, sc ? weaponLevel(player, sc.weapon) : player.upgradeLevels[upg.id]);
       const shown = new Map(d.rows.map((r) => [r.id, r]));
       let changed = 0;
@@ -230,7 +230,7 @@ test('5x jackpot caches use compact cards so both rows of rewards fit one screen
   const g = game();
   // Autocannon lines are maxed, so with tied draws the heaviest-weighted eligible card wins, in pool order:
   // Rotary Claw twice, then Tectonic Claw Bore (an evolution, 5 changed stats incl. its AREA-scaled blast).
-  for (const id of ['multishot', 'firerate', 'pierce', 'thermite']) g.player.upgradeLevels[id] = byId(id).maxLevel;
+  for (const id of ['multishot', 'firerate', 'pierce']) g.player.upgradeLevels[id] = byId(id).maxLevel;
   withRandom([0.0001], () => g.openRelicChest({ guaranteedSuper: false }));
   const grid = elements.get('chest-rewards-grid');
   const cards = grid.children.slice(-5);
@@ -274,24 +274,26 @@ test('the HUD lists each weapon once (slot chip, real level) and nothing else; u
   for (const id of ['blaster', 'lightning', 'grenades']) assert.equal(acquireWeapon(p, id), true, id);
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.blaster_damage, levelJump: 5 });
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.lightning_damage, levelJump: 2 });
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.thermite, levelJump: 2 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.grenades_fire, levelJump: 2 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.status_potency, levelJump: 1 });
   assert.equal(weaponLevel(p, 'blaster'), 6);
   assert.equal(weaponLevel(p, 'lightning'), 3);
+  assert.equal(weaponLevel(p, 'grenades'), 3, 'element ranks are weapon levels');
 
-  assert.deepEqual(runUpgradeLines(p).map((u) => `${u.name} LV ${u.level}`), ['Thermite Rounds LV 2'],
-    'equip lines (rank 1) and stat cards stay out of the upgrade list');
+  assert.deepEqual(runUpgradeLines(p).map((u) => `${u.name} LV ${u.level}`), ['Status Potency LV 1'],
+    'equip lines (rank 1), stat cards and element cards stay out of the upgrade list');
 
   g.updateHUD();
   const bar = elements.get('active-weapons-bar').innerHTML;
   assert.match(bar, /Autocannon LV 6</);
   assert.match(bar, /Tesla Arc LV 3</);
-  assert.match(bar, /Grenades LV 1</);
-  assert.ok(!bar.includes('Thermite'), 'no upgrade row on the HUD');
+  assert.match(bar, /Grenades LV 3 <span class="weapon-el"[^>]*>FIRE</, 'an infused weapon shows its element');
+  assert.ok(!bar.includes('Status Potency') && !bar.includes('Thermite'), 'no upgrade row on the HUD');
 
   // The level-up strip shows both rows: weapon slots, then the picked upgrades (each weapon once).
   const [weapons, upgrades] = loadoutStripHtml(p).split('UPGRADES</span>');
   assert.match(weapons, /Autocannon LV 6</);
-  assert.match(upgrades, /Thermite Rounds LV 2</);
+  assert.match(upgrades, /Status Potency LV 1</);
   for (const name of ['Autocannon', 'Tesla Arc', 'Plasma Grenades']) assert.ok(!upgrades.includes(name), `${name} is not listed twice`);
-  assert.match(upgradesHtml(p), /DAMAGE TYPES[\s\S]*Thermite Rounds[\s\S]*LV 2/);
+  assert.match(upgradesHtml(p), /STATUS EFFECTS[\s\S]*Status Potency[\s\S]*LV 1/);
 });

@@ -5,9 +5,9 @@
 // controller's focus doesn't jump away at a limit.
 import {
   RANGE_FORMATIONS, RANGE_TARGETS, RANGE_MOD_GROUPS, DUMMY_COUNTS, MAX_WAVE, DPS_WINDOW,
-  autoRanks, clampRanks, entryRanks, entryLevel, entryBuild
+  autoRanks, clampRanks, entryRanks, entryLevel, entryBuild, entryElement
 } from './weapon-range.js';
-import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, TRANSFORMS, BOOST_NAME } from './weapon-levels.js';
+import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, TRANSFORMS, BOOST_NAME, ELEMENTS, ELEMENT_CARDS, ELEMENT_INFO, ELEMENT_MAX_RANKS } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, weaponSlots } from './loadout.js';
 import { UPGRADE_BY_ID } from './upgrades.js';
 import { formatCompact } from './run-report.js';
@@ -141,7 +141,7 @@ export class RangePanel {
     const dm = cfg.dummies;
     const cycle = (list, cur) => list[(list.indexOf(cur) + step + list.length) % list.length];
     switch (act) {
-      case 'add': if (cfg.weapons.length < weaponSlots()) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {} }); break;
+      case 'add': if (cfg.weapons.length < weaponSlots()) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {}, element: null, elementRank: 1 }); break;
       case 'remove': cfg.weapons = cfg.weapons.filter((x) => x.id !== w); break;
       case 'lv': if (entry && !entry.custom) entry.level = Math.max(1, Math.min(WEAPON_MAX_LEVEL, entry.level + step)); break;
       case 'ranks-mode':
@@ -152,6 +152,17 @@ export class RangePanel {
         break;
       case 'rank': if (entry) entry.ranks = clampRanks(entry.id, { ...entry.ranks, [v]: (entry.ranks[v] || 0) + step }); break;
       case 'bt': if (entry) entry.bt = { ...entry.bt, [v]: entry.bt?.[v] === 'boost' ? 'transform' : 'boost' }; break;
+      case 'el':
+        if (!entry) break;
+        // AUTO keeps the stat ranks it had: the element's ranks come on top of the level.
+        if (!entry.custom) entry.level = Math.min(WEAPON_MAX_LEVEL, entryLevel(entry) - (entryElement(entry)?.rank || 0) + (v === 'none' ? 0 : entry.elementRank || 1));
+        entry.element = v === 'none' ? null : v;
+        break;
+      case 'elrank':
+        if (!entry?.element) break;
+        entry.elementRank = Math.max(1, Math.min(ELEMENT_MAX_RANKS, (entry.elementRank || 1) + step));
+        if (!entry.custom) entry.level = Math.max(1, Math.min(WEAPON_MAX_LEVEL, entry.level + step));
+        break;
       case 'mod': cfg.mods[v] = Math.max(0, Math.min(UPGRADE_BY_ID[v].maxLevel, (cfg.mods[v] || 0) + step)); break;
       case 'type': dm.type = cycle(RANGE_TARGETS.map((t) => t.id), dm.type); break;
       case 'count': dm.count = cycle(DUMMY_COUNTS, DUMMY_COUNTS.includes(dm.count) ? dm.count : 12); break;
@@ -243,8 +254,15 @@ export class RangePanel {
     }).join('');
     const build = entryBuild(w);
     const note = build.transforms || build.atb ? '' : '<span class="rg-dim">Breakthroughs unlock at LV 6, 12 and 18.</span>';
+    // Element (FIRE / FROST / CORROSIVE / SHOCK) and its rank, for the five element-capable weapons.
+    const el = entryElement(w);
+    const elRow = ELEMENT_CARDS[w.id]
+      ? `<div class="rg-row rg-wrap"><span class="rg-label">ELEMENT</span><span class="rg-seg">${[['none', 'NONE'], ...ELEMENTS.map((x) => [x, ELEMENT_INFO[x].label])]
+        .map(([id, label]) => btn('el', label, { w: w.id, v: id, cls: id === (el?.element || 'none') ? 'is-on' : '', pressed: id === (el?.element || 'none') })).join('')}</span>`
+        + (el ? stepper('elrank', `RANK ${el.rank} / ${ELEMENT_MAX_RANKS}`, { w: w.id }) : '') + '</div>'
+      : '';
     return `<div class="rg-weapon" style="--wc:${info.color}">${head}${mode}`
-      + `<div class="${w.custom ? 'rg-ranks' : 'rg-chips'}">${rankRows}${autoNote}</div><div class="rg-bts">${bt}${note}</div></div>`;
+      + `<div class="${w.custom ? 'rg-ranks' : 'rg-chips'}">${rankRows}${autoNote}</div>${elRow}<div class="rg-bts">${bt}${note}</div></div>`;
   }
 
   modsHtml() {

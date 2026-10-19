@@ -13,7 +13,7 @@
 // Weapon-specific upgrade lines name their owners with an `owners` list on the UPGRADE_POOL entry.
 import { TUNING } from './config.js';
 import { WEAPON_TAGS } from './weapon-scaling.js';
-import { STAT_CARDS } from './weapon-levels.js';
+import { STAT_CARDS, ELEMENT_CARDS } from './weapon-levels.js';
 
 export const WEAPONS = [
   {
@@ -64,7 +64,7 @@ export const WEAPONS = [
   {
     id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
     color: '#38ffc8',
-    summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst. Thermite, Cryo Payload and Nanite Swarm set their element.'
+    summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst. Infuse them with an element (FIRE, FROST, CORROSIVE or SHOCK) from a level-up card.'
   }
 ];
 
@@ -110,7 +110,7 @@ export const freeSlots = (p) => Math.max(0, weaponSlots() - ownedWeapons(p).leng
 export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id)).map((w) => w.id);
 
 // Weapon level shown on slots, HUD and cards: LV 1 for equipping it plus every rank of its stat cards
-// (0 when not equipped). Evolution bonus levels (Storm Protocol) are shown separately.
+// and its element card (0 when not equipped). Evolution bonus levels (Storm Protocol) are shown separately.
 export function weaponLevel(p, id) {
   const w = WEAPON_BY_ID[id];
   if (!w) return 0;
@@ -118,6 +118,7 @@ export function weaponLevel(p, id) {
   if (!lv && id === 'blaster' && ownsWeapon(p, id)) lv = 1; // fixtures built without the equip line
   if (!lv) return 0;
   for (const c of STAT_CARDS[id] || []) lv += p.upgradeLevels?.[c.id] || 0;
+  for (const c of ELEMENT_CARDS[id] || []) lv += p.upgradeLevels?.[c.id] || 0;
   return lv;
 }
 

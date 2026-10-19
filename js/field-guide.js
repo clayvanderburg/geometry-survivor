@@ -16,7 +16,8 @@ import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
-import { WEAPON_TAGS, TAG_INFO } from './weapon-scaling.js';
+import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
+import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS } from './weapon-levels.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, lockCost, banishCost } from './gold.js';
@@ -372,12 +373,12 @@ export const MECHANIC_ENTRIES = [
     ]
   },
   {
-    id: 'status', icon: '☢', title: 'BURN · CHILL · CORRODE',
+    id: 'status', icon: '☢', title: 'ELEMENTS: BURN · CHILL · CORRODE · STUN',
     body: () => [
-      'BURN (Thermite Rounds, blaster and helix bolts, Plasma Grenades): each hit adds a stack and refreshes the fire for 3 s; stacks tick every 0.5 s.',
-      `CHILL (Cryo Payload, rocket, missile and Plasma Grenade blasts): slows movement; hulls frost over. Bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow.`,
-      'CORRODE (Nanite Swarm, Tesla arcs, Plasma Grenades): each stack makes the target take +5% damage from every source, burn included. Vortexes are immune to all three.',
-      'Plasma Grenades take the element of your strongest damage-type card (FIRE, FROST or CORROSIVE; plain PLASMA with none) and apply every damage type you own: blasts, bomblets and Lingering Clouds alike.'
+      `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by a supply cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
+      `BURN (FIRE): each hit adds a stack (max 3 + rank) and refreshes the fire for ${W.burnDuration} s; stacks tick every ${W.burnTickInterval} s. CHILL (FROST): slows movement and frosts the hull; bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow. CORRODE (CORROSIVE): each stack makes the target take +${pct(W.corrodePerStack)} damage from every source, burn included.`,
+      `STUN (SHOCK): a hit stuns for ${W.shockStun(1)} s, or ${pct(W.shockLongChance(1))} of the time a long ${W.shockLongStun} s stun: the hull crackles yellow, stops moving and can't attack (touching it still hurts). Then it is stun-immune for ${W.stunImmunity} s, so nothing is stunned forever. Bosses keep ${pct(TUNING.shockBossMult ?? 0.2)} of a stun (immune ${W.stunImmunityBoss} s), lieutenants ${pct(TUNING.shockLieutenantMult ?? 0.5)} (immune ${W.stunImmunityLieutenant} s).`,
+      'STATUS cards (Status Potency, Status Application, Status Duration, Shock Conductor and the FIRE / FROST / CORROSIVE / SHOCK Amplifiers) strengthen every weapon of their element and never raise a weapon\'s level. They only show up once a weapon carries a matching element. Vortexes take statuses like any enemy; invulnerable hulls are immune.'
     ]
   },
   {
@@ -505,7 +506,7 @@ const EVOLUTION_RECIPES = {
   evo_tempest: 'Swarm Micro-Missiles + Tesla Arc Emitter',
   evo_siege: 'Proximity Mines + Sentry Turret',
   evo_emp: 'Plasma Grenades + Tesla Arc Emitter',
-  evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any damage-type card'
+  evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any weapon with an element'
 };
 
 const tagChips = (tags = []) => tags.filter(t => TAG_INFO[t]).map(t => ({ id: t, label: TAG_INFO[t].label, color: TAG_INFO[t].color }));
