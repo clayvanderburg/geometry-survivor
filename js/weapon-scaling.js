@@ -32,8 +32,15 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
 export const DAMAGE_GROWTH = 1.42; // Damage card: x1.42 damage per hit per rank (compounding; 1.5 before v0.29, 1.45 before v0.31)
 export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
+// Deliberate departures from the shared curve, set from live player data (stats dashboard, v0.35.1).
+// CARD_STEP_TRIM scales a weapon's Damage-card bonus and fire-rate step per rank (Autocannon 0.8:
+// x1.336 damage and +32% fire rate per rank); LV1_TRIM scales its LV 1 hit damage (Swarm Missiles 0.5).
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.5 });
+export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
+export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
-export const hitMult = (b) => Math.pow(DAMAGE_GROWTH, b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
 // transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make.
 const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, transforms: 0 });
@@ -58,8 +65,8 @@ export const WEAPON_SCALING = {
   // Plasma Charge raises bolt damage; Prism Split adds a pair of streams in the fixed PRISM_STREAMS
   // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
-  blasterRateStep: RATE_STEP,
-  blasterRateMult: (b) => rateMult(b.r.rate),
+  blasterRateStep: rateStep('blaster'),
+  blasterRateMult: (b) => 1 + W.blasterRateStep * (b.r.rate || 0),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
@@ -129,7 +136,7 @@ export const WEAPON_SCALING = {
   nukeRadiusMult: 2.2,
   nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
   missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
-  missileDamageMult: (b) => lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
+  missileDamageMult: (b) => LV1_TRIM.missiles * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
