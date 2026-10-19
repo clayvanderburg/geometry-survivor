@@ -25,10 +25,12 @@ import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
 } from './status-effects.js';
 import {
-  describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText
+  describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText,
+  slotRewardHtml
 } from './upgrade-cards.js';
+import { handSizeFor, slotReward } from './slot-rewards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -128,8 +130,8 @@ function turnToward(from, to, rate) {
 const AUTOCANNON_DRAW_WIDTH = 0.6;
 // Music / SFX level sliders read as a percentage (TUNING level 1 = 100%), like MASTER VOLUME.
 const levelPct = (v) => `${Math.round(Number(v) * 100)}%`;
-// Cards in a level-up hand (the NEW WEAPON pick still offers 3 weapons, a Breakthrough 2 choices).
-const HAND_SIZE = 4;
+// Weapons offered by a NEW WEAPON pick. Level-up hands hold 2-4 cards by weapons equipped (slot-rewards.js).
+const WEAPON_PICK_SIZE = 3;
 const SINGULARITY_GRID_DEPTH = 340;
 // Swarm Missile colour: orange-gold, turning pink once Storm Protocol charges them with lightning.
 const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
@@ -327,6 +329,7 @@ export class Game {
     this.goldEarned = 0;
     this.goldSpent = 0;
     this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
+    this.pickRerolls = 0; // rerolls of the current NEW WEAPON pick (its own price, from 40 gold)
     this.handLock = null; // { card, slot }: the locked card in the hand on screen
     this.carriedLock = null; // locked card passed over: guaranteed in the next level-up hand
     this.handPhase = null; // 'hand' (rerolls and locks allowed), 'weapon' (the NEW WEAPON pick) or 'breakthrough'
@@ -3635,7 +3638,7 @@ export class Game {
     // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
     this.beginHand();
-    this.currentChoices = rollHandAround(this.player, HAND_SIZE, this.handLock, rollLevelUpHand);
+    this.currentChoices = rollHandAround(this.player, this.handSize(), this.handLock, rollLevelUpHand);
     this.runStats?.offered(this.currentChoices);
     this.recordHandOdds();
     if (this.currentChoices.length === 0) {
@@ -3648,9 +3651,14 @@ export class Game {
       return;
     }
 
-    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', 'Press <span>[1]</span>-<span>[4]</span>, Click, or D-Pad + <span>A</span> to Evolve');
+    this.setUpgradeHeader('GEOM RESONANCE ACHIEVED', 'SYSTEM EVOLUTION', `Press <span>[1]</span>-<span>[${this.currentChoices.length}]</span>, Click, or D-Pad + <span>A</span> to Evolve`);
     this.renderHand();
     document.getElementById('upgrade-modal').classList.remove('hidden');
+  }
+
+  // Cards in a level-up hand: 2 with one weapon, 3 with two or three, 4 from four (slot-rewards.js).
+  handSize() {
+    return handSizeFor(ownedWeapons(this.player).length);
   }
 
   // --- Gold: rerolls and card locks on the level-up hand (rules and costs in js/gold.js) -----------
@@ -3807,12 +3815,13 @@ export class Game {
   }
 
   rerollHand() {
+    if (this.state === 'UPGRADE' && this.handPhase === 'weapon') return this.rerollWeaponPick();
     if (!this.canEditHand()) return false;
     if (!this.spendGold(this.rerollPrice())) return false;
     this.handRerolls++;
     this.banishArmed = -1;
     this.player.newWeaponDrought = this.handDrought;
-    this.currentChoices = rollHandAround(this.player, HAND_SIZE, this.handLock, rollLevelUpHand);
+    this.currentChoices = rollHandAround(this.player, this.handSize(), this.handLock, rollLevelUpHand);
     this.runStats?.reroll();
     this.runStats?.offered(this.currentChoices, this.handLock?.card);
     this.recordHandOdds();
@@ -3820,6 +3829,32 @@ export class Game {
     const focusedIndex = this.focusedChoiceIndex();
     this.renderHand();
     if (focusedIndex >= 0) this.focusChoice(focusedIndex);
+    this.sound.playLevelUp();
+    return true;
+  }
+
+  // Gold price of the next reroll of the NEW WEAPON pick (40, 80, 160... gold; Probability Engine discounts it).
+  weaponRerollPrice() {
+    return Math.round(weaponRerollCost(this.pickRerolls) * (this.player?.rerollCostMult ?? 1));
+  }
+
+  // A NEW WEAPON pick can be rerolled while some unequipped weapon is not already on offer.
+  canRerollWeaponPick() {
+    return this.state === 'UPGRADE' && this.handPhase === 'weapon' && unownedWeapons(this.player).length > this.currentChoices.length;
+  }
+
+  // REROLL on the NEW WEAPON pick: 3 fresh weapons, ones not just shown first.
+  rerollWeaponPick() {
+    if (!this.canRerollWeaponPick()) return false;
+    if (!this.spendGold(this.weaponRerollPrice())) return false;
+    this.pickRerolls++;
+    const shown = this.currentChoices.map((c) => c.weaponId);
+    this.currentChoices = rollWeaponPicks(this.player, WEAPON_PICK_SIZE, shown);
+    this.runStats?.reroll();
+    this.runStats?.offered(this.currentChoices);
+    const focusedIndex = this.focusedChoiceIndex();
+    this.renderWeaponPick();
+    if (focusedIndex >= 0) this.focusChoice(Math.min(focusedIndex, this.currentChoices.length - 1));
     this.sound.playLevelUp();
     return true;
   }
@@ -3857,21 +3892,27 @@ export class Game {
   renderHandControls() {
     const doc = globalThis.document;
     const inHand = this.handPhase === 'hand';
-    doc?.getElementById('hand-goldbar')?.classList?.[inHand ? 'remove' : 'add']('hidden');
-    doc?.getElementById('upgrade-modal')?.classList?.[this.handPhase === 'weapon' ? 'add' : 'remove']('phase-weapon');
+    const inPick = this.handPhase === 'weapon';
+    doc?.getElementById('hand-goldbar')?.classList?.[inHand || inPick ? 'remove' : 'add']('hidden');
+    doc?.getElementById('upgrade-modal')?.classList?.[inPick ? 'add' : 'remove']('phase-weapon');
     const count = doc?.getElementById('hand-gold-count');
     if (count) count.textContent = `${GOLD_ICON} ${this.gold} GOLD`;
-    const cost = this.rerollPrice();
+    const cost = inPick ? this.weaponRerollPrice() : this.rerollPrice();
     const lc = lockCost();
     const reroll = doc?.getElementById('btn-reroll-hand');
     if (reroll) {
       const affordable = this.gold >= cost;
-      reroll.disabled = !inHand || !affordable;
-      reroll.innerHTML = `↻ REROLL · ${cost} ${GOLD_ICON} <span class="hand-key">[R] / X</span>`;
-      reroll.title = affordable ? `Reroll the unlocked cards for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
+      const open = inHand || (inPick && this.canRerollWeaponPick());
+      reroll.disabled = !open || !affordable;
+      reroll.innerHTML = `↻ REROLL${inPick ? ' WEAPONS' : ''} · ${cost} ${GOLD_ICON} <span class="hand-key">[R] / X</span>`;
+      reroll.title = inPick && !open ? 'No other weapons left to offer'
+        : affordable ? `Reroll the ${inPick ? 'weapons on offer' : 'unlocked cards'} for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
     }
     const note = doc?.getElementById('hand-lock-note');
-    if (note) {
+    if (note && inPick) {
+      note.textContent = this.canRerollWeaponPick() ? `↻ ${cost} ${GOLD_ICON} swaps these for different weapons` : 'Every weapon left is on offer';
+      note.classList?.remove('dropped');
+    } else if (note) {
       const lockedName = this.handLock?.card.name.replace('SYNERGY: ', '');
       const bc = banishCost();
       note.textContent = this.banishMode ? `✕ BANISH MODE: press [1]-[4] to banish that card for ${bc} ${GOLD_ICON} · [B] / [Esc] cancels`
@@ -3916,6 +3957,7 @@ export class Game {
   }
 
   setUpgradeHeader(subtitle, title, hint) {
+    this.setSlotReward(null);
     const modal = document.getElementById('upgrade-modal');
     const sub = modal.querySelector?.('.glitch-subtitle');
     const head = modal.querySelector?.('.upgrade-title');
@@ -4017,10 +4059,11 @@ export class Game {
   }
 
   // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
+  // Gold can reroll the 3 weapons (rerollWeaponPick); the slot's reward shows under the title.
   openWeaponPick() {
     this.handPhase = 'weapon';
-    this.renderHandControls();
-    this.currentChoices = rollWeaponPicks(this.player, 3);
+    this.pickRerolls = 0;
+    this.currentChoices = rollWeaponPicks(this.player, WEAPON_PICK_SIZE);
     this.runStats?.offered(this.currentChoices);
     this.runStats?.weaponPickOdds(unownedWeapons(this.player), this.currentChoices);
     if (this.currentChoices.length === 0) {
@@ -4028,15 +4071,32 @@ export class Game {
       return;
     }
     const p = this.player;
-    this.setUpgradeHeader(`SLOT ${ownedWeapons(p).length + 1} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
-      'Press <span>[1]</span> <span>[2]</span> <span>[3]</span>, Click, or D-Pad + <span>A</span> to Equip');
-    this.renderChoiceCards(this.currentChoices.map((c) => describeWeaponPick(p, c.weaponId)));
+    const slot = ownedWeapons(p).length + 1;
+    this.setUpgradeHeader(`SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+      `Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Equip`);
+    const reward = slotReward(slot);
+    this.setSlotReward(reward && { ...reward, slot });
+    this.renderWeaponPick();
     // On narrow screens the hand scrolls; start the pick at its header, not where NEW WEAPON was.
     const modal = document.getElementById('upgrade-modal');
     for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
     // Same modal state, so the controller grace (set on state changes) is restarted by hand.
     this.menuGrace = Math.max(this.menuGrace, CHOICE_CLICK_GUARD_MS / 1000);
     this.sound.playLevelUp();
+  }
+
+  renderWeaponPick() {
+    const p = this.player;
+    this.renderChoiceCards(this.currentChoices.map((c) => describeWeaponPick(p, c.weaponId)));
+    this.renderHandControls();
+  }
+
+  // The slot reward banner under the upgrade modal's title (the NEW WEAPON pick); null hides it.
+  setSlotReward(reward) {
+    const el = globalThis.document?.getElementById?.('upgrade-slot-reward');
+    if (!el) return;
+    el.innerHTML = slotRewardHtml(reward);
+    el.classList?.[reward ? 'remove' : 'add']('hidden');
   }
 
   // A weapon that reached LV 6 / 12 / 18 without its Breakthrough: open the R&D pick (from a level-up
@@ -4056,7 +4116,9 @@ export class Game {
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
       const name = WEAPON_BY_ID[id].name;
-      this.setUpgradeHeader(`⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
+      // The slot 6 weapon gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
+      const early = weaponLevel(p, id) < level;
+      this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
       const modal = document.getElementById('upgrade-modal');

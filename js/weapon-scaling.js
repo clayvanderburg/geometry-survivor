@@ -8,6 +8,7 @@
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
 import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild } from './weapon-levels.js';
+import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
 // stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
@@ -532,10 +533,13 @@ export function sourceBuild(p, weapon, b) {
   return weaponBuild(p, id);
 }
 
+// Base damage of every weapon: the damage stat times the slot reward for weapons equipped (slot-rewards.js).
+export const baseDamage = (p) => p.stats.damage * loadoutDamageMult(p);
+
 // Per-hit damage (before crits and status modifiers) for every weapon. `b` is the weapon's build (or
 // a level number for a build without stat ranks; omitted = the player's own build).
 export function weaponDamage(p, weapon, b) {
-  const d = p.stats.damage;
+  const d = baseDamage(p);
   let base;
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;
@@ -582,6 +586,6 @@ export function critMultiplier(p, afflicted = false) {
 }
 
 // Damage-type numbers at a given card level, including their tuner multipliers.
-export const burnStackDps = (p, lv) => p.stats.damage * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1);
+export const burnStackDps = (p, lv) => baseDamage(p) * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1);
 export const chillSlow = (lv, isBoss = false) => Math.min(0.9, W.chillSlow(lv) * (TUNING.chillSlowMult ?? 1)) * (isBoss ? (TUNING.chillBossMult ?? 0.4) : 1);
 export const corrodePerStack = () => W.corrodePerStack * (TUNING.corrodeMult ?? 1);

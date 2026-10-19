@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.34.0',
+    date: '2026-10-19',
+    title: 'Fill Your Slots',
+    notes: [
+      { type: 'balance', text: 'Level-ups offer 2 cards while you carry one weapon, 3 with two or three, and 4 from four weapons. Riding one weapon to LV 12 is no longer the easy way.' },
+      { type: 'new', text: 'SLOT REWARDS: your 3rd and 5th weapons each give +5% damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick.' },
+      { type: 'new', text: 'The NEW WEAPON card now shows what its slot unlocks.' },
+      { type: 'new', text: 'Don\'t like the 3 weapons on offer? REROLL them for 40 gold (80, then 160 within one pick).' }
+    ]
+  },
+  {
     version: '0.33.0',
     date: '2026-10-19',
     title: 'Shield Capacitor',

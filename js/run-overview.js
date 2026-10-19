@@ -8,7 +8,7 @@
 // PERMANENT = RUN START vs BASE (Void Armory) and THIS RUN = TOTAL vs RUN START (cards picked this run).
 import { TUNING } from './config.js';
 import { runStartPlayer, runUpgradeLines, HIT_INVULN_BASE } from './upgrades.js';
-import { WEAPON_SCALING as W, blasterFireRate } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, blasterFireRate, baseDamage } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
 import { weaponPotentialDps, bonusLevels, bonusText } from './upgrade-cards.js';
@@ -31,7 +31,7 @@ const pctNum = (n) => fixed(n, Math.abs(n) < 10 && Math.abs(n % 1) > 1e-9 ? 1 : 
 export const STAT_GROUPS = [
   {
     id: 'offense', label: 'OFFENSE', rows: [
-      { id: 'damage', label: 'Damage (every weapon)', kind: 'mult', fmt: 'num1', get: (s) => s.stats.damage },
+      { id: 'damage', label: 'Damage (every weapon)', kind: 'mult', fmt: 'num1', get: (s) => baseDamage(s) },
       { id: 'fireRate', label: 'Autocannon fire rate', kind: 'mult', fmt: 'rate', get: (s) => blasterFireRate(s, weaponBuild(s, 'blaster')) },
       { id: 'critChance', label: 'Crit chance', kind: 'add', fmt: 'pct', get: (s) => Math.min(1, s.stats.critChance ?? 0) },
       { id: 'critDamage', label: 'Crit damage', kind: 'add', fmt: 'pct', get: (s) => s.stats.critDamage ?? 1.5 },
