@@ -174,7 +174,9 @@ test('only stats that change are listed', () => {
   assert.ok(!describeUpgrade(p, byId('magnet')).rows.some((r) => r.id === 'bombs'));
   p.hp = p.maxHp = 100;
   const thrusters = describeUpgrade(p, byId('thrusters')).rows;
-  assert.deepEqual(thrusters.find((r) => r.id === 'maxHp'), { id: 'maxHp', label: 'Max shield', before: '100', after: '115' });
+  assert.ok(!thrusters.some((r) => r.id === 'maxHp'), 'the shield has its own card');
+  const capacitor = describeUpgrade(p, byId('shield_capacitor')).rows;
+  assert.deepEqual(capacitor.find((r) => r.id === 'maxHp'), { id: 'maxHp', label: 'Max shield', before: '100', after: '120' });
   assert.ok(!thrusters.some((r) => r.id === 'missileDamage'), 'unowned weapons stay off the card');
 });
 

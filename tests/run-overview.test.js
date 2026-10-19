@@ -60,7 +60,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   for (const id of ['damage', 'maxHp', 'critChance', 'moveSpeed']) assert.equal(r[id].run, '—', `${id}: no cards yet`);
 
   install(p, 'overdrive', 2);   // x1.12 damage per level
-  install(p, 'thrusters');      // +16% speed, +25 shield, a Phase Nova level (dash -0.14 s)
+  install(p, 'thrusters');      // +16% speed, a Phase Nova level (dash -0.14 s)
+  install(p, 'shield_capacitor'); // +20 shield
   install(p, 'crit_chance', 2); // +5% each
   install(p, 'tag_explosive');
   install(p, 'firerate', 3);    // Autocannon Hyper-Capacitor: lives on the weapon build, not the base stat
@@ -68,8 +69,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.damage.run, '+25%');
   assert.equal(r.damage.permanent, '+10%', 'the armory share is unchanged by cards');
   assert.equal(r.moveSpeed.run, '+16%');
-  assert.equal(r.maxHp.run, '+15');
-  assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 7.5 + 15)));
+  assert.equal(r.maxHp.run, '+20');
+  assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 7.5 + 20)));
   assert.equal(r.critChance.run, '+10%');
   assert.equal(r.critChance.total, '17%');
   assert.equal(r.tag_explosive.run, '+30%');

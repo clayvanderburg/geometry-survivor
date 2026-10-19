@@ -12,6 +12,9 @@ export const LOCAL_TOP = 8;
 // flat (+4), sec (+0.02 s). Negative steps are reductions (damage taken, dash cooldown, reroll cost).
 export const ARMORY_VERSION = 2; // bump to reset everyone's ranks and cores again (see normalizeSave)
 export const STARTING_CORES = 15;
+// One-time wipe of the developer's test pilots: a save flying one of these callsigns loses its Void Cores,
+// armory ranks and the local runs under those names, once per DEV_WIPE id.
+export const DEV_WIPE = Object.freeze({ id: 'nox-madking-v0330', names: Object.freeze(['NOX', 'MADKING']) });
 
 export const ARMORY_CATEGORIES = [
   { id: 'offense', label: 'OFFENSE', icon: '✦' },
@@ -21,7 +24,11 @@ export const ARMORY_CATEGORIES = [
   { id: 'utility', label: 'UTILITY', icon: '✧' }
 ];
 
-export const META_UPGRADES = [
+// The last rank of every upgrade costs about ARMORY_TOP_COST cores: each one's growth is steepened to get
+// there (never flattened; Deep-Core Extractor and Supernova Reserve already cost more).
+export const ARMORY_TOP_COST = 1000;
+
+const BASE_META_UPGRADES = [
   // OFFENSE
   { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.01, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
   { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
@@ -47,6 +54,10 @@ export const META_UPGRADES = [
   { id: 'miningReach', cat: 'utility', name: 'Extended Claws', icon: '⟟', color: '#7fd4ff', stat: 'drill reach', per: 0.02, fmt: 'pct', maxRank: 15, baseCost: 12, growth: 1.15 },
   { id: 'bombs', cat: 'utility', name: 'Supernova Reserve', icon: '✸', color: '#ffcc00', stat: 'starting Supernova bomb', per: 1, fmt: 'flat', maxRank: 3, baseCost: 400, growth: 3 }
 ];
+export const META_UPGRADES = BASE_META_UPGRADES.map((u) => ({
+  ...u,
+  growth: Math.max(u.growth, Math.pow(ARMORY_TOP_COST / u.baseCost, 1 / Math.max(1, u.maxRank - 1)))
+}));
 
 export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u]));
 
@@ -167,22 +178,28 @@ export function normalizeSave(value) {
   // An existing save from before ARMORY_VERSION had the old six bundled upgrades: its ranks and cores
   // are reset once (callsign, high scores, Field Guide and runs played are kept) and a notice is shown.
   const legacyArmory = Object.keys(source).length > 0 && source.armory !== ARMORY_VERSION;
+  const devWipe = source.devWipe !== DEV_WIPE.id && typeof source.pilotName === 'string' && DEV_WIPE.names.includes(normalizePilotName(source.pilotName));
+  const keptScores = devWipe ? savedScores.filter((e) => !DEV_WIPE.names.includes(e.name)) : savedScores;
   return {
     pilotName: normalizePilotName(source.pilotName),
-    cores: legacyArmory ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES) + retiredRefund(sourceRanks),
+    cores: legacyArmory || devWipe ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES) + retiredRefund(sourceRanks),
     totalRuns: boundedInteger(source.totalRuns, 0),
-    ranks: legacyArmory ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
+    ranks: legacyArmory || devWipe ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
     armory: ARMORY_VERSION,
+    devWipe: DEV_WIPE.id, // the wipe check has run for this save (see DEV_WIPE)
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
-    highscores: savedScores.length ? topRunsPerMode(savedScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
+    highscores: keptScores.length ? topRunsPerMode(keptScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
   };
 }
 
 export class ProgressionManager {
   constructor() {
     this.data = this.load();
-    if (this.data.armoryResetNotice) this.save(); // persist a one-time armory reset right away
+    // Persist a one-time armory reset or developer-pilot wipe right away.
+    let wipeCheckPending = false;
+    try { wipeCheckPending = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')?.devWipe !== DEV_WIPE.id; } catch { /* unreadable: load() already fell back */ }
+    if (this.data.armoryResetNotice || wipeCheckPending) this.save();
     this.onExternalChange = null;
     // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
     globalThis.addEventListener?.('storage', (e) => {

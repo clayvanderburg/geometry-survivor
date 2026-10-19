@@ -151,7 +151,7 @@ export const STAT_ROWS = [
   { id: 'xpMultiplier', label: 'XP gain', get: (p) => p.stats.xpMultiplier, fmt: mult, headline: 'pct', unit: 'XP GAIN' },
   { id: 'bombs', label: 'Supernova bombs', get: (p) => p.bombs, fmt: int, headline: 'count', unit: 'BOMBS' },
 
-  // Phase Nova Thrusters
+  // Phase Nova Thrusters (move speed, dash) and Shield Capacitor (shield)
   { id: 'moveSpeed', label: 'Move speed', get: (p) => p.stats.moveSpeed, fmt: (v) => v.toFixed(2), headline: 'pct', unit: 'MOVE SPEED' },
   { id: 'maxHp', label: 'Max shield', get: (p) => p.maxHp, fmt: int, headline: 'count', unit: 'MAX SHIELD' },
   { id: 'hp', label: 'Shield now', get: (p) => p.hp, fmt: int },

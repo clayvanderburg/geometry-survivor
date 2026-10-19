@@ -39,7 +39,9 @@ export const PURGES = Object.freeze([
   // The developer's ~87M wave-36 run on 0.16.0 (from before the v0.17 weapon rework), removed on request.
   { id: 'purge-dev-87m-v0160-v1', version: '0.16.0', wave: 36, minScore: 80e6, maxScore: 95e6 },
   // Fresh start for v0.31.0 (second harder pass): every board of every mode, all-time included.
-  { id: 'wipe-before-v0310', beforeVersion: '0.31.0' }
+  { id: 'wipe-before-v0310', beforeVersion: '0.31.0' },
+  // The developer's test runs again (v0.33.0), with their Void Cores and armory reset on the device.
+  { id: 'purge-madking-nox-v2', names: ['MADKING', 'NOX'] }
 ]);
 
 // Does a board entry match a purge rule?
