@@ -14,7 +14,7 @@ export const GUIDE_TABS = [
 ];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const ENTRY_HUE = { lieutenant: 228, boss: 48, brood_queen: 325, ouroboros: 245, wing_commander: 30, hive_carrier: 120, event_horizon: 280 };
+const ENTRY_HUE = { lieutenant: 228, boss: 48, brood_queen: 325, ouroboros: 245, wing_commander: 30, hive_carrier: 120, event_horizon: 280, architect: 55 };
 
 export function hostileCardHTML(entry, { unlocked = false, fresh = false } = {}) {
   const stats = hostileStats(entry.id);

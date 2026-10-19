@@ -352,6 +352,39 @@ const SCENES = {
     },
     noContactKill: true
   },
+  gate: {
+    w: 600, loop: 9,
+    setup(s) { s.home(0.15, 0.5); s.spawn('gate', s.W * 0.55, s.H * 0.5, { attach: { rotation: Math.PI / 2 } }); },
+    tick(s, dt) {
+      // Fly right through the beam: it detonates and takes the swarm round it along.
+      const p = s.player;
+      p.x += (s.W * 0.9 - p.x) * 0.012;
+      p.walkCycle += 0.25;
+      if (s.count('swarmer') < 6 && s.every(0.5)) s.spawn('swarmer', s.W * (0.45 + Math.random() * 0.2), s.H * (0.2 + Math.random() * 0.6));
+      const g = s.find('gate');
+      if (g && Math.hypot(g.x - p.x, g.y - p.y) < 22) {
+        s.particles.spawnShockwave(g.x, g.y, 220, g.hue, 6, 0.45);
+        for (const e of [...s.manager.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) < 220) s.kill(e);
+      }
+    },
+    noContactKill: true
+  },
+  architect: {
+    w: 900, loop: 13,
+    setup(s) {
+      s.home(0.5, 0.5);
+      s.manager.queueSpawn('architect', s.W * 0.88, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.hold();
+      if (s.t > 1.4) s.autoFire(0.14, e => e.isBoss);
+      const q = s.find('architect');
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -679,7 +712,8 @@ const SILHOUETTE = {
   shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
-  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260]
+  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
+  gate: ['gate', 200], architect: ['architect', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

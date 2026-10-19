@@ -8,7 +8,8 @@ import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, bossBuilt } from './bosses.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, bossBuilt } from './bosses.js';
+import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
@@ -144,6 +145,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Go and get it: every second you leave it alone is more drones. Cut through the drones on the way in.'
   },
   {
+    id: 'gate', name: 'LASER GATE', group: 'hazard', unlockWave: unlockWaveOf('gate'),
+    what: () => `Two yellow pylons joined by a crackling beam, drifting and spinning toward you. Shoot the hub to break it. FLY THROUGH THE BEAM and it detonates in a ${GATE.blastRadius} px blast that wrecks every hostile nearby, bosses included, and costs you nothing. The pylons are solid and hit like a hull. Debuts with the Architect.`,
+    tip: 'Do not shoot every gate: lure a crowd (or a boss) next to one, then fly through the beam. Mind the pylons at the ends.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -173,6 +179,11 @@ export const HOSTILE_ENTRIES = [
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
     what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${bossGrindText()}`,
     tip: 'Fight it from the edge of its pull and kill things away from it so it cannot feed. Shoot from close range so the bend has less time to steer your shots off.'
+  },
+  {
+    id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
+    what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${bossGrindText()}`,
+    tip: 'Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early, and the blast takes the rest of the ring.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

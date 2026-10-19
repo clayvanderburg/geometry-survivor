@@ -767,6 +767,7 @@ export class EnemyManager {
       const e = this.enemies[i];
       const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4
         : e.type === 'conduit' ? 250
+        : e.type === 'gate' ? 110
         : e.type === 'bruiser' && e.state === 'windup' ? 300
         : e.type === 'blinker' && e.state === 'telegraph' ? 280
         : e.type === 'gunner' && e.state === 'aim' ? 190

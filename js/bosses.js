@@ -627,6 +627,109 @@ const eventHorizon = {
   }
 };
 
+// --- THE ARCHITECT (wave 18, major) ---------------------------------------------------------
+// Hangs back and builds laser gates round you, beaming each one into place. Fly through a gate and it
+// blows: lure the Architect's guards (or the Architect) next to one first. At half HP it starts dropping
+// CAGES: a ring of gates round where you are that closes in, walls facing you. Break out through a beam
+// before it tightens; the blast takes the rest of the ring with it.
+export const ARCH = {
+  range: 380, band: 60, speed: 1.4, buildEvery: 2.4, rageBuildEvery: 1.5, buildTime: 0.7, maxGates: 8,
+  ringMin: 170, ringMax: 260, cageEvery: 8, cageGates: 6, cageR: 300, cageTime: 5, guards: 2, rageAt: 0.5
+};
+
+function gatesOf(e, m) {
+  let n = 0;
+  for (const o of m.enemies) if (o.builder === e && !o.dead) n++;
+  for (const sp of m.spawnIndicators) if (sp.config.attach?.builder === e) n++;
+  return n;
+}
+
+const architect = {
+  name: 'THE ARCHITECT', epithet: 'IT DRAWS THE LINES YOU DIE BEHIND', tier: 'major', hue: 55, debut: ['gate', 'shielder'],
+  stats: () => ({ speed: ARCH.speed, radius: 32, sides: 3, vRot: 0 }),
+  onArrive(e, m) {
+    e.aiTimer = 1.2;
+    e.cageT = ARCH.cageEvery * 0.5;
+    e.enraged = false;
+    for (let k = 0; k < ARCH.guards; k++) {
+      const a = (k / ARCH.guards) * Math.PI * 2;
+      m.queueSpawn('shielder', e.x + Math.cos(a) * 70, e.y + Math.sin(a) * 70, m.waveScaleFor('shielder', e.bossWave), { instant: true });
+    }
+  },
+  update(e, m, env) {
+    const { dt, dirX, dirY, dist, player } = env;
+    const radial = dist > ARCH.range + ARCH.band ? 1 : dist < ARCH.range - ARCH.band ? -1 : 0;
+    const rx = radial > 0 ? env.moveX : dirX;
+    const ry = radial > 0 ? env.moveY : dirY;
+    e.vx = (e.vx + rx * radial * 0.16 - dirY * e.strafeSign * 0.07) * 0.92;
+    e.vy = (e.vy + ry * radial * 0.16 + dirX * e.strafeSign * 0.07) * 0.92;
+    e.rotation += 0.6 * dt;
+    if (!e.enraged && e.hp <= e.maxHp * ARCH.rageAt) {
+      e.enraged = true;
+      e.cageT = 0.5;
+      env.particles?.spawnShockwave?.(e.x, e.y, 260, e.hue, 5, 0.5);
+    }
+    if (e.buildT > 0) e.buildT -= dt;
+    e.aiTimer -= dt;
+    if (e.aiTimer <= 0) {
+      e.aiTimer = e.enraged ? ARCH.rageBuildEvery : ARCH.buildEvery;
+      if (gatesOf(e, m) < ARCH.maxGates) {
+        // A gate on a ring round the ship, side-on so its beam crosses your path.
+        const a = Math.random() * Math.PI * 2;
+        const r = ARCH.ringMin + Math.random() * (ARCH.ringMax - ARCH.ringMin);
+        const x = player.x + Math.cos(a) * r;
+        const y = player.y + Math.sin(a) * r;
+        if (m.queueSpawn('gate', x, y, m.waveScaleFor('gate', e.bossWave), { warmup: ARCH.buildTime, attach: { builder: e, rotation: a + Math.PI / 2 } })) {
+          e.buildX = x;
+          e.buildY = y;
+          e.buildT = ARCH.buildTime;
+        }
+      }
+    }
+    if (!e.enraged) return;
+    e.cageT -= dt;
+    if (e.cageT <= 0) {
+      e.cageT = ARCH.cageEvery;
+      const off = Math.random() * Math.PI * 2;
+      for (let k = 0; k < ARCH.cageGates; k++) {
+        const a = off + (k / ARCH.cageGates) * Math.PI * 2;
+        m.queueSpawn('gate', player.x + Math.cos(a) * ARCH.cageR, player.y + Math.sin(a) * ARCH.cageR, m.waveScaleFor('gate', e.bossWave), {
+          warmup: 0.5, attach: { builder: e, cage: { cx: player.x, cy: player.y, a, r: ARCH.cageR, t: ARCH.cageTime } }
+        });
+      }
+      env.grid?.applyImpulse(player.x, player.y, 50, ARCH.cageR, e.hue);
+    }
+  },
+  trace(ctx, e, r) {
+    // A drafting triangle round a compass ring, three struts to its corners.
+    for (let k = 0; k < 3; k++) {
+      const a = (k * Math.PI * 2) / 3;
+      if (k === 0) ctx.moveTo(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2);
+      else ctx.lineTo(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2);
+    }
+    ctx.closePath();
+    ctx.moveTo(r * 0.55, 0);
+    ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
+    for (let k = 0; k < 3; k++) {
+      const a = Math.PI / 3 + (k * Math.PI * 2) / 3;
+      ctx.moveTo(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55);
+      ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95);
+    }
+  },
+  overlay(ctx, e) {
+    if (!(e.buildT > 0)) return;
+    // Construction beam to the gate it is building.
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 75%, ${0.25 + 0.5 * (e.buildT / ARCH.buildTime)})`;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash?.([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y);
+    ctx.lineTo(e.buildX, e.buildY);
+    ctx.stroke();
+    ctx.setLineDash?.([]);
+  }
+};
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -685,7 +788,8 @@ export const BOSS_DEFS = {
   ouroboros,
   wing_commander: wingCommander,
   hive_carrier: hiveCarrier,
-  event_horizon: eventHorizon
+  event_horizon: eventHorizon,
+  architect
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

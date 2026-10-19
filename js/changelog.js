@@ -17,8 +17,8 @@ export const CHANGELOG = Object.freeze([
     title: 'Boss Campaign',
     notes: [
       { type: 'new', text: 'BOSS CAMPAIGN: a minor boss every 3rd wave and a major boss every 6th, each with its own look and attacks. New enemies now debut alongside a boss instead of on a fixed wave.' },
-      { type: 'new', text: 'Bosses: BROOD QUEEN (wave 3), OUROBOROS (6), WING COMMANDER (9), HIVE CARRIER (12) and EVENT HORIZON (15), each with its own attacks and a second phase.' },
-      { type: 'new', text: 'New enemies: MAYFLY clouds (3), SERPENTS (6), KESTREL V-wings (9), CARRIERS and their DRONES (12), and the HULK, the old Dreadnought as an armored sponge (15).' },
+      { type: 'new', text: 'Bosses: BROOD QUEEN (3), OUROBOROS (6), WING COMMANDER (9), HIVE CARRIER (12), EVENT HORIZON (15), THE ARCHITECT (18), each with its own attacks.' },
+      { type: 'new', text: 'New enemies: MAYFLIES (3), SERPENTS (6), KESTREL V-wings (9), CARRIERS + DRONES (12), HULKS (15) and LASER GATES (18): fly through a gate\'s beam to blow it up.' },
       { type: 'new', text: 'Every wave has a theme (MAYFLY BLOOM, STAMPEDE, CROSSFIRE...) that tilts which enemies show up. Past wave 30, bosses come in pairs.' },
       { type: 'new', text: 'Veteran forms: swarmers, pinwheels, weavers, splitters and mayflies grow an extra edge and a little speed at waves 11 and 21. Late splitters burst into four.' },
       { type: 'balance', text: 'Enemies debut later (bruisers 6, blinkers 9, gunners 12, vortexes 15, shielders 18, conduits 24); every wave keeps the same total enemy HP per second.' },

@@ -10,6 +10,7 @@ import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER } from './hostiles.js';
 import { SERPENT, spawnSerpent } from './serpents.js';
 import { spawnWing } from './squadrons.js';
+import { GATE, gatePylons, beamDistance } from './gates.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -177,7 +178,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -2650,6 +2651,40 @@ export class Game {
     if (INTEL_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
   }
 
+  // A laser gate against the ship: a pylon hits like a hull; crossing the beam (hub included) detonates
+  // the gate. Returns true when the hit ended the run.
+  gateContact(e, p) {
+    // The beam first: a ship crossing it near a pylon still blows the gate rather than taking the hit.
+    const { d, t } = beamDistance(e, p.x, p.y);
+    if (d < p.radius && t > 0.06 && t < 0.94) {
+      this.detonateGate(e);
+      return false;
+    }
+    for (const q of gatePylons(e)) {
+      if (!shieldTouches(p, TUNING, q.x, q.y, GATE.pylonRadius)) continue;
+      if (p.invuln > 0) return false;
+      this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
+      return this.endRunIfDead();
+    }
+    return false;
+  }
+
+  // Flying through a gate: it blows, wrecking every hostile within GATE.blastRadius (bosses too).
+  detonateGate(e) {
+    if (e.dead) return;
+    const r = GATE.blastRadius;
+    this.particles.spawnShockwave(e.x, e.y, r, e.hue, 6, 0.45);
+    this.particles.spawnShockwave(e.x, e.y, r * 0.6, 0, 4, 0.3);
+    this.particles.spawnExplosionSparks(e.x, e.y, 40, e.hue, 3, 16, 2.4);
+    this.particles.spawnFloatText?.(e.x, e.y - 20, 'GATE BLAST!', '#ffe14a', 15);
+    this.grid.applyImpulse(e.x, e.y, 90, r * 1.4, e.hue);
+    this.addShake(8);
+    e.hp = 0;
+    e.lastStat = 'other';
+    this.killEnemy(e);
+    this.damageEnemiesInRadius(e.x, e.y, r, GATE.blastDamage * this.getWaveScale(), e.hue, 'other', KNOCKBACK.area * 2, 0.3);
+  }
+
   // Seconds until the next pack: the wave's base interval, stretched or shrunk by the HP budget, and
   // slowed (bossPackRate) while this boss wave's boss is still warning in or alive. The lull lasts only
   // until the wave timer runs out: an unbeaten boss then faces full-rate packs.
@@ -4915,6 +4950,10 @@ export class Game {
 
     for (const e of range ? [] : [...enemies].reverse()) { // range dummies never touch the ship
       if (e.dead) continue;
+      if (e.type === 'gate') {
+        if (this.gateContact(e, p)) return;
+        continue;
+      }
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {

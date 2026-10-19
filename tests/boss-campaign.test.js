@@ -469,3 +469,51 @@ test('Event Horizon: a gravity well that tugs the ship, swallows hostiles to hea
   assert.equal(h.enraged, true);
   assert.equal(m.enemies.filter(e => e.type === 'blackhole').length, HORIZON.vortexes, 'spits out vortexes');
 });
+
+test('laser gates: flying through the beam detonates them and wrecks nearby hostiles; the pylons hurt', async () => {
+  resetTuning();
+  const { GATE, gatePylons } = await import('../js/gates.js');
+  const g = campaignGame({ wave: 18 });
+  const m = g.enemyManager;
+  g.player.invuln = 0;
+  m.queueSpawn('gate', g.player.x, g.player.y, 1, { instant: true, attach: { rotation: Math.PI / 2 } });
+  m.queueSpawn('pinwheel', g.player.x + 120, g.player.y, 1, { instant: true });
+  step(m, g.player, 2);
+  const gate = m.enemies.find(e => e.type === 'gate');
+  const pin = m.enemies.find(e => e.type === 'pinwheel');
+  const shield = g.player.hp;
+  assert.equal(g.gateContact(gate, g.player), false);
+  assert.ok(gate.dead, 'crossing the beam detonates it');
+  assert.ok(pin.dead, 'the blast wrecks hostiles nearby');
+  assert.equal(g.player.hp, shield, 'free for the pilot');
+  // A pylon is solid.
+  m.queueSpawn('gate', 3000, 3000, 1, { instant: true, attach: { rotation: 0 } });
+  step(m, g.player, 2);
+  const g2 = m.enemies.find(e => e.type === 'gate');
+  const [a] = gatePylons(g2);
+  g.player.x = a.x; g.player.y = a.y + GATE.pylonRadius;
+  g.gateContact(g2, g.player);
+  assert.ok(g.player.hp < shield, 'a pylon hits like a hull');
+  assert.ok(!g2.dead);
+});
+
+test('the Architect builds gates round the ship and, from half HP, drops closing cages', async () => {
+  resetTuning();
+  const { ARCH } = await import('../js/bosses.js');
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  m.queueSpawn('architect', 2000, 2000, waveScaleAt(18), { instant: true, wave: 18 });
+  step(m, player, 4);
+  const a = m.enemies.find(e => e.type === 'architect');
+  assert.equal(m.enemies.filter(e => e.type === 'shielder').length, ARCH.guards);
+  step(m, player, 60 * 6);
+  const gates = m.enemies.filter(e => e.type === 'gate' && e.builder === a);
+  assert.ok(gates.length >= 2, `${gates.length} gates built`);
+  a.hp = a.maxHp * 0.49;
+  step(m, player, 75); // the cage drops 0.5 s in and beams in over 0.5 s
+  const cage = m.enemies.filter(e => e.cage);
+  assert.equal(cage.length, ARCH.cageGates, 'a cage of gates');
+  const r0 = Math.hypot(cage[0].x - player.x, cage[0].y - player.y);
+  step(m, player, 60 * 2);
+  assert.ok(Math.hypot(cage[0].x - player.x, cage[0].y - player.y) < r0 - 30, 'the cage closes in');
+});

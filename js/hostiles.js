@@ -6,11 +6,13 @@
 //   SERPENT — a winding head with a body that blocks shots (js/serpents.js); kill the head.
 //   KESTREL — darts in V formation making strafing runs (js/squadrons.js); kill the leader to scatter them.
 //   CARRIER — hangs back at range and launches homing DRONES (tiny kamikazes that burn out after a while).
+//   GATE    — two pylons and a beam (js/gates.js): fly through the beam to detonate it, shoot the hub to break it.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
 import { SERPENT, windToward } from './serpents.js';
 import { KESTREL, updateKestrel, traceKestrel } from './squadrons.js';
 import { turnToward } from './serpents.js';
+import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
 
 export const CARRIER = { range: 430, band: 70, launchEvery: 3.2, launch: 2, maxDrones: 6 };
 export const DRONE = { speed: 4.3, turnRate: 2.6, life: 7, launchKick: 3.5 };
@@ -25,6 +27,7 @@ export const HOSTILE_INFO = {
   serpent: { label: 'SERPENT', unlockWave: unlockWaveOf('serpent'), intro: 'ONLY THE HEAD TAKES DAMAGE · THE BODY BLOCKS SHOTS — AIM FOR THE HEAD' },
   kestrel: { label: 'KESTREL WING', unlockWave: unlockWaveOf('kestrel'), intro: 'V FORMATIONS ON STRAFING RUNS · SIDESTEP THE LINE — DOWN THE LEADER TO SCATTER THEM' },
   carrier: { label: 'CARRIER', unlockWave: unlockWaveOf('carrier'), intro: 'HANGS BACK AND LAUNCHES HOMING DRONES — CHASE IT DOWN OR OUTRUN THE DRONES' },
+  gate: { label: 'LASER GATE', unlockWave: unlockWaveOf('gate'), intro: 'FLY THROUGH THE BEAM TO DETONATE IT · THE PYLONS HURT — LURE A CROWD CLOSE FIRST' },
   drone: { label: 'DRONE', unlockWave: unlockWaveOf('drone'), intro: 'HOMING KAMIKAZE FROM A CARRIER · BURNS OUT AFTER A FEW SECONDS — KEEP MOVING' }
 };
 
@@ -69,6 +72,13 @@ export function hostileKindStats(type, waveScale) {
         radius: 21, sides: 6, hue: 120, // Hangar green
         score: 160, xp: 9, vRot: 0, knockMult: 0.4
       };
+    case 'gate':
+      return {
+        hp: 30 * waveScale, maxHp: 30 * waveScale,
+        speed: 1.1,
+        radius: 13, sides: 4, hue: 55, // Hazard yellow
+        score: 150, xp: 5, vRot: 0, knockMult: 0.2
+      };
     case 'drone':
       return {
         hp: 6 * waveScale, maxHp: 6 * waveScale,
@@ -82,7 +92,7 @@ export function hostileKindStats(type, waveScale) {
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2 };
 
 // Fast movers that leave a neon ribbon.
 export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel', 'drone']);
@@ -159,7 +169,7 @@ function updateDrone(e, m, env) {
   e.rotation = Math.atan2(e.vy, e.vx);
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone };
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {
@@ -201,6 +211,8 @@ export function traceHostileKind(ctx, e, r) {
     ctx.rect(-r * 0.5, -r * 0.8, r * 0.8, r * 0.35);
     ctx.moveTo(r * 0.75, 0);
     ctx.arc(r * 0.6, 0, r * 0.15, 0, Math.PI * 2);
+  } else if (e.type === 'gate') {
+    traceGate(ctx, e, r);
   } else if (e.type === 'drone') {
     ctx.moveTo(r * 1.4, 0);
     ctx.lineTo(-r, r * 0.8);
@@ -221,6 +233,10 @@ export function traceHostileKind(ctx, e, r) {
 
 // Post-hit HP ring for the hulk, so "this one takes a while" reads.
 export function drawHostileOverlay(ctx, e, r) {
+  if (e.type === 'gate') {
+    drawGateBeam(ctx, e);
+    return;
+  }
   if (e.type !== 'hulk' || e.isLieutenant || !(e.sinceHit < 2) || e.hp >= e.maxHp) return;
   const pct = Math.max(0, e.hp / e.maxHp);
   ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.75 * (1 - e.sinceHit / 2)})`;
