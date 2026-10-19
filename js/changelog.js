@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.1',
+    date: '2026-10-19',
+    title: 'Longer Flames',
+    notes: [
+      { type: 'balance', text: 'Flamethrower reaches 30% further from the start, and Nozzle Pressure and Wide Nozzle cards are twice as big (+40 px reach, about +5 degrees each side).' }
+    ]
+  },
+  {
     version: '0.39.0',
     date: '2026-10-19',
     title: 'Electric Shield Field',
