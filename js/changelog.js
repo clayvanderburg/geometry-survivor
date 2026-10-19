@@ -12,15 +12,51 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.34.0',
+    version: '0.36.0',
     date: '2026-10-19',
     title: 'Fill Your Slots',
     notes: [
       { type: 'balance', text: 'Level-ups offer 2 cards while you carry one weapon, 3 with two or three, and 4 from four weapons. Riding one weapon to LV 12 is no longer the easy way.' },
       { type: 'new', text: 'SLOT REWARDS: your 3rd and 5th weapons each give +5% damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick.' },
       { type: 'new', text: 'The NEW WEAPON card now shows what its slot unlocks.' },
-      { type: 'new', text: 'OVERCHARGE: once every weapon is LV 18, general, crit, tag and damage-type cards keep coming past their max and keep stacking.' },
+      { type: 'new', text: 'OVERCHARGE: once every weapon is LV 18, general, crit, tag and STATUS cards keep coming past their max and keep stacking.' },
       { type: 'new', text: 'Don\'t like the 3 weapons on offer? REROLL them for 40 gold (80, then 160 within one pick).' }
+    ]
+  },
+  {
+    version: '0.35.0',
+    date: '2026-10-19',
+    title: 'Element Infusion',
+    notes: [
+      { type: 'new', text: 'ELEMENTS: give Autocannon, Rocket Pods, Swarm Missiles, Tesla Arc or Plasma Grenades FIRE, FROST, CORROSIVE or SHOCK from level-up cards. Each rank is a weapon level.' },
+      { type: 'new', text: 'Your pick is locked for that weapon: supply caches never hand out or swap elements. More cards of the same element make it stronger.' },
+      { type: 'new', text: 'SHOCK stuns: 0.3 s per hit, 30% chance of a 1.5 s stun. Stunned enemies stop moving and shooting, then shrug stuns off for 1 s. Bosses barely notice.' },
+      { type: 'new', text: 'STATUS cards: Status Potency, Application, Duration, Shock Conductor and an Amplifier per element. They show up once a weapon has a matching element.' },
+      { type: 'balance', text: 'Thermite Rounds, Cryo Payload and Nanite Swarm are now per-weapon element cards; Supercritical needs crit chance LV 2 plus any weapon with an element.' },
+      { type: 'balance', text: 'CORROSIVE stacks add +7% damage taken each (was +5%), since element ranks now use weapon levels.' }
+    ]
+  },
+  {
+    version: '0.34.1',
+    date: '2026-10-19',
+    title: 'Tougher Bosses',
+    notes: [
+      { type: 'balance', text: 'All ten bosses have 3x HP, so they no longer melt once your build comes together. Their XP and Void Core drops are unchanged.' }
+    ]
+  },
+  {
+    version: '0.34.0',
+    date: '2026-10-19',
+    title: 'Boss Campaign',
+    notes: [
+      { type: 'new', text: 'BOSS CAMPAIGN: a minor boss every 3rd wave and a major boss every 6th, each with its own look and attacks. New enemies now debut alongside a boss instead of on a fixed wave.' },
+      { type: 'new', text: 'Ten bosses, one every 3rd wave: BROOD QUEEN, OUROBOROS, WING COMMANDER, HIVE CARRIER, EVENT HORIZON, ARCHITECT, PROGENITOR, CONDUCTOR, ECLIPSE TWINS, THE PRISM.' },
+      { type: 'new', text: 'New enemies: MAYFLIES, SERPENTS, KESTREL V-wings, CARRIERS + DRONES, HULKS, LASER GATES (fly through to blow one up), MITOSIS CELLS, REPULSORS and LANCERS.' },
+      { type: 'new', text: 'Every wave has a theme (MAYFLY BLOOM, STAMPEDE, CROSSFIRE...) that tilts which enemies show up. Past wave 30, bosses come in pairs.' },
+      { type: 'new', text: 'Veteran forms: swarmers, pinwheels, weavers, splitters and mayflies grow an extra edge and a little speed at waves 11 and 21. Late splitters burst into four.' },
+      { type: 'balance', text: 'Enemies debut later (bruisers 6, blinkers 9, gunners 12, vortexes 15, shielders 18, conduits 24); every wave keeps the same total enemy HP per second.' },
+      { type: 'balance', text: 'While a boss wave\'s boss is up, packs arrive 30% less often, until the wave ends. Major bosses have 1.8x HP and drop 5 Void Cores.' },
+      { type: 'balance', text: 'Bosses bust through asteroids 4x faster than before, and a boss portal blows apart the rock around it. Serpent heads drill rock and their bodies glide over it.' }
     ]
   },
   {

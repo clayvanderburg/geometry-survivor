@@ -103,6 +103,86 @@ export const STAT_CARDS = {
 export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
 export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.id, c]));
 
+// --- Element infusion (v0.34) ----------------------------------------------------------------------
+// Five weapons can carry an ELEMENT: FIRE (burn), FROST (chill), CORROSIVE (corrode) or SHOCK (stun).
+// Each has one element card per element ("Autocannon: Thermite Rounds"), offered only in level-up hands
+// (never in supply caches). The first one taken LOCKS that weapon's element for the run: the other three
+// are never offered again, and more cards of the same element are rank-ups (stronger status). Like stat
+// cards, every rank raises the weapon's level by 1 and counts toward LV 18 and its Breakthroughs.
+// Rank state lives in player.weapons under the card id (`blaster_fire`), so status-effects.js reads it
+// per hit with plain property lookups. The numbers per rank live in weapon-scaling.js.
+export const ELEMENTS = ['fire', 'frost', 'corrode', 'shock'];
+export const ELEMENT_WEAPONS = ['blaster', 'rockets', 'missiles', 'lightning', 'grenades'];
+export const ELEMENT_MAX_RANKS = 5;
+// label: what cards and the HUD say; status: the status effect (TAG_INFO key, weapon-scaling.js).
+export const ELEMENT_INFO = {
+  fire: { id: 'fire', label: 'FIRE', status: 'burn', color: '#ff5a2e', hue: 18 },
+  frost: { id: 'frost', label: 'FROST', status: 'chill', color: '#8fe8ff', hue: 192 },
+  corrode: { id: 'corrode', label: 'CORROSIVE', status: 'corrode', color: '#7dff4a', hue: 100 },
+  shock: { id: 'shock', label: 'SHOCK', status: 'shock', color: '#f4ff52', hue: 62 }
+};
+
+const ELEMENT_NAMES = {
+  blaster: { fire: 'Thermite Rounds', frost: 'Cryo Rounds', corrode: 'Nanite Rounds', shock: 'Shock Rounds' },
+  rockets: { fire: 'Incendiary Warheads', frost: 'Cryo Warheads', corrode: 'Nanite Warheads', shock: 'Shock Warheads' },
+  missiles: { fire: 'Thermite Payload', frost: 'Cryo Payload', corrode: 'Nanite Payload', shock: 'Shock Payload' },
+  lightning: { fire: 'Searing Arcs', frost: 'Cryo Arcs', corrode: 'Nanite Swarm', shock: 'Stun Arcs' },
+  grenades: { fire: 'Thermite Charge', frost: 'Cryo Charge', corrode: 'Nanite Charge', shock: 'Shock Charge' }
+};
+const ELEMENT_WEAPON_TEXT = {
+  blaster: 'Autocannon bolts (Pulsar Helix too)', rockets: 'Rocket Pod hits and blasts', missiles: 'Swarm Missile blasts',
+  lightning: 'Tesla arcs', grenades: 'Plasma Grenade blasts, bomblets and clouds'
+};
+const ELEMENT_EFFECT_TEXT = {
+  fire: 'set targets on FIRE: every hit adds a burn stack. More ranks burn hotter and stack higher.',
+  frost: 'CHILL targets, slowing them (bosses resist most of it). More ranks slow harder and longer.',
+  corrode: 'CORRODE targets: every stack makes them take more damage from everything. More ranks stack higher.',
+  shock: 'SHOCK targets: a short stun, sometimes a long one. More ranks stun longer and more often.'
+};
+export const ELEMENT_WEAPON_LABEL = {
+  blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades'
+};
+// player.weapons / upgradeLevels key of a weapon's element card.
+export const elementKey = (weapon, element) => `${weapon}_${element}`;
+
+export const ELEMENT_CARDS = Object.fromEntries(ELEMENT_WEAPONS.map((weapon) => [weapon, ELEMENTS.map((element) => ({
+  weapon,
+  element,
+  id: elementKey(weapon, element),
+  name: `${ELEMENT_WEAPON_LABEL[weapon]}: ${ELEMENT_NAMES[weapon][element]}`,
+  summary: `${ELEMENT_WEAPON_TEXT[weapon]} ${ELEMENT_EFFECT_TEXT[element]} Locks this weapon's element for the run.`,
+  maxLevel: ELEMENT_MAX_RANKS
+}))]));
+export const ELEMENT_CARD_LIST = Object.values(ELEMENT_CARDS).flat();
+export const ELEMENT_CARD_BY_ID = Object.fromEntries(ELEMENT_CARD_LIST.map((c) => [c.id, c]));
+
+// The weapon a level card belongs to (stat cards and element cards both raise their weapon's level).
+export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CARD_BY_ID[id]?.weapon || null;
+
+// A weapon's element and its rank ({ element, rank }), or null when it has none. Reads player.weapons
+// (kept in step with the card ranks by the cards' apply()).
+export const ELEMENT_KEYS = Object.fromEntries(ELEMENT_WEAPONS.map((weapon) => [weapon, ELEMENTS.map((el) => elementKey(weapon, el))]));
+export function weaponElement(p, weapon) {
+  const w = p?.weapons;
+  const keys = ELEMENT_KEYS[weapon];
+  if (!w || !keys) return null;
+  for (let i = 0; i < keys.length; i++) {
+    const rank = w[keys[i]];
+    if (rank > 0) return { element: ELEMENTS[i], rank };
+  }
+  return null;
+}
+
+// Elements carried by the player's weapons (owned or not: callers pass owned ids when it matters).
+export function elementsOf(p, weapons = ELEMENT_WEAPONS) {
+  const out = new Set();
+  for (const id of weapons) {
+    const el = weaponElement(p, id);
+    if (el) out.add(el.element);
+  }
+  return out;
+}
+
 // Category badge on a weapon's stat and Breakthrough cards: the weapon's name, so every card says
 // which weapon it upgrades.
 export const WEAPON_BADGE = {

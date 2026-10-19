@@ -35,11 +35,12 @@ export function inView(view, x, y, r = 0) {
 }
 
 // Inside the arena (with room for `pad`) and clear of rock.
-export function isOpenSpawn(game, x, y, pad = 0) {
+// `rock: false` skips the rock check (a boss's arrival blasts the rock round its portal).
+export function isOpenSpawn(game, x, y, pad = 0, { rock = true } = {}) {
   const edge = Math.max(SPAWN_ARENA_PAD, pad + 40);
   if (!(x >= edge && y >= edge && x <= game.worldWidth - edge && y <= game.worldHeight - edge)) return false;
   const am = game.asteroidManager;
-  if (!am?.getNearbyAsteroids) return true;
+  if (!rock || !am?.getNearbyAsteroids) return true;
   const rocks = am.getNearbyAsteroids(x, y, am.cellsFor ? am.cellsFor(SPAWN_ROCK_CLEARANCE) : 1);
   for (let i = 0; i < rocks.length; i++) {
     const rock = rocks[i];
@@ -111,7 +112,7 @@ export function pickSpawnPoint(game, { pad = 0, warmup = SPAWN_WARMUP, rand = Ma
 
 // Visible spawn (sandbox, or the rare case with no room off screen): inside the view, at least
 // spawnMinDist (+ pad) from the ship, inside the arena and clear of rock. The caller adds the long telegraph.
-export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = TUNING, minDist: min = null } = {}) {
+export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = TUNING, minDist: min = null, rock = true } = {}) {
   const p = game.player;
   const view = spawnView(game);
   const minDist = (min ?? tuning.spawnMinDist ?? 260) + pad;
@@ -121,7 +122,7 @@ export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = 
   for (let attempt = 0; attempt < 24; attempt++) {
     const x = view.x + inset + rand() * spanX;
     const y = view.y + inset + rand() * spanY;
-    if (Math.hypot(x - p.x, y - p.y) >= minDist && isOpenSpawn(game, x, y, pad)) return { x, y, onScreen: true };
+    if (Math.hypot(x - p.x, y - p.y) >= minDist && isOpenSpawn(game, x, y, pad, { rock })) return { x, y, onScreen: true };
   }
   // Tiny view or a crowded field: a circle at exactly the minimum distance.
   const offset = rand() * Math.PI * 2;
@@ -129,7 +130,7 @@ export function pickOnscreenSpawn(game, { pad = 0, rand = Math.random, tuning = 
     const a = offset + (k / 16) * Math.PI * 2;
     const x = p.x + Math.cos(a) * minDist;
     const y = p.y + Math.sin(a) * minDist;
-    if (isOpenSpawn(game, x, y, pad)) return { x, y, onScreen: inView(view, x, y, pad) };
+    if (isOpenSpawn(game, x, y, pad, { rock })) return { x, y, onScreen: inView(view, x, y, pad) };
   }
   // Last resort: toward the arena centre, which always has room beyond the minimum distance.
   const a = Math.atan2(game.worldHeight / 2 - p.y, game.worldWidth / 2 - p.x);

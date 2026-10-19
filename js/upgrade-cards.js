@@ -7,14 +7,16 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, baseDamage
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius,
+  burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
+  doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import {
-  STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
-  weaponBuild, levelBuild
+  WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
+  weaponBuild, levelBuild, levelCardWeapon, weaponElement, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
 } from './weapon-levels.js';
 
 const MAX_ROWS = 6;
@@ -30,6 +32,7 @@ const mult = (v) => `${v.toFixed(2)}x`;
 const bonus = (v) => `+${Math.round(v * 100)}%`;
 const tagBonus = (v) => bonus(v - 1);
 const tagBoost = (p, tag) => p.stats.tagDamage?.[tag] ?? 1;
+const rank = (p, key) => p.stats?.[key] || 0;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
 const sec1 = (v) => `${v.toFixed(1)}s`;
@@ -37,6 +40,37 @@ const sec1 = (v) => `${v.toFixed(1)}s`;
 // `fn` gets the weapon's build (level, stat ranks, Breakthroughs).
 const wb = (p, id, fn) => (ownsWeapon(p, id) ? fn(weaponBuild(p, id)) : null);
 // Deployable hits scale with bolt damage and the tuner's deployable multiplier (same as deployables.js).
+
+// Rows of one element-capable weapon: its element, then the numbers of the status it applies (null while
+// the weapon is not equipped or carries another element, so a card only shows what it changes).
+function elementRows(w) {
+  const L = ELEMENT_WEAPON_LABEL[w];
+  const at = (p, want, fn) => {
+    if (!ownsWeapon(p, w)) return null;
+    const e = weaponElement(p, w);
+    return e && e.element === want ? fn(e.rank) : null;
+  };
+  const rows = [
+    { id: `${w}:burnMax`, label: `${L} max burn DPS`, get: (p) => at(p, 'fire', (lv) => burnStackDps(p, lv) * burnMaxStacks(p, lv)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
+    { id: `${w}:burnStacks`, label: `${L} burn max stacks`, get: (p) => at(p, 'fire', (lv) => burnMaxStacks(p, lv)), fmt: int },
+    { id: `${w}:chill`, label: `${L} chill slow`, get: (p) => at(p, 'frost', (lv) => chillSlow(lv, false, p)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `HITS CHILL // -${row.fmt(a)} SPEED` },
+    { id: `${w}:chillDuration`, label: `${L} chill duration`, get: (p) => at(p, 'frost', (lv) => chillDuration(p, lv)), fmt: secs },
+    { id: `${w}:corrodeMax`, label: `${L} max damage taken`, get: (p) => at(p, 'corrode', (lv) => corrodePerStack(p) * corrodeMaxStacks(p, lv)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `HITS CORRODE // ${row.fmt(a)} DMG TAKEN` },
+    { id: `${w}:corrodeStacks`, label: `${L} corrode max stacks`, get: (p) => at(p, 'corrode', (lv) => corrodeMaxStacks(p, lv)), fmt: int },
+    { id: `${w}:stun`, label: `${L} stun`, get: (p) => at(p, 'shock', (lv) => shockStun(p, lv)), fmt: secs, headline: (b, a) => `+${(a - b).toFixed(2)}s STUN`, newText: (a, row) => `HITS STUN // ${row.fmt(a)} STUN` },
+    { id: `${w}:stunLong`, label: `${L} long-stun chance`, get: (p) => at(p, 'shock', (lv) => shockLongChance(p, lv)), fmt: pct },
+    { id: `${w}:stunLongTime`, label: `${L} long stun`, get: (p) => at(p, 'shock', () => shockLongStun(p)), fmt: secs }
+  ];
+  // Plasma Grenades show their element on the 'grenadeElement' row.
+  if (w !== 'grenades') {
+    rows.unshift({ id: `${w}:element`, label: `${L} element`, get: (p) => {
+      if (!ownsWeapon(p, w)) return null;
+      const e = weaponElement(p, w);
+      return e ? ELEMENT_INFO[e.element].label : null;
+    }, fmt: (v) => v });
+  }
+  return rows;
+}
 
 // headline: 'count' (+N UNIT), 'pct' (+N% UNIT, or N.N× UNIT from triple up), 'points' (+N% UNIT for ratio stats like luck),
 // or a function(before, after). newText: headline when the row comes online (before is null).
@@ -51,6 +85,14 @@ export const STAT_ROWS = [
   { id: 'explosiveDamage', label: 'EXPLOSIVE damage bonus', get: (p) => tagBoost(p, 'explosive'), fmt: tagBonus, headline: 'points', unit: 'EXPLOSIVE DAMAGE' },
   { id: 'electricDamage', label: 'ELECTRIC damage bonus', get: (p) => tagBoost(p, 'electric'), fmt: tagBonus, headline: 'points', unit: 'ELECTRIC DAMAGE' },
   { id: 'areaSize', label: 'AREA size', get: (p) => areaMult(p), fmt: pct, headline: 'points', unit: 'AREA SIZE' },
+  // Global STATUS cards (they lead with their own row; each infused weapon's rows below show the effect)
+  { id: 'statusPotency', label: 'Status potency', get: (p) => statusPotency(p), fmt: tagBonus, headline: 'points', unit: 'STATUS POTENCY' },
+  { id: 'statusApplication', label: 'Extra burn / corrode stacks', get: (p) => rank(p, 'statusApplication') * W.applicationStacks, fmt: int, headline: 'count', unit: 'MAX STACKS' },
+  { id: 'statusDouble', label: 'Double-stack chance', get: (p) => doubleStackChance(p), fmt: pct },
+  { id: 'statusDuration', label: 'Status duration', get: (p) => statusDurationMult(p), fmt: tagBonus, headline: 'points', unit: 'STATUS DURATION' },
+  { id: 'stunLongChance', label: 'Long-stun chance bonus', get: (p) => shockLongChance(p, 1) - W.shockLongChance(1), fmt: bonus, headline: 'points', unit: 'LONG-STUN CHANCE' },
+  { id: 'stunDuration', label: 'Stun duration', get: (p) => stunDurationMult(p), fmt: tagBonus, headline: 'points', unit: 'STUN DURATION' },
+  ...ELEMENTS.map((el) => ({ id: `${el}Damage`, label: `${ELEMENT_INFO[el].label} damage bonus`, get: (p) => elementDamageMult(p, el), fmt: tagBonus, headline: 'points', unit: `${ELEMENT_INFO[el].label} DAMAGE` })),
 
   // Autocannon (primary blaster). Each weapon's rows read its build (weapon-levels.js), so a stat card
   // shows exactly its own stat plus the damage per hit its new level brings.
@@ -160,18 +202,8 @@ export const STAT_ROWS = [
   { id: 'novaRadius', label: 'Dash nova radius', get: (p) => owned(p, 'dashNova', (l) => novaRadius(p, l)), fmt: int },
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
-  // Damage types (status effects, see status-effects.js)
-  { id: 'burnMax', label: 'Max burn DPS / target', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l) * W.burnMaxStacks(l)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
-  { id: 'burnStack', label: 'Burn DPS / stack', get: (p) => owned(p, 'thermite', (l) => burnStackDps(p, l)), fmt: dec1 },
-  { id: 'burnStacks', label: 'Burn max stacks', get: (p) => owned(p, 'thermite', W.burnMaxStacks), fmt: int },
-  { id: 'burnDuration', label: 'Burn duration', get: (p) => owned(p, 'thermite', () => W.burnDuration), fmt: secs },
-  { id: 'chillSlow', label: 'Chill slow', get: (p) => owned(p, 'cryo', (l) => chillSlow(l)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `BLASTS CHILL // -${row.fmt(a)} SPEED` },
-  { id: 'chillBoss', label: 'Chill slow on bosses', get: (p) => owned(p, 'cryo', (l) => chillSlow(l, true)), fmt: pct },
-  { id: 'chillDuration', label: 'Chill duration', get: (p) => owned(p, 'cryo', W.chillDuration), fmt: secs },
-  { id: 'corrodeMax', label: 'Max damage taken', get: (p) => owned(p, 'nanite', (l) => corrodePerStack() * W.corrodeMaxStacks(l)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `HITS CORRODE // ${row.fmt(a)} DMG TAKEN` },
-  { id: 'corrodeStack', label: 'Damage taken / stack', get: (p) => owned(p, 'nanite', () => corrodePerStack()), fmt: bonus },
-  { id: 'corrodeStacks', label: 'Corrode max stacks', get: (p) => owned(p, 'nanite', W.corrodeMaxStacks), fmt: int },
-  { id: 'corrodeDuration', label: 'Corrode duration', get: (p) => owned(p, 'nanite', () => W.corrodeDuration), fmt: secs }
+  // Elements (status-effects.js): each infused weapon's status at its element rank
+  ...ELEMENT_WEAPONS.flatMap(elementRows)
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -227,9 +259,11 @@ function diffRows(before, after) {
   return changed;
 }
 
-// A stat card's level line is its weapon's level (LV 3 -> LV 4 / 18), not the card's own rank.
+// A level card's (stat or element card) level line is its weapon's level (LV 3 -> LV 4 / 18), not the
+// card's own rank.
 export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
-  const sc = STAT_CARD_BY_ID[upg.id];
+  const weapon = levelCardWeapon(upg.id);
+  const sc = weapon ? { weapon } : null;
   const fromLevel = sc ? weaponLevel(player, sc.weapon) : (player.upgradeLevels[upg.id] || 0);
   const before = readRows(player);
   const copy = deepCopy(player);
@@ -329,7 +363,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
   const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade' };
-  let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]);
+  let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;
   return v;

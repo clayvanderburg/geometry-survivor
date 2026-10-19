@@ -83,7 +83,7 @@ export class WeaponEffects {
   }
 
   // A burning pool: every `tick` s for `life` s it hits everything inside for `damage`. `look` draws it
-  // as a Plasma Grenade cloud of that element ('plasma', 'frost', 'corrode'; 'fire' and none: flames).
+  // as a Plasma Grenade cloud of that element ('plasma', 'frost', 'corrode', 'shock'; 'fire' and none: flames).
   addPool(p) {
     if (this.pools.length >= MAX_POOLS) this.pools.shift();
     this.pools.push({ tickT: 0, ...p, maxLife: p.life });
@@ -221,7 +221,7 @@ export class WeaponEffects {
 
   // Plasma Grenade clouds (Lingering Cloud), one look per element: plasma a glowing radioactive haze
   // with drifting puffs and a turning hazard ring, frost an icy hexagon with a snowflake, corrode a
-  // toxic pool with rising bubbles. Fire clouds use the napalm flames.
+  // toxic pool with rising bubbles, shock a crackling rim with jumping arcs. Fire clouds use the napalm flames.
   drawCloud(ctx, p, t, vfx) {
     const k = Math.max(0, p.life / p.maxLife);
     const a = Math.min(1, (p.maxLife - p.life) / 0.2) * Math.min(1, k * 3); // fade in, fade out
@@ -277,6 +277,26 @@ export class WeaponEffects {
         ctx.moveTo(bx + br, by);
         ctx.arc(bx, by, br, 0, Math.PI * 2);
       }
+      ctx.stroke();
+    } else if (p.look === 'shock') {
+      // Shock: a crackling rim and jagged arcs that jump to new spots ~10 times a second.
+      const frame = Math.floor(t * 10);
+      ctx.strokeStyle = `hsla(${hue}, 100%, 72%, ${Math.min(1, 0.7 * a * vfx)})`;
+      ctx.lineWidth = 1.6 * vfx;
+      ctx.beginPath();
+      for (let s = 0; s < 4; s++) {
+        const q = s * 1.571 + Math.sin(frame * 3.1 + s * 7.7 + p.x) * 1.2;
+        let px = p.x + Math.cos(q) * R * 0.1, py = p.y + Math.sin(q) * R * 0.1;
+        ctx.moveTo(px, py);
+        for (let j = 1; j <= 4; j++) {
+          const jit = Math.sin(frame * 5.3 + s * 3.7 + j * 11.1 + p.y) * R * 0.12;
+          px = p.x + Math.cos(q) * R * (0.1 + 0.22 * j) - Math.sin(q) * jit;
+          py = p.y + Math.sin(q) * R * (0.1 + 0.22 * j) + Math.cos(q) * jit;
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.moveTo(p.x + R, p.y);
+      ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
       ctx.stroke();
     } else {
       // Plasma: drifting puffs and a turning dashed hazard ring.

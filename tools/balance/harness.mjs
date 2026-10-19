@@ -140,7 +140,9 @@ function installInstrumentation(game, metrics) {
     } finally {
       hitDepth--;
     }
-    metrics.damage(src, Math.min(before, dmg), dmg, e);
+    // Effective damage is the HP the hit actually took (crits, armor and CORRODE included, overkill excluded).
+    const landed = Math.min(before, Math.max(0, before - Math.max(0, e.hp)));
+    metrics.damage(src, landed, dmg, e);
   };
 
   // Supernova boss damage writes HP directly and reports through damageNumbers.
@@ -237,6 +239,13 @@ function installInstrumentation(game, metrics) {
   game.enemyBulletDamage = function (b) {
     const dmg = proto.enemyBulletDamage.call(this, b);
     metrics.hurt({ type: 'orb' }, Math.min(dmg, Math.max(0, game.player.hp)), dmg, game);
+    return dmg;
+  };
+
+  // Beams (lancers, twin tethers, the Prism's lighthouse) are scored to the hull that carries them.
+  game.beamDamage = function (e) {
+    const dmg = proto.beamDamage.call(this, e);
+    metrics.hurt(e, Math.min(dmg, Math.max(0, game.player.hp)), dmg, game);
     return dmg;
   };
 
@@ -736,8 +745,8 @@ export function classifyUpgrades() {
     const player = JSON.parse(fresh);
     const before = JSON.stringify(player.weapons);
     applyUpgradeLevels(player, { ...u, levelJump: 1 });
-    // Damage-type cards (Thermite, Cryo, Nanite) flag a weapon modifier, not a weapon of their own.
-    const isModifier = u.category === 'DAMAGE TYPE';
+    // Element cards (Autocannon: Thermite Rounds, ...) raise a weapon's level and set its element: a modifier, not a weapon.
+    const isModifier = !!u.elementCard;
     // Weapon stat cards raise a weapon's level too, but they are that weapon's cards, not weapons.
     return { id: u.id, name: u.name, maxLevel: u.maxLevel, isSynergy: !!u.isSynergy, isModifier, isStatCard: !!u.statCard,
       isWeapon: !isModifier && !u.statCard && JSON.stringify(player.weapons) !== before };

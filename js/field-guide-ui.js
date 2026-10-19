@@ -14,7 +14,7 @@ export const GUIDE_TABS = [
 ];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const ENTRY_HUE = { lieutenant: 228, boss: 48 };
+const ENTRY_HUE = { lieutenant: 228, boss: 48, brood_queen: 325, ouroboros: 245, wing_commander: 30, hive_carrier: 120, event_horizon: 280, architect: 55, progenitor: 95, conductor: 165, eclipse_twins: 48, prism: 300 };
 
 export function hostileCardHTML(entry, { unlocked = false, fresh = false } = {}) {
   const stats = hostileStats(entry.id);
@@ -27,7 +27,7 @@ export function hostileCardHTML(entry, { unlocked = false, fresh = false } = {})
     return `<article class="${cls}" data-entry="${esc(entry.id)}" data-gp-nav tabindex="0" style="--entry-hue:${hue}">${preview}
       <div class="guide-info"><div class="guide-entry-head"><h3>UNKNOWN SIGNATURE</h3></div>
       <p class="guide-what">Not logged yet. Meet it in a run to unlock its file, stats and counter-play.</p>
-      <p class="guide-hint">${entry.id === 'boss' ? 'Signal expected every 3 waves.' : `Signal detected from wave ${wave}.`}</p></div></article>`;
+      <p class="guide-hint">${entry.boss ? `Signal expected on wave ${wave}.` : `Signal detected from wave ${wave}.`}</p></div></article>`;
   }
   const chips = hostileStatRows(entry.id).map(([k, v]) => `<span class="guide-stat"><b>${esc(k)}</b> ${esc(v)}</span>`).join('');
   const mods = entry.modifiers

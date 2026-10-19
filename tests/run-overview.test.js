@@ -110,7 +110,8 @@ test('weapons, upgrades, damage and run info read the live run', () => {
   const g = freshGame();
   const p = g.player;
   acquireWeapon(p, 'grenades');
-  install(p, 'thermite', 2);
+  install(p, 'grenades_fire', 2);
+  install(p, 'status_potency');
   install(p, 'luck_boost');
   g.runStats.damage('blaster', 300);
   g.runStats.damage('grenade', 100);
@@ -120,7 +121,7 @@ test('weapons, upgrades, damage and run info read the live run', () => {
   assert.equal(blaster.dealt, 300);
   assert.equal(blaster.share, 0.6);
   assert.deepEqual(damageRows(g.runStats).map((r) => [r.id, r.dmg]), [['blaster', 300], ['grenades', 100], ['supernova', 100]]);
-  assert.deepEqual(upgradeGroups(p).map((x) => [x.label, x.items.map((u) => u.id)]), [['DAMAGE TYPES', ['thermite']], ['SHIP SYSTEMS & PASSIVES', ['luck_boost']]]);
+  assert.deepEqual(upgradeGroups(p).map((x) => [x.label, x.items.map((u) => u.id)]), [['STATUS EFFECTS', ['status_potency']], ['SHIP SYSTEMS & PASSIVES', ['luck_boost']]], 'element cards are weapon levels: they show on the weapon, not here');
   g.wave = 4; g.elapsedTime = 125; g.kills = 37; g.gold = 12;
   const info = Object.fromEntries(runInfo(g).map(([k, v, d]) => [k, [v, d]]));
   assert.deepEqual(info.WAVE, ['4', '02:05']);

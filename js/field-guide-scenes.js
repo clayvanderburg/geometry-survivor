@@ -9,6 +9,10 @@ import { ParticleSystem } from './particles.js';
 import { drawCrabShip, drawPlayerShield, shieldTouches } from './ship-renderer.js';
 import { BRUISER, shieldBlocks, bounceFromShip, lieutenantTypes } from './archetypes.js';
 import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
+import { bossDef } from './bosses.js';
+import { SERPENT, spawnSerpent, turnToward } from './serpents.js';
+import { REPULSOR } from './hostiles.js';
+import { spawnWing } from './squadrons.js';
 import { wellPullScale, playerPullShare } from './gravity.js';
 
 export const PREVIEW_DT = 1 / 60;
@@ -207,21 +211,280 @@ const SCENES = {
     },
     onKill(s, e) { s.splitCopies(e); }
   },
-  boss: {
-    w: 640, loop: 11,
+  mayfly: {
+    w: 440, loop: 8,
+    setup(s) { s.home(0.78, 0.5); s.cloud(); },
+    tick(s) {
+      s.kite(s.W * 0.74, s.H * 0.5, 46, 1.5);
+      s.autoFire(0.1);
+      if (s.count() < 4 && s.every(1.6)) s.cloud();
+    }
+  },
+  hulk: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.8, 0.5); s.spawn('hulk', s.W * 0.25, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.78, s.H * 0.5, 50, 0.9);
+      s.autoFire(0.1);
+      if (s.count('hulk') === 0 && s.every(1.2)) s.spawn('hulk', s.W * 0.2, s.H * 0.5);
+    },
+    noContactKill: true
+  },
+  brood_queen: {
+    w: 680, loop: 12,
     setup(s) {
-      s.home(0.5, 0.5);
-      s.manager.queueSpawn('boss', s.W * 0.5, s.H * 0.5, 1, { warmup: 1.6, name: BOSS_NAME, epithet: 'WAVE 3 WARDEN' });
+      s.home(0.82, 0.5);
+      s.manager.queueSpawn('brood_queen', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
     },
     tick(s) {
-      s.kite(s.W * 0.5, s.H * 0.5, s.H * 0.36, 0.7);
-      if (s.t > 1.8) s.autoFire(0.22);
-      for (const e of s.manager.bossArrivals) {
-        s.particles.spawnShockwave(e.x, e.y, 320, 48, 6, 0.6);
-        s.particles.spawnShockwave(e.x, e.y, 200, e.hue, 4, 0.45);
-        s.particles.spawnExplosionSparks(e.x, e.y, 30, 48, 3, 14, 2.4);
+      s.kite(s.W * 0.66, s.H * 0.5, s.H * 0.34, 0.8);
+      if (s.t > 1.4) s.autoFire(0.12);
+      // Speed the fight along so the preview reaches her half-HP scatter and the mayfly burst.
+      const q = s.find('brood_queen');
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 9.5) s.kill(q);
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); }
+  },
+  serpent: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.8, 0.5); s.serpent(); },
+    tick(s) {
+      s.kite(s.W * 0.78, s.H * 0.5, 40, 1.1);
+      s.autoFire(0.14);
+      if (s.count() === 0 && s.every(1.2)) s.serpent();
+    },
+    noContactKill: true
+  },
+  ouroboros: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.62, 0.5);
+      s.manager.queueSpawn('ouroboros', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      const q = s.find('ouroboros');
+      // Holds still while it coils (so the noose reads), kites otherwise.
+      if (!q || q.state === 'wind') s.kite(s.W * 0.62, s.H * 0.5, s.H * 0.22, 0.7);
+      if (s.t > 1.4) s.autoFire(0.12, e => !e.leader);
+      if (q && s.t > 5 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12.6) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
+  kestrel: {
+    w: 640, loop: 9,
+    setup(s) { s.home(0.6, 0.5); spawnWing(s.manager, s.W * 0.08, s.H * 0.3, 1, 2, { angle: 0.3, extra: { instant: true } }); },
+    tick(s) {
+      s.kite(s.W * 0.6, s.H * 0.5, 30, 1.2);
+      if (s.t > 2) s.autoFire(0.16);
+      if (s.count() === 0 && s.every(1)) spawnWing(s.manager, s.W * 0.08, s.H * 0.7, 1, 2, { angle: -0.3, extra: { instant: true } });
+    }
+  },
+  wing_commander: {
+    w: 900, loop: 13,
+    setup(s) {
+      s.home(0.55, 0.5);
+      s.manager.queueSpawn('wing_commander', s.W * 0.15, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.55, s.H * 0.5, s.H * 0.25, 0.6);
+      if (s.t > 1.4) s.autoFire(0.12, e => e.isBoss);
+      const q = s.find('wing_commander');
+      if (q && s.t > 7 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 11.5) s.kill(q);
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
+    noContactKill: true
+  },
+  carrier: {
+    w: 640, loop: 10,
+    setup(s) { s.home(0.3, 0.5); s.spawn('carrier', s.W * 0.85, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.3, s.H * 0.5, 30, 1.3);
+      if (s.t > 3) s.autoFire(0.14);
+      if (s.count('carrier') === 0 && s.every(1.5)) s.spawn('carrier', s.W * 0.9, s.H * 0.5);
+    }
+  },
+  drone: {
+    w: 520, loop: 8,
+    setup(s) { s.home(0.7, 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.7, s.H * 0.5, 60, 2.2);
+      s.autoFire(0.2);
+      if (s.count() < 3 && s.every(0.6)) s.spawn('drone', s.W * 0.05, s.H * (0.2 + Math.random() * 0.6), { attach: { aimAngle: 0, lifeT: 6 } });
+    }
+  },
+  hive_carrier: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.72, 0.5);
+      s.manager.queueSpawn('hive_carrier', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.72, s.H * 0.5, s.H * 0.25, 0.7);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.mount || (e.isBoss && !e.deflect));
+      // Speed the fight along: the bays fall one by one, then the exposed core.
+      if (s.t > 5 && s.every(1.2)) { const bay = s.manager.enemies.find(e => e.mount && !e.dead); if (bay) s.kill(bay); }
+      const q = s.find('hive_carrier');
+      if (q && s.t > 12.8) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
+  event_horizon: {
+    w: 900, loop: 12,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('event_horizon', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.8, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.14, e => e.isBoss);
+      const q = s.find('event_horizon');
+      // Swarmers drift in from the edges to be swallowed.
+      if (q && s.count('swarmer') < 6 && s.every(0.7)) s.spawn('swarmer', q.x + (Math.random() - 0.5) * 500, Math.random() < 0.5 ? 20 : s.H - 20);
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 11) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
+  gate: {
+    w: 600, loop: 9,
+    setup(s) { s.home(0.15, 0.5); s.spawn('gate', s.W * 0.55, s.H * 0.5, { attach: { rotation: Math.PI / 2 } }); },
+    tick(s, dt) {
+      // Fly right through the beam: it detonates and takes the swarm round it along.
+      const p = s.player;
+      p.x += (s.W * 0.9 - p.x) * 0.012;
+      p.walkCycle += 0.25;
+      if (s.count('swarmer') < 6 && s.every(0.5)) s.spawn('swarmer', s.W * (0.45 + Math.random() * 0.2), s.H * (0.2 + Math.random() * 0.6));
+      const g = s.find('gate');
+      if (g && Math.hypot(g.x - p.x, g.y - p.y) < 22) {
+        s.particles.spawnShockwave(g.x, g.y, 220, g.hue, 6, 0.45);
+        for (const e of [...s.manager.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) < 220) s.kill(e);
       }
-      s.manager.bossArrivals.length = 0;
+    },
+    noContactKill: true
+  },
+  architect: {
+    w: 900, loop: 13,
+    setup(s) {
+      s.home(0.5, 0.5);
+      s.manager.queueSpawn('architect', s.W * 0.88, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.hold();
+      if (s.t > 1.4) s.autoFire(0.14, e => e.isBoss);
+      const q = s.find('architect');
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
+  mitosis: {
+    w: 520, loop: 12,
+    setup(s) { s.home(0.82, 0.5); s.spawn('mitosis', s.W * 0.25, s.H * 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.82, s.H * 0.5, 30, 1);
+      // Hold fire a while so the cell grows and splits, then clean up.
+      if (s.t > 8) s.autoFire(0.12);
+      if (s.count() === 0 && s.every(1)) s.spawn('mitosis', s.W * 0.2, s.H * 0.5);
+    }
+  },
+  progenitor: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('progenitor', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.8, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.isBoss);
+      // Split it down quickly: whenever a piece is hit, finish it.
+      if (s.t > 3 && s.every(1.4)) { const q = s.manager.enemies.find(e => e.isBoss && !e.dead); if (q) s.kill(q); }
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
+    noContactKill: true
+  },
+  repulsor: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.82, 0.5); s.spawn('repulsor', s.W * 0.35, s.H * 0.5); },
+    tick(s) {
+      s.hold();
+      s.autoFire(0.07);
+      // The scene has no game loop: swing bolts out of the field the way Game.repelProjectiles does.
+      const f = s.find('repulsor');
+      if (f) s.repel(f);
+      if (s.count('repulsor') === 0 && s.every(1.2)) s.spawn('repulsor', s.W * 0.3, s.H * 0.5);
+    }
+  },
+  conductor: {
+    w: 900, loop: 13,
+    setup(s) {
+      s.home(0.85, 0.5);
+      s.manager.queueSpawn('conductor', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.85, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.1, e => !e.isBoss);
+      const q = s.find('conductor');
+      if (q && s.t > 7 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12) s.kill(q);
+      for (const f of s.manager.enemies) if (f.type === 'repulsor') s.repel(f);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
+  lancer: {
+    w: 640, loop: 9,
+    setup(s) { s.home(0.75, 0.5); s.spawn('lancer', s.W * 0.2, s.H * 0.5); },
+    onSpawn(s, e) { if (e.type === 'lancer') e.lanceT = 0.6; },
+    tick(s) {
+      const l = s.find('lancer');
+      // Sidestep the locked line.
+      if (l && l.lanceState === 'aim' && l.lanceT < 0.3) s.player.y += (s.player.y < s.H * 0.5 ? -1 : 1) * 3;
+      else s.player.y += (s.H * 0.5 - s.player.y) * 0.02;
+      if (!l || l.lanceState !== 'aim') s.autoFire(0.25);
+      if (s.count('lancer') === 0 && s.every(1)) s.spawn('lancer', s.W * 0.15, s.H * 0.5);
+    }
+  },
+  eclipse_twins: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.5, 0.5);
+      s.manager.queueSpawn('eclipse_twins', s.W * 0.2, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.5, s.H * 0.5, 70, 0.8);
+      if (s.t > 1.4) s.autoFire(0.12, e => e.isBoss);
+      // Down one twin so the survivor's rage and revive ring show.
+      if (s.t > 7 && s.every(20)) { const t = s.manager.enemies.find(e => e.twinRole === 'luna'); if (t) s.kill(t); }
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
+    noContactKill: true
+  },
+  prism: {
+    w: 900, loop: 15,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('prism', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.8, s.H * 0.5, 50, 0.8);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.isBoss);
+      // Walk it through its three phases.
+      const q = s.find('prism');
+      if (q && s.t > 5 && q.phase === 0) q.hp = q.maxHp * 0.6;
+      if (q && s.t > 9 && q.phase === 1) q.hp = q.maxHp * 0.3;
+      if (q && s.t > 14.2) s.kill(q);
+      s.bossEntrance();
     },
     noContactKill: true
   }
@@ -333,6 +596,41 @@ export class GuidePreview {
     this.fireAt(best.x, best.y);
   }
 
+  // A boss arrival flourish (shockwaves and sparks, like Game.onBossArrived).
+  bossEntrance() {
+    for (const e of this.manager.bossArrivals) {
+      this.particles.spawnShockwave(e.x, e.y, 320, 48, 6, 0.6);
+      this.particles.spawnShockwave(e.x, e.y, 200, e.hue, 4, 0.45);
+      this.particles.spawnExplosionSparks(e.x, e.y, 30, 48, 3, 14, 2.4);
+    }
+    this.manager.bossArrivals.length = 0;
+  }
+
+  // A serpent winding in from the left edge.
+  serpent() {
+    spawnSerpent(this.manager, 'serpent', this.W * 0.12, this.H * 0.5, 1, SERPENT.segments, { angle: 0, extra: { instant: true } });
+  }
+
+  // Game.repelProjectiles for the preview's own bolts (no charge: the field always holds here).
+  repel(f) {
+    for (const b of this.bolts) {
+      const dx = b.x - f.x;
+      const dy = b.y - f.y;
+      const d = Math.hypot(dx, dy);
+      if (d > REPULSOR.field || d < 1 || b.vx * dx + b.vy * dy >= 0) continue;
+      const speed = Math.hypot(b.vx, b.vy);
+      const a = turnToward(Math.atan2(b.vy, b.vx), Math.atan2(dy, dx), REPULSOR.push * (1 - d / REPULSOR.field) + 0.05);
+      b.vx = Math.cos(a) * speed;
+      b.vy = Math.sin(a) * speed;
+      f.repelFlash = 1;
+    }
+  }
+
+  // A mayfly cloud drifting in from the left edge.
+  cloud() {
+    for (let k = 0; k < 10; k++) this.spawn('mayfly', this.W * (0.06 + Math.random() * 0.1), this.H * (0.3 + Math.random() * 0.4));
+  }
+
   // The splitter death burst from Game.killEnemy: three fast minis thrown outward.
   splitterBurst(e) {
     this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 3, 0.2);
@@ -363,6 +661,11 @@ export class GuidePreview {
   }
 
   hit(e, b) {
+    if (e.deflect) {
+      e.hitFlash = Math.max(e.hitFlash, 0.35);
+      this.particles.spawnImpact(b.x, b.y, Math.atan2(-b.vy, -b.vx), 5, 0.08);
+      return;
+    }
     e.hp -= BOLT_DAMAGE * (e.armor ? 1 - e.armor : 1) * (e.linked > 0 ? 0.7 : 1);
     e.hitFlash = 1;
     e.sinceHit = 0;
@@ -428,6 +731,7 @@ export class GuidePreview {
     this.def.tick(this, dt);
     this.manager.update(dt, this.player, this.bolts, GRID_STUB, this.particles, this.W, this.H);
     this.manager.lieutenantArrivals.length = 0;
+    for (const e of this.manager.doomed.splice(0)) this.kill(e);
     this.manager.enemyBullets.update(dt, this.player, null, this.particles, this.W, this.H, this.orbHit);
     this.updateBolts();
     this.updateContacts();
@@ -510,7 +814,12 @@ export class GuidePreview {
 const SILHOUETTE = {
   swarmer: ['swarmer', 120], pinwheel: ['pinwheel', 140], weaver: ['weaver', 130], splitter: ['splitter', 170],
   mini_splitter: ['mini_splitter', 100], blackhole: ['blackhole', 220], bruiser: ['bruiser', 200], gunner: ['gunner', 140],
-  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360]
+  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260],
+  mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
+  kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
+  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
+  gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300],
+  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], eclipse_twins: ['eclipse_twins', 220], prism: ['prism', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

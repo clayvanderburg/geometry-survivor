@@ -18,12 +18,14 @@ const { Game } = await import('../js/main.js');
 const { EnemyManager, waveScaleAt, damageRampAt, xpScaleAt, spawnIntervalAt, packSize, contactDamageAt, easeIn } = await import('../js/enemies.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const fieldGuide = await import('../js/field-guide.js');
+const { hpBudgetScale } = await import('../js/waves.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 const RAMP_KEYS = [
   'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'waveHpGrowthRamp', 'spawnIntervalStart', 'spawnIntervalTau', 'spawnIntervalMin',
   'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
-  'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
+  'mayflyPackPerWave', 'mayflyPackMax', 'hpBudget', 'hpBudgetMin', 'hpBudgetMax',
+  'bossHpMult', 'campaignBossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {
@@ -89,6 +91,25 @@ test('boss HP multiplier scales bosses, and lieutenants through their share of b
   assert.equal(withTuning({ bossHpMult: 2 }, () => manager.getArchetype('swarmer', 4).maxHp), 40, 'regular hulls are unaffected');
 });
 
+test('campaign boss HP multiplier scales the named bosses only, not their XP, lieutenants or packs', () => {
+  const manager = new EnemyManager();
+  const lt = { type: 'pinwheel', name: 'X', epithet: 'Y', mods: ['hasted'] };
+  const sample = () => ({
+    queen: manager.getArchetype('brood_queen', 4),
+    hive: manager.getArchetype('hive_carrier', 4),
+    lt: manager.getArchetype('pinwheel', 4, { lieutenant: lt }).maxHp,
+    hulk: manager.getArchetype('hulk', 4).maxHp,
+    swarmer: manager.getArchetype('swarmer', 4).maxHp
+  });
+  const a = withTuning({ campaignBossHpMult: 1 }, sample);
+  const b = withTuning({ campaignBossHpMult: 3 }, sample);
+  assert.equal(b.queen.maxHp, 3 * a.queen.maxHp);
+  assert.equal(b.hive.maxHp, 3 * a.hive.maxHp);
+  assert.equal(b.queen.xp, a.queen.xp, 'boss XP is unchanged');
+  assert.deepEqual([b.lt, b.hulk, b.swarmer], [a.lt, a.hulk, a.swarmer], 'lieutenants and regular hulls are unaffected');
+  assert.equal(DEFAULT_TUNING.campaignBossHpMult, 3);
+});
+
 test('waves advance every waveLength seconds and bosses stay on every third wave', () => {
   withTuning({ waveLength: 31 }, () => {
     const g = rampGame({ wave: 2 });
@@ -111,13 +132,20 @@ test('pack cadence reads the spawn-interval ramp', () => {
     g.spawnCooldown = 0;
     g.spawnWavePack = () => {};
     g.update(1 / 60);
-    assert.ok(Math.abs(g.spawnCooldown - spawnIntervalAt(5)) < 1e-9);
+    assert.ok(Math.abs(g.spawnCooldown - spawnIntervalAt(5) * hpBudgetScale(5)) < 1e-9, 'the HP budget paces packs');
+  });
+  withTuning({ spawnIntervalStart: 3, spawnIntervalTau: 5, spawnIntervalMin: 1.2, hpBudget: 0 }, () => {
+    const g = rampGame({ wave: 5 });
+    g.spawnCooldown = 0;
+    g.spawnWavePack = () => {};
+    g.update(1 / 60);
+    assert.ok(Math.abs(g.spawnCooldown - spawnIntervalAt(5)) < 1e-9, 'with the budget off, the plain ramp');
   });
 });
 
 test('pack sizes read the per-wave growth, caps and the global multiplier', () => {
-  const queued = (values, pack, wave) => withTuning({ packSizeMult: 1, swarmPackPerWave: 2, swarmPackMax: 34, skirmishPackMax: 99, splitterPackMax: 99, ...values, spawnWeightSwarm: 0, spawnWeightSkirmish: 0, spawnWeightSplitter: 0, spawnWeightBlackhole: 0,
-    spawnWeightBruiser: 0, spawnWeightGunner: 0, spawnWeightShielder: 0, spawnWeightBlinker: 0, spawnWeightConduit: 0, [pack]: 1 }, () => {
+  const noPacks = Object.fromEntries(Object.keys(DEFAULT_TUNING).filter(k => k.startsWith('spawnWeight')).map(k => [k, 0]));
+  const queued = (values, pack, wave) => withTuning({ packSizeMult: 1, swarmPackPerWave: 2, swarmPackMax: 34, skirmishPackMax: 99, splitterPackMax: 99, ...values, ...noPacks, [pack]: 1 }, () => {
     const g = rampGame({ wave });
     g.spawnWavePack();
     return g.enemyManager.spawnIndicators.length;
@@ -130,7 +158,9 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
   assert.equal(queued({ splitterPackPerWave: 0.5, packSizeMult: 0.5 }, 'spawnWeightSplitter', 10), 4);
   assert.equal(queued({ splitterPackPerWave: 0.5, splitterPackMax: 5 }, 'spawnWeightSplitter', 10), 5);
   assert.equal(queued({ skirmishPackPerWave: 1, skirmishPackMax: 8 }, 'spawnWeightSkirmish', 10), 8);
-  assert.equal(queued({ packSizeMult: 2 }, 'spawnWeightBlinker', 5), 6, 'capped packs scale too');
+  assert.equal(queued({ packSizeMult: 2 }, 'spawnWeightBlinker', 9), 6, 'capped packs scale too');
+  assert.equal(queued({ mayflyPackPerWave: 1 }, 'spawnWeightMayfly', 8), 12 + 5, 'mayfly clouds grow from their debut wave');
+  assert.equal(queued({ mayflyPackPerWave: 1, mayflyPackMax: 14 }, 'spawnWeightMayfly', 8), 14);
   withTuning({ packSizeMult: 0.25 }, () => assert.equal(packSize(1), 1, 'never below one hull'));
 });
 

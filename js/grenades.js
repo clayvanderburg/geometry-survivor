@@ -4,38 +4,32 @@
 // blast. Breakthroughs: Cluster Grenades (bomblets scatter on landing), Lingering Cloud (the blast leaves
 // a damaging cloud) and Gravity Grenade (armed grenades pull enemies in before they blast).
 //
-// One weapon, several elements: the damage-type cards the player owns set the grenade's element and hue
-// (grenadeElement). Every grenade hit has source 'grenade', so status-effects.js applies burn / chill /
-// corrode for each card owned, to the blast, the bomblets and the cloud alike.
+// The grenade's element is the one the player infused it with (weapon-levels.js ELEMENT_CARDS: FIRE,
+// FROST, CORROSIVE or SHOCK; plain PLASMA without one). It sets the grenade's hue and cloud look; every
+// grenade hit has source 'grenade', so status-effects.js applies that element's status to the blast,
+// the bomblets and the cloud alike.
 //
 // Grenades live in a fixed pool (nothing is allocated while throwing or simulating them) and are
 // simulated only from Game.update, so pause, hit-stop and slow-mo freeze them with the rest of the world.
 // Damage goes through Game.damageEnemiesInRadius / hitEnemy; bomblets and clouds run in weapon-fx.js.
 import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius } from './weapon-scaling.js';
-import { weaponBuild } from './weapon-levels.js';
+import { weaponBuild, weaponElement } from './weapon-levels.js';
 import { wellPullScale } from './gravity.js';
 import { isDeployableTarget } from './deployables.js';
 
-// Element per damage-type card (status-effects.js), with the blast / cloud hue. Plasma is the plain one.
+// Element look per grenade element, with the blast / cloud hue. Plasma is the plain one.
 export const GRENADE_ELEMENTS = {
-  plasma: { id: 'plasma', label: 'PLASMA', hue: 162, card: null },
-  fire: { id: 'fire', label: 'FIRE', hue: 18, card: 'thermite' },
-  frost: { id: 'frost', label: 'FROST', hue: 192, card: 'cryo' },
-  corrode: { id: 'corrode', label: 'CORROSIVE', hue: 100, card: 'nanite' }
+  plasma: { id: 'plasma', label: 'PLASMA', hue: 162 },
+  fire: { id: 'fire', label: 'FIRE', hue: 18 },
+  frost: { id: 'frost', label: 'FROST', hue: 192 },
+  corrode: { id: 'corrode', label: 'CORROSIVE', hue: 100 },
+  shock: { id: 'shock', label: 'SHOCK', hue: 62 }
 };
-const ELEMENT_ORDER = ['fire', 'frost', 'corrode'];
 
-// The grenade's element: the damage-type card with the highest level (ties: fire, frost, corrode), or
-// plasma when none is owned. Every owned card still applies its status on grenade hits.
+// The grenade's element: the one its element card locked in, or plasma when it has none.
 export function grenadeElement(p) {
-  let best = GRENADE_ELEMENTS.plasma;
-  let bestLv = 0;
-  for (const id of ELEMENT_ORDER) {
-    const el = GRENADE_ELEMENTS[id];
-    const lv = p.weapons?.[el.card] || 0;
-    if (lv > bestLv) { best = el; bestLv = lv; }
-  }
-  return best;
+  const el = weaponElement(p, 'grenades');
+  return el ? GRENADE_ELEMENTS[el.element] : GRENADE_ELEMENTS.plasma;
 }
 
 const POOL = 64;          // >= grenades alive at once: up to 7 per throw, a throw every ~0.5 s, ~1.3-1.6 s each

@@ -12,7 +12,7 @@ globalThis.document = { getElementById: element, createElement: element };
 const { Game } = await import('../js/main.js');
 const { EnemyManager, SPAWN_HOLD_MAX, LIEUTENANT_MAX_SHIP_SHARE } = await import('../js/enemies.js');
 const { AsteroidManager } = await import('../js/asteroids.js');
-const { WAVE_PACKS } = await import('../js/archetypes.js');
+const { WAVE_PACKS } = await import('../js/waves.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { pickSpawnPoint, pickOnscreenSpawn, spawnView, inView, ringPoint } = await import('../js/spawn-placement.js');
 const { catchupPace } = await import('../js/pursuit.js');
@@ -200,7 +200,9 @@ function assertQueuedSpawnsValid(g, label) {
   for (const sp of g.enemyManager.spawnIndicators) {
     const d = Math.hypot(sp.x - p.x, sp.y - p.y);
     assert.ok(d >= TUNING.spawnMinDist, `${label}: ${sp.type} queued ${d.toFixed(0)}px from the ship`);
-    assert.ok(sp.guard, `${label}: ${sp.type} unguarded`);
+    // Serpent plates and V wingmen trail their (guarded) leader and are never relocated apart from it.
+    const follower = sp.config.attach?.leader || sp.config.attach?.wingLeader;
+    if (!follower) assert.ok(sp.guard, `${label}: ${sp.type} unguarded`);
     if (sp.onScreen) {
       assert.ok(sp.maxTimer >= 1.2, `${label}: on-screen ${sp.type} telegraph ${sp.maxTimer}s`);
     } else {

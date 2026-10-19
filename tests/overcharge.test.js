@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // OVERCHARGE (upgrades.js overchargeReady): once every equipped weapon is LV 18, cards that don't raise a
-// weapon's level (general, tag and damage-type cards) keep coming past their own max and keep stacking.
+// weapon's level (general, tag and STATUS cards) keep coming past their own max and keep stacking.
 const h = await import('../tools/balance/harness.mjs');
 const {
   UPGRADE_POOL, UPGRADE_BY_ID, upgradeKind, upgradeWeapons, eligibleUpgrades, applyUpgradeLevels, levelRoom, acquireWeapon,
@@ -48,12 +48,12 @@ test('overcharge: a maxed general card stays maxed until every weapon is LV 18',
   assert.ok(!eligibleUpgrades(p).some((u) => u.id === 'overdrive'));
 });
 
-test('overcharge: general, tag and damage-type cards only; evolutions and passives keep their max', () => {
+test('overcharge: general, tag and STATUS cards only; evolutions, element cards and passives keep their max', () => {
   for (const u of UPGRADE_POOL) {
     const kind = upgradeKind(u);
-    if (kind === 'weapon' || kind === 'core' || kind === 'evolution') assert.equal(canOvercharge(u), false, u.id);
+    if (kind === 'weapon' || kind === 'core' || kind === 'evolution' || kind === 'element') assert.equal(canOvercharge(u), false, u.id);
   }
-  for (const id of ['overdrive', 'thrusters', 'crit_damage', 'tag_kinetic', 'tag_area', 'thermite', 'cryo', 'nanite', 'magnet']) {
+  for (const id of ['overdrive', 'thrusters', 'crit_damage', 'tag_kinetic', 'tag_area', 'status_potency', 'fire_damage', 'magnet']) {
     assert.equal(canOvercharge(UPGRADE_BY_ID[id]), true, id);
   }
   assert.equal(canOvercharge(UPGRADE_BY_ID.shrapnel), false, 'Volatile Shatter is a passive with its own level');

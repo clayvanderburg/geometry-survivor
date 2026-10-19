@@ -1831,6 +1831,14 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
 }
 
+/* Element tag on an infused weapon's chip (FIRE, FROST, CORROSIVE, SHOCK). */
+.weapon-slot-chip .weapon-el {
+  color: var(--ec, #fff);
+  font-size: 0.85em;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 6px var(--ec, transparent);
+}
+
 .weapon-slot-chip.empty {
   border: 1px dashed rgba(122, 139, 168, 0.55);
   color: var(--text-dim);

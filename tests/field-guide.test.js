@@ -38,7 +38,8 @@ const {
 } = await import('../js/field-guide.js');
 const { GuidePreview, PREVIEW_IDS, drawSilhouette } = await import('../js/field-guide-scenes.js');
 const { hostileCardHTML, tabHTML, GUIDE_TABS } = await import('../js/field-guide-ui.js');
-const { ARCHETYPE_INFO, WAVE_PACKS } = await import('../js/archetypes.js');
+const { ARCHETYPE_INFO } = await import('../js/archetypes.js');
+const { WAVE_PACKS } = await import('../js/waves.js');
 const { UPGRADE_POOL } = await import('../js/upgrades.js');
 const { WEAPON_BY_LEVEL_ID } = await import('../js/loadout.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
@@ -103,11 +104,11 @@ test('encounters: hostiles in (or just outside) the camera view are detected, on
     { type: 'swarmer', x: 1300, y: 1250, radius: 10 },
     { type: 'gunner', x: 3000, y: 3000, radius: 14 }, // far off-screen
     { type: 'bruiser', x: 990, y: 1100, radius: 35, isLieutenant: true }, // hull pokes into view
-    { type: 'boss', x: 2200, y: 1500, radius: 36, isBoss: true },
+    { type: 'brood_queen', x: 2200, y: 1500, radius: 36, isBoss: true },
     { type: 'not_a_real_enemy', x: 1100, y: 1100, radius: 5 }
   ];
-  assert.deepEqual(detectEncounters(enemies, view, () => false), ['swarmer', 'lieutenant', 'bruiser', 'boss']);
-  assert.deepEqual(detectEncounters(enemies, view, id => id !== 'boss'), ['boss'], 'known entries are skipped');
+  assert.deepEqual(detectEncounters(enemies, view, () => false), ['swarmer', 'lieutenant', 'bruiser', 'brood_queen']);
+  assert.deepEqual(detectEncounters(enemies, view, id => id !== 'brood_queen'), ['brood_queen'], 'known entries are skipped');
   assert.deepEqual(guideIdsFor({ type: 'gunner', isLieutenant: true }), ['lieutenant', 'gunner']);
 });
 
@@ -152,7 +153,7 @@ test('the NEW HOSTILE SIGNATURE card logs the archetype and links to the guide',
   assert.match(g.ltCard.link, /IN YOUR FIELD GUIDE/);
 });
 
-test('every enemy type the game can spawn has a guide entry and a preview', () => {
+test('every enemy type the game can spawn has a guide entry and a preview', async () => {
   // Static: every getArchetype case, every archetype and every queued spawn literal in the game code.
   const enemiesSrc = readFileSync(new URL('../js/enemies.js', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
@@ -162,6 +163,8 @@ test('every enemy type the game can spawn has a guide entry and a preview', () =
     ...[...mainSrc.matchAll(/queueSpawn\('([a-z_]+)'/g)].map(m => m[1]),
     ...[...mainSrc.matchAll(/spread\('([a-z_]+)'/g)].map(m => m[1])
   ]);
+  // 'boss' (the Prismatic Dreadnought) is only a code fallback now: every boss wave has a named boss.
+  types.delete('boss');
   for (const type of types) assert.ok(HOSTILE_IDS.includes(type), `no Field Guide entry for enemy type "${type}"`);
 
   // Dynamic: force every wave pack at a late wave and check what actually gets queued.
@@ -180,14 +183,16 @@ test('every enemy type the game can spawn has a guide entry and a preview', () =
   }
   resetTuning();
   for (const type of queued) assert.ok(HOSTILE_IDS.includes(type), `pack spawns "${type}" with no guide entry`);
-  for (const id of ['lieutenant', 'boss', 'mini_splitter']) assert.ok(HOSTILE_IDS.includes(id));
+  for (const id of ['lieutenant', 'brood_queen', 'mini_splitter']) assert.ok(HOSTILE_IDS.includes(id));
+  const { BOSS_DEFS } = await import('../js/bosses.js');
+  for (const id of Object.keys(BOSS_DEFS)) assert.ok(HOSTILE_IDS.includes(id), `boss ${id} has a guide entry`);
   assert.deepEqual([...PREVIEW_IDS].sort(), [...HOSTILE_IDS].sort(), 'every entry has an animated preview');
 });
 
 test('guide stats come from the real spawn config and game formulas', () => {
   resetTuning();
   const em = new EnemyManager();
-  for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && id !== 'boss')) {
+  for (const id of HOSTILE_IDS.filter(id => id !== 'lieutenant' && !HOSTILE_ENTRIES.find(e => e.id === id).boss)) {
     const cfg = em.getArchetype(id, waveScaleAt(1));
     const s = hostileStats(id);
     assert.equal(s.hp, Math.round(cfg.maxHp * TUNING.enemyHpMult), `${id} HP`);
@@ -195,7 +200,7 @@ test('guide stats come from the real spawn config and game formulas', () => {
     assert.equal(s.contact, Math.round(contactDamageAt(cfg, 1)), `${id} contact`);
   }
   assert.equal(hostileStats('bruiser').contact, Math.round(18 * 1.5 * damageRampAt(1)));
-  assert.equal(hostileStats('boss').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult * TUNING.enemyHpMult));
+  assert.equal(hostileStats('brood_queen').hp, Math.round(650 * waveScaleAt(3) * TUNING.bossHpMult * TUNING.campaignBossHpMult * TUNING.enemyHpMult), 'bosses show HP on their own wave');
   assert.equal(hostileStats('gunner').unlockWave, ARCHETYPE_INFO.gunner.unlockWave);
   const g = Object.assign(Object.create(Game.prototype), { wave: 9 });
   assert.equal(g.contactDamage({ contactMult: 1.5 }), contactDamageAt({ contactMult: 1.5 }, 9), 'one contact formula');
@@ -257,7 +262,7 @@ test('preview scenes actually show the behaviour they describe', () => {
   assert.ok(run('blinker', 8, p => p.manager.enemies.some(e => e.state === 'telegraph')), 'blinker telegraphs');
   assert.ok(run('conduit', 6, p => p.manager.enemies.some(e => e.linked > 0)), 'conduit links an ally');
   assert.ok(run('splitter', 8, p => p.manager.enemies.some(e => e.type === 'mini_splitter')), 'splitter bursts into minis');
-  assert.ok(run('boss', 4, p => p.manager.enemies.some(e => e.isBoss)), 'boss arrives after its warning');
+  assert.ok(run('brood_queen', 4, p => p.manager.enemies.some(e => e.isBoss)), 'boss arrives after its warning');
   assert.ok(run('lieutenant', 4, p => p.manager.enemies.some(e => e.isLieutenant)), 'lieutenant arrives');
   assert.ok(run('blackhole', 4, p => p.tug > 0), 'vortex tugs the ship');
 });

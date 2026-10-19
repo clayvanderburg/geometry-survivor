@@ -96,29 +96,30 @@ test('grenade cards preview their own stat; the NEW WEAPON pick and Breakthrough
   assert.match(t.headline, /\+22% DPS/);
 });
 
-test('damage-type cards are offered for grenades, set the element, and leave with the last owner', () => {
+test('grenade element cards are offered with grenades, lock the element for good, and leave with the weapon', () => {
   const g = h.createHeadlessGame();
   g.resetRun();
   const p = g.player;
   discardWeapon(p, 'blaster');
-  for (const id of ['thermite', 'cryo', 'nanite']) assert.equal(loadoutAllows(p, UPGRADE_BY_ID[id]), false, id);
+  const ids = ['grenades_fire', 'grenades_frost', 'grenades_corrode', 'grenades_shock'];
+  for (const id of ids) assert.equal(loadoutAllows(p, UPGRADE_BY_ID[id]), false, id);
   acquireWeapon(p, 'grenades');
-  for (const id of ['thermite', 'cryo', 'nanite']) {
+  for (const id of ids) {
     assert.equal(loadoutAllows(p, UPGRADE_BY_ID[id]), true, `${id} with grenades`);
+    assert.match(UPGRADE_BY_ID[id].name, /^Plasma Grenades: /);
     assert.match(UPGRADE_BY_ID[id].summary, /Plasma Grenade/);
   }
-  assert.ok(eligibleUpgrades(p).some((u) => u.id === 'thermite'));
+  assert.deepEqual(eligibleUpgrades(p).filter((u) => u.elementCard).map((u) => u.id), ids, 'all four on offer before a pick');
   assert.equal(grenadeElement(p), GRENADE_ELEMENTS.plasma);
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.cryo, levelJump: 1 });
+  const card = describeUpgrade(p, { ...UPGRADE_BY_ID.grenades_frost, levelJump: 1 });
+  assert.ok(card.rows.some((r) => r.id === 'grenadeElement' && r.before === 'PLASMA' && r.after === 'FROST'), 'the card previews the element');
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.grenades_frost, levelJump: 1 });
   assert.equal(grenadeElement(p).id, 'frost');
-  const card = describeUpgrade(p, { ...UPGRADE_BY_ID.thermite, levelJump: 2 });
-  assert.ok(card.rows.some((r) => r.id === 'grenadeElement' && r.before === 'FROST' && r.after === 'FIRE'), 'the card previews the element change');
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.thermite, levelJump: 2 });
-  assert.equal(grenadeElement(p).id, 'fire');
-  assert.equal(grenadeElement(p).hue, GRENADE_ELEMENTS.fire.hue);
+  assert.equal(grenadeElement(p).hue, GRENADE_ELEMENTS.frost.hue);
+  assert.deepEqual(eligibleUpgrades(p).filter((u) => u.elementCard).map((u) => u.id), ['grenades_frost'], 'locked: only FROST rank-ups');
   discardWeapon(p, 'grenades');
-  assert.equal(p.upgradeLevels.thermite, undefined, 'thermite left with its last owner');
-  assert.equal(p.upgradeLevels.cryo, undefined);
+  assert.equal(p.upgradeLevels.grenades_frost, undefined, 'the element left with its weapon');
+  assert.equal(grenadeElement(p), GRENADE_ELEMENTS.plasma);
 });
 
 // A headless fight with only Plasma Grenades equipped, against a ring of real swarmers.
@@ -186,15 +187,18 @@ test('live fight: each grenade transform runs and deals damage', () => {
   assert.ok(all.seen.maxActive <= all.g.grenades.items.length, 'the pool never overflows');
 });
 
-test('Thermite + Plasma Grenades burns; Cryo chills; Nanite corrodes; clouds take the element', () => {
-  const fire = grenadeFight({ cards: [['thermite', 1]], bt: { 12: 'transform' } });
+test('FIRE grenades burn; FROST chill; CORROSIVE corrode; SHOCK stun; clouds take the element', () => {
+  const fire = grenadeFight({ cards: [['grenades_fire', 1]], bt: { 12: 'transform' } });
   assert.ok(fire.g.enemyManager.enemies.some((e) => e.st?.burn > 0), 'grenade hits ignite');
-  assert.ok(fire.bySource.burn > 0, 'burn ticks deal damage');
+  assert.ok(fire.bySource.burn_grenades > 0, 'burn ticks deal damage, credited to the grenades');
   assert.ok(fire.g.weaponFx.pools.some((x) => x.source === 'grenade' && x.look === 'fire' && x.hue === GRENADE_ELEMENTS.fire.hue), 'a fire cloud');
-  const frost = grenadeFight({ cards: [['cryo', 1]] });
+  const frost = grenadeFight({ cards: [['grenades_frost', 1]] });
   assert.ok(frost.g.enemyManager.enemies.some((e) => e.st?.chillT > 0), 'grenade hits chill');
-  const acid = grenadeFight({ cards: [['nanite', 1]] });
+  const acid = grenadeFight({ cards: [['grenades_corrode', 1]] });
   assert.ok(acid.g.enemyManager.enemies.some((e) => e.st?.corrode > 0), 'grenade hits corrode');
+  const shock = grenadeFight({ cards: [['grenades_shock', 1]], bt: { 12: 'transform' } });
+  assert.ok(shock.g.enemyManager.enemies.some((e) => e.st?.stunT > 0 || e.st?.stunImmT > 0), 'grenade hits stun');
+  assert.ok(shock.g.weaponFx.pools.some((x) => x.source === 'grenade' && x.look === 'shock' && x.hue === GRENADE_ELEMENTS.shock.hue), 'a shock cloud');
 });
 
 test('SYNERGY: EMP Grenades needs grenades + Tesla Arc, names both, and arcs lightning off every blast', () => {
