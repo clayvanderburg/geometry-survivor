@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius,
   burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
   doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -174,6 +174,17 @@ export const STAT_ROWS = [
   { id: 'grenadeRange', label: 'Throw range', get: (p) => wb(p, 'grenades', W.grenadeRange), fmt: int, headline: 'count', unit: 'GRENADE THROW RANGE' },
   { id: 'grenadeElement', label: 'Grenade element', get: (p) => wb(p, 'grenades', () => grenadeElement(p).label), fmt: (v) => v },
   { id: 'empArcs', label: 'EMP arcs / grenade blast', get: (p) => (p.weapons.empGrenades && ownsWeapon(p, 'grenades') ? W.empArcs : null), fmt: int, newText: (a) => `GRENADE BLASTS ARC // ${a} ZAPS` },
+
+  // Corrosive Gas Trail (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
+  { id: 'gasRadius', label: 'Gas cloud radius', get: (p) => wb(p, 'gas', (b) => gasCloudRadius(p, b)), fmt: int, headline: 'count', unit: 'GAS CLOUD RADIUS' },
+  { id: 'gasDamage', label: 'Gas damage / tick', get: (p) => wb(p, 'gas', (b) => weaponDamage(p, 'gas', b)), fmt: dec1, headline: 'pct', unit: 'GAS DAMAGE' },
+  { id: 'gasTickRate', label: 'Gas ticks / s', get: (p) => wb(p, 'gas', (b) => 1 / W.gasTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'GAS TICK RATE' },
+  { id: 'gasLife', label: 'Cloud linger', get: (p) => wb(p, 'gas', W.gasLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s CLOUD LINGER` },
+  { id: 'gasCorrode', label: 'Gas max damage taken', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodePerStack(p) * corrodeMaxStacks(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
+  { id: 'gasCorrodeStacks', label: 'Gas corrode max stacks', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodeMaxStacks(p, e.rank) : null; }), fmt: int },
+  { id: 'gasSeek', label: 'Clouds creep toward enemies', get: (p) => wb(p, 'gas', (b) => (b.t4 ? W.seekSpeed : null)), fmt: (v) => `${Math.round(v)} px/s`, newText: () => 'CLOUDS HUNT ENEMIES' },
+  { id: 'gasPocket', label: 'Volatile pocket burst', get: (p) => wb(p, 'gas', (b) => (b.t8 ? weaponDamage(p, 'gas', b) * W.pocketShare * W.pocketEvery / W.gasTick(b) : null)), fmt: dec1, newText: (a, row) => `GAS POCKETS BURST // ${row.fmt(a)} DMG` },
+  { id: 'gasShroud', label: 'Toxic shroud radius', get: (p) => wb(p, 'gas', (b) => (b.t12 ? gasCloudRadius(p, b) * W.shroudRadiusMult : null)), fmt: int, newText: (a) => `TOXIC SHROUD // ${a} RADIUS` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -362,7 +373,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

@@ -97,6 +97,12 @@ export const STAT_CARDS = {
     card('grenades', 'grenades_rate', 'rate', 'Plasma Grenade Throw Rate', 'grenadeCooldown', 'Plasma Grenades: throws more often. Only throw rate.', cap(8)),
     card('grenades', 'grenades_radius', 'radius', 'Plasma Grenade Blast Size', 'grenadeBlast', 'Plasma Grenades: wider blasts. Only blast size.'),
     card('grenades', 'grenades_range', 'range', 'Plasma Grenade Throw Range', 'grenadeRange', 'Plasma Grenades: lobs reach targets further out. Only throw range.')
+  ],
+  gas: [
+    card('gas', 'gas_damage', 'damage', 'Gas Trail Toxicity', 'gasDamage', 'Corrosive Gas Trail: a nastier brew. Only damage per gas tick.'),
+    card('gas', 'gas_rate', 'rate', 'Gas Trail Reactivity', 'gasTickRate', 'Corrosive Gas Trail: the gas eats into hulls more often. Only tick rate.', cap(8)),
+    card('gas', 'gas_radius', 'radius', 'Gas Trail Plume Size', 'gasRadius', 'Corrosive Gas Trail: wider clouds. Only cloud size.'),
+    card('gas', 'gas_linger', 'linger', 'Gas Trail Linger', 'gasLife', 'Corrosive Gas Trail: clouds hang in the air longer before they thin out. Only cloud lifetime.')
   ]
 };
 
@@ -159,11 +165,19 @@ export const ELEMENT_CARD_BY_ID = Object.fromEntries(ELEMENT_CARD_LIST.map((c) =
 // The weapon a level card belongs to (stat cards and element cards both raise their weapon's level).
 export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CARD_BY_ID[id]?.weapon || null;
 
+// Weapons born with an element instead of taking element cards (never infusable, never re-locked).
+// Their element counts like an infused one (STATUS cards, Amplifiers, Supercritical, HUD tag); its rank
+// grows with the weapon level (fixedElementRank: 1 at LV 1, +1 at each Breakthrough level).
+export const FIXED_ELEMENTS = { gas: 'corrode' };
+export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
+
 // A weapon's element and its rank ({ element, rank }), or null when it has none. Reads player.weapons
 // (kept in step with the card ranks by the cards' apply()).
 export const ELEMENT_KEYS = Object.fromEntries(ELEMENT_WEAPONS.map((weapon) => [weapon, ELEMENTS.map((el) => elementKey(weapon, el))]));
 export function weaponElement(p, weapon) {
   const w = p?.weapons;
+  const fixed = FIXED_ELEMENTS[weapon];
+  if (fixed) return w?.[weapon] > 0 ? { element: fixed, rank: fixedElementRank(w[weapon]), fixed: true } : null;
   const keys = ELEMENT_KEYS[weapon];
   if (!w || !keys) return null;
   for (let i = 0; i < keys.length; i++) {
@@ -188,7 +202,7 @@ export function elementsOf(p, weapons = ELEMENT_WEAPONS) {
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL'
 };
 
 // Transforms: one per weapon per milestone (30 in all), each changing how the weapon works.
@@ -243,6 +257,11 @@ export const TRANSFORMS = {
     6: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets hop onto nearby enemies past the blast and pop a moment later.'),
     12: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that burns, freezes or corrodes (by its element) everything inside.'),
     18: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades drag nearby enemies in, harder as the fuse burns down, then blast.')
+  },
+  gas: {
+    6: tf('seek', 'Seeking Miasma', 'Corrosive Gas Trail clouds creep toward the nearest enemy instead of hanging where you left them, and eat harder.'),
+    12: tf('pockets', 'Volatile Pockets', 'Corrosive Gas Trail leaves a volatile gas pocket every second or so: it swells, then bursts in a corrosive blast when an enemy comes close.'),
+    18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
   }
 };
 

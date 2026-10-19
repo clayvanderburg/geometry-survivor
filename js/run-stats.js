@@ -26,7 +26,9 @@ export const SUB_SOURCES = Object.freeze({
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse
   siege: 'turret',        // Siege Battery shell bursts on turret bolts
-  emp: 'grenades'         // EMP Grenades arcs, fired by Plasma Grenade blasts
+  emp: 'grenades',        // EMP Grenades arcs, fired by Plasma Grenade blasts
+  gas_pocket: 'gas',      // Corrosive Gas Trail: Volatile Pockets bursts
+  gas_shroud: 'gas'       // Corrosive Gas Trail: Toxic Shroud ticks
 });
 
 // Damage that is not a loadout weapon's.

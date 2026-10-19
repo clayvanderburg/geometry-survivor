@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
@@ -349,6 +349,44 @@ export const WEAPON_SCALING = {
   empShare: 0.35,
   empRangeMult: 1.5,
 
+  // --- Corrosive Gas Trail (stats: damage, rate, radius, linger) -----------------------------------
+  // The ship vents puffs of CORROSIVE gas from its tail as it flies (gas-trail.js): a new puff every
+  // gasPuffSpacing x the cloud radius of travel, and a hovering ship keeps topping up its last puff
+  // instead of stacking new ones. Every gasTick s each enemy inside ANY cloud takes one tick (clouds
+  // never stack on one enemy) and a CORRODE stack. Its element is fixed (weapon-levels.js FIXED_ELEMENTS).
+  // A cloud swells in over gasGrow s and shrinks away over the last gasFade share of its life.
+  // Potential counts one tick per tick interval on one target; a trail usually holds several enemies,
+  // so each tick is valued at gasHitShare (the per-tick damage is that much lower).
+  gasRadius: (b) => 46 * (1 + 0.12 * b.r.radius),
+  gasLife: (b) => 2.6 + 0.4 * (b?.r?.linger || 0),
+  gasTick: (b) => 0.3 / rateMult(b.r.rate),
+  gasPuffSpacing: 0.7,
+  gasGrow: 0.35,
+  gasFade: 0.3,
+  gasHitShare: 3,
+  // Transforms: Seeking Miasma (clouds creep toward the nearest enemy within seekRange at seekSpeed px/s:
+  // no extra attacks, so every tick hits BT_TRANSFORM_DPS harder), Volatile Pockets (every pocketEvery s a
+  // pocket that arms for pocketArm s, then bursts when an enemy comes within its trigger, or at
+  // pocketFuse, for pocketShare of the gas DPS over pocketEvery, valued at pocketHitShare), Toxic Shroud
+  // (a cloud shroudRadiusMult x the cloud radius around the hull that ticks with the trail for
+  // shroudShare of a tick, valued at shroudHitShare).
+  seekRange: 280,
+  seekSpeed: 70,
+  pocketEvery: 1.2,
+  pocketArm: 0.35,
+  pocketFuse: 1.8,
+  pocketTriggerFrac: 0.6,
+  pocketRadiusMult: 1.9,
+  pocketShare: 0.5,
+  pocketHitShare: 1.6, // a pocket burst on the chasing pack catches a few enemies: valued at this share
+  shroudRadiusMult: 2,
+  shroudShare: 0.5,
+  shroudHitShare: 1.4, // the shroud holds whatever is closing in on the hull: valued at this share
+  gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0),
+  gasDamageMult: (b) => lv1('gas', 'gas', (b0) => DPS_TARGET(1) * W.gasTick(b0) / W.gasUnits(b0)) * hitMult(b) * tfScale(b, W.gasUnits),
+  pocketDamageMult: (b) => W.pocketShare * W.gasDamageMult(b) * W.pocketEvery / W.gasTick(b),
+  shroudDamageMult: (b) => W.shroudShare * W.gasDamageMult(b),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -505,7 +543,9 @@ export const POTENTIAL_DPS = {
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
     return W.grenadeCount(b) * (blast + bomblets + cloud) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
-  }
+  },
+  gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
+    + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -525,7 +565,8 @@ export const WEAPON_TAGS = {
   turret: ['deployable', 'projectile', 'kinetic'],
   drone: ['deployable', 'projectile', 'kinetic'],
   siege: ['deployable', 'explosive', 'area'],
-  grenade: ['projectile', 'explosive', 'area']
+  grenade: ['projectile', 'explosive', 'area'],
+  gas: ['area', 'corrode']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -561,7 +602,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -602,6 +643,7 @@ export function weaponDamage(p, weapon, b) {
     case 'drone': base = d * W.droneDamageMult(sourceBuild(p, weapon, b)) * (TUNING.deployableDamageMult ?? 1); break;
     case 'siege': base = d * W.turretDamageMult(sourceBuild(p, weapon, b)) * W.siegeShellDamageMult * (TUNING.deployableDamageMult ?? 1); break;
     case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -616,6 +658,7 @@ export const tectonicBlastRadius = (p) => W.tectonicBlastRadius * areaMult(p);
 export const mineBlastRadius = (p, b = weaponBuild(p, 'mines')) => W.mineBlastRadius(b) * areaMult(p);
 export const siegeShellRadius = (p) => W.siegeShellRadius * areaMult(p);
 export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grenadeBlastRadius(b) * areaMult(p);
+export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);
@@ -637,6 +680,7 @@ export const elementDamageMult = (p, element) => (element ? p?.stats?.elementDam
 // Element of the weapon a damage source belongs to, or null ('helix' -> blaster's, 'rocket' -> rockets'...).
 export function sourceElement(p, source) {
   const id = SOURCE_WEAPON[source];
+  if (id && FIXED_ELEMENTS[id]) return FIXED_ELEMENTS[id];
   const keys = id && ELEMENT_KEYS[id];
   const w = p?.weapons;
   if (!keys || !w) return null;

@@ -9,7 +9,7 @@ import {
   WEAPON_SCALING as W, TAG_INFO, SOURCE_WEAPON, burnStackDps, burnMaxStacks, burnDuration, chillSlow, chillDuration,
   corrodePerStack, corrodeMaxStacks, corrodeDuration, doubleStackChance, shockStun, shockLongStun, shockLongChance, stunResist, stunImmunity
 } from './weapon-scaling.js';
-import { ELEMENTS, ELEMENT_KEYS } from './weapon-levels.js';
+import { ELEMENT_KEYS, weaponElement } from './weapon-levels.js';
 
 export const STATUS_COLORS = { burn: TAG_INFO.burn.color, chill: TAG_INFO.chill.color, corrode: TAG_INFO.corrode.color, shock: TAG_INFO.shock.color };
 
@@ -97,23 +97,19 @@ export function applyShock(e, lv, p = null) {
 }
 
 // Apply the element of the weapon behind `source` (Autocannon bolts and Pulsar Helix bolts share the
-// Autocannon's; Storm Protocol and EMP arcs are Tesla arcs). Weapons without an element apply nothing.
+// Autocannon's; Storm Protocol and EMP arcs are Tesla arcs; Corrosive Gas Trail is always CORROSIVE).
+// Weapons without an element apply nothing.
 export function applyOnHitStatuses(p, e, source) {
   if (e.dead || statusImmune(e)) return;
   const weapon = SOURCE_WEAPON[source];
-  const keys = weapon && ELEMENT_KEYS[weapon];
-  const w = p.weapons;
-  if (!keys || !w) return;
-  for (let i = 0; i < keys.length; i++) {
-    const lv = w[keys[i]];
-    if (!(lv > 0)) continue;
-    switch (ELEMENTS[i]) {
-      case 'fire': applyBurn(p, e, lv, weapon); break;
-      case 'frost': applyChill(e, lv, p); break;
-      case 'corrode': applyCorrode(e, lv, p); break;
-      case 'shock': applyShock(e, lv, p); break;
-    }
-    return; // one element per weapon
+  const el = weapon && weaponElement(p, weapon);
+  if (!el) return;
+  const lv = el.rank;
+  switch (el.element) { // one element per weapon
+    case 'fire': applyBurn(p, e, lv, weapon); break;
+    case 'frost': applyChill(e, lv, p); break;
+    case 'corrode': applyCorrode(e, lv, p); break;
+    case 'shock': applyShock(e, lv, p); break;
   }
 }
 

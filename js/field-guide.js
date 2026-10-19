@@ -377,6 +377,7 @@ export const MECHANIC_ENTRIES = [
     id: 'status', icon: '☢', title: 'ELEMENTS: BURN · CHILL · CORRODE · STUN',
     body: () => [
       `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by a supply cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
+      `${WEAPON_BY_ID.gas.name} is born CORROSIVE (no element cards): every gas tick corrodes, its corrode rank grows by 1 at LV 6, 12 and 18, and it counts as a CORROSIVE weapon for STATUS cards and the Corrosive Amplifier.`,
       `BURN (FIRE): each hit adds a stack (max 3 + rank) and refreshes the fire for ${W.burnDuration} s; stacks tick every ${W.burnTickInterval} s. CHILL (FROST): slows movement and frosts the hull; bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow. CORRODE (CORROSIVE): each stack makes the target take +${pct(W.corrodePerStack)} damage from every source, burn included.`,
       `STUN (SHOCK): a hit stuns for ${W.shockStun(1)} s, or ${pct(W.shockLongChance(1))} of the time a long ${W.shockLongStun} s stun: the hull crackles yellow, stops moving and can't attack (touching it still hurts). Then it is stun-immune for ${W.stunImmunity} s, so nothing is stunned forever. Bosses keep ${pct(TUNING.shockBossMult ?? 0.2)} of a stun (immune ${W.stunImmunityBoss} s), lieutenants ${pct(TUNING.shockLieutenantMult ?? 0.5)} (immune ${W.stunImmunityLieutenant} s).`,
       'STATUS cards (Status Potency, Status Application, Status Duration, Shock Conductor and the FIRE / FROST / CORROSIVE / SHOCK Amplifiers) strengthen every weapon of their element and never raise a weapon\'s level. They only show up once a weapon carries a matching element. Vortexes take statuses like any enemy; invulnerable hulls are immune.'
@@ -455,7 +456,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
