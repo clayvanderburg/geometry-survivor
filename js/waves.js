@@ -14,6 +14,7 @@ export const WAVE_PACKS = [
   { id: 'bruiser', lead: 'bruiser', weightKey: 'spawnWeightBruiser' },
   { id: 'serpent', lead: 'serpent', weightKey: 'spawnWeightSerpent' },
   { id: 'blinker', lead: 'blinker', weightKey: 'spawnWeightBlinker' },
+  { id: 'kestrel', lead: 'kestrel', weightKey: 'spawnWeightKestrel' },
   { id: 'gunner', lead: 'gunner', weightKey: 'spawnWeightGunner' },
   { id: 'blackhole', lead: 'blackhole', weightKey: 'spawnWeightBlackhole' },
   { id: 'hulk', lead: 'hulk', weightKey: 'spawnWeightHulk' },
@@ -75,6 +76,8 @@ export function packRoster(id, wave, legacy = false) {
       const n = packSize(Math.min(3, 1 + Math.floor(s('shielder') / 5)));
       return [['shielder', n], ['pinwheel', n * 2]];
     }
+    // One V: a leader and its wingmen (3 at first, 5 from nine waves after their debut).
+    case 'kestrel': return [['kestrel', Math.min(5, 3 + 2 * Math.floor(s('kestrel') / 9))]];
     case 'blinker': return [['blinker', packSize(Math.min(7, 3 + Math.floor(s('blinker') / 3)))]];
     case 'conduit': return [['conduit', 1], ['pinwheel', 3], ['bruiser', wave >= 8 ? 1 : 0]];
     default: return [];

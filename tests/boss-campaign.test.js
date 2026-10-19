@@ -327,3 +327,52 @@ test('Ouroboros: arrives with its body, sheds tail serpents, then coils, rears, 
   assert.deepEqual([...seen].sort(), ['coil', 'rear', 'strike', 'wind']);
   assert.ok([q.x, q.y].every(Number.isFinite));
 });
+
+test('kestrels: a V holds formation on strafing runs, and scatters onto solo runs when its leader dies', async () => {
+  resetTuning();
+  const { spawnWing, slotOffset, KESTREL } = await import('../js/squadrons.js');
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  spawnWing(m, 2000, 2000, 1, 4, { angle: 0, extra: { instant: true } });
+  step(m, player, 3);
+  const lead = m.enemies.find(e => e.type === 'kestrel' && !e.wingLeader);
+  const wing = m.enemies.filter(e => e.wingLeader === lead);
+  assert.equal(wing.length, 4);
+  const states = new Set();
+  for (let i = 0; i < 60 * 8; i++) { step(m, player, 1); states.add(lead.state); }
+  assert.ok(states.has('run') && states.has('turn'), 'leader alternates runs and turns');
+  for (const w of wing) {
+    const o = slotOffset(w.wingSlot);
+    const c = Math.cos(lead.aimAngle), s = Math.sin(lead.aimAngle);
+    const tx = lead.x - c * o.back - s * o.side, ty = lead.y - s * o.back + c * o.side;
+    assert.ok(Math.hypot(w.x - tx, w.y - ty) < 40, `slot ${w.wingSlot} held`);
+  }
+  lead.dead = true;
+  m.enemies.splice(m.enemies.indexOf(lead), 1);
+  step(m, player, 2);
+  assert.ok(wing.every(w => w.wingLeader === null && (w.state === 'turn' || w.state === 'run')), 'wingmen scatter');
+  assert.ok(KESTREL.speed < 5, 'slower than the ship at base thrust');
+});
+
+test('Wing Commander: leads a V, lays mine lines on runs, reinforces, scrambles and fans at half HP', async () => {
+  resetTuning();
+  const { WING } = await import('../js/bosses.js');
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  m.queueSpawn('wing_commander', 1800, 2000, waveScaleAt(9), { instant: true, wave: 9 });
+  step(m, player, 4);
+  const c = m.enemies.find(e => e.type === 'wing_commander');
+  const escort = () => m.enemies.filter(e => e.wingLeader === c);
+  assert.equal(escort().length, WING.escort);
+  let mines = 0;
+  for (let i = 0; i < 60 * 5 && !mines; i++) { step(m, player, 1); mines = m.enemyBullets.count; }
+  assert.ok(mines > 0, 'a run lays mines');
+  // Lose two wingmen: the next run calls them back.
+  for (const o of escort().slice(0, 2)) { o.dead = true; m.enemies.splice(m.enemies.indexOf(o), 1); }
+  for (let i = 0; i < 60 * 10 && escort().length < WING.escort; i++) step(m, player, 1);
+  assert.equal(escort().length, WING.escort, 'reinforced');
+  c.hp = c.maxHp * 0.49;
+  step(m, player, 1);
+  assert.equal(c.enraged, true);
+  assert.equal(escort().length, 0, 'the escort scrambles');
+});

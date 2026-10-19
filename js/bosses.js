@@ -10,6 +10,7 @@
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick.
 import { TUNING } from './config.js';
 import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
+import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -298,9 +299,112 @@ function shedTail(e, m) {
   spawnSerpent(m, 'serpent', stump.x, stump.y, m.waveScaleFor('serpent', e.bossWave), OURO.spawnSegments, { angle, extra: { instant: true } });
 }
 
+// --- WING COMMANDER (wave 9, minor) ---------------------------------------------------------
+// A big arrowhead that never chases: it leads a V of Kestrels on strafing runs through where you are,
+// laying a line of slow drifting mines on either side as it passes, and calls in replacements for lost
+// wingmen at the start of each run. At half HP the escort scrambles to hunt on its own, and the
+// Commander flies faster runs and opens each one with an aimed five-orb fan.
+export const WING = {
+  escort: 6, speed: 3.4, rageSpeed: 4.3, turnRate: 1.5, rageTurnRate: 2.1, reinforce: 2,
+  mineEvery: 0.28, mineSpeed: 1.1, mineLife: 5.5, fan: 5, fanSpread: 0.22, fanSpeed: 4.2, rageAt: 0.5, deathOrbs: 10
+};
+
+function fireOrb(m, e, angle, speed, life = 4) {
+  const b = m.enemyBullets?.spawn(e.x + Math.cos(angle) * e.radius, e.y + Math.sin(angle) * e.radius,
+    Math.cos(angle) * speed, Math.sin(angle) * speed, TUNING.enemyBulletDamage ?? 12, 8);
+  if (b) {
+    b.life = life;
+    b.from = e.type;
+  }
+  return b;
+}
+
+// First free V slots (1..n) on a leader.
+function freeSlots(e, m, n) {
+  const taken = new Set(wingmenOf(e, m).map(o => o.wingSlot));
+  const out = [];
+  for (let k = 1; out.length < n && k <= WING.escort; k++) if (!taken.has(k)) out.push(k);
+  return out;
+}
+
+const wingCommander = {
+  name: 'WING COMMANDER', epithet: 'ACE OF THE KESTREL FLIGHT', tier: 'minor', hue: 30, debut: ['kestrel', 'blinker'],
+  stats: () => ({ speed: WING.speed, radius: 30, sides: 3, vRot: 0 }),
+  onArrive(e, m) {
+    e.state = 'turn';
+    e.enraged = false;
+    e.aimAngle = Math.random() * Math.PI * 2;
+    e.mineT = 0;
+    spawnWing(m, e.x, e.y, m.waveScaleFor('kestrel', e.bossWave), WING.escort, { angle: e.aimAngle, leader: e, extra: { instant: true } });
+  },
+  update(e, m, env) {
+    const { dt, player } = env;
+    if (!e.enraged && e.hp <= e.maxHp * WING.rageAt) {
+      // Scramble: the escort breaks formation and each Kestrel hunts alone.
+      e.enraged = true;
+      e.speed = WING.rageSpeed;
+      for (const o of wingmenOf(e, m)) {
+        o.wingLeader = null;
+        o.burstSpeed = 0;
+        o.state = 'turn';
+      }
+      env.particles?.spawnShockwave?.(e.x, e.y, 240, e.hue, 4, 0.45);
+    }
+    const before = e.state;
+    flyRuns(e, env, e.enraged ? WING.rageSpeed : WING.speed, e.enraged ? WING.rageTurnRate : WING.turnRate);
+    if (before === 'turn' && e.state === 'run') {
+      if (e.enraged) {
+        const a = Math.atan2(player.y - e.y, player.x - e.x);
+        for (let k = 0; k < WING.fan; k++) fireOrb(m, e, a + (k - (WING.fan - 1) / 2) * WING.fanSpread, WING.fanSpeed);
+        m.shotsFired = (m.shotsFired || 0) + 1;
+      } else {
+        // New run: call in replacements for lost wingmen.
+        const scale = m.waveScaleFor('kestrel', e.bossWave);
+        for (const k of freeSlots(e, m, WING.reinforce)) {
+          const o = slotOffset(k);
+          const c = Math.cos(e.aimAngle), sn = Math.sin(e.aimAngle);
+          m.queueSpawn('kestrel', e.x - c * o.back * 2 - sn * o.side, e.y - sn * o.back * 2 + c * o.side, scale,
+            { instant: true, attach: { wingLeader: e, wingSlot: k, aimAngle: e.aimAngle } });
+        }
+      }
+    }
+    if (e.state === 'run') {
+      // Mines: a slow drifting orb out of each side, so every pass leaves two lines to cross.
+      e.mineT -= dt;
+      if (e.mineT <= 0) {
+        e.mineT = WING.mineEvery;
+        fireOrb(m, e, e.aimAngle + Math.PI / 2, WING.mineSpeed, WING.mineLife);
+        fireOrb(m, e, e.aimAngle - Math.PI / 2, WING.mineSpeed, WING.mineLife);
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    // A broad delta wing with twin tail fins and a cockpit stripe.
+    ctx.moveTo(r * 1.5, 0);
+    ctx.lineTo(-r * 0.9, r * 1.2);
+    ctx.lineTo(-r * 0.5, r * 0.4);
+    ctx.lineTo(-r * 1.1, r * 0.4);
+    ctx.lineTo(-r * 0.8, 0);
+    ctx.lineTo(-r * 1.1, -r * 0.4);
+    ctx.lineTo(-r * 0.5, -r * 0.4);
+    ctx.lineTo(-r * 0.9, -r * 1.2);
+    ctx.closePath();
+    ctx.moveTo(r * 0.9, 0);
+    ctx.lineTo(-r * 0.2, 0);
+    ctx.moveTo(r * 0.2, r * 0.35);
+    ctx.lineTo(-r * 0.3, r * 0.75);
+    ctx.moveTo(r * 0.2, -r * 0.35);
+    ctx.lineTo(-r * 0.3, -r * 0.75);
+  },
+  onDeath(e, m) {
+    for (let k = 0; k < WING.deathOrbs; k++) fireOrb(m, e, (k / WING.deathOrbs) * Math.PI * 2, 2.2);
+  }
+};
+
 export const BOSS_DEFS = {
   brood_queen: broodQueen,
-  ouroboros
+  ouroboros,
+  wing_commander: wingCommander
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

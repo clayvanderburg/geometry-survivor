@@ -8,8 +8,9 @@ import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, bossBuilt } from './bosses.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, bossBuilt } from './bosses.js';
 import { SERPENT } from './serpents.js';
+import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
@@ -128,6 +129,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Get ahead of it, not behind: shoot the head as it turns toward you. Auto-aim and homing weapons prefer the head; area blasts on the body are wasted.'
   },
   {
+    id: 'kestrel', name: 'KESTREL WING', group: 'archetype', unlockWave: unlockWaveOf('kestrel'),
+    what: () => `Amber darts that fly in a V of 3 (later 5). They never chase: the leader lines up on you, makes a straight strafing run through where you were at nearly your speed, overshoots, banks round and lines up again, wingmen holding their slots. Down the leader and the rest scatter onto runs of their own. Debuts with the Wing Commander.`,
+    tip: 'Step off the line as they line up, then shoot down the length of the V as it passes. Take the leader first.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -142,6 +148,11 @@ export const HOSTILE_ENTRIES = [
     id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
     what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${bossGrindText()}`,
     tip: 'Only the head counts. When it starts to coil, dash out through the gap where head meets tail before the ring closes, and step off the red lane before it strikes.'
+  },
+  {
+    id: 'wing_commander', name: BOSS_DEFS.wing_commander.name, group: 'boss', boss: true, unlockWave: bossWave('wing_commander'),
+    what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad amber delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, and the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
+    tip: 'Do not stand in its lane: sidestep the run, then cross its mine lines through the gaps. Thin the escort between passes so it has fewer wingmen to call back.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

@@ -9,6 +9,7 @@ import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from '.
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER } from './hostiles.js';
 import { SERPENT, spawnSerpent } from './serpents.js';
+import { spawnWing } from './squadrons.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -176,7 +177,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -1100,9 +1101,12 @@ export class Game {
       } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
         const type = SANDBOX_ARCHETYPES[sandboxAction];
         const bp = this.spawnPointOnscreen(30);
+        const angle = Math.atan2(p.y - bp.y, p.x - bp.x);
         const ok = type === 'serpent'
-          ? spawnSerpent(this.enemyManager, 'serpent', bp.x, bp.y, this.getWaveScale(type), SERPENT.segments, { angle: Math.atan2(p.y - bp.y, p.x - bp.x), extra: this.placedSpawn(bp) })
-          : this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(type), this.placedSpawn(bp));
+          ? spawnSerpent(this.enemyManager, 'serpent', bp.x, bp.y, this.getWaveScale(type), SERPENT.segments, { angle, extra: this.placedSpawn(bp) })
+          : type === 'kestrel'
+            ? spawnWing(this.enemyManager, bp.x, bp.y, this.getWaveScale(type), 2, { angle, extra: this.placedSpawn(bp) }).length > 0
+            : this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(type), this.placedSpawn(bp));
         if (!ok) {
           this.showBanner(`⚠ ENEMY CAP REACHED — ${INTEL_INFO[type].label} NOT SPAWNED ⚠`);
         }
@@ -2607,6 +2611,11 @@ export class Game {
         const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
         spawnSerpent(em, 'serpent', p2.x, p2.y, this.getWaveScale('serpent'), SERPENT.segments, { angle, extra: this.placedSpawn(p2) });
       }
+    } else if (pack === 'kestrel') {
+      // One V on a strafing run that starts lined up on the ship.
+      const p2 = this.spawnPoint(80);
+      const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
+      spawnWing(em, p2.x, p2.y, this.getWaveScale('kestrel'), count('kestrel') - 1, { angle, extra: this.placedSpawn(p2) });
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
       for (let i = 0; i < count('shielder'); i++) {

@@ -4,9 +4,11 @@
 //   MAYFLY — tiny, twitchy bugs in big clouds; one tap kills them, standing still is what hurts.
 //   HULK   — the old Prismatic Dreadnought hull, demoted to a slow, armored bullet sponge.
 //   SERPENT — a winding head with a body that blocks shots (js/serpents.js); kill the head.
+//   KESTREL — darts in V formation making strafing runs (js/squadrons.js); kill the leader to scatter them.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
 import { SERPENT, windToward } from './serpents.js';
+import { KESTREL, updateKestrel, traceKestrel } from './squadrons.js';
 
 export const MAYFLY = { jitterMin: 0.12, jitterMax: 0.38, spread: 1.25, burst: 1.6 };
 export const HULK = { knockMult: 0.1, contactMult: 1.8 };
@@ -15,7 +17,8 @@ export const HULK = { knockMult: 0.1, contactMult: 1.8 };
 export const HOSTILE_INFO = {
   mayfly: { label: 'MAYFLY', unlockWave: unlockWaveOf('mayfly'), intro: 'TINY TWITCHY CLOUDS · ONE HIT EACH — KEEP MOVING, SWEEP THEM' },
   hulk: { label: 'HULK', unlockWave: unlockWaveOf('hulk'), intro: 'SLOW ARMORED SPONGE · SOAKS SHOTS AND BLOCKS LANES — KITE AROUND IT' },
-  serpent: { label: 'SERPENT', unlockWave: unlockWaveOf('serpent'), intro: 'ONLY THE HEAD TAKES DAMAGE · THE BODY BLOCKS SHOTS — AIM FOR THE HEAD' }
+  serpent: { label: 'SERPENT', unlockWave: unlockWaveOf('serpent'), intro: 'ONLY THE HEAD TAKES DAMAGE · THE BODY BLOCKS SHOTS — AIM FOR THE HEAD' },
+  kestrel: { label: 'KESTREL WING', unlockWave: unlockWaveOf('kestrel'), intro: 'V FORMATIONS ON STRAFING RUNS · SIDESTEP THE LINE — DOWN THE LEADER TO SCATTER THEM' }
 };
 
 export const isHostileKind = (type) => Object.hasOwn(HOSTILE_INFO, type);
@@ -45,16 +48,23 @@ export function hostileKindStats(type, waveScale) {
         radius: SERPENT.headRadius, sides: 6, hue: 245, // Royal indigo
         score: 140, xp: 6, vRot: 0, sturdy: true, knockMult: 0.4
       };
+    case 'kestrel':
+      return {
+        hp: 24 * waveScale, maxHp: 24 * waveScale,
+        speed: KESTREL.speed,
+        radius: 11, sides: 3, hue: 30, // Afterburner amber
+        score: 70, xp: 3, vRot: 0
+      };
     default:
       return null;
   }
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1 };
 
 // Fast movers that leave a neon ribbon.
-export const HOSTILE_TRAILS = new Set(['mayfly']);
+export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel']);
 
 function updateMayfly(e, m, env) {
   const { dirX, dirY, dt } = env;
@@ -81,7 +91,7 @@ function updateSerpent(e, m, env) {
   windToward(e, env, { speed: e.speed });
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent };
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {
@@ -108,6 +118,8 @@ export function traceHostileKind(ctx, e, r) {
       ctx.moveTo(x, 0);
       ctx.lineTo(x - r * 0.4, -r * (1.2 + k * 0.2) * flap);
     }
+  } else if (e.type === 'kestrel') {
+    traceKestrel(ctx, r);
   } else if (e.type === 'hulk') {
     // The Dreadnought's octagon with a counter-rotating inner core and four armor ribs.
     polygon(ctx, 8, r, 0);
