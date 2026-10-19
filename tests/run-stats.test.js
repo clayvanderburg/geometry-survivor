@@ -345,7 +345,9 @@ test('a simulated run fills the same stats the browser uploads, matching the bal
   assert.equal(s.version, GAME_VERSION);
   assert.ok(!sanitizeRunStats(s).error, 'the sim summary passes server validation');
   assert.ok(s.weapons.blaster.lv[1][0] > 0, 'Autocannon time is tracked from the start');
-  assert.ok(s.weapons.missiles?.dmg > 0, 'the equipped missiles are credited');
+  // The first weapon picked after Autocannon (missiles when offered; the 1-of-3 pick is random) is credited.
+  const second = r.loadout.find((id) => id !== 'blaster');
+  assert.ok(second && s.weapons[second]?.dmg > 0, `the equipped ${second} is credited`);
   const total = Object.values(s.weapons).reduce((a, w) => a + w.dmg, 0);
   const harness = Object.values(r.dealt).reduce((a, v) => a + v, 0);
   // The harness books the damage requested (before armor and crits), the tracker what landed: close.

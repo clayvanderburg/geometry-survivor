@@ -264,7 +264,8 @@ export function damageHtml(runStats) {
 
 // Weapon slot chips (equipped weapons in their colour, free slots dashed): the HUD row and the
 // level-up screen's loadout strip.
-export function weaponChipsHtml(p) {
+// `charges` ({ weaponId: 0..1 }, optional) adds a charge gauge under a chip (Electric Shield Field's recharge).
+export function weaponChipsHtml(p, charges = null) {
   const owned = ownedWeapons(p);
   const chips = [];
   for (let i = 0; i < Math.max(weaponSlots(), owned.length); i++) {
@@ -278,7 +279,11 @@ export function weaponChipsHtml(p) {
     const el = weaponElement(p, w.id);
     const elTag = el ? ` <span class="weapon-el" style="--ec:${ELEMENT_INFO[el.element].color}">${ELEMENT_INFO[el.element].label}</span>` : '';
     const title = el ? `${w.name} (${ELEMENT_INFO[el.element].label} ${el.rank})` : w.name;
-    chips.push(`<span class="weapon-slot-chip" style="--wc:${w.color}" title="${esc(title)}">${w.hudName}${lv}${elTag}</span>`);
+    const charge = charges?.[w.id];
+    const gauge = typeof charge === 'number';
+    const cls = gauge ? ` charge${charge >= 1 ? ' ready' : ''}` : '';
+    const style = gauge ? `--wc:${w.color};--charge:${charge}` : `--wc:${w.color}`;
+    chips.push(`<span class="weapon-slot-chip${cls}" style="${style}" title="${esc(title)}">${w.hudName}${lv}${elTag}</span>`);
   }
   return chips.join('');
 }

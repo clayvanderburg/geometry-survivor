@@ -110,6 +110,12 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
     card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burnMax', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4))
+  ],
+  shockfield: [
+    card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),
+    card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
+    card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
+    card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
   ]
 };
 
@@ -178,7 +184,8 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // grows with the weapon level (fixedElementRank: 1 at LV 1, +1 at each Breakthrough level).
 // The Flamethrower always burns: its FIRE rank is 1 + its Sticky Gel ('burn' stat) ranks instead
 // (ACROSS THE BOARD's free utility rank included), up to ELEMENT_MAX_RANKS (FIXED_ELEMENT_RANK).
-export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire' };
+// The Electric Shield Field is always SHOCK: its rank is 1 + its Stun Coils ('stun' stat) ranks the same way.
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', shockfield: 'shock' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
 export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || 0));
 // Flamethrower FIRE rank read straight from the card ranks and Breakthroughs (no build allocated:
@@ -189,12 +196,20 @@ export function flameElementRank(p) {
   if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
   return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.flamethrower_burn || 0) + atb * BT_BOOST_RANKS);
 }
+// Electric Shield Field SHOCK rank, the same way from its Stun Coils ranks (equals W.fieldStunRank of its build).
+export function fieldElementRank(p) {
+  const bt = p?.breakthroughs?.shockfield;
+  let atb = 0;
+  if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
+  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.shockfield_stun || 0) + atb * BT_BOOST_RANKS);
+}
 // Fixed-element weapons whose rank does not follow the level rule above.
-const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank };
+const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank, shockfield: fieldElementRank };
 
 // A weapon's element and its rank ({ element, rank }), or null when it has none. Reads player.weapons
 // (kept in step with the card ranks by the cards' apply()).
 export const ELEMENT_KEYS = Object.fromEntries(ELEMENT_WEAPONS.map((weapon) => [weapon, ELEMENTS.map((el) => elementKey(weapon, el))]));
+
 export function weaponElement(p, weapon) {
   const w = p?.weapons;
   const fixed = FIXED_ELEMENTS[weapon];
@@ -209,7 +224,7 @@ export function weaponElement(p, weapon) {
 }
 
 // Elements carried by the player's weapons (owned or not: callers pass owned ids when it matters).
-export function elementsOf(p, weapons = ELEMENT_WEAPONS) {
+export function elementsOf(p, weapons = [...ELEMENT_WEAPONS, ...Object.keys(FIXED_ELEMENTS)]) {
   const out = new Set();
   for (const id of weapons) {
     const el = weaponElement(p, id);
@@ -223,10 +238,10 @@ export function elementsOf(p, weapons = ELEMENT_WEAPONS) {
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', shockfield: 'SHOCK FIELD'
 };
 
-// Transforms: one per weapon per milestone (30 in all), each changing how the weapon works.
+// Transforms: one per weapon per milestone, each changing how the weapon works.
 const tf = (id, name, summary) => ({ id, name, summary });
 export const TRANSFORMS = {
   blaster: {
@@ -288,6 +303,11 @@ export const TRANSFORMS = {
     6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle that sprays fire straight behind you, a little shorter than the front one.'),
     12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
+  },
+  shockfield: {
+    6: tf('lash', 'Arc Lash', 'Every Electric Shield Field discharge also lashes arcs out at the 3 nearest enemies beyond the field, stunning them too.'),
+    12: tf('repulse', 'Repulsor Surge', 'Electric Shield Field discharges hurl enemies back and hit harder, and each one that lands recharges your Phase Dash faster.'),
+    18: tf('overcharge', 'Thunderclap Overcharge', 'The Electric Shield Field banks charge with every discharge. When a big pack or a boss closes in, it releases it all in a wide thunderclap.')
   }
 };
 

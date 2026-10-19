@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius,
   burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
   doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -193,6 +193,15 @@ export const STAT_ROWS = [
   { id: 'gasSeek', label: 'Clouds creep toward enemies', get: (p) => wb(p, 'gas', (b) => (b.t4 ? W.seekSpeed : null)), fmt: (v) => `${Math.round(v)} px/s`, newText: () => 'CLOUDS HUNT ENEMIES' },
   { id: 'gasPocket', label: 'Volatile pocket burst', get: (p) => wb(p, 'gas', (b) => (b.t8 ? weaponDamage(p, 'gas', b) * W.pocketShare * W.pocketEvery / W.gasTick(b) : null)), fmt: dec1, newText: (a, row) => `GAS POCKETS BURST // ${row.fmt(a)} DMG` },
   { id: 'gasShroud', label: 'Toxic shroud radius', get: (p) => wb(p, 'gas', (b) => (b.t12 ? gasCloudRadius(p, b) * W.shroudRadiusMult : null)), fmt: int, newText: (a) => `TOXIC SHROUD // ${a} RADIUS` },
+  // Electric Shield Field (fixed SHOCK element: its stun rows read the field's own rank)
+  { id: 'fieldRadius', label: 'Field radius', get: (p) => wb(p, 'shockfield', (b) => fieldRadius(p, b)), fmt: int, headline: 'count', unit: 'FIELD RADIUS', newText: (a) => `SHOCK FIELD // ${a} RADIUS` },
+  { id: 'fieldDamage', label: 'Discharge damage', get: (p) => wb(p, 'shockfield', (b) => weaponDamage(p, 'shockfield', b)), fmt: dec1, headline: 'pct', unit: 'DISCHARGE DAMAGE' },
+  { id: 'fieldCooldown', label: 'Field recharge', get: (p) => wb(p, 'shockfield', W.fieldCooldown), fmt: secs, headline: 'pct', unit: 'FIELD RECHARGE' },
+  { id: 'fieldStun', label: 'Field stun', get: (p) => wb(p, 'shockfield', (b) => shockStun(p, W.fieldStunRank(b))), fmt: secs, headline: (b, a) => `+${(a - b).toFixed(2)}s STUN` },
+  { id: 'fieldStunLong', label: 'Field long-stun chance', get: (p) => wb(p, 'shockfield', (b) => shockLongChance(p, W.fieldStunRank(b))), fmt: pct },
+  { id: 'fieldLash', label: 'Arc Lash arcs / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t4 ? W.lashArcs : null)), fmt: int, newText: (a) => `DISCHARGES LASH // ${a} ARCS` },
+  { id: 'fieldDashRefund', label: 'Dash recharge / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t8 ? W.dashRefund : null)), fmt: secs, newText: (a, row) => `DISCHARGES REPULSE // -${row.fmt(a)} DASH` },
+  { id: 'fieldClap', label: 'Thunderclap radius', get: (p) => wb(p, 'shockfield', (b) => (b.t12 ? fieldRadius(p, b) * W.overchargeRadiusMult : null)), fmt: int, newText: (a, row) => `THUNDERCLAP // ${row.fmt(a)} RADIUS` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -392,7 +401,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', shockfield: 'shockfield' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

@@ -17,6 +17,7 @@ import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
 import { Flamethrower } from './flamethrower.js';
+import { ShockField } from './shock-field.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -423,6 +424,7 @@ export class Game {
         grenades: 0,
         gas: 0,
         flamethrower: 0,
+        shockfield: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -449,6 +451,7 @@ export class Game {
     (this.grenades ||= new Grenades()).clear();
     (this.gasTrail ||= new GasTrail()).clear();
     (this.flamethrower ||= new Flamethrower()).clear();
+    (this.shockField ||= new ShockField()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     this.missileSalvos = 0;
     this.turretShots = 0;
@@ -5042,6 +5045,7 @@ export class Game {
     this.deployables?.update(dt, this);
     this.grenades?.update(dt, this);
     this.gasTrail?.update(dt, this);
+    this.shockField?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -5320,7 +5324,7 @@ export class Game {
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
     // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
-    const barHtml = weaponChipsHtml(p);
+    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge() });
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
@@ -6191,6 +6195,7 @@ export class Game {
     this.gasTrail?.drawGround(ctx, this);
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
+    if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);

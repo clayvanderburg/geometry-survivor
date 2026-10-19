@@ -9,7 +9,7 @@ const h = await import('../tools/balance/harness.mjs');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { PAD } = await import('../js/gamepad.js');
 const { acquireWeapon, discardWeapon, pendingBreakthroughs, applyUpgradeLevels, rollWeaponPicks, UPGRADE_BY_ID } = await import('../js/upgrades.js');
-const { ownedWeapons, unownedWeapons, weaponLevel } = await import('../js/loadout.js');
+const { WEAPONS, ownedWeapons, unownedWeapons, weaponLevel } = await import('../js/loadout.js');
 const { weaponDamage } = await import('../js/weapon-scaling.js');
 const { describeNewWeapon, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { handSizeFor, loadoutDamageMult, loadoutDamageMultFor, slotReward, slotTip, SLOT_TIP_SEEN_KEY, readSlotTipSeen } = await import('../js/slot-rewards.js');
@@ -215,8 +215,9 @@ test('weapon pick reroll: 40 then 80 gold, fresh weapons first, off when nothing
 
 test('weapon pick reroll is off when every weapon left is already on offer', () => {
   const g = freshGame(ALL_BUT_BLASTER.slice(0, 4), 1000);
-  withTuning({ ...odds(1), weaponSlots: 10 }, () => {
-    // Own everything but three weapons (however many the game has), so the pick offers all that's left.
+  // Enough slots that a free one is left after owning everything but three weapons, however many the game has.
+  withTuning({ ...odds(1), weaponSlots: WEAPONS.length + 2 }, () => {
+    // Own everything but three weapons, so the pick offers all that's left.
     while (unownedWeapons(g.player).length > 3) acquireWeapon(g.player, unownedWeapons(g.player)[0].id ?? unownedWeapons(g.player)[0]);
     g.triggerLevelUp();
     g.selectUpgrade(g.currentChoices.findIndex((c) => c.isNewWeapon));

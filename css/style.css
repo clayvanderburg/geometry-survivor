@@ -1888,6 +1888,18 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   text-shadow: 0 0 6px var(--ec, transparent);
 }
 
+/* Charge gauge along the bottom of a chip (Electric Shield Field recharging; glows once charged). */
+.weapon-slot-chip.charge {
+  background-image: linear-gradient(90deg, var(--wc) calc(var(--charge, 0) * 100%), rgba(255, 255, 255, 0.08) 0);
+  background-size: 100% 2px;
+  background-repeat: no-repeat;
+  background-position: left bottom;
+}
+
+.weapon-slot-chip.charge.ready {
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 7px var(--wc);
+}
+
 .weapon-slot-chip.empty {
   border: 1px dashed rgba(122, 139, 168, 0.55);
   color: var(--text-dim);

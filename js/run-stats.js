@@ -29,7 +29,9 @@ export const SUB_SOURCES = Object.freeze({
   siege: 'turret',        // Siege Battery shell bursts on turret bolts
   emp: 'grenades',        // EMP Grenades arcs, fired by Plasma Grenade blasts
   gas_pocket: 'gas',      // Corrosive Gas Trail: Volatile Pockets bursts
-  gas_shroud: 'gas'       // Corrosive Gas Trail: Toxic Shroud ticks
+  gas_shroud: 'gas',      // Corrosive Gas Trail: Toxic Shroud ticks
+  fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
 });
 
 // Damage that is not a loadout weapon's.

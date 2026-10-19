@@ -20,6 +20,7 @@ export const DAMAGE_SOURCE_COLORS = {
   grenade: '#5effd0',     // Plasma Grenade blasts, bomblets and clouds
   gas: '#7dff6a',         // Corrosive Gas Trail ticks, pocket bursts and the shroud
   flame: '#ffc23d',       // Flamethrower scorches, napalm puddles and the Inferno Ring
+  shockfield: '#bff9ff',  // Electric Shield Field discharges, arcs and thunderclaps
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   rocket: '#ffb347',      // Rocket Pods
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
