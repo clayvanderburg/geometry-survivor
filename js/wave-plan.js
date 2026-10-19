@@ -12,7 +12,7 @@
 export const UNLOCK_WAVE = {
   swarmer: 1, pinwheel: 1, weaver: 1, splitter: 1, mini_splitter: 1,
   mayfly: 3,
-  bruiser: 6,
+  bruiser: 6, serpent: 6,
   blinker: 9,
   gunner: 12,
   blackhole: 15, hulk: 15,

@@ -8,7 +8,8 @@ import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, bossBuilt } from './bosses.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, bossBuilt } from './bosses.js';
+import { SERPENT } from './serpents.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
@@ -115,6 +116,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Do not try to out-trade it head-on. Kite it in a loop, let it body-block its own pack, and burn it down with sustained damage.'
   },
   {
+    id: 'serpent', name: 'SERPENT', group: 'archetype', unlockWave: unlockWaveOf('serpent'),
+    what: () => `An indigo arrowhead trailing ${SERPENT.segments} armored body plates that follow it like a rope. It winds toward you in long S-curves. Only the head takes damage: the body stops your shots cold and stings on contact. Kill the head and the body pops plate by plate. Debuts with the Ouroboros.`,
+    tip: 'Get ahead of it, not behind: shoot the head as it turns toward you. Auto-aim and homing weapons prefer the head; area blasts on the body are wasted.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -124,6 +130,11 @@ export const HOSTILE_ENTRIES = [
     id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
     what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${eliteGrindText()}`,
     tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
+  },
+  {
+    id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
+    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${eliteGrindText()}`,
+    tip: 'Only the head counts. When it starts to coil, dash out through the gap where head meets tail before the ring closes, and step off the red lane before it strikes.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

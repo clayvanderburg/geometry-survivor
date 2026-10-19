@@ -9,6 +9,7 @@
 // A boss wave whose boss is not defined here gets the Prismatic Dreadnought ('boss', js/enemies.js).
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick.
 import { TUNING } from './config.js';
+import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -86,7 +87,7 @@ const broodQueen = {
     if (!e.enraged && e.hp <= e.maxHp * QUEEN.rageAt) {
       // The brood scatters: every orbiter breaks loose at once.
       e.enraged = true;
-      e.speed = QUEEN.rageSpeed * (e.speedScale || 1);
+      e.speed = QUEEN.rageSpeed; // the speed cap applies chill (speedScale) on top
       e.aiTimer = QUEEN.rageSpawnEvery;
       queenOrbiters(e, m).forEach((o, i) => release(o, player, i % 2 === 0));
       env.particles?.spawnShockwave?.(e.x, e.y, 260, e.hue, 5, 0.5);
@@ -148,8 +149,158 @@ const broodQueen = {
   }
 };
 
+// --- OUROBOROS (wave 6, major) ---------------------------------------------------------------
+// A giant serpent. Only its crowned head can be hurt; the long body blocks shots and stings on
+// contact. While healthy it winds after you and every few seconds sheds its tail as a small serpent.
+// From half HP it hunts: it COILS round the ship in a tightening ring (dash out through the gap where
+// head meets tail), REARS with a marked strike lane, STRIKES down it, then winds free and coils again.
+export const OURO = {
+  segments: 26, gap: 30, headRadius: 30, bodyRadius: 22, tailRadius: 12,
+  speed: 2.1, rageSpeed: 2.7, turnRate: 1.7, weave: 0.6, weaveRate: 1.3,
+  shedEvery: 7, shedSegments: 3, shedMin: 12, spawnSegments: 6,
+  coilAt: 0.5, coilTime: 4.2, coilR0: 330, coilR1: 135, coilSpeed: 3.6,
+  rearTime: 0.7, strikeTime: 0.55, strikeSpeed: 10.5, windTime: 3
+};
+
+// Live body segments of a serpent head, front to tail.
+function bodyOf(e) {
+  const out = [];
+  for (const ref of e.bodyRefs || []) {
+    const seg = liveOf(ref);
+    if (seg && !seg.dead && !seg.doomQueued) out.push(seg);
+  }
+  return out;
+}
+
+const ouroboros = {
+  name: 'OUROBOROS', epithet: 'THE COIL THAT DEVOURS', tier: 'major', hue: 245, debut: ['serpent', 'bruiser'],
+  stats: () => ({ speed: OURO.speed, radius: OURO.headRadius, sides: 6, vRot: 0 }),
+  onArrive(e, m) {
+    e.state = 'wind';
+    e.aiTimer = OURO.shedEvery;
+    e.enraged = false;
+    e.aimAngle = Math.random() * Math.PI * 2;
+    e.bodyRefs = spawnBody(m, e, e.x, e.y, OURO.segments, 1, {
+      angle: e.aimAngle, gap: OURO.gap, radius: OURO.bodyRadius, tail: OURO.tailRadius, hue: e.hue, boss: e.type, headRadius: OURO.headRadius, extra: { instant: true }
+    });
+  },
+  update(e, m, env) {
+    const { dt, player } = env;
+    if (!e.enraged && e.hp <= e.maxHp * OURO.coilAt) {
+      e.enraged = true;
+      e.state = 'coil';
+      e.aiTimer = OURO.coilTime;
+      e.coilA = Math.atan2(e.y - player.y, e.x - player.x);
+      e.coilDir = Math.random() < 0.5 ? -1 : 1;
+      env.particles?.spawnShockwave?.(e.x, e.y, 300, e.hue, 5, 0.5);
+      env.grid?.applyImpulse(e.x, e.y, 70, 300, e.hue);
+    }
+    e.aiTimer -= dt;
+    if (e.state === 'wind') {
+      e.speed = e.enraged ? OURO.rageSpeed : OURO.speed;
+      windToward(e, env, { speed: e.speed, turnRate: OURO.turnRate, weave: OURO.weave, weaveRate: OURO.weaveRate });
+      if (e.aiTimer <= 0) {
+        if (e.enraged) {
+          e.state = 'coil';
+          e.aiTimer = OURO.coilTime;
+          e.coilA = Math.atan2(e.y - player.y, e.x - player.x);
+          e.coilDir = Math.random() < 0.5 ? -1 : 1;
+        } else {
+          e.aiTimer = OURO.shedEvery;
+          shedTail(e, m);
+        }
+      }
+    } else if (e.state === 'coil') {
+      // Circle the ship on a shrinking ring; the body trails round it into a noose.
+      const k = 1 - Math.max(0, e.aiTimer) / OURO.coilTime;
+      const r = OURO.coilR0 + (OURO.coilR1 - OURO.coilR0) * k;
+      e.coilA += e.coilDir * (OURO.coilSpeed * 60 / r) * dt;
+      const tx = player.x + Math.cos(e.coilA) * r;
+      const ty = player.y + Math.sin(e.coilA) * r;
+      e.speed = OURO.coilSpeed * 1.6;
+      e.vx = (tx - e.x) * 0.12;
+      e.vy = (ty - e.y) * 0.12;
+      e.aimAngle = Math.atan2(e.vy, e.vx);
+      e.rotation = e.aimAngle;
+      if (e.aiTimer <= 0) {
+        e.state = 'rear';
+        e.aiTimer = OURO.rearTime;
+      }
+    } else if (e.state === 'rear') {
+      // Rears back and locks a strike lane on the ship.
+      e.vx *= 0.8;
+      e.vy *= 0.8;
+      e.aimAngle = turnToward(e.aimAngle, Math.atan2(player.y - e.y, player.x - e.x), 6 * dt);
+      e.rotation = e.aimAngle;
+      if (e.aiTimer <= 0) {
+        e.state = 'strike';
+        e.aiTimer = OURO.strikeTime;
+        e.burstSpeed = OURO.strikeSpeed * (e.speedScale || 1);
+        env.grid?.applyImpulse(e.x, e.y, 40, 160, e.hue);
+      }
+    } else if (e.state === 'strike') {
+      e.vx = Math.cos(e.aimAngle) * e.burstSpeed;
+      e.vy = Math.sin(e.aimAngle) * e.burstSpeed;
+      if (e.aiTimer <= 0) {
+        e.burstSpeed = 0;
+        e.state = 'wind';
+        e.aiTimer = OURO.windTime;
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    traceSerpentHead(ctx, r);
+    // Inner jaw plate.
+    ctx.moveTo(r * 0.9, 0);
+    ctx.lineTo(r * 0.1, r * 0.5);
+    ctx.lineTo(-r * 0.3, 0);
+    ctx.lineTo(r * 0.1, -r * 0.5);
+    ctx.closePath();
+  },
+  overlay(ctx, e) {
+    if (e.state !== 'rear') return;
+    // Strike lane: a red dashed corridor the length of the lunge, flashing faster as it locks.
+    const t = 1 - Math.max(0, e.aiTimer) / OURO.rearTime;
+    const len = OURO.strikeSpeed * OURO.strikeTime * 60 + e.radius;
+    const flash = 0.5 + 0.5 * Math.cos(e.aiTimer * Math.PI * 14);
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.rotate(e.aimAngle);
+    ctx.strokeStyle = `hsla(0, 100%, 62%, ${0.3 + t * 0.4 + flash * 0.2})`;
+    ctx.lineWidth = 2.4;
+    ctx.strokeRect(e.radius * 0.8, -e.radius, len, e.radius * 2);
+    ctx.beginPath();
+    for (let k = 0; k < 5; k++) {
+      if (k / 5 > t) break;
+      const x = e.radius + (len - e.radius) * ((k + 0.5) / 5);
+      ctx.moveTo(x - e.radius * 0.5, -e.radius * 0.6);
+      ctx.lineTo(x, 0);
+      ctx.lineTo(x - e.radius * 0.5, e.radius * 0.6);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+// Phase-one shedding: the last few tail plates pop and a small serpent wriggles free from the stump.
+function shedTail(e, m) {
+  const body = bodyOf(e);
+  if (body.length <= OURO.shedMin) return;
+  const cut = body.slice(-OURO.shedSegments);
+  const stump = cut[0];
+  const angle = Math.atan2(stump.y - e.y, stump.x - e.x);
+  for (const seg of cut) {
+    seg.doomQueued = true;
+    seg.noReward = true; // shed, not killed: it crumbles without score or drops
+    m.doomed.push(seg);
+  }
+  e.bodyRefs = e.bodyRefs.filter(ref => !cut.includes(liveOf(ref)));
+  spawnSerpent(m, 'serpent', stump.x, stump.y, m.waveScaleFor('serpent', e.bossWave), OURO.spawnSegments, { angle, extra: { instant: true } });
+}
+
 export const BOSS_DEFS = {
-  brood_queen: broodQueen
+  brood_queen: broodQueen,
+  ouroboros
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

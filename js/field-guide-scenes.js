@@ -10,6 +10,7 @@ import { drawCrabShip, drawPlayerShield, shieldTouches } from './ship-renderer.j
 import { BRUISER, shieldBlocks, bounceFromShip, lieutenantTypes } from './archetypes.js';
 import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
 import { bossDef } from './bosses.js';
+import { SERPENT, spawnSerpent } from './serpents.js';
 import { wellPullScale, playerPullShare } from './gravity.js';
 
 export const PREVIEW_DT = 1 / 60;
@@ -244,6 +245,33 @@ const SCENES = {
     },
     onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); }
   },
+  serpent: {
+    w: 560, loop: 10,
+    setup(s) { s.home(0.8, 0.5); s.serpent(); },
+    tick(s) {
+      s.kite(s.W * 0.78, s.H * 0.5, 40, 1.1);
+      s.autoFire(0.14);
+      if (s.count() === 0 && s.every(1.2)) s.serpent();
+    },
+    noContactKill: true
+  },
+  ouroboros: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.62, 0.5);
+      s.manager.queueSpawn('ouroboros', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      const q = s.find('ouroboros');
+      // Holds still while it coils (so the noose reads), kites otherwise.
+      if (!q || q.state === 'wind') s.kite(s.W * 0.62, s.H * 0.5, s.H * 0.22, 0.7);
+      if (s.t > 1.4) s.autoFire(0.12, e => !e.leader);
+      if (q && s.t > 5 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 12.6) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -375,6 +403,11 @@ export class GuidePreview {
     this.manager.bossArrivals.length = 0;
   }
 
+  // A serpent winding in from the left edge.
+  serpent() {
+    spawnSerpent(this.manager, 'serpent', this.W * 0.12, this.H * 0.5, 1, SERPENT.segments, { angle: 0, extra: { instant: true } });
+  }
+
   // A mayfly cloud drifting in from the left edge.
   cloud() {
     for (let k = 0; k < 10; k++) this.spawn('mayfly', this.W * (0.06 + Math.random() * 0.1), this.H * (0.3 + Math.random() * 0.4));
@@ -410,6 +443,11 @@ export class GuidePreview {
   }
 
   hit(e, b) {
+    if (e.deflect) {
+      e.hitFlash = Math.max(e.hitFlash, 0.35);
+      this.particles.spawnImpact(b.x, b.y, Math.atan2(-b.vy, -b.vx), 5, 0.08);
+      return;
+    }
     e.hp -= BOLT_DAMAGE * (e.armor ? 1 - e.armor : 1) * (e.linked > 0 ? 0.7 : 1);
     e.hitFlash = 1;
     e.sinceHit = 0;
@@ -475,6 +513,7 @@ export class GuidePreview {
     this.def.tick(this, dt);
     this.manager.update(dt, this.player, this.bolts, GRID_STUB, this.particles, this.W, this.H);
     this.manager.lieutenantArrivals.length = 0;
+    for (const e of this.manager.doomed.splice(0)) this.kill(e);
     this.manager.enemyBullets.update(dt, this.player, null, this.particles, this.W, this.H, this.orbHit);
     this.updateBolts();
     this.updateContacts();
@@ -558,7 +597,7 @@ const SILHOUETTE = {
   swarmer: ['swarmer', 120], pinwheel: ['pinwheel', 140], weaver: ['weaver', 130], splitter: ['splitter', 170],
   mini_splitter: ['mini_splitter', 100], blackhole: ['blackhole', 220], bruiser: ['bruiser', 200], gunner: ['gunner', 140],
   shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
-  mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340]
+  mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

@@ -200,7 +200,8 @@ function assertQueuedSpawnsValid(g, label) {
   for (const sp of g.enemyManager.spawnIndicators) {
     const d = Math.hypot(sp.x - p.x, sp.y - p.y);
     assert.ok(d >= TUNING.spawnMinDist, `${label}: ${sp.type} queued ${d.toFixed(0)}px from the ship`);
-    assert.ok(sp.guard, `${label}: ${sp.type} unguarded`);
+    // Serpent body segments trail their (guarded) head and are never relocated apart from it.
+    if (!sp.config.attach?.leader) assert.ok(sp.guard, `${label}: ${sp.type} unguarded`);
     if (sp.onScreen) {
       assert.ok(sp.maxTimer >= 1.2, `${label}: on-screen ${sp.type} telegraph ${sp.maxTimer}s`);
     } else {

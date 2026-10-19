@@ -12,6 +12,7 @@ export const WAVE_PACKS = [
   { id: 'splitter', lead: 'splitter', weightKey: 'spawnWeightSplitter' },
   { id: 'mayfly', lead: 'mayfly', weightKey: 'spawnWeightMayfly' },
   { id: 'bruiser', lead: 'bruiser', weightKey: 'spawnWeightBruiser' },
+  { id: 'serpent', lead: 'serpent', weightKey: 'spawnWeightSerpent' },
   { id: 'blinker', lead: 'blinker', weightKey: 'spawnWeightBlinker' },
   { id: 'gunner', lead: 'gunner', weightKey: 'spawnWeightGunner' },
   { id: 'blackhole', lead: 'blackhole', weightKey: 'spawnWeightBlackhole' },
@@ -67,6 +68,8 @@ export function packRoster(id, wave, legacy = false) {
     case 'bruiser': return [['bruiser', packSize(Math.min(3, 1 + Math.floor(s('bruiser') / 4)))]];
     case 'gunner': return [['gunner', packSize(Math.min(5, 2 + Math.floor(s('gunner') / 4)))]];
     case 'hulk': return [['hulk', Math.min(3, 1 + Math.floor(s('hulk') / 8))]];
+    // Serpents count their head only: the body cannot be hurt, and dies with it.
+    case 'serpent': return [['serpent', Math.min(3, 1 + Math.floor(s('serpent') / 6))]];
     case 'shielder': {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
       const n = packSize(Math.min(3, 1 + Math.floor(s('shielder') / 5)));

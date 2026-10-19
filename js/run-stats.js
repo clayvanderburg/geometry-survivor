@@ -45,7 +45,10 @@ export function buildSourceGroups(weapons = []) {
   return Object.freeze(map);
 }
 
-export const enemyKind = (e) => (e?.isBoss ? 'boss' : e?.isLieutenant ? 'lieutenant' : String(e?.type || 'unknown'));
+// Bosses are their own type ('boss' for the Dreadnought stand-in); a boss's body plates count as the boss.
+export const enemyKind = (e) => (e?.isBoss ? String(e.type || 'boss')
+  : typeof e?.bossBody === 'string' ? e.bossBody
+  : e?.isLieutenant ? 'lieutenant' : String(e?.type || 'unknown'));
 
 const LIMIT = { levelTimes: 200, timeline: 40, groups: 32, kinds: 40, cards: 160, sources: 40 };
 const r1 = (v) => Math.round(v * 10) / 10;

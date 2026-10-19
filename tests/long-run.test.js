@@ -53,7 +53,8 @@ test('multiple delayed bosses retain FIFO wave scaling, announce only admission,
   g.update(1 / 60);
   const bosses = g.enemyManager.spawnIndicators.filter(spawn => spawn.config.isBoss);
   assert.equal(bosses.length, 2);
-  assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale * TUNING.bossHpMult * TUNING.enemyHpMult, 650 * wave6Scale * TUNING.bossHpMult * TUNING.enemyHpMult]);
+  // Wave 6 is a major boss: 1.8x the minor-boss HP formula.
+  assert.deepEqual(bosses.map(spawn => spawn.config.maxHp), [650 * wave3Scale * TUNING.bossHpMult * TUNING.enemyHpMult, 650 * wave6Scale * TUNING.bossHpMult * 1.8 * TUNING.enemyHpMult]);
   assert.equal(g.pendingBossSpawns.length, 0);
   assert.equal(g.enemyManager.enemies.length + g.enemyManager.spawnIndicators.length, 200);
   assert.equal(warnings, 2);

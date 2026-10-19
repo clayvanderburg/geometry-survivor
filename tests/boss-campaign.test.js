@@ -275,3 +275,54 @@ test('every pack type the plan can pick has a roster, and spawning each stays fi
     resetTuning();
   }
 });
+
+test('serpent: the head winds in, the body follows like a rope and blocks shots, and a dead head unzips the body', async () => {
+  resetTuning();
+  const { SERPENT, spawnSerpent } = await import('../js/serpents.js');
+  const g = campaignGame({ wave: 7 });
+  const m = g.enemyManager;
+  spawnSerpent(m, 'serpent', 2600, 2000, 1, SERPENT.segments, { angle: Math.PI, extra: { instant: true } });
+  step(m, g.player, 3);
+  const head = m.enemies.find(e => e.type === 'serpent' && !e.leader);
+  const body = m.enemies.filter(e => e.leader);
+  assert.ok(head && body.length === SERPENT.segments);
+  assert.ok(body.every(s => s.deflect && s.sturdy && s.hp === 1));
+  step(m, g.player, 90);
+  for (const s of body) assert.ok(Math.hypot(s.x - s.leader.x, s.y - s.leader.y) <= s.gap + 8, 'segments keep their spacing (within a tick of travel)');
+  // Shots at the body do nothing; auto-aim goes for the head.
+  g.hitEnemy(body[3], 500);
+  assert.equal(body[3].hp, 1);
+  assert.ok(!body[3].dead);
+  assert.equal(g.findAutoAimTarget(body[0].x + 1, body[0].y), head, 'auto-aim prefers the head over a closer body plate');
+  // Kill the head: the body pops plate by plate through the game's kill path.
+  const kills = g.kills;
+  g.hitEnemy(head, head.hp + 1);
+  for (let i = 0; i < 60 && m.enemies.some(e => e.type === 'serpent'); i++) g.update(1 / 60);
+  assert.equal(m.enemies.filter(e => e.type === 'serpent').length, 0);
+  assert.equal(g.kills - kills, SERPENT.segments + 1);
+});
+
+test('Ouroboros: arrives with its body, sheds tail serpents, then coils, rears, strikes and winds from half HP', async () => {
+  resetTuning();
+  const { OURO } = await import('../js/bosses.js');
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  m.queueSpawn('ouroboros', 2000, 2000, waveScaleAt(6), { instant: true, wave: 6 });
+  step(m, player, 4);
+  const q = m.enemies.find(e => e.type === 'ouroboros');
+  assert.ok(q.isBoss && q.bossTier === 'major');
+  const body = () => m.enemies.filter(e => e.leader && e.bossBody && !e.doomQueued);
+  assert.equal(body().length, OURO.segments);
+  step(m, player, Math.ceil(OURO.shedEvery * 60) + 3);
+  assert.equal(body().length, OURO.segments - OURO.shedSegments, 'the tail was shed');
+  assert.ok(m.doomed.every(s => s.noReward), 'a shed tail crumbles without rewards');
+  assert.ok(m.enemies.some(e => e.type === 'serpent' && !e.leader && !e.isBoss), 'a small serpent wriggled free');
+  m.doomed.length = 0;
+  q.hp = q.maxHp * 0.49;
+  step(m, player, 1);
+  assert.equal(q.state, 'coil');
+  const seen = new Set();
+  for (let i = 0; i < 60 * 12; i++) { step(m, player, 1); seen.add(q.state); }
+  assert.deepEqual([...seen].sort(), ['coil', 'rear', 'strike', 'wind']);
+  assert.ok([q.x, q.y].every(Number.isFinite));
+});

@@ -126,7 +126,7 @@ test('pack cadence reads the spawn-interval ramp', () => {
 
 test('pack sizes read the per-wave growth, caps and the global multiplier', () => {
   const queued = (values, pack, wave) => withTuning({ packSizeMult: 1, swarmPackPerWave: 2, swarmPackMax: 34, skirmishPackMax: 99, splitterPackMax: 99, ...values, spawnWeightSwarm: 0, spawnWeightSkirmish: 0, spawnWeightSplitter: 0, spawnWeightBlackhole: 0,
-    spawnWeightBruiser: 0, spawnWeightGunner: 0, spawnWeightShielder: 0, spawnWeightBlinker: 0, spawnWeightConduit: 0, spawnWeightMayfly: 0, spawnWeightHulk: 0, [pack]: 1 }, () => {
+    spawnWeightBruiser: 0, spawnWeightGunner: 0, spawnWeightShielder: 0, spawnWeightBlinker: 0, spawnWeightConduit: 0, spawnWeightMayfly: 0, spawnWeightHulk: 0, spawnWeightSerpent: 0, [pack]: 1 }, () => {
     const g = rampGame({ wave });
     g.spawnWavePack();
     return g.enemyManager.spawnIndicators.length;

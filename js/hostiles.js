@@ -3,8 +3,10 @@
 // and an optional world-space overlay.
 //   MAYFLY — tiny, twitchy bugs in big clouds; one tap kills them, standing still is what hurts.
 //   HULK   — the old Prismatic Dreadnought hull, demoted to a slow, armored bullet sponge.
+//   SERPENT — a winding head with a body that blocks shots (js/serpents.js); kill the head.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
+import { SERPENT, windToward } from './serpents.js';
 
 export const MAYFLY = { jitterMin: 0.12, jitterMax: 0.38, spread: 1.25, burst: 1.6 };
 export const HULK = { knockMult: 0.1, contactMult: 1.8 };
@@ -12,7 +14,8 @@ export const HULK = { knockMult: 0.1, contactMult: 1.8 };
 // Intel card text for a hostile's first appearance in a run (same shape as ARCHETYPE_INFO).
 export const HOSTILE_INFO = {
   mayfly: { label: 'MAYFLY', unlockWave: unlockWaveOf('mayfly'), intro: 'TINY TWITCHY CLOUDS · ONE HIT EACH — KEEP MOVING, SWEEP THEM' },
-  hulk: { label: 'HULK', unlockWave: unlockWaveOf('hulk'), intro: 'SLOW ARMORED SPONGE · SOAKS SHOTS AND BLOCKS LANES — KITE AROUND IT' }
+  hulk: { label: 'HULK', unlockWave: unlockWaveOf('hulk'), intro: 'SLOW ARMORED SPONGE · SOAKS SHOTS AND BLOCKS LANES — KITE AROUND IT' },
+  serpent: { label: 'SERPENT', unlockWave: unlockWaveOf('serpent'), intro: 'ONLY THE HEAD TAKES DAMAGE · THE BODY BLOCKS SHOTS — AIM FOR THE HEAD' }
 };
 
 export const isHostileKind = (type) => Object.hasOwn(HOSTILE_INFO, type);
@@ -34,13 +37,21 @@ export function hostileKindStats(type, waveScale) {
         score: 600, xp: 18, vRot: 0.02,
         knockMult: HULK.knockMult, contactMult: HULK.contactMult, sturdy: true
       };
+    case 'serpent':
+      // The head; body segments take these over in bindSegment (js/serpents.js).
+      return {
+        hp: 55 * waveScale, maxHp: 55 * waveScale,
+        speed: SERPENT.speed + Math.min(0.9, waveScale * 0.06),
+        radius: SERPENT.headRadius, sides: 6, hue: 245, // Royal indigo
+        score: 140, xp: 6, vRot: 0, sturdy: true, knockMult: 0.4
+      };
     default:
       return null;
   }
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1 };
 
 // Fast movers that leave a neon ribbon.
 export const HOSTILE_TRAILS = new Set(['mayfly']);
@@ -66,7 +77,11 @@ function updateHulk(e, m, env) {
   e.vy = (e.vy + env.moveY * 0.12 + env.sepY) * 0.92;
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk };
+function updateSerpent(e, m, env) {
+  windToward(e, env, { speed: e.speed });
+}
+
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {

@@ -11,6 +11,7 @@ import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
 import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
+import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
 const BOSS_TELEGRAPH_RADIUS = 150;
@@ -142,6 +143,9 @@ export class EnemyManager {
     // Bosses that materialized this tick; the game drains this to stage their entrance.
     this.bossArrivals = [];
     this.lieutenantArrivals = [];
+    // Hulls whose time is up without a killing blow (a serpent body unzipping after its head died):
+    // the game drains this every tick and pops each through its normal kill path.
+    this.doomed = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
     // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
@@ -168,6 +172,7 @@ export class EnemyManager {
     this.spawnIndicators = [];
     this.bossArrivals = [];
     this.lieutenantArrivals = [];
+    this.doomed = [];
     this.enemyBullets.clear();
   }
 
@@ -435,6 +440,8 @@ export class EnemyManager {
           tier: c.tier || 1, // veteran form of the core swarm (js/wave-plan.js)
           bossTier: c.bossTier || null,
           bossWave: c.bossWave || 0,
+          leader: null, // serpent body segments: the hull ahead in the chain (js/serpents.js)
+          deflect: false, // true: shots are blocked but do no damage (serpent bodies)
           anchor: null, // Brood Queen escorts: the boss whose ring they ride (js/bosses.js)
           orbitA: 0,
           orbitR: 0,
@@ -448,7 +455,11 @@ export class EnemyManager {
           detourX: 0,
           detourY: 0
         };
-        if (c.attach) Object.assign(spawned, c.attach);
+        if (c.attach) {
+          Object.assign(spawned, c.attach);
+          c.attach.live = spawned; // chained spawns (serpent bodies) resolve their leader through this
+          if (spawned.leader) bindSegment(spawned);
+        }
         this.enemies.push(spawned);
         this.onSpawn?.(spawned); // run stats (Game sets it): spawn time and per-type spawn counts
         if (spawned.isBoss) {
@@ -483,6 +494,12 @@ export class EnemyManager {
       e.rotation += e.vRot;
       e.pulsePhase += dt * 6;
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt * 6);
+      if (e.leader) {
+        // Serpent body segment: a rope follow of the hull ahead (js/serpents.js), no steering of its own.
+        followLeader(e, this, dt);
+        this.enemyIndex.update(e);
+        continue;
+      }
 
       const dxPlayer = player.x - e.x;
       const dyPlayer = player.y - e.y;
@@ -782,7 +799,10 @@ export class EnemyManager {
         ctx.lineWidth = pass === 0 ? 5.5 : 2.2;
 
         ctx.beginPath();
-        if (e.type === 'swarmer') {
+        if (e.type === 'serpent') {
+          if (e.leader) traceSegment(ctx, e, r);
+          else traceSerpentHead(ctx, r);
+        } else if (e.type === 'swarmer') {
           traceSwarmer(ctx, r, e.tier);
         } else if (e.type === 'pinwheel') {
           // Square + inner pinwheel blades; veterans grow a pentagon, then a hexagon of blades.

@@ -8,6 +8,7 @@ import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from './wave-plan.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER } from './hostiles.js';
+import { SERPENT, spawnSerpent } from './serpents.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -175,7 +176,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -1099,7 +1100,10 @@ export class Game {
       } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
         const type = SANDBOX_ARCHETYPES[sandboxAction];
         const bp = this.spawnPointOnscreen(30);
-        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(), this.placedSpawn(bp))) {
+        const ok = type === 'serpent'
+          ? spawnSerpent(this.enemyManager, 'serpent', bp.x, bp.y, this.getWaveScale(type), SERPENT.segments, { angle: Math.atan2(p.y - bp.y, p.x - bp.x), extra: this.placedSpawn(bp) })
+          : this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(type), this.placedSpawn(bp));
+        if (!ok) {
           this.showBanner(`⚠ ENEMY CAP REACHED — ${INTEL_INFO[type].label} NOT SPAWNED ⚠`);
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
@@ -1916,7 +1920,7 @@ export class Game {
 
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
-      if (e.dead) continue;
+      if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
       // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
       if (e.isBoss || e.isLieutenant) {
@@ -1971,6 +1975,11 @@ export class Game {
   // stats (js/run-stats.js) when it differs from `source` (sub-sources: helix, storm, collapse, ...).
   hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const p = this.player;
+    if (e.deflect) {
+      // Armored hull (a serpent's body): the shot is stopped with a pale flash and does no damage.
+      e.hitFlash = Math.max(e.hitFlash || 0, 0.35);
+      return;
+    }
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
     const chance = dot || !p ? 0 : critChance(p);
@@ -2588,6 +2597,12 @@ export class Game {
       }
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
+    } else if (pack === 'serpent') {
+      for (let i = 0; i < count('serpent'); i++) {
+        const p2 = this.spawnPoint(SERPENT.gap * SERPENT.segments * 0.5);
+        const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
+        spawnSerpent(em, 'serpent', p2.x, p2.y, this.getWaveScale('serpent'), SERPENT.segments, { angle, extra: this.placedSpawn(p2) });
+      }
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
       for (let i = 0; i < count('shielder'); i++) {
@@ -2643,7 +2658,9 @@ export class Game {
       const dx = e.x - x;
       const dy = e.y - y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const score = e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
+      // Armored serpent bodies count as much further away still: aim for the head.
+      const score = e.deflect ? d + 420
+        : e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
       if (score < bestScore) {
         bestScore = score;
         best = e;
@@ -4836,6 +4853,25 @@ export class Game {
     this.enemyManager.view = spawnView(this);
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
+    // A shed tail (`noReward`) just crumbles away: no score, no drops.
+    const doomed = this.enemyManager.doomed;
+    if (doomed?.length) {
+      for (const e of doomed.splice(0)) {
+        if (e.noReward) {
+          const i = enemies.indexOf(e);
+          if (i !== -1 && !e.dead) {
+            e.dead = true;
+            enemies.splice(i, 1);
+            this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, 0.6);
+          }
+          continue;
+        }
+        e.hp = 0;
+        e.lastStat ||= 'other';
+        this.killEnemy(e, false);
+      }
+    }
     const arrivals = this.enemyManager.bossArrivals;
     if (arrivals?.length) {
       for (const boss of arrivals) this.onBossArrived(boss);
