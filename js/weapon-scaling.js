@@ -298,7 +298,7 @@ export const WEAPON_SCALING = {
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
   droneFireRate: (b) => 7.6 * rateMult(b.r.rate),
-  droneRange: (b) => 392 + 35 * b.r.range, // +40% (was 280 + 25/rank)
+  droneRange: (b) => 784 + 35 * b.r.range, // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
   droneBoltSpeed: 15,
   // Transforms: Extra Wingman (+1 drone past the cap), Homing Bolts, Micro-Missile Pods (each drone
   // launches a homing micro-missile every podEvery s worth 22% of its bolt damage).
@@ -357,8 +357,8 @@ export const WEAPON_SCALING = {
   // A cloud swells in over gasGrow s and shrinks away over the last gasFade share of its life.
   // Potential counts one tick per tick interval on one target; a trail usually holds several enemies,
   // so each tick is valued at gasHitShare (the per-tick damage is that much lower).
-  gasRadius: (b) => 46 * (1 + 0.12 * b.r.radius),
-  gasLife: (b) => 2.6 + 0.4 * (b?.r?.linger || 0),
+  gasRadius: (b) => 46 * (1 + 0.36 * b.r.radius), // +12% / rank before v0.38.1
+  gasLife: (b) => 2.6 + 1.2 * (b?.r?.linger || 0), // +0.4 s / rank before v0.38.1
   gasTick: (b) => 0.3 / rateMult(b.r.rate),
   gasPuffSpacing: 0.7,
   gasGrow: 0.35,

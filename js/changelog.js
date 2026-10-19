@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.38.1',
+    date: '2026-10-19',
+    title: 'Gas Trail & Drone Buffs',
+    notes: [
+      { type: 'balance', text: 'Gas Trail Plume Size cards give +36% cloud size per level (was +12%) and Gas Trail Linger cards +1.2s cloud life per level (was +0.4s).' },
+      { type: 'balance', text: 'Escort Drones start with double the range: they engage targets 784 px out (was 392). Range cards still add +35 each.' }
+    ]
+  },
+  {
     version: '0.38.0',
     date: '2026-10-19',
     title: 'Flamethrower',

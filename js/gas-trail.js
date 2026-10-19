@@ -22,7 +22,7 @@ import { isDeployableTarget } from './deployables.js';
 export const GAS_HUE = 122;     // sickly neon green body; rims run teal, bubbles acid
 const RIM_HUE = 166;
 const BUBBLE_HUE = 92;
-const MAX_PUFFS = 96;           // >= puffs alive at once: life / (spacing x radius / ship speed), oldest recycled past it
+const MAX_PUFFS = 256;          // >= puffs alive at once: life / (spacing x radius / ship speed), oldest recycled past it
 const MAX_POCKETS = 8;          // >= pockets alive at once (one every ~1.2 s, ~1.8 s fuse at most)
 const SEEK_RETARGET = 0.3;      // s between a seeking cloud's target picks
 const POCKET_KNOCK = 0.9;
