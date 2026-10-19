@@ -4259,9 +4259,11 @@ body.touch-mode .card-detail-card .upg-jump-ribbon { position: static; transform
   text-shadow: 0 0 10px rgba(181, 101, 255, 0.8);
   box-shadow: 0 0 18px rgba(181, 101, 255, 0.25);
 }
-/* Pause menu: TUTORIAL / FIELD GUIDE / PATCH NOTES share a row (hidden buttons take no column). */
-.pause-action-row.pause-info-row { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-@media (max-width: 520px) { .pause-action-row.pause-info-row { grid-auto-flow: row; } }
+/* Pause menu: TUTORIAL / FIELD GUIDE / PATCH NOTES share a row, wrapping onto a second line when the
+   side column is too narrow for all three (so labels and the NEW badge never spill past a border). */
+.pause-action-row.pause-info-row { display: flex; flex-wrap: wrap; }
+.pause-action-row.pause-info-row .neon-btn { flex: 1 1 auto; margin: 0; }
+@media (max-width: 520px) { .pause-action-row.pause-info-row { flex-direction: column; } }
 
 /* Portrait phones: the clip on top, text below. */
 @media (max-width: 700px) and (orientation: portrait) {
