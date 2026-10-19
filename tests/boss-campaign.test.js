@@ -376,3 +376,17 @@ test('Wing Commander: leads a V, lays mine lines on runs, reinforces, scrambles 
   assert.equal(c.enraged, true);
   assert.equal(escort().length, 0, 'the escort scrambles');
 });
+
+test('Wing Commander arriving already lined up never double-books its escort slots', () => {
+  resetTuning();
+  const m = new EnemyManager();
+  const player = { x: 2600, y: 2000 };
+  m.queueSpawn('wing_commander', 1800, 2000, 1, { instant: true, wave: 9 });
+  step(m, player, 2);
+  const c = m.enemies.find(e => e.type === 'wing_commander');
+  c.aimAngle = 0; // facing the ship: its first tick starts a run before the escort is live
+  c.state = 'turn';
+  step(m, player, 4);
+  const slots = m.enemies.filter(e => e.wingLeader === c).map(e => e.wingSlot).sort();
+  assert.deepEqual(slots, [1, 2, 3, 4, 5, 6]);
+});

@@ -319,9 +319,10 @@ function fireOrb(m, e, angle, speed, life = 4) {
   return b;
 }
 
-// First free V slots (1..n) on a leader.
+// First free V slots (1..n) on a leader. Wingmen still materializing hold their slot too.
 function freeSlots(e, m, n) {
   const taken = new Set(wingmenOf(e, m).map(o => o.wingSlot));
+  for (const sp of m.spawnIndicators) if (sp.config.attach?.wingLeader === e) taken.add(sp.config.attach.wingSlot);
   const out = [];
   for (let k = 1; out.length < n && k <= WING.escort; k++) if (!taken.has(k)) out.push(k);
   return out;
