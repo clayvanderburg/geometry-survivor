@@ -55,14 +55,14 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
 });
 
 test('an old save is reset once (ranks + cores), keeping callsign, high scores and the Field Guide', () => {
-  const old = { pilotName: 'NOX', cores: 9999, totalRuns: 40, ranks: { damage: 8, maxHp: 8, haste: 6 },
-    guide: { seen: ['swarmer'], fresh: [] }, highscores: [{ id: 'r1', name: 'NOX', score: 99999, wave: 50, multiplier: 30, kills: 9000, timeStr: '18:20' }] };
+  const old = { pilotName: 'VEGA', cores: 9999, totalRuns: 40, ranks: { damage: 8, maxHp: 8, haste: 6 },
+    guide: { seen: ['swarmer'], fresh: [] }, highscores: [{ id: 'r1', name: 'VEGA', score: 99999, wave: 50, multiplier: 30, kills: 9000, timeStr: '18:20' }] };
   const save = normalizeSave(old);
   assert.equal(save.cores, STARTING_CORES);
   assert.ok(Object.values(save.ranks).every((r) => r === 0));
   assert.equal(save.armory, ARMORY_VERSION);
   assert.equal(save.armoryResetNotice, true);
-  assert.equal(save.pilotName, 'NOX');
+  assert.equal(save.pilotName, 'VEGA');
   assert.equal(save.totalRuns, 40);
   assert.deepEqual(save.guide.seen, ['swarmer']);
   assert.equal(save.highscores[0].score, 99999);
@@ -147,4 +147,31 @@ test('the retired Chronos Capacitor (Autocannon fire rate) refunds every core sp
   assert.equal(save.ranks.fireRate, undefined, 'the upgrade is gone from the save');
   assert.equal(save.ranks.damage, 3);
   assert.equal(normalizeSave(save).cores, 100 + spent, 'a second load does not refund again');
+});
+
+test('every upgrade\'s last rank costs about ARMORY_TOP_COST cores (or more, never cheaper than before)', async () => {
+  const { META_UPGRADES, armoryCost, ARMORY_TOP_COST } = await import('../js/progression.js');
+  for (const u of META_UPGRADES) {
+    const last = armoryCost(u, u.maxRank - 1);
+    assert.ok(last >= ARMORY_TOP_COST * 0.98, `${u.id}: last rank ${last}`);
+    assert.ok(armoryCost(u, 0) === Math.round(u.baseCost), `${u.id}: first rank stays cheap`);
+  }
+});
+
+test('the developer\'s test pilots (NOX, MADKING) lose cores, ranks and their local runs once', async () => {
+  const { normalizeSave, DEV_WIPE, STARTING_CORES } = await import('../js/progression.js');
+  const run = (name, score) => ({ id: name + score, name, score, wave: 10, multiplier: 2, kills: 100, timeStr: '03:00', mode: 'normal' });
+  const old = { armory: 2, pilotName: 'madking', cores: 5000, ranks: { damage: 20 }, highscores: [run('MADKING', 900), run('NOX', 800), run('ACE', 700)] };
+  const save = normalizeSave(old);
+  assert.equal(save.cores, STARTING_CORES);
+  assert.equal(save.ranks.damage, 0);
+  assert.deepEqual(save.highscores.map((e) => e.name), ['ACE']);
+  assert.equal(save.devWipe, DEV_WIPE.id);
+  save.cores = 300; save.ranks.damage = 2;
+  const again = normalizeSave(save);
+  assert.equal(again.cores, 300, 'only once');
+  assert.equal(again.ranks.damage, 2);
+  const other = normalizeSave({ armory: 2, pilotName: 'VEGA', cores: 5000, ranks: { damage: 20 } });
+  assert.equal(other.cores, 5000, 'other pilots keep everything');
+  assert.equal(other.ranks.damage, 20);
 });

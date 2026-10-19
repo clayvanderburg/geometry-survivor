@@ -144,13 +144,24 @@ export const UPGRADE_POOL = [
     tags: ['area'],
     maxLevel: 5,
     headline: 'moveSpeed',
-    summary: 'Faster hull, tougher shield, and Phase Dash unleashes a damaging shockwave.',
-    shieldCard: true, // raises and repairs the shield: never offered in HARDCORE (js/modes.js)
+    summary: 'Faster hull, and Phase Dash unleashes a damaging shockwave.',
     apply(player) {
       player.stats.moveSpeed *= 1.16;
-      player.maxHp += 15; // 25 before v0.32
-      player.hp = Math.min(player.maxHp, player.hp + 30); // 45 before v0.32
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
+    }
+  },
+  {
+    // The shield on its own card (it rode on Phase Nova Thrusters before v0.33).
+    id: 'shield_capacitor',
+    name: 'Shield Capacitor',
+    category: 'UTILITY',
+    maxLevel: 5,
+    headline: 'maxHp',
+    summary: 'A bigger shield, and it repairs some of the damage you have taken.',
+    shieldCard: true, // raises and repairs the shield: never offered in HARDCORE (js/modes.js)
+    apply(player) {
+      player.maxHp += 20;
+      player.hp = Math.min(player.maxHp, player.hp + 35);
     }
   },
   // Deployables: placed or escorting units that fight on their own. Their numbers live in

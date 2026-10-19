@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.33.0',
+    date: '2026-10-19',
+    title: 'Shield Capacitor',
+    notes: [
+      { type: 'new', text: 'SHIELD CAPACITOR: the shield now has its own card (+20 max shield, repairs 35). Phase Nova Thrusters is just speed and the dash shockwave, and HARDCORE can draw it now.' },
+      { type: 'balance', text: 'Void Armory prices climb much faster: the first ranks are as cheap as ever, the last rank of every upgrade costs about 1,000 Void Cores.' },
+      { type: 'fix', text: 'The developer\'s test pilots (NOX, MADKING) were cleared off every leaderboard, with their Void Cores and armory reset.' }
+    ]
+  },
+  {
     version: '0.32.0',
     date: '2026-10-19',
     title: 'No More Ramming',
