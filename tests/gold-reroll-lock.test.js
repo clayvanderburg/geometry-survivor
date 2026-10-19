@@ -22,11 +22,13 @@ const odds = (chance, pity = 99) => ({
 });
 Object.assign(TUNING, odds(0));
 
-function freshGame(gold = 0) {
+// Four weapons equipped by default, so level-up hands hold the full 4 cards (slot-rewards.js).
+function freshGame(gold = 0, weapons = ['rockets', 'missiles', 'lightning']) {
   const g = h.createHeadlessGame();
   g.resetRun();
   g.state = 'PLAYING';
   g.gold = gold;
+  for (const id of weapons) acquireWeapon(g.player, id);
   return g;
 }
 
@@ -219,7 +221,7 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
   assert.match(g.lockNote, /lock dropped/);
 
   // Its weapon discarded.
-  const g2 = freshGame();
+  const g2 = freshGame(0, []);
   assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }), null, 'Rocket Pods not equipped');
   acquireWeapon(g2.player, 'rockets');
   assert.equal(refreshLockedCard(g2.player, { ...UPGRADE_BY_ID.rockets_damage, levelJump: 3 }).id, 'rockets_damage', 'valid while Rocket Pods are equipped');
@@ -245,11 +247,10 @@ test('a locked NEW WEAPON card carries over as NEW WEAPON, and drops when no slo
   assert.equal(g.currentChoices.filter((c) => c.isNewWeapon).length, 1, 'exactly one NEW WEAPON card');
   assert.ok(g.currentChoices[nw].isNewWeapon && g.handLock.card === g.currentChoices[nw]);
   assert.equal(g.player.newWeaponDrought, 0);
-  // Taking it opens the weapon pick; rerolls and locks are off there.
+  // Taking it opens the weapon pick; locks are off there (a reroll costs the pick's own price).
   g.selectUpgrade(nw);
   assert.equal(g.handPhase, 'weapon');
   assert.ok(g.currentChoices.every((c) => c.isWeaponPick));
-  assert.equal(g.rerollHand(), false);
   assert.equal(g.toggleCardLock(0), false);
   assert.equal(g.carriedLock, null);
   g.selectUpgrade(0);

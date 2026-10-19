@@ -9,6 +9,7 @@ import {
   STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
   levelCardWeapon, weaponElement, elementsOf
 } from './weapon-levels.js';
+import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
 
 // Rarity is the size of the rolled level jump: +1 common, +2 uncommon, +3 rare, +4 epic,
 // +5 legendary. Evolutions (synergies) are one-shot unlocks with their own tier.
@@ -176,6 +177,7 @@ export const UPGRADE_POOL = [
     category: 'PASSIVE',
     tags: ['projectile', 'kinetic'],
     maxLevel: 8,
+    overcharge: false, // a passive's level is its own, like a weapon's
     headline: 'shrapnelShards',
     summary: 'Passive, no slot: kills burst into ricochet shards that trigger chain-reaction kills.',
     apply(player) {
@@ -234,6 +236,7 @@ export const UPGRADE_POOL = [
     category: 'CRITICAL',
     tags: ['crit'],
     maxLevel: 6,
+    overchargeReq: (player) => (player.stats.critChance ?? 0) < 1, // nothing past 100%
     headline: 'critChance',
     summary: 'Every weapon finds weak points more often. Crits hit harder and flash gold.',
     apply(player) {
@@ -514,11 +517,25 @@ export function levelJumpChances(luck) {
   return { pentaChance, quadChance, tripleChance, doubleChance };
 }
 
+// OVERCHARGE: once every equipped weapon is LV 18, cards that don't raise a weapon's level (general, tag
+// and STATUS cards) keep coming past their own max and keep stacking. Evolutions (one-time unlocks)
+// and passives (their level is their own) don't; overchargeReq can stop a card early (crit chance at 100%).
+export function overchargeReady(player) {
+  const owned = ownedWeapons(player);
+  return owned.length > 0 && owned.every((id) => weaponLevel(player, id) >= WEAPON_MAX_LEVEL);
+}
+
+export function canOvercharge(u) {
+  const kind = upgradeKind(u);
+  return u.overcharge !== false && (kind === 'general' || kind === 'tag' || kind === 'status' || kind === 'line');
+}
+
 // Levels a card can still add: its own cap, and for a level card (stat or element) also the room left
-// under the weapon's LV 18 cap (so a +5 roll on a LV 16 weapon installs +2).
+// under the weapon's LV 18 cap (so a +5 roll on a LV 16 weapon installs +2). An OVERCHARGE card has no cap.
 export function levelRoom(player, u) {
   const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
   const weapon = levelCardWeapon(u.id);
+  if (!weapon && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
   if (!weapon) return Math.max(0, own);
   const lv = Math.max(1, weaponLevel(player, weapon));
   return Math.max(0, Math.min(own, WEAPON_MAX_LEVEL - lv));
@@ -681,10 +698,11 @@ export function rollLevelUpHand(player, count = 3) {
   return hand;
 }
 
-// Up to `count` different unequipped weapons to choose from after picking NEW WEAPON.
-export function rollWeaponPicks(player, count = 3) {
+// Up to `count` different unequipped weapons to choose from after picking NEW WEAPON. A reroll passes the
+// weapons just shown as `avoid`: they only come back when too few others are left to fill the pick.
+export function rollWeaponPicks(player, count = 3, avoid = []) {
   return unownedWeapons(player)
-    .map((id) => ({ id, score: Math.random() }))
+    .map((id) => ({ id, score: Math.random() - (avoid.includes(id) ? 1 : 0) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, count)
     .map(({ id }) => ({
@@ -697,13 +715,19 @@ export function rollWeaponPicks(player, count = 3) {
     }));
 }
 
-// Equip a weapon in a free slot. Leveled weapons start at LV 1 through applyUpgradeLevels.
+// Equip a weapon in a free slot. Leveled weapons start at LV 1 through applyUpgradeLevels. The first
+// weapon to fill slot BREAKTHROUGH_SLOT in a run gets its LV 6 Breakthrough right away (slot-rewards.js):
+// pendingBreakthroughs offers it at LV 1, and it counts as that weapon's LV 6 Breakthrough.
 export function acquireWeapon(player, id) {
   const weapon = WEAPON_BY_ID[id];
   if (!weapon || ownsWeapon(player, id) || freeSlots(player) <= 0) return false;
   player.loadout = [...ownedWeapons(player), id];
   if (weapon.levelId && !(player.upgradeLevels[weapon.levelId] > 0)) {
     applyUpgradeLevels(player, { ...UPGRADE_BY_ID[weapon.levelId], levelJump: 1 });
+  }
+  if (player.loadout.length === BREAKTHROUGH_SLOT && !player.slotBreakthroughGiven) {
+    player.slotBreakthroughGiven = true;
+    player.slotBreakthroughWeapon = id;
   }
   return true;
 }
@@ -776,7 +800,7 @@ function replayLevels(player, levels) {
     upgradeLevels: {}
   };
   for (const u of UPGRADE_POOL) {
-    const lv = Math.min(levels[u.id] || 0, u.maxLevel);
+    const lv = canOvercharge(u) ? levels[u.id] || 0 : Math.min(levels[u.id] || 0, u.maxLevel);
     for (let k = 0; k < lv; k++) {
       scratch.upgradeLevels[u.id] = k + 1;
       u.apply(scratch);
@@ -825,9 +849,11 @@ export function discardWeapon(player, id) {
     }
   }
   if (!player.base && weapon.levelKey) player.weapons[weapon.levelKey] = 0;
-  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds).
+  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds). The slot 6
+  // Breakthrough is once per run, so it goes too.
   if (player.breakthroughs) delete player.breakthroughs[id];
   if (player.breakthroughsOffered) delete player.breakthroughsOffered[id];
+  if (player.slotBreakthroughWeapon === id) player.slotBreakthroughWeapon = null;
   return removed;
 }
 
@@ -835,12 +861,14 @@ export function discardWeapon(player, id) {
 
 // Milestones a weapon has reached but not yet chosen a Breakthrough for, lowest first.
 // A milestone already offered this run is never offered again (until the weapon is discarded), even if
-// its choice somehow failed to record: a weapon gets each Breakthrough exactly once.
+// its choice somehow failed to record: a weapon gets each Breakthrough exactly once. The weapon that
+// filled slot 6 has reached its first milestone from LV 1 (acquireWeapon).
 export function pendingBreakthroughs(player, id) {
   const lv = weaponLevel(player, id);
   const taken = player.breakthroughs?.[id] || {};
   const offered = player.breakthroughsOffered?.[id] || {};
-  return BREAKTHROUGH_LEVELS.filter((m) => lv >= m && !taken[m] && !offered[m]);
+  const early = player.slotBreakthroughWeapon === id && ownsWeapon(player, id) ? BREAKTHROUGH_LEVELS[0] : 0;
+  return BREAKTHROUGH_LEVELS.filter((m) => (lv >= m || m === early) && !taken[m] && !offered[m]);
 }
 
 // Mark a milestone as offered (the Breakthrough screen opened for it).

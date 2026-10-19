@@ -9,10 +9,11 @@ import {
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
   blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius,
   burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
-  doubleStackChance, stunDurationMult, elementDamageMult
+  doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
+import { slotReward } from './slot-rewards.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
   weaponBuild, levelBuild, levelCardWeapon, weaponElement, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
@@ -75,7 +76,7 @@ function elementRows(w) {
 // or a function(before, after). newText: headline when the row comes online (before is null).
 export const STAT_ROWS = [
   // Build-wide modifiers first, so crit, tag and Reactor Overdrive cards lead with their own row
-  { id: 'allDamage', label: 'Base damage (all weapons)', get: (p) => p.stats.damage, fmt: dec1, headline: 'pct', unit: 'DAMAGE · ALL WEAPONS' },
+  { id: 'allDamage', label: 'Base damage (all weapons)', get: (p) => baseDamage(p), fmt: dec1, headline: 'pct', unit: 'DAMAGE · ALL WEAPONS' },
   { id: 'critChance', label: 'Crit chance', get: (p) => critChance(p), fmt: pct, headline: 'points', unit: 'CRIT CHANCE' },
   { id: 'critDamage', label: 'Crit damage', get: (p) => critDamage(p), fmt: mult, headline: 'points', unit: 'CRIT DAMAGE' },
   { id: 'critAverage', label: 'Avg bonus from crits', get: (p) => critChance(p) * (critDamage(p) - 1), fmt: (v) => `+${(v * 100).toFixed(1)}%` },
@@ -300,6 +301,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
 export function describeNewWeapon(player) {
   const used = ownedWeapons(player).length;
   const slots = weaponSlots();
+  const reward = used + 1 <= slots ? slotReward(used + 1) : null;
   return {
     id: 'new_weapon',
     name: 'NEW WEAPON',
@@ -315,9 +317,16 @@ export function describeNewWeapon(player) {
     headline: 'CHOOSE 1 OF 3 WEAPONS',
     rows: [{ id: 'slots', label: 'Weapon slots used', before: `${used} / ${slots}`, after: `${used + 1} / ${slots}` }],
     hiddenRows: 0,
-    levelHtml: `SLOT ${used + 1} OF ${slots}`
+    levelHtml: `SLOT ${used + 1} OF ${slots}`,
+    // What filling this slot unlocks (slot-rewards.js), shown as a banner on the card.
+    reward: reward && { ...reward, slot: used + 1 }
   };
 }
+
+// Banner for a slot reward ({ slot, short, text, kind }): the NEW WEAPON card and the weapon pick header.
+export const slotRewardHtml = (r) => (r
+  ? `<div class="upg-slot-reward reward-${r.kind}"><span class="upg-slot-reward-label">SLOT ${r.slot} UNLOCKS</span><b>${r.short}</b><span class="upg-slot-reward-text">${r.text}</span></div>`
+  : '');
 
 // A weapon offered after NEW WEAPON: its summary, tags and exact LV 1 stats (installed on a copy).
 export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
@@ -354,7 +363,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
   const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade' };
-  let v = POTENTIAL_DPS[id](b) * p.stats.damage * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
+  let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;
   return v;
@@ -411,11 +420,14 @@ export function bonusText(bonus) {
 }
 
 // Same wording everywhere: level cards "LV 2 → LV 3", caches "INSTALLED // LV 2 → LV 3", HUD "LV 3".
+// " / 5", or " / 5 · ⚡ OVERCHARGE" for a card stacked past its max (upgrades.js overchargeReady).
+export const maxText = (level, maxLevel) => `<span class="upg-max"> / ${maxLevel}${level > maxLevel ? ' · <span class="upg-overcharge">⚡ OVERCHARGE</span>' : ''}</span>`;
+
 export function levelText(d, installed = false) {
   if (d.levelHtml) return d.levelHtml;
   if (d.isSynergy) return installed ? '★ EVOLUTION INSTALLED ★' : '★ EVOLUTION // UNLOCK ★';
   const from = d.fromLevel === 0 ? 'NEW' : `LV ${d.fromLevel}`;
-  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}<span class="upg-max"> / ${d.maxLevel}</span>`;
+  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}${maxText(d.toLevel, d.maxLevel)}`;
 }
 
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).
@@ -439,7 +451,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
           <span class="upg-badge">${d.rarityLabel === d.category ? d.category : `${d.rarityLabel} · ${d.category}`}</span>
         </div>
         <div class="upg-name">${d.name}</div>${tags}
-        <div class="upg-headline">${d.headline}</div>
+        <div class="upg-headline">${d.headline}</div>${slotRewardHtml(d.reward)}
         <div class="upg-summary">${d.summary}</div>
         <div class="upg-stats">${rows}${more}
         </div>

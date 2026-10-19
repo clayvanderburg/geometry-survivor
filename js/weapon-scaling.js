@@ -8,6 +8,7 @@
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
 import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS } from './weapon-levels.js';
+import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
 // stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
@@ -32,7 +33,7 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
 export const DAMAGE_GROWTH = 1.42; // Damage card: x1.42 damage per hit per rank (compounding; 1.5 before v0.29, 1.45 before v0.31)
 export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
-// Deliberate departures from the shared curve, set from live player data (stats dashboard, v0.35.1).
+// Deliberate departures from the shared curve, set from live player data (stats dashboard, v0.36.1).
 // CARD_STEP_TRIM scales a weapon's Damage-card bonus and fire-rate step per rank (Autocannon 0.8:
 // x1.336 damage and +32% fire rate per rank); LV1_TRIM scales its LV 1 hit damage (Swarm Missiles 0.5).
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
@@ -572,10 +573,13 @@ export function sourceBuild(p, weapon, b) {
   return weaponBuild(p, id);
 }
 
+// Base damage of every weapon: the damage stat times the slot reward for weapons equipped (slot-rewards.js).
+export const baseDamage = (p) => p.stats.damage * loadoutDamageMult(p);
+
 // Per-hit damage (before crits and status modifiers) for every weapon. `b` is the weapon's build (or
 // a level number for a build without stat ranks; omitted = the player's own build).
 export function weaponDamage(p, weapon, b) {
-  const d = p.stats.damage;
+  const d = baseDamage(p);
   let base;
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;
@@ -640,7 +644,7 @@ export function sourceElement(p, source) {
   return null;
 }
 
-export const burnStackDps = (p, lv) => p.stats.damage * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire');
+export const burnStackDps = (p, lv) => baseDamage(p) * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire');
 export const burnMaxStacks = (p, lv) => W.burnMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
 export const burnDuration = (p) => W.burnDuration * statusDurationMult(p);
 export const chillSlow = (lv, isBoss = false, p = null) =>
