@@ -95,11 +95,13 @@ const CLIPS = {
       g.keys = { KeyD: dx > 8, KeyA: dx < -8, KeyS: dy > 8, KeyW: dy < -8 };
     }
   },
-  // The level-up hand, with gold to spend on REROLL / LOCK.
+  // The level-up hand of a fresh run (2 cards: NEW WEAPON with its slot reward, and an upgrade), with gold
+  // to spend on REROLL / LOCK.
   levelup: {
     still: true, hud: true, view: { width: 1600, height: 900 }, shot: '#upgrade-modal .modal-card',
     setup: (g, p) => {
       g.gold = 60;
+      p.newWeaponDrought = 99;
       g.applyLiveTuning('FORCE_LEVELUP');
     }
   },

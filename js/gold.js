@@ -1,12 +1,12 @@
 // Gold: a per-run currency mined from gold veins (separate from Void Cores, which are meta) and spent on
 // the level-up hand. REROLL replaces the unlocked cards (TUNING.goldRerollCost, x goldRerollGrowth for
-// each further reroll of the same hand); LOCK (TUNING.goldLockCost) keeps one card in place through
+// each further reroll of the same hand; the NEW WEAPON pick rerolls its weapons from goldWeaponRerollCost); LOCK (TUNING.goldLockCost) keeps one card in place through
 // rerolls and carries it into the next level-up hand if another card is picked.
 //
 // Pure helpers over a player and plain objects, so tests and the balance harness can use them without
 // a DOM. The hand itself is still rolled by upgrades.js rollLevelUpHand: rollHandAround only wraps it.
 import { TUNING } from './config.js';
-import { rollLevelUpHand, rollUpgrades, eligibleUpgrades, canOfferNewWeapon, newWeaponCard } from './upgrades.js';
+import { rollLevelUpHand, rollUpgrades, eligibleUpgrades, canOfferNewWeapon, newWeaponCard, levelRoom } from './upgrades.js';
 
 export const GOLD_ICON = '◆';
 export const MAX_COINS_PER_VEIN = 6; // a vein's gold is split into at most this many pickups
@@ -23,6 +23,14 @@ export function goldCoins(total, maxCoins = MAX_COINS_PER_VEIN) {
 // Cost of the next reroll after `rerolls` rerolls of the same hand: 20, 40, 80, 160... by default.
 export function rerollCost(rerolls = 0, tuning = TUNING) {
   const base = Math.max(0, tuning.goldRerollCost ?? 20);
+  const growth = Math.max(1, tuning.goldRerollGrowth ?? 2);
+  return Math.round(base * Math.pow(growth, Math.max(0, rerolls)));
+}
+
+// Cost of the next reroll of a NEW WEAPON pick (the 3 weapons on offer) after `rerolls` rerolls of that
+// pick: 40, 80, 160... by default (TUNING.goldWeaponRerollCost, same growth as the hand reroll).
+export function weaponRerollCost(rerolls = 0, tuning = TUNING) {
+  const base = Math.max(0, tuning.goldWeaponRerollCost ?? 40);
   const growth = Math.max(1, tuning.goldRerollGrowth ?? 2);
   return Math.round(base * Math.pow(growth, Math.max(0, rerolls)));
 }
@@ -46,8 +54,7 @@ export function refreshLockedCard(player, card) {
   if (card.isNewWeapon) return canOfferNewWeapon(player) ? newWeaponCard(player) : null;
   const upgrade = eligibleUpgrades(player).find((u) => u.id === card.id);
   if (!upgrade) return null;
-  const remaining = upgrade.maxLevel - (player.upgradeLevels[upgrade.id] || 0);
-  return { ...upgrade, levelJump: Math.max(1, Math.min(card.levelJump || 1, remaining)) };
+  return { ...upgrade, levelJump: Math.max(1, Math.min(card.levelJump || 1, levelRoom(player, upgrade))) };
 }
 
 // The level-up hand hook. With no lock it is exactly roll(player, count). With a lock ({ card, slot })

@@ -15,7 +15,7 @@ import { TUNING } from './config.js';
 
 export const TUTORIAL_SEEN_KEY = 'vexolith_tutorial_seen';
 // The GAME_VERSION major.minor the slides were last checked against (see the rule above).
-export const TUTORIAL_REVIEWED_FOR = '0.35';
+export const TUTORIAL_REVIEWED_FOR = '0.36';
 export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 
 // Lines are plain text with **bold** and [[gold|green|purple:colored]] spans. A line may be an object
@@ -58,10 +58,10 @@ export function tutorialSlides(tuning = TUNING) {
     },
     {
       id: 'levelup', title: 'LEVEL UP', media: 'levelup.webp',
-      alt: 'The level-up screen with four upgrade cards',
+      alt: 'The level-up screen with a NEW WEAPON card and an upgrade card',
       lines: [
         `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade.`,
-        'Spend [[gold:◆ gold]] to **REROLL** the cards or **LOCK** one for later.'
+        'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards.'
       ]
     },
     {

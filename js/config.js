@@ -191,6 +191,8 @@ export const DEFAULT_TUNING = {
   newWeaponChanceBy5: 0.3,
   newWeaponPityOne: 2,
   newWeaponPity: 4,
+  // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
+  slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
   weaponLineWeight: 1.5,
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
@@ -241,7 +243,8 @@ export const DEFAULT_TUNING = {
   goldRerollCost: 20,
   goldRerollGrowth: 2,
   goldLockCost: 5,
-  goldBanishCost: 30
+  goldBanishCost: 30,
+  goldWeaponRerollCost: 40
 };
 
 export const TUNING_SCHEMA = [
@@ -447,6 +450,7 @@ export const TUNING_SCHEMA = [
       { key: 'newWeaponChanceBy5', label: 'NEW WEAPON Chance / Hand (5+ Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponPityOne', label: 'NEW WEAPON Guaranteed Every N Hands (1 Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
       { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands (2+ Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
@@ -496,7 +500,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldRerollCost', label: 'First Reroll Cost (per hand)', type: 'range', min: 0, max: 200, step: 1, unit: '' },
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
       { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
+      { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
+      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
     ]
   }
 ];
