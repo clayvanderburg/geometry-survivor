@@ -160,7 +160,7 @@ test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and dr
   assert.equal(W.mineBlastRadius(b('mines')), 120);
   assert.equal(W.lightningRange(b('lightning')), 420);
   assert.equal(W.turretRange(b('turret')), 476);
-  assert.equal(W.droneRange(b('drones')), 392);
+  assert.equal(W.droneRange(b('drones')), 784);
 });
 
 test('Volatile Shatter stays off the DPS curve: flat shard damage, gated by kills', () => {
