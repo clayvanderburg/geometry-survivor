@@ -671,3 +671,37 @@ test('Eclipse Twins: a tethered pair; kill one and the other enrages, and its tw
   g.killEnemy(sol);
   assert.equal(g.chests.length, 1, 'both down: one payout');
 });
+
+test('The Prism: swarm ring, then gate cages, then a gravity well with orb rings and a sweeping beam', async () => {
+  resetTuning();
+  const { PRISM } = await import('../js/bosses.js');
+  const { bossBuilt: built } = await import('../js/bosses.js');
+  for (let w = 3; w <= 30; w += 3) assert.ok(built(plan.BOSS_SCHEDULE[w]), `wave ${w} has its named boss`);
+  const g = campaignGame({ wave: 30 });
+  const m = g.enemyManager;
+  m.queueSpawn('prism', 2300, 2000, waveScaleAt(30), { instant: true, wave: 30 });
+  step(m, g.player, 5);
+  const p = m.enemies.find(e => e.type === 'prism');
+  assert.equal(p.bossTier, 'major');
+  assert.equal(m.enemies.filter(e => e.anchor === p).length, PRISM.ring, 'phase 1: a shard ring');
+  const hue0 = p.hue;
+  step(m, g.player, 30);
+  assert.notEqual(p.hue, hue0, 'it cycles through the spectrum');
+  p.hp = p.maxHp * 0.6;
+  step(m, g.player, 1);
+  assert.equal(p.phase, 1);
+  assert.equal(m.enemies.filter(e => e.anchor === p).length, 0, 'the ring breaks');
+  step(m, g.player, 150);
+  assert.ok(m.enemies.some(e => e.cage && e.builder === p), 'phase 2: gate cages');
+  p.hp = p.maxHp * 0.3;
+  step(m, g.player, 1);
+  assert.equal(p.phase, 2);
+  assert.ok(g.collectGravityWells().includes(p), 'phase 3: a gravity well');
+  step(m, g.player, Math.ceil(PRISM.beamWarmup * 60) + 2);
+  assert.ok(p.beam, 'with a sweeping beam');
+  const a0 = Math.atan2(p.beam.y2 - p.y, p.beam.x2 - p.x);
+  step(m, g.player, 30);
+  assert.ok(Math.abs(Math.atan2(p.beam.y2 - p.y, p.beam.x2 - p.x) - a0) > 0.1, 'the beam turns');
+  step(m, g.player, Math.ceil(PRISM.breathEvery * 60));
+  assert.ok(m.enemyBullets.count >= PRISM.orbRing, 'orb rings');
+});

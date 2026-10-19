@@ -282,6 +282,6 @@ test('Field Guide lieutenant and boss entries give their mining speed', () => {
   assert.match(mining, /lieutenants grind through rock/);
   assert.match(mining, /bosses bust through/);
   TUNING.eliteMining = 0;
-  assert.doesNotMatch(text('boss'), /busts/);
+  assert.doesNotMatch(text('brood_queen'), /busts/);
   resetTuning();
 });

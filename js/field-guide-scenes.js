@@ -470,15 +470,20 @@ const SCENES = {
     onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
-  boss: {
-    w: 640, loop: 11,
+  prism: {
+    w: 900, loop: 15,
     setup(s) {
-      s.home(0.5, 0.5);
-      s.manager.queueSpawn('boss', s.W * 0.5, s.H * 0.5, 1, { warmup: 1.6, name: BOSS_NAME, epithet: 'WAVE 3 WARDEN' });
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('prism', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
     },
     tick(s) {
-      s.kite(s.W * 0.5, s.H * 0.5, s.H * 0.36, 0.7);
-      if (s.t > 1.8) s.autoFire(0.22);
+      s.kite(s.W * 0.8, s.H * 0.5, 50, 0.8);
+      if (s.t > 1.4) s.autoFire(0.1, e => e.isBoss);
+      // Walk it through its three phases.
+      const q = s.find('prism');
+      if (q && s.t > 5 && q.phase === 0) q.hp = q.maxHp * 0.6;
+      if (q && s.t > 9 && q.phase === 1) q.hp = q.maxHp * 0.3;
+      if (q && s.t > 14.2) s.kill(q);
       s.bossEntrance();
     },
     noContactKill: true
@@ -809,12 +814,12 @@ export class GuidePreview {
 const SILHOUETTE = {
   swarmer: ['swarmer', 120], pinwheel: ['pinwheel', 140], weaver: ['weaver', 130], splitter: ['splitter', 170],
   mini_splitter: ['mini_splitter', 100], blackhole: ['blackhole', 220], bruiser: ['bruiser', 200], gunner: ['gunner', 140],
-  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
+  shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260],
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
   carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
   gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300],
-  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], eclipse_twins: ['eclipse_twins', 220]
+  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], eclipse_twins: ['eclipse_twins', 220], prism: ['prism', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

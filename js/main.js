@@ -1089,7 +1089,7 @@ export class Game {
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
         // Same warning -> entrance event as a scheduled boss; each press cycles to the next boss.
-        const roster = [...Object.keys(BOSS_DEFS), 'boss'];
+        const roster = Object.keys(BOSS_DEFS);
         const id = roster[(this.sandboxBossIndex = ((this.sandboxBossIndex ?? -1) + 1) % roster.length)];
         const bp = this.spawnPointOnscreen(40);
         if (!this.queueBossEncounter(bp, this.getWaveScale(), { id, wave: this.wave, epithet: id === 'boss' ? `WAVE ${this.wave} SANDBOX SIMULACRUM` : '' })) {

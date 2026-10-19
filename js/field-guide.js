@@ -2,13 +2,13 @@
 // Pure data and helpers (no DOM): js/field-guide-ui.js renders it and js/field-guide-scenes.js
 // animates the hostile previews with the real enemy drawing code.
 //
-// Hostile entry ids are enemy `type` strings, plus 'lieutenant' (any elite) and 'boss'. Adding a new
+// Hostile entry ids are enemy `type` strings (bosses included), plus 'lieutenant' (any elite). Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING, DEFAULT_TUNING } from './config.js';
-import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
+import { EnemyManager, contactDamageAt, waveScaleAt } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, bossBuilt } from './bosses.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
@@ -33,8 +33,6 @@ export const GUIDE_GROUPS = [
 
 // Wave a named boss leads (from the campaign schedule).
 const bossWave = (id) => +(Object.keys(BOSS_SCHEDULE).find(w => BOSS_SCHEDULE[w] === id) ?? 3);
-// First boss wave still flown by the Dreadnought stand-in (no named boss yet); 3 if every slot is named.
-const dreadnoughtWave = () => +(Object.keys(BOSS_SCHEDULE).find(w => !bossBuilt(BOSS_SCHEDULE[w])) ?? 3);
 const veteranNote = ' From wave 11 they field a veteran form with an extra edge, and from wave 21 another, each a little faster.';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -217,9 +215,9 @@ export const HOSTILE_ENTRIES = [
     tip: 'Keep moving so the ring\'s centre never sits on you, and cross the tether where it is far from both twins. Bring both down to low HP, then finish them back to back.'
   },
   {
-    id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,
-    what: () => `The fleet's line boss: it takes any boss wave whose named boss has not arrived yet. A cyan octagon with a gold spike crown and magenta halo that drives straight at you; health bars at the top of the screen.${bossGrindText()}`,
-    tip: 'Clear the fodder during the warning, then kite in wide circles. A kill drops a guaranteed Super Relic Cache and a spare Supernova.'
+    id: 'prism', name: BOSS_DEFS.prism.name, group: 'boss', boss: true, unlockWave: bossWave('prism'),
+    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a spinning prism that cycles through every color and fights with the campaign's moves, one phase per third of its HP. SWARM: a ring of shard swarmers that peel off to dive or circle you. LATTICE: closing cages of laser gates. SINGULARITY: a gravity well that exhales rings of ${PRISM.orbRing} orbs while a lighthouse beam sweeps round it. Past wave 30 the run goes on, and bosses come in pairs.${bossGrindText()}`,
+    tip: 'Phase one: sweep the ring with area damage. Phase two: break each cage early through a beam. Phase three: stay outside the beam\'s reach and circle with it, slipping through the orb rings.'
   }
 ];
 
@@ -242,7 +240,7 @@ export function hostileStats(id) {
   const unlockWave = resolveText(entry.unlockWave);
   const wave = entry.boss || id === 'lieutenant' ? unlockWave : 1;
   const type = id === 'lieutenant' ? 'pinwheel' : id;
-  const cfg = statsManager.getArchetype(type, waveScaleAt(wave), id === 'boss' ? { name: BOSS_NAME, wave } : { wave });
+  const cfg = statsManager.getArchetype(type, waveScaleAt(wave), { wave });
   const hp = cfg.maxHp * (TUNING.enemyHpMult ?? 1);
   const speed = cfg.speed * (type === 'blackhole' ? 1 : (TUNING.enemySpeedMult ?? 1)) * 60;
   const ship = (TUNING.moveSpeed ?? 5) * 60;
@@ -270,8 +268,7 @@ export function hostileStatRows(id) {
   rows.push(['CONTACT', String(s.contact)]);
   if (s.xp !== null) rows.push(['XP', String(s.xp)]);
   const entry = hostileEntry(id);
-  if (id === 'boss') rows.push(['LEADS', 'UNNAMED BOSS WAVES']);
-  else if (entry.boss) rows.push([`${(BOSS_DEFS[id]?.tier || 'minor').toUpperCase()} BOSS`, `WAVE ${s.unlockWave}`]);
+  if (entry.boss) rows.push([`${(BOSS_DEFS[id]?.tier || 'minor').toUpperCase()} BOSS`, `WAVE ${s.unlockWave}`]);
   else rows.push(['FROM', `WAVE ${s.unlockWave}`]);
   return rows;
 }
@@ -280,8 +277,7 @@ export function lieutenantModifierRows() {
   return Object.entries(LT_MODIFIERS).map(([id, m]) => ({ id, label: m.label, detail: m.detail, hue: m.hue }));
 }
 
-// Guide id(s) for a live enemy: its type, plus 'lieutenant' for elites. Bosses are their own type
-// (the Dreadnought stand-in is 'boss').
+// Guide id(s) for a live enemy: its type, plus 'lieutenant' for elites. Bosses are their own type.
 export function guideIdsFor(e) {
   if (!e) return [];
   if (e.isBoss) return [e.type];

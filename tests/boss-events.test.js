@@ -129,15 +129,15 @@ test('sandbox +Boss runs the same warning event, and reports when the cap blocks
   assert.equal(warning.timer, TUNING.bossWarningTime);
   assert.equal(calls.warnings, 1);
   assert.equal(banners.length, 0);
-  // Each press cycles to the next boss, ending on the Dreadnought stand-in.
+  // Each press cycles to the next boss and wraps round to the first.
   const names = [];
-  for (let i = 0; i < 12 && names.at(-1) !== 'PRISMATIC DREADNOUGHT'; i++) {
+  for (let i = 0; i < 12 && names.at(-1) !== 'BROOD QUEEN'; i++) {
     g.enemyManager.spawnIndicators.length = 0;
     g.applyLiveTuning('SPAWN_BOSS');
     names.push(bossWarnings(g)[0].config.name);
   }
-  assert.equal(names.at(-1), 'PRISMATIC DREADNOUGHT');
-  assert.equal(bossWarnings(g)[0].config.epithet, 'WAVE 4 SANDBOX SIMULACRUM');
+  assert.equal(names.at(-1), 'BROOD QUEEN');
+  assert.equal(names.length, 10, 'all ten bosses, then round again');
   const warned = calls.warnings;
 
   g.enemyManager.enemies = Array.from({ length: g.enemyManager.maxEnemies }, () => ({ type: 'swarmer' }));

@@ -17,7 +17,7 @@ export const CHANGELOG = Object.freeze([
     title: 'Boss Campaign',
     notes: [
       { type: 'new', text: 'BOSS CAMPAIGN: a minor boss every 3rd wave and a major boss every 6th, each with its own look and attacks. New enemies now debut alongside a boss instead of on a fixed wave.' },
-      { type: 'new', text: 'Bosses: BROOD QUEEN (3), OUROBOROS (6), WING COMMANDER (9), HIVE CARRIER (12), EVENT HORIZON (15), ARCHITECT (18), PROGENITOR (21), CONDUCTOR (24), ECLIPSE TWINS (27).' },
+      { type: 'new', text: 'Ten bosses, one every 3rd wave: BROOD QUEEN, OUROBOROS, WING COMMANDER, HIVE CARRIER, EVENT HORIZON, ARCHITECT, PROGENITOR, CONDUCTOR, ECLIPSE TWINS, THE PRISM.' },
       { type: 'new', text: 'New enemies: MAYFLIES, SERPENTS, KESTREL V-wings, CARRIERS + DRONES, HULKS, LASER GATES (fly through to blow one up), MITOSIS CELLS, REPULSORS and LANCERS.' },
       { type: 'new', text: 'Every wave has a theme (MAYFLY BLOOM, STAMPEDE, CROSSFIRE...) that tilts which enemies show up. Past wave 30, bosses come in pairs.' },
       { type: 'new', text: 'Veteran forms: swarmers, pinwheels, weavers, splitters and mayflies grow an extra edge and a little speed at waves 11 and 21. Late splitters burst into four.' },

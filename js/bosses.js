@@ -12,7 +12,7 @@ import { TUNING } from './config.js';
 import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 import { launchDrones, traceCell } from './hostiles.js';
-import { lanceCycle, drawLanceAim, drawBeam } from './lancers.js';
+import { lanceCycle, drawLanceAim, drawBeam, beamFrom } from './lancers.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -40,6 +40,13 @@ function queenOrbiters(e, m) {
   const out = [];
   for (const o of m.enemies) if (o.anchor === e && !o.dead) out.push(o);
   return out;
+}
+
+// Ring size including orbiters still materializing (so a fresh ring is never topped up twice).
+function ringSize(e, m) {
+  let n = queenOrbiters(e, m).length;
+  for (const sp of m.spawnIndicators) if (sp.config.attach?.anchor === e) n++;
+  return n;
 }
 
 // Spawn one brood swarmer. `orbit` swarmers join her ring; otherwise it dives at the ship.
@@ -121,7 +128,7 @@ const broodQueen = {
     e.hatchT -= dt;
     if (e.hatchT <= 0) {
       e.hatchT = QUEEN.hatchEvery;
-      if (ring.length < QUEEN.ring) hatch(e, m, e.x, e.y, true);
+      if (ringSize(e, m) < QUEEN.ring) hatch(e, m, e.x, e.y, true);
     }
   },
   trace(ctx, e, r) {
@@ -1088,6 +1095,145 @@ const eclipseTwins = {
   }
 };
 
+// --- THE PRISM (wave 30, major: the finale) --------------------------------------------------
+// A spinning triangular prism that cycles through every color and fights with the whole campaign's
+// moves, one phase per third of its HP:
+//   SWARM       (full → 2/3): a ring of shard swarmers that peel off to dive or circle, like the Queen's.
+//   LATTICE     (2/3 → 1/3): gate cages dropped round you, like the Architect's.
+//   SINGULARITY (1/3 → 0):   it becomes a gravity well that exhales orb rings, with a lighthouse beam
+//                            sweeping round it.
+// Past wave 30 the run goes on, and bosses start arriving in pairs.
+export const PRISM = {
+  hpScale: 1.3, phaseAt: [2 / 3, 1 / 3], ring: 12, peelEvery: 2.6, hatchEvery: 1.1, cageEvery: 6.5,
+  pullRadius: 380, breathEvery: 4, orbRing: 20, beamSpin: 0.6, beamLength: 520, beamWarmup: 1.5, speed: 1.2
+};
+
+const PRISM_PHASES = ['SWARM', 'LATTICE', 'SINGULARITY'];
+
+const prism = {
+  name: 'THE PRISM', epithet: 'ALL LIGHT, ALL AT ONCE', tier: 'major', hue: 0, debut: [],
+  hpScale: PRISM.hpScale,
+  stats: () => ({ speed: PRISM.speed, radius: 40, sides: 3, vRot: 0 }),
+  onArrive(e, m) {
+    e.phase = 0;
+    e.aiTimer = PRISM.peelEvery;
+    e.hatchT = 0;
+    e.cageT = 1.5;
+    e.breathT = PRISM.breathEvery;
+    e.beamAngle = 0;
+    e.beamWarm = 0;
+    for (let k = 0; k < PRISM.ring; k++) {
+      const a = (k / PRISM.ring) * Math.PI * 2;
+      hatch(e, m, e.x + Math.cos(a) * QUEEN.orbitR, e.y + Math.sin(a) * QUEEN.orbitR, true);
+    }
+  },
+  update(e, m, env) {
+    const { dt, player } = env;
+    e.hue = (e.hue + 70 * dt) % 360; // the spectrum, round and round
+    e.rotation += (0.6 + e.phase * 0.4) * dt;
+    e.vx = (e.vx + env.moveX * 0.12) * 0.94;
+    e.vy = (e.vy + env.moveY * 0.12) * 0.94;
+    const frac = e.hp / e.maxHp;
+    const phase = frac <= PRISM.phaseAt[1] ? 2 : frac <= PRISM.phaseAt[0] ? 1 : 0;
+    if (phase > e.phase) {
+      e.phase = phase;
+      if (phase === 1) for (const o of queenOrbiters(e, m)) release(o, player, Math.random() < 0.5); // the swarm breaks
+      if (phase === 2) {
+        e.gravityWell = true;
+        e.pullRadius = PRISM.pullRadius;
+        e.bendMult = 1.6;
+        e.beamWarm = PRISM.beamWarmup;
+        e.beamAngle = Math.atan2(player.y - e.y, player.x - e.x) + Math.PI / 2;
+      }
+      env.particles?.spawnShockwave?.(e.x, e.y, 340, e.hue, 6, 0.55);
+      env.grid?.applyImpulse(e.x, e.y, 90, 340, e.hue);
+    }
+    if (e.phase === 0) {
+      // SWARM: the Queen's ring.
+      e.aiTimer -= dt;
+      const ring = queenOrbiters(e, m);
+      if (e.aiTimer <= 0 && ring.length) {
+        e.aiTimer = PRISM.peelEvery;
+        ring.sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+        ring.slice(0, 4).forEach((o, i) => release(o, player, i % 2 === 0));
+      }
+      e.hatchT -= dt;
+      if (e.hatchT <= 0) {
+        e.hatchT = PRISM.hatchEvery;
+        if (ringSize(e, m) < PRISM.ring) hatch(e, m, e.x, e.y, true);
+      }
+    } else if (e.phase === 1) {
+      // LATTICE: the Architect's cages.
+      e.cageT -= dt;
+      if (e.cageT <= 0) {
+        e.cageT = PRISM.cageEvery;
+        const off = Math.random() * Math.PI * 2;
+        for (let k = 0; k < ARCH.cageGates; k++) {
+          const a = off + (k / ARCH.cageGates) * Math.PI * 2;
+          m.queueSpawn('gate', player.x + Math.cos(a) * ARCH.cageR, player.y + Math.sin(a) * ARCH.cageR, m.waveScaleFor('gate', e.bossWave), {
+            warmup: 0.5, attach: { builder: e, cage: { cx: player.x, cy: player.y, a, r: ARCH.cageR, t: ARCH.cageTime } }
+          });
+        }
+      }
+    } else {
+      // SINGULARITY: a gravity well breathing orb rings, a lighthouse beam sweeping round it.
+      e.breathT -= dt;
+      if (e.breathT <= 0) {
+        e.breathT = PRISM.breathEvery;
+        const off = Math.random() * Math.PI * 2;
+        for (let k = 0; k < PRISM.orbRing; k++) fireOrb(m, e, off + (k / PRISM.orbRing) * Math.PI * 2, HORIZON.ringSpeed, 6);
+        m.shotsFired = (m.shotsFired || 0) + 1;
+      }
+      if (e.beamWarm > 0) {
+        e.beamWarm -= dt; // the telegraph: a thin line where the beam will light
+        e.beam = null;
+      } else {
+        e.beamAngle += PRISM.beamSpin * dt;
+        e.beam = beamFrom(e, e.beamAngle, PRISM.beamLength, 8);
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    // A triangle around a counter-spinning inner triangle, with a spectrum line through it.
+    for (const [k, rr] of [[0, 1.25], [Math.PI / 3 - e.rotation * 2, 0.6]]) {
+      for (let s = 0; s < 3; s++) {
+        const a = k + (s * Math.PI * 2) / 3;
+        if (s === 0) ctx.moveTo(Math.cos(a) * r * rr, Math.sin(a) * r * rr);
+        else ctx.lineTo(Math.cos(a) * r * rr, Math.sin(a) * r * rr);
+      }
+      ctx.closePath();
+    }
+    ctx.moveTo(-r * 1.1, 0);
+    ctx.lineTo(r * 1.1, 0);
+  },
+  overlay(ctx, e, r) {
+    if (e.phase === 2 && e.beamWarm > 0) {
+      const b = beamFrom(e, e.beamAngle, PRISM.beamLength, 8);
+      ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.3 + 0.4 * (1 - e.beamWarm / PRISM.beamWarmup)})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash?.([10, 8]);
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(b.x2, b.y2);
+      ctx.stroke();
+      ctx.setLineDash?.([]);
+    }
+    if (e.beam) drawBeam(ctx, e.beam, e.hue);
+    // Phase pips: which third of the fight this is.
+    ctx.fillStyle = `hsla(${e.hue}, 100%, 70%, 0.9)`;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.arc(e.x - 14 + k * 14, e.y + r * 1.7, k <= e.phase ? 4 : 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+  onDeath(e, m) {
+    // The light scatters: a double ring of orbs in every direction.
+    for (let k = 0; k < 24; k++) fireOrb(m, e, (k / 24) * Math.PI * 2, k % 2 ? 2 : 3.2, 5);
+  }
+};
+export const PRISM_PHASE_NAMES = PRISM_PHASES;
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -1150,7 +1296,8 @@ export const BOSS_DEFS = {
   architect,
   progenitor,
   conductor,
-  eclipse_twins: eclipseTwins
+  eclipse_twins: eclipseTwins,
+  prism
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);
