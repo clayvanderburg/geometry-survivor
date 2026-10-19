@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.36.1',
+    date: '2026-10-19',
+    title: 'Autocannon & Missile Nerf',
+    notes: [
+      { type: 'balance', text: 'Autocannon Plasma Charge gives +34% damage per level (was +42%) and Hyper-Capacitor +32% fire rate (was +40%). Player data showed it far ahead of every other weapon.' },
+      { type: 'balance', text: 'Swarm Missiles deal half damage per missile. Salvo size, reload and blast size are unchanged.' }
+    ]
+  },
+  {
     version: '0.36.0',
     date: '2026-10-19',
     title: 'Fill Your Slots',

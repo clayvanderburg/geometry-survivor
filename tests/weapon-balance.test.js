@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // POWER card adds the same damage output on every weapon, so weapons built for damage stay equal.
 // UTILITY cards (size, radius, reach, pull...) add none. Difficulty of use is tuned separately.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
 const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
 // Weapons whose damage depends on something other than attacking: shards need kills, the dash nova
@@ -14,6 +14,8 @@ const CONDITIONAL = new Set(['shrapnel', 'thrusters']);
 const IDS = Object.keys(STAT_CARDS);
 const near = (a, b, tol = 1e-6) => Math.abs(a / b - 1) < tol;
 const lv1 = (id) => POTENTIAL_DPS[id](levelBuild(id, 1));
+// LV 1 potential after a weapon's deliberate LV1_TRIM (1 for weapons on the shared curve).
+const lv1Target = (id) => DPS_TARGET(1) * (LV1_TRIM[id] ?? 1);
 
 test('every weapon is on the shared DPS curve', () => {
   const weapons = h.classifyUpgrades().filter((c) => c.isWeapon && !c.isSynergy && !CONDITIONAL.has(c.id));
@@ -22,25 +24,34 @@ test('every weapon is on the shared DPS curve', () => {
   for (const id of IDS) assert.ok(POTENTIAL_DPS[id], `${id} needs a POTENTIAL_DPS entry`);
 });
 
-test('all weapons deliver the same potential DPS at LV 1', () => {
-  for (const id of IDS) assert.ok(near(lv1(id), DPS_TARGET(1)), `${id}: ${lv1(id).toFixed(3)} vs ${DPS_TARGET(1)}`);
+test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM)', () => {
+  for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('weapons built for damage stay equal: every Damage rank is the same x DAMAGE_GROWTH on every weapon', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles LV 1 damage x0.5', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.5 });
+  assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
+  assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
+  assert.equal(damageGrowth('rockets'), DAMAGE_GROWTH);
+  assert.equal(rateStep('rockets'), RATE_STEP);
+});
+
+test('weapons built for damage stay equal: every Damage rank is the same x DAMAGE_GROWTH on every weapon (times its CARD_STEP_TRIM)', () => {
   for (let r = 0; r < WEAPON_MAX_LEVEL; r++) {
     for (const id of IDS) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { damage: r }));
-      assert.ok(near(dps, DPS_TARGET(1) * DAMAGE_GROWTH ** r), `${id} with ${r} Damage ranks: ${dps.toFixed(2)}`);
+      assert.ok(near(dps, lv1Target(id) * damageGrowth(id) ** r), `${id} with ${r} Damage ranks: ${dps.toFixed(2)}`);
     }
   }
 });
 
-test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon', () => {
+test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon (times its CARD_STEP_TRIM)', () => {
   const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate' };
   for (const [id, stat] of Object.entries(RATE)) {
     for (let r = 1; r <= 6; r++) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { [stat]: r }));
-      assert.ok(near(dps, lv1(id) * (1 + RATE_STEP * r)), `${id} ${stat} x${r}`);
+      assert.ok(near(dps, lv1(id) * (1 + rateStep(id) * r)), `${id} ${stat} x${r}`);
     }
   }
 });
