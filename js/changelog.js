@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.36.2',
+    date: '2026-10-19',
+    title: 'Boss HP Retune',
+    notes: [
+      { type: 'balance', text: 'Bosses now have 2x their original HP (down from 3x since 0.34.1). XP and Void Core drops are unchanged.' }
+    ]
+  },
+  {
     version: '0.36.1',
     date: '2026-10-19',
     title: 'Autocannon & Missile Nerf',
