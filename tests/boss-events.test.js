@@ -86,7 +86,7 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   assert.equal(boss.type, 'brood_queen');
   assert.equal(boss.name, 'BROOD QUEEN');
   assert.equal(boss.bossTier, 'minor');
-  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult * TUNING.enemyHpMult, 'a minor boss keeps the Dreadnought HP formula');
+  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult * TUNING.campaignBossHpMult * TUNING.enemyHpMult, 'a minor boss: the Dreadnought HP formula × the campaign boss multiplier');
   assert.equal(calls.arrivals, 1);
   assert.deepEqual(g.enemyManager.bossArrivals, [], 'arrivals are drained once staged');
   assert.equal(g.bossCard.kind, 'arrival');

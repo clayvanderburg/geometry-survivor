@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.34.1',
+    date: '2026-10-19',
+    title: 'Tougher Bosses',
+    notes: [
+      { type: 'balance', text: 'All ten bosses have 3x HP, so they no longer melt once your build comes together. Their XP and Void Core drops are unchanged.' }
+    ]
+  },
+  {
     version: '0.34.0',
     date: '2026-10-19',
     title: 'Boss Campaign',

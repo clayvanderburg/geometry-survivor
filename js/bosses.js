@@ -22,7 +22,7 @@ export const BOSS_TIER = {
 };
 
 export function bossHp(waveScale, tier = 'minor') {
-  return BOSS_BASE_HP * waveScale * (TUNING.bossHpMult ?? 1) * (BOSS_TIER[tier]?.hp ?? 1);
+  return BOSS_BASE_HP * waveScale * (TUNING.bossHpMult ?? 1) * (TUNING.campaignBossHpMult ?? 1) * (BOSS_TIER[tier]?.hp ?? 1);
 }
 
 // --- BROOD QUEEN (wave 3, minor) ------------------------------------------------------------

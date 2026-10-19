@@ -25,7 +25,7 @@ const RAMP_KEYS = [
   'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'waveHpGrowthRamp', 'spawnIntervalStart', 'spawnIntervalTau', 'spawnIntervalMin',
   'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
   'mayflyPackPerWave', 'mayflyPackMax', 'hpBudget', 'hpBudgetMin', 'hpBudgetMax',
-  'bossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
+  'bossHpMult', 'campaignBossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {
@@ -89,6 +89,25 @@ test('boss HP multiplier scales bosses, and lieutenants through their share of b
   assert.equal(boss2, 2 * boss1);
   assert.ok(lt2 > lt1, 'lieutenants follow boss HP');
   assert.equal(withTuning({ bossHpMult: 2 }, () => manager.getArchetype('swarmer', 4).maxHp), 40, 'regular hulls are unaffected');
+});
+
+test('campaign boss HP multiplier scales the named bosses only, not their XP, lieutenants or packs', () => {
+  const manager = new EnemyManager();
+  const lt = { type: 'pinwheel', name: 'X', epithet: 'Y', mods: ['hasted'] };
+  const sample = () => ({
+    queen: manager.getArchetype('brood_queen', 4),
+    hive: manager.getArchetype('hive_carrier', 4),
+    lt: manager.getArchetype('pinwheel', 4, { lieutenant: lt }).maxHp,
+    hulk: manager.getArchetype('hulk', 4).maxHp,
+    swarmer: manager.getArchetype('swarmer', 4).maxHp
+  });
+  const a = withTuning({ campaignBossHpMult: 1 }, sample);
+  const b = withTuning({ campaignBossHpMult: 3 }, sample);
+  assert.equal(b.queen.maxHp, 3 * a.queen.maxHp);
+  assert.equal(b.hive.maxHp, 3 * a.hive.maxHp);
+  assert.equal(b.queen.xp, a.queen.xp, 'boss XP is unchanged');
+  assert.deepEqual([b.lt, b.hulk, b.swarmer], [a.lt, a.hulk, a.swarmer], 'lieutenants and regular hulls are unaffected');
+  assert.equal(DEFAULT_TUNING.campaignBossHpMult, 3);
 });
 
 test('waves advance every waveLength seconds and bosses stay on every third wave', () => {

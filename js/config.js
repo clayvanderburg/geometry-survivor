@@ -224,6 +224,8 @@ export const DEFAULT_TUNING = {
   hpBudgetMin: 0.5,
   hpBudgetMax: 2.5,
   bossHpMult: 0.5,
+  // Campaign bosses only (js/bosses.js), on top of bossHpMult; lieutenants and boss XP are unaffected.
+  campaignBossHpMult: 3,
   damageRampBase: 0.45, // 0.5 before v0.29, 0.55 before v0.31, 0.6 before v0.32 (gentler start, same late game)
   damageRampFrom: 10,
   damageRampPerWave: 0.07, // 0.04 before v0.29, 0.044 before v0.31
@@ -471,6 +473,7 @@ export const TUNING_SCHEMA = [
       { key: 'hpBudgetMin', label: 'HP Budget: Fastest Pack Pace', type: 'range', min: 0.2, max: 1, step: 0.05, unit: 'x' },
       { key: 'hpBudgetMax', label: 'HP Budget: Slowest Pack Pace', type: 'range', min: 1, max: 5, step: 0.05, unit: 'x' },
       { key: 'bossHpMult', label: 'Boss HP (lieutenants follow)', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 'x' },
+      { key: 'campaignBossHpMult', label: 'Campaign Boss HP (bosses only)', type: 'range', min: 0.5, max: 6, step: 0.1, unit: 'x' },
       { key: 'damageRampBase', label: 'Contact/Orb Damage Before the Ramp', type: 'range', min: 0.2, max: 3, step: 0.05, unit: 'x' },
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
