@@ -334,6 +334,24 @@ const SCENES = {
     },
     noContactKill: true
   },
+  event_horizon: {
+    w: 900, loop: 12,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.manager.queueSpawn('event_horizon', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.8, s.H * 0.5, 40, 0.9);
+      if (s.t > 1.4) s.autoFire(0.14, e => e.isBoss);
+      const q = s.find('event_horizon');
+      // Swarmers drift in from the edges to be swallowed.
+      if (q && s.count('swarmer') < 6 && s.every(0.7)) s.spawn('swarmer', q.x + (Math.random() - 0.5) * 500, Math.random() < 0.5 ? 20 : s.H - 20);
+      if (q && s.t > 6 && !q.enraged) q.hp = Math.min(q.hp, q.maxHp * 0.49);
+      if (q && s.t > 11) s.kill(q);
+      s.bossEntrance();
+    },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -661,7 +679,7 @@ const SILHOUETTE = {
   shielder: ['shielder', 170], blinker: ['blinker', 130], conduit: ['conduit', 150], lieutenant: ['bruiser', 260], boss: ['boss', 360],
   mayfly: ['mayfly', 70], hulk: ['hulk', 320], brood_queen: ['brood_queen', 340], serpent: ['serpent', 110], ouroboros: ['ouroboros', 260],
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
-  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300]
+  carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

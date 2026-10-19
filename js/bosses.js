@@ -506,6 +506,127 @@ const hiveCarrier = {
   }
 };
 
+// --- EVENT HORIZON (wave 15, minor) ---------------------------------------------------------
+// A living black hole. It drifts after you with a huge pull: it tugs your ship (never past the escape
+// cap), bends your shots, and drags other hostiles in. Anything it swallows heals it. It breathes:
+// it INHALES (stronger pull) and then EXHALES a ring of orbs. At half HP it spits out two vortexes and
+// breathes faster. Arrives with two Hulks in tow.
+export const HORIZON = {
+  pullRadius: 400, bend: 2.2, enemyPull: 0.9, eatHeal: 0.025, eatRadius: 1.05,
+  breathEvery: 6, rageBreathEvery: 4, inhaleTime: 1.6, ring: 16, rageRing: 24, ringSpeed: 2.6,
+  speed: 0.75, rageAt: 0.5, vortexes: 2, escortHulks: 2
+};
+
+const eventHorizon = {
+  name: 'EVENT HORIZON', epithet: 'THE HUNGER BETWEEN STARS', tier: 'minor', hue: 280, debut: ['blackhole', 'hulk'],
+  stats: () => ({ speed: HORIZON.speed, radius: 40, sides: 12, vRot: 0.02, gravityWell: true, pullRadius: HORIZON.pullRadius, bendMult: HORIZON.bend }),
+  onArrive(e, m) {
+    e.aiTimer = HORIZON.breathEvery;
+    e.inhaleT = 0;
+    e.enraged = false;
+    e.gravityWell = true;
+    e.pullRadius = HORIZON.pullRadius;
+    e.bendMult = HORIZON.bend;
+    for (let k = 0; k < HORIZON.escortHulks; k++) {
+      const a = (k / HORIZON.escortHulks) * Math.PI * 2 + 0.6;
+      m.queueSpawn('hulk', e.x + Math.cos(a) * 240, e.y + Math.sin(a) * 240, m.waveScaleFor('hulk', e.bossWave), { instant: true });
+    }
+  },
+  update(e, m, env) {
+    const { dt } = env;
+    e.vx = (e.vx + env.dirX * 0.06) * 0.95;
+    e.vy = (e.vy + env.dirY * 0.06) * 0.95;
+    if (!e.enraged && e.hp <= e.maxHp * HORIZON.rageAt) {
+      e.enraged = true;
+      for (let k = 0; k < HORIZON.vortexes; k++) {
+        const a = Math.random() * Math.PI * 2;
+        m.queueSpawn('blackhole', e.x + Math.cos(a) * e.radius * 1.5, e.y + Math.sin(a) * e.radius * 1.5, m.waveScaleFor('blackhole', e.bossWave), {
+          instant: true, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3
+        });
+      }
+      env.particles?.spawnShockwave?.(e.x, e.y, 300, e.hue, 6, 0.5);
+    }
+    // Breathing: inhale (pull radius swells), then exhale a ring of orbs.
+    e.aiTimer -= dt;
+    if (e.inhaleT > 0) {
+      e.inhaleT -= dt;
+      e.pullRadius = HORIZON.pullRadius * 1.25;
+      if (e.inhaleT <= 0) {
+        e.pullRadius = HORIZON.pullRadius;
+        const n = e.enraged ? HORIZON.rageRing : HORIZON.ring;
+        const off = Math.random() * Math.PI * 2;
+        for (let k = 0; k < n; k++) fireOrb(m, e, off + (k / n) * Math.PI * 2, HORIZON.ringSpeed, 6);
+        m.shotsFired = (m.shotsFired || 0) + 1;
+        env.grid?.applyImpulse(e.x, e.y, 60, 260, e.hue);
+      }
+    } else if (e.aiTimer <= 0) {
+      e.aiTimer = e.enraged ? HORIZON.rageBreathEvery : HORIZON.breathEvery;
+      e.inhaleT = HORIZON.inhaleTime;
+    }
+    // Drag other hostiles in; swallow the ones that reach the core.
+    const reach = e.pullRadius;
+    const pull = HORIZON.enemyPull * (e.inhaleT > 0 ? 1.6 : 1);
+    for (const o of m.enemyIndex.query(e.x, e.y, reach)) {
+      if (o === e || o.dead || o.isBoss || o.leader || o.mount || o.doomQueued || o.type === 'blackhole') continue;
+      const gx = e.x - o.x;
+      const gy = e.y - o.y;
+      const d = Math.hypot(gx, gy) || 1;
+      if (d > reach) continue;
+      if (d < e.radius * HORIZON.eatRadius) {
+        o.doomQueued = true;
+        o.noReward = true;
+        m.doomed.push(o);
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * HORIZON.eatHeal);
+        e.fedFlash = 1;
+        continue;
+      }
+      const k = pull * (1 - d / reach) / d;
+      o.gvx = (o.gvx || 0) + (gx - gy * 0.35) * k * 0.08;
+      o.gvy = (o.gvy || 0) + (gy + gx * 0.35) * k * 0.08;
+    }
+    if (e.fedFlash > 0) e.fedFlash = Math.max(0, e.fedFlash - dt * 2);
+  },
+  trace(ctx, e, r) {
+    // The horizon itself, and a churning inner ring that tightens on an inhale.
+    ctx.moveTo(r, 0);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    const k = e.inhaleT > 0 ? 0.45 : 0.62;
+    ctx.moveTo(r * k, 0);
+    ctx.arc(0, 0, r * k, 0, Math.PI * 1.6);
+  },
+  overlay(ctx, e, r) {
+    // Accretion disc, a pull rim at the edge of its reach, and a green flash when it feeds.
+    const spin = e.pulsePhase * 0.4;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    for (let k = 0; k < 3; k++) {
+      ctx.strokeStyle = k === 0 ? 'hsla(30, 100%, 62%, 0.6)' : `hsla(${e.hue}, 100%, 66%, ${0.45 - k * 0.1})`;
+      ctx.lineWidth = 2.6 - k * 0.6;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * (2 + k * 0.6), r * (0.55 + k * 0.2), (k % 2 ? -spin : spin) + k, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${e.inhaleT > 0 ? 0.5 : 0.22})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const R = e.pullRadius || HORIZON.pullRadius;
+    for (let k = 0; k < 32; k++) {
+      const a0 = (k / 32) * Math.PI * 2 + spin * 0.2;
+      ctx.moveTo(Math.cos(a0) * R, Math.sin(a0) * R);
+      ctx.arc(0, 0, R, a0, a0 + 0.08);
+    }
+    ctx.stroke();
+    if (e.fedFlash > 0) {
+      ctx.strokeStyle = `hsla(140, 100%, 65%, ${e.fedFlash})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+};
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -563,7 +684,8 @@ export const BOSS_DEFS = {
   brood_queen: broodQueen,
   ouroboros,
   wing_commander: wingCommander,
-  hive_carrier: hiveCarrier
+  hive_carrier: hiveCarrier,
+  event_horizon: eventHorizon
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

@@ -440,3 +440,32 @@ test('Hive Carrier: bays shield the core and launch drones; with every bay down 
   for (let i = 0; i < 30; i++) g.update(1 / 60);
   assert.ok(!m.enemies.some(e => e.mount === h));
 });
+
+test('Event Horizon: a gravity well that tugs the ship, swallows hostiles to heal, breathes orb rings and spits vortexes', async () => {
+  resetTuning();
+  const { HORIZON } = await import('../js/bosses.js');
+  const g = campaignGame({ wave: 15 });
+  const m = g.enemyManager;
+  m.queueSpawn('event_horizon', 2300, 2000, waveScaleAt(15), { instant: true, wave: 15 });
+  step(m, g.player, 5); // it materializes, then its escort
+  const h = m.enemies.find(e => e.type === 'event_horizon');
+  assert.equal(m.enemies.filter(e => e.type === 'hulk').length, HORIZON.escortHulks, 'arrives with hulks');
+  assert.ok(g.collectGravityWells().includes(h), 'counts as a gravity well');
+  g.player.vx = g.player.vy = 0;
+  g.applyWellPullToPlayer(g.player);
+  assert.ok(g.player.vx > 0, 'tugs the ship toward it');
+  // Feed it: a swarmer at the core is swallowed and heals it.
+  h.hp = h.maxHp * 0.7;
+  m.queueSpawn('swarmer', h.x + 5, h.y, 1, { instant: true });
+  step(m, g.player, 3);
+  assert.ok(h.hp > h.maxHp * 0.7, 'healed by feeding');
+  assert.ok(m.doomed.some(e => e.type === 'swarmer' && e.noReward));
+  m.doomed.length = 0;
+  // Breath: inhale, then a ring of orbs.
+  step(m, g.player, Math.ceil((HORIZON.breathEvery + HORIZON.inhaleTime) * 60) + 2);
+  assert.ok(m.enemyBullets.count >= HORIZON.ring, 'exhales a ring of orbs');
+  h.hp = h.maxHp * 0.49;
+  step(m, g.player, 3);
+  assert.equal(h.enraged, true);
+  assert.equal(m.enemies.filter(e => e.type === 'blackhole').length, HORIZON.vortexes, 'spits out vortexes');
+});

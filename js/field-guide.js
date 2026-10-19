@@ -8,7 +8,7 @@ import { TUNING, DEFAULT_TUNING } from './config.js';
 import { EnemyManager, contactDamageAt, waveScaleAt, BOSS_NAME } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE } from './hostiles.js';
-import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, bossBuilt } from './bosses.js';
+import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, bossBuilt } from './bosses.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
@@ -168,6 +168,11 @@ export const HOSTILE_ENTRIES = [
     id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
     what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge, slow mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${bossGrindText()}`,
     tip: 'Take the bays out one at a time while dodging the drones; area damage hits several. Once the core is exposed, circle wide through the gaps in the spiral.'
+  },
+  {
+    id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
+    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${bossGrindText()}`,
+    tip: 'Fight it from the edge of its pull and kill things away from it so it cannot feed. Shoot from close range so the bend has less time to steer your shots off.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,

@@ -181,6 +181,8 @@ const SANDBOX_ARCHETYPES = {
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
+// Pull radius of a gravity well: its own (the Event Horizon's) or the vortex tuning.
+const pullRadiusOf = (w) => w.pullRadius ?? (TUNING.blackholePullRadius ?? 200);
 
 // Field Guide: how long the in-run "FIELD GUIDE UPDATED" toast stays up, and how often (fixed ticks)
 // the camera view is scanned for hostiles the player has never logged.
@@ -3442,7 +3444,8 @@ export class Game {
     wells.length = 0;
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
-      if (enemies[i].type === 'blackhole' && !enemies[i].dead) wells.push(enemies[i]);
+      const e = enemies[i];
+      if ((e.type === 'blackhole' || e.gravityWell) && !e.dead) wells.push(e); // vortexes + the Event Horizon
     }
     return wells;
   }
@@ -3454,7 +3457,6 @@ export class Game {
     const wells = this.gravityWells;
     p.gravityTug = 0;
     if (!wells || wells.length === 0) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     const thrust = Math.max(0, p.stats.moveSpeed) * SHIP_THRUST_PER_TICK;
     let ax = 0;
     let ay = 0;
@@ -3465,7 +3467,7 @@ export class Game {
       const dy = w.y - p.y;
       const d = Math.hypot(dx, dy);
       if (d < 1e-6) continue;
-      const a = playerPullShare(d, radius, w.radius) * thrust;
+      const a = playerPullShare(d, pullRadiusOf(w), w.radius) * thrust;
       ax += (dx / d) * a;
       ay += (dy / d) * a;
     }
@@ -3486,7 +3488,6 @@ export class Game {
     const wells = this.gravityWells;
     const strength = TUNING.blackholeBulletBend ?? 0.22;
     if (!wells || wells.length === 0 || strength <= 0) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     for (let i = 0; i < this.bullets.length; i++) {
       const b = this.bullets[i];
       let ax = 0;
@@ -3496,7 +3497,7 @@ export class Game {
         if (w.dead) continue;
         const dx = w.x - b.x;
         const dy = w.y - b.y;
-        const k = wellPullScale(dx, dy, radius, strength, w.radius);
+        const k = wellPullScale(dx, dy, pullRadiusOf(w), strength * (w.bendMult || 1), w.radius);
         ax += dx * k;
         ay += dy * k;
       }
@@ -3513,14 +3514,15 @@ export class Game {
   // Grid funnels and spiralling infall streams for every well (visual only).
   updateWellEffects() {
     const radius = TUNING.blackholePullRadius ?? 200;
-    const margin = Math.max(260, radius); // streams spawn up to 0.9 × pull radius from their well
+    const margin = Math.max(420, radius); // streams spawn up to 0.9 × pull radius from their well (the Event Horizon: 400)
     const onScreen = (x, y) => x > this.camX - margin && x < this.camX + this.width + margin &&
       y > this.camY - margin && y < this.camY + this.height + margin;
     for (let i = 0; i < this.gravityWells.length; i++) {
       const w = this.gravityWells[i];
       if (w.dead) continue;
-      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, radius, w.hue, 0.22);
-      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, radius * 0.9, w.hue, 1);
+      const r = pullRadiusOf(w);
+      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, r, w.hue, 0.22);
+      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, r * 0.9, w.hue, 1);
     }
     for (let i = 0; i < this.singularities.length; i++) {
       const sg = this.singularities[i];
@@ -4959,12 +4961,11 @@ export class Game {
         // Loose geoms drift into enemy black holes: kill the well to cash in the pile.
         const wells = this.gravityWells;
         if (wells && wells.length) {
-          const wellRadius = TUNING.blackholePullRadius ?? 200;
           const wellPull = TUNING.blackholePickupPull ?? 0.3;
           for (let w = 0; w < wells.length; w++) {
             const well = wells[w];
             if (well.dead) continue;
-            const k = wellPullScale(well.x - g.x, well.y - g.y, wellRadius, wellPull, well.radius * 0.6);
+            const k = wellPullScale(well.x - g.x, well.y - g.y, pullRadiusOf(well), wellPull, well.radius * 0.6);
             g.vx += (well.x - g.x) * k;
             g.vy += (well.y - g.y) * k;
           }
@@ -5977,7 +5978,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (e.type !== 'blackhole' || !inView(e.x, e.y, e.radius)) continue;
+      if ((e.type !== 'blackhole' && !e.gravityWell) || !inView(e.x, e.y, e.radius)) continue;
       ctx.moveTo(e.x + e.radius * 0.9, e.y);
       ctx.arc(e.x, e.y, e.radius * 0.9, 0, Math.PI * 2);
     }
@@ -6039,7 +6040,6 @@ export class Game {
   drawGravityTethers(ctx, p) {
     const wells = this.gravityWells;
     if (!wells || wells.length === 0 || !(p.gravityTug > 0)) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     ctx.save();
     ctx.setLineDash([4, 9]);
     ctx.lineDashOffset = -(this.elapsedTime || 0) * 40;
@@ -6048,7 +6048,7 @@ export class Game {
       const w = wells[i];
       if (w.dead) continue;
       const d = Math.hypot(w.x - p.x, w.y - p.y);
-      const f = playerPullShare(d, radius, w.radius);
+      const f = playerPullShare(d, pullRadiusOf(w), w.radius);
       if (f <= 0 || d < 1) continue;
       const ux = (w.x - p.x) / d;
       const uy = (w.y - p.y) / d;
