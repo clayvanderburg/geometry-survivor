@@ -28,9 +28,9 @@ export const META_UPGRADES = [
   { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
   // DEFENSE
-  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 2, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
+  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 1.5, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
   { id: 'armor', cat: 'defense', name: 'Ablative Plating', icon: '⬢', color: '#7fd4ff', stat: 'damage taken', per: -0.004, fmt: 'pct', maxRank: 30, baseCost: 18, growth: 1.14 },
-  { id: 'phase', cat: 'defense', name: 'Phase Buffer', icon: '◐', color: '#9d8cff', stat: 'invulnerability after a hit', per: 0.02, fmt: 'sec', maxRank: 15, baseCost: 22, growth: 1.18 },
+  { id: 'phase', cat: 'defense', name: 'Phase Buffer', icon: '◐', color: '#9d8cff', stat: 'invulnerability after a hit', per: 0.01, fmt: 'sec', maxRank: 15, baseCost: 22, growth: 1.18 },
   // MOBILITY
   { id: 'moveSpeed', cat: 'mobility', name: 'Vector Thrusters', icon: '➤', color: '#00ff88', stat: 'move speed', per: 0.008, fmt: 'pct', maxRank: 25, baseCost: 12, growth: 1.14 },
   { id: 'dash', cat: 'mobility', name: 'Blink Coils', icon: '⇢', color: '#5aa8ff', stat: 'dash cooldown', per: -0.01, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },

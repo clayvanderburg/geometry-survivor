@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.32.0',
+    date: '2026-10-19',
+    title: 'No More Ramming',
+    notes: [
+      { type: 'balance', text: 'After a hit you are untouchable for 0.4 s (was 0.65 s), so plowing through a pack hurts. Phase Buffer adds +0.01 s per rank (was +0.02 s).' },
+      { type: 'balance', text: 'Base shield 75 (was 85) and it recharges half as fast (0.6/s). Phase Nova Thrusters give +15 max shield and repair 30 (was +25 / 45). Aegis Shield Matrix +1.5 per rank (was +2).' },
+      { type: 'balance', text: 'Early waves hit a little softer, so a fresh pilot gets a fair start; by wave 20 enemies hit as hard as before.' },
+      { type: 'fix', text: 'The Field Guide now shows HARDCORE\'s real starting shield.' }
+    ]
+  },
+  {
     version: '0.31.2',
     date: '2026-10-19',
     title: 'Nothing Left Behind',

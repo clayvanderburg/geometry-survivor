@@ -38,7 +38,7 @@ export const DEFAULT_TUNING = {
   shieldHue: 222,
   shieldPadding: 0.38,
   shieldThickness: 1.0,
-  shieldRegenRate: 1.2,
+  shieldRegenRate: 0.6, // 1.2 before v0.32: a full bar back every minute made the ship feel untouchable
   dashCooldownBase: 1.5,
 
   // 3. Luck, Multi-Level Rolls & Chest Jackpots
@@ -203,7 +203,7 @@ export const DEFAULT_TUNING = {
   splitterPackPerWave: 0.4,
   splitterPackMax: 10,
   bossHpMult: 0.5,
-  damageRampBase: 0.6, // 0.5 before v0.29, 0.55 before v0.31
+  damageRampBase: 0.45, // 0.5 before v0.29, 0.55 before v0.31, 0.6 before v0.32 (gentler start, same late game)
   damageRampFrom: 10,
   damageRampPerWave: 0.07, // 0.04 before v0.29, 0.044 before v0.31
   damageRampSmooth: 12, // (10 before v0.31) waves over which the ramp eases in to its full per-wave rate
