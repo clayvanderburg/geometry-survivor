@@ -396,8 +396,8 @@ export const WEAPON_SCALING = {
   // Potential counts a scorch on flameHitShare targets: the cone always catches a pack and its burn is
   // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
   flameTickRate: (b) => 8 * rateMult(b.r.rate),
-  flameRange: (b) => 195 + 20 * (b?.r?.range || 0),
-  flameConeHalf: (b) => 0.3 + 0.045 * (b?.r?.cone || 0), // radians either side of the aim (~17 deg at LV 1)
+  flameRange: (b) => 254 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1
+  flameConeHalf: (b) => 0.3 + 0.09 * (b?.r?.cone || 0), // radians either side of the aim (~17 deg at LV 1); +0.045 per rank before v0.39.1
   flameBurnRank,
   flameEdgeFalloff: 0.35,
   flameBurnShare: 0.35, // its burn stacks tick at 35% of the usual FIRE DPS (burnStackDps)
