@@ -170,7 +170,8 @@ test('weapon pick reroll: 40 then 80 gold, fresh weapons first, off when nothing
 test('weapon pick reroll is off when every weapon left is already on offer', () => {
   const g = freshGame(ALL_BUT_BLASTER.slice(0, 4), 1000);
   withTuning({ ...odds(1), weaponSlots: 10 }, () => {
-    for (const id of ['orbitals', 'mines']) acquireWeapon(g.player, id);
+    // Own everything but three weapons (however many the game has), so the pick offers all that's left.
+    while (unownedWeapons(g.player).length > 3) acquireWeapon(g.player, unownedWeapons(g.player)[0].id ?? unownedWeapons(g.player)[0]);
     g.triggerLevelUp();
     g.selectUpgrade(g.currentChoices.findIndex((c) => c.isNewWeapon));
     assert.equal(unownedWeapons(g.player).length, 3);

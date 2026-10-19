@@ -65,6 +65,11 @@ export const WEAPONS = [
     id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
     color: '#38ffc8',
     summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst. Infuse them with an element (FIRE, FROST, CORROSIVE or SHOCK) from a level-up card.'
+  },
+  {
+    id: 'gas', name: 'Corrosive Gas Trail', hudName: 'Gas Trail', levelId: 'gas', levelKey: 'gas', category: 'AUTONOMOUS', tagSources: ['gas'],
+    color: '#5dff6e',
+    summary: 'Vents a trail of corrosive gas behind your ship. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
   }
 ];
 
