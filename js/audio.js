@@ -19,6 +19,8 @@ const sfxBusGain = () => VOLUME_REF.sfx * (TUNING.sfxVolume ?? 1);
 
 // Sixteenth steps of the boss-fight riff inside each bar.
 const BOSS_RIFF_STEPS = [0, 3, 6, 8, 11, 14];
+// Peak level of the looping Flamethrower roar into the SFX bus (one-shots sit around 0.2-0.5).
+const FLAME_ROAR_GAIN = 0.07;
 
 export const SFX_BASE = 'assets/sfx/';
 
@@ -528,6 +530,7 @@ export class SoundEngine {
 
   async dispose() {
     this.stopMusic();
+    this.stopFlameRoar();
     const ctx = this.ctx;
     this.ctx = null;
     if (this.decks) {
@@ -1753,6 +1756,85 @@ export class SoundEngine {
     band.connect(g);
     g.connect(this.sfxGain);
     noise.start(t, Math.random() * 0.7, 0.24);
+  }
+
+  // Flamethrower: one soft looping roar, faded in while the nozzles spray and out when they stop
+  // (level 0..1, called every frame; only touches the graph when the target changes). Low-passed noise
+  // for the body, a quiet band of hiss on top and a slow flutter, kept well under the one-shot SFX so a
+  // long spray never tires the ear. Built on the first spray; the looped source idles at zero gain.
+  setFlameRoar(level = 0) {
+    if (!this.ctx || !this.sfxGain) return;
+    const target = this.enabled && level > 0 ? FLAME_ROAR_GAIN * Math.min(1, level) : 0;
+    if (!this.flameRoar) {
+      if (!target) return;
+      const ctx = this.ctx;
+      const src = this.noiseSource();
+      src.loop = true;
+      const body = ctx.createBiquadFilter();
+      body.type = 'lowpass';
+      body.frequency.value = 420;
+      body.Q.value = 0.8;
+      const hiss = ctx.createBiquadFilter();
+      hiss.type = 'bandpass';
+      hiss.frequency.value = 1500;
+      hiss.Q.value = 1.1;
+      const hissGain = ctx.createGain();
+      hissGain.gain.value = 0.18;
+      const flutter = ctx.createGain();
+      flutter.gain.value = 1;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 6.5;
+      const lfoDepth = ctx.createGain();
+      lfoDepth.gain.value = 0.22;
+      const out = ctx.createGain();
+      out.gain.value = 0;
+      src.connect(body);
+      src.connect(hiss);
+      hiss.connect(hissGain);
+      body.connect(flutter);
+      hissGain.connect(flutter);
+      lfo.connect(lfoDepth);
+      lfoDepth.connect(flutter.gain);
+      flutter.connect(out);
+      out.connect(this.sfxGain);
+      src.start();
+      lfo.start();
+      this.flameRoar = { src, lfo, out, level: 0 };
+    }
+    const r = this.flameRoar;
+    if (Math.abs(r.level - target) < 1e-4) return;
+    r.level = target;
+    const t = this.ctx.currentTime;
+    r.out.gain.cancelScheduledValues(t);
+    r.out.gain.setTargetAtTime(target, t, target > 0 ? 0.07 : 0.14);
+  }
+
+  stopFlameRoar() {
+    const r = this.flameRoar;
+    this.flameRoar = null;
+    if (!r) return;
+    try { r.src.stop(); r.lfo.stop(); } catch (_e) {}
+    r.out.disconnect();
+  }
+
+  // Inferno Ring: a short rising whoosh of band-passed noise.
+  playFlameBurst() {
+    if (!this.enabled || !this.ctx || !this.claimVoice('flameBurst', 200, 1, 0.45)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(260, t);
+    band.frequency.exponentialRampToValueAtTime(1100, t + 0.32);
+    band.Q.value = 1.4;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.5, 0.45);
   }
 
   // Orbit blade contact: a short metallic grind tick (blades touch every tick, so heavily throttled).

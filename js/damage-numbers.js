@@ -19,6 +19,7 @@ export const DAMAGE_SOURCE_COLORS = {
   drone: '#c4ff4a',       // Escort drone bolts
   grenade: '#5effd0',     // Plasma Grenade blasts, bomblets and clouds
   gas: '#7dff6a',         // Corrosive Gas Trail ticks, pocket bursts and the shroud
+  flame: '#ffc23d',       // Flamethrower scorches, napalm puddles and the Inferno Ring
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   rocket: '#ffb347',      // Rocket Pods
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
