@@ -134,3 +134,14 @@ test('navRect: a button scrolled out of its panel sits on the panel edge, so it 
     globalThis.getComputedStyle = saved;
   }
 });
+
+test('up / down goes to the nearest row: an offset row between two lined-up buttons is never skipped', () => {
+  // Pause menu at 1280x720: RESUME, then TUTORIAL + FIELD GUIDE side by side, then a full-width PATCH NOTES.
+  const resume = { left: 43, top: 541, width: 365, height: 45 };
+  const tutorial = { left: 43, top: 594, width: 158, height: 35 };
+  const guide = { left: 209, top: 594, width: 199, height: 35 };
+  const notes = { left: 43, top: 637, width: 365, height: 38 };
+  assert.equal(pickInDirection(resume, [tutorial, guide, notes], 0, 1), 1, 'Down from RESUME: FIELD GUIDE, not PATCH NOTES');
+  assert.equal(pickInDirection(notes, [resume, tutorial, guide], 0, -1), 2, 'Up from PATCH NOTES: FIELD GUIDE, not RESUME');
+  assert.equal(pickInDirection(guide, [resume, tutorial, notes], 0, 1), 2);
+});

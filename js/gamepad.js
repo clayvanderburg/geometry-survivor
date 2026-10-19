@@ -33,14 +33,18 @@ export function readGamepad(prevButtons = []) {
 // win first, so a neighbour that is only a few pixels lower (a lifted focused card) never counts as
 // "down"; anything merely on that side is the fallback. A left / right move stays in its row first
 // (items overlapping it vertically), so two stacked rows of small pills (the leaderboard's MODE and
-// VERSION switches) never trade focus sideways. Returns an index or -1.
+// VERSION switches) never trade focus sideways. An up / down move goes to the nearest row in the cone
+// first, so a button lined up two rows away never skips an offset row in between (the pause menu's
+// TUTORIAL / FIELD GUIDE row between RESUME and PATCH NOTES). Returns an index or -1.
 export function pickInDirection(from, rects, dx, dy) {
   const fx = from.left + from.width / 2, fy = from.top + from.height / 2;
-  const sameRow = (r) => r.top < from.top + from.height && r.top + r.height > from.top;
-  const pick = (cone, row = false) => {
+  const overlapsRow = (r, of) => r.top < of.top + of.height && r.top + r.height > of.top;
+  const sameRow = (r) => overlapsRow(r, from);
+  const pick = (cone, row = false, band = null) => {
     let best = -1, bestScore = Infinity;
     rects.forEach((r, i) => {
       if (row && !sameRow(r)) return;
+      if (band && !overlapsRow(r, band)) return;
       const vx = r.left + r.width / 2 - fx, vy = r.top + r.height / 2 - fy;
       const along = vx * dx + vy * dy;
       if (along <= 1) return;
@@ -54,6 +58,17 @@ export function pickInDirection(from, rects, dx, dy) {
   const inRow = dy === 0 ? pick(true, true) : -1;
   if (inRow >= 0) return inRow;
   const inCone = pick(true);
+  if (inCone >= 0 && dx === 0) {
+    // The nearest row in the cone (by the gap along the move), then the best item in that row.
+    let near = null, nearAlong = Infinity;
+    rects.forEach((r) => {
+      const vx = r.left + r.width / 2 - fx, vy = r.top + r.height / 2 - fy;
+      const along = vy * dy;
+      if (along > 1 && Math.abs(vx) <= along * 3.7 && along < nearAlong) { nearAlong = along; near = r; }
+    });
+    const inBand = near ? pick(true, false, near) : -1;
+    if (inBand >= 0) return inBand;
+  }
   return inCone >= 0 ? inCone : pick(false);
 }
 

@@ -179,6 +179,22 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
       const got = await pauseFocus();
       if (got !== want) throw Error(`the d-pad should reach ${want}, got ${got}`);
     };
+    // Steers focus toward a button from wherever it is, one d-pad press at a time (the pause buttons wrap
+    // differently with the window size, so a fixed path would break when a button is added).
+    const steerTo = async (want, max = 6) => {
+      for (let k = 0; k < max && (await pauseFocus()) !== want; k++) {
+        const dir = await page.evaluate((id) => {
+          const a = document.querySelector('#pause-modal .gp-focus').getBoundingClientRect();
+          const b = document.getElementById(id).getBoundingClientRect();
+          const dy = (b.top + b.height / 2) - (a.top + a.height / 2), dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+          const sameRow = b.top < a.bottom && b.bottom > a.top;
+          return sameRow ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+        }, want);
+        await press({ right: RIGHT, left: LEFT, down: DOWN, up: UP }[dir]);
+      }
+      const got = await pauseFocus();
+      if (got !== want) throw Error(`the d-pad should reach ${want}, got ${got}`);
+    };
     await press(START);
     await expect('PAUSED', 'Start pauses');
     await page.waitForTimeout(400);
@@ -241,13 +257,13 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     await press(B);
     await expect('PLAYING', 'B resumes after discarding');
 
-    // Field Guide from pause: Down (and Left) from Resume reaches its button, A opens it, RB switches tabs, the d-pad
+    // Field Guide from pause: Down (and sideways) from Resume reaches its button, A opens it, RB switches tabs, the d-pad
     // walks focus into the entries (scrolling the list), B backs out to the pause menu.
     await press(START);
     await expect('PAUSED', 'Start pauses for the guide');
     await page.waitForTimeout(400);
     await press(DOWN);
-    await walkTo('btn-pause-guide', LEFT, 2); // Down from Resume lands on the Field Guide / Patch Notes row
+    await steerTo('btn-pause-guide'); // Down from Resume lands in the Tutorial / Field Guide / Patch Notes block
     await press(A);
     if (!(await page.evaluate(() => __game.guideOpen && !document.getElementById('guide-modal').classList.contains('hidden')))) throw Error('A should open the Field Guide');
     await page.waitForTimeout(400);
@@ -265,14 +281,14 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     await press(B);
     await expect('PLAYING', 'B resumes after the guide');
 
-    // Patch notes from pause: Down (and Right) from Resume reaches PATCH NOTES (wearing its NEW badge), A opens them with the
+    // Patch notes from pause: Down (and a step or two more) from Resume reaches PATCH NOTES (wearing its NEW badge), A opens them with the
     // newest version expanded, the d-pad walks into the list, A on an older version expands it, B backs out.
     await press(START);
     await expect('PAUSED', 'Start pauses for the patch notes');
     await page.waitForTimeout(400);
     if (await page.evaluate(() => document.querySelector('#btn-pause-notes [data-notes-badge]').classList.contains('hidden'))) throw Error('PATCH NOTES should wear a NEW badge before they are read');
     await press(DOWN);
-    await walkTo('btn-pause-notes', RIGHT, 2);
+    await steerTo('btn-pause-notes');
     await press(A);
     const opened = await page.evaluate(() => ({
       open: __game.notesOpen && !document.getElementById('notes-modal').classList.contains('hidden'),
