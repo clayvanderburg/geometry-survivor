@@ -622,3 +622,52 @@ test('the Conductor links hostiles, is shielded while four links hold, and plays
   step(m, g.player, Math.ceil(COND.crescendoEvery * 60) + 2);
   assert.ok(c.enraged && m.enemyBullets.count > 0, 'linked hulls fire orbs');
 });
+
+test('lancers plant, telegraph a locking line, then sweep a beam that burns the ship', async () => {
+  resetTuning();
+  const { LANCE } = await import('../js/lancers.js');
+  const g = campaignGame({ wave: 27 });
+  const m = g.enemyManager;
+  g.player.invuln = 0;
+  m.queueSpawn('lancer', g.player.x - 300, g.player.y, 1, { instant: true });
+  step(m, g.player, 2);
+  const l = m.enemies.find(e => e.type === 'lancer');
+  l.lanceT = 0;
+  const seen = new Set();
+  let burned = false;
+  const shield = g.player.hp;
+  for (let i = 0; i < 60 * 4; i++) {
+    g.update(1 / 60);
+    seen.add(l.lanceState);
+    if (g.player.hp < shield) { burned = true; break; }
+  }
+  assert.ok(seen.has('aim'), 'aims first');
+  assert.ok(burned, 'the beam burns a ship that stands still');
+  assert.ok(LANCE.lockAt < LANCE.aimTime);
+});
+
+test('Eclipse Twins: a tethered pair; kill one and the other enrages, and its twin revives unless it dies in time', async () => {
+  resetTuning();
+  const { TWINS } = await import('../js/bosses.js');
+  const g = campaignGame({ wave: 27 });
+  const m = g.enemyManager;
+  m.queueSpawn('eclipse_twins', 2300, 2000, waveScaleAt(27), { instant: true, wave: 27 });
+  step(m, g.player, 5);
+  m.bossArrivals.length = 0;
+  const twins = () => m.enemies.filter(e => e.type === 'eclipse_twins');
+  assert.equal(twins().length, 2);
+  const sol = twins().find(e => e.twinRole === 'sol');
+  const luna = twins().find(e => e.twinRole === 'luna');
+  step(m, g.player, 2);
+  assert.ok(sol.beam && Math.hypot(sol.beam.x2 - luna.x, sol.beam.y2 - luna.y) < 10, 'SOL carries a tether to LUNA');
+  g.killEnemy(luna);
+  assert.equal(g.chests.length, 0, 'no payout for the first twin');
+  assert.ok(sol.reviveT > 0, 'the revive clock starts');
+  step(m, g.player, Math.ceil(TWINS.reviveTime * 60) + 3);
+  const back = twins().find(e => e.twinRole === 'luna');
+  assert.ok(back, 'LUNA returns');
+  assert.ok(Math.abs(back.hp - back.maxHp * TWINS.reviveHp) < back.maxHp * 0.05, 'at half HP');
+  g.killEnemy(back);
+  g.killEnemy(sol);
+  assert.equal(g.chests.length, 1, 'both down: one payout');
+});

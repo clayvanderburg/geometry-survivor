@@ -12,6 +12,7 @@ import { TUNING } from './config.js';
 import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 import { launchDrones, traceCell } from './hostiles.js';
+import { lanceCycle, drawLanceAim, drawBeam } from './lancers.js';
 
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
@@ -963,6 +964,130 @@ function callChoir(e, m, arrival) {
   });
 }
 
+// --- ECLIPSE TWINS (wave 27, minor) ---------------------------------------------------------
+// SOL and LUNA circle a point that trails after you, roughly opposite each other, joined by a burning
+// tether. The angle between them breathes, so the tether sweeps back and forth across the ring: stay off
+// its line. Kill one and the survivor enrages (faster, firing lancer beams), and if it is not finished
+// within REVIVE seconds its twin returns at half HP. Beaten (and paid out) when both are down together.
+export const TWINS = {
+  orbitR: 260, spin: 0.55, rageSpin: 0.95, sweep: 0.9, sweepRate: 0.8, centerSpeed: 1.6, speed: 4,
+  hpScale: 0.6, reviveTime: 10, reviveHp: 0.5, tetherWidth: 6, rageLanceCooldown: 2.2
+};
+
+function twinsOf(e, m) {
+  const out = [];
+  for (const o of m.enemies) if (o.type === 'eclipse_twins' && o.root === e.root && !o.dead) out.push(o);
+  return out;
+}
+
+function spawnTwin(m, root, role, x, y, hp) {
+  return m.queueSpawn('eclipse_twins', x, y, 1, {
+    instant: true, wave: root.bossWave,
+    attach: { root, splitChild: true, twinRole: role, hp, maxHp: root.maxHp, hue: role === 'luna' ? 275 : 48, name: role === 'luna' ? 'LUNA' : 'SOL' }
+  });
+}
+
+const eclipseTwins = {
+  name: 'ECLIPSE TWINS', epithet: 'SOL AND LUNA', tier: 'minor', hue: 48, debut: ['lancer'],
+  hpScale: TWINS.hpScale,
+  stats: () => ({ speed: TWINS.speed, radius: 26, sides: 8, vRot: 0 }),
+  onArrive(e, m) {
+    e.root = e;
+    e.twinRole = 'sol';
+    e.name = 'SOL';
+    e.orbitTheta = Math.random() * Math.PI * 2;
+    e.clock = 0;
+    e.centerX = e.x;
+    e.centerY = e.y;
+    spawnTwin(m, e, 'luna', e.x + 60, e.y, e.maxHp);
+  },
+  isFinalPiece(e, m) {
+    return twinsOf(e, m).length === 0; // its twin is already down
+  },
+  update(e, m, env) {
+    const { dt, player } = env;
+    const root = e.root || e;
+    const pair = twinsOf(e, m);
+    const partner = pair.find(o => o !== e) || null;
+    const lead = !partner || e.twinRole === 'sol';
+    if (lead) {
+      // The leader keeps the shared clock: the ring's spin and the point it circles.
+      root.clock = (root.clock || 0) + dt;
+      root.orbitTheta = (root.orbitTheta || 0) + (partner ? TWINS.spin : TWINS.rageSpin) * dt;
+      const cx = root.centerX ?? e.x;
+      const cy = root.centerY ?? e.y;
+      const dx = player.x - cx;
+      const dy = player.y - cy;
+      const d = Math.hypot(dx, dy) || 1;
+      const step = Math.min(d, TWINS.centerSpeed);
+      root.centerX = cx + (dx / d) * step;
+      root.centerY = cy + (dy / d) * step;
+    }
+    const delta = Math.sin((root.clock || 0) * TWINS.sweepRate) * TWINS.sweep;
+    const a = (root.orbitTheta || 0) + (e.twinRole === 'luna' ? Math.PI + delta : 0);
+    const tx = (root.centerX ?? player.x) + Math.cos(a) * TWINS.orbitR;
+    const ty = (root.centerY ?? player.y) + Math.sin(a) * TWINS.orbitR;
+    const holding = !partner && lanceCycle(e, env, { cooldown: TWINS.rageLanceCooldown });
+    e.vx = (tx - e.x) * (holding ? 0.02 : 0.08);
+    e.vy = (ty - e.y) * (holding ? 0.02 : 0.08);
+    e.rotation += (partner ? 1 : 2.5) * dt;
+    if (partner) {
+      e.lanceState = 'idle';
+      // SOL carries the tether to LUNA.
+      e.beam = e.twinRole === 'sol' ? { x1: e.x, y1: e.y, x2: partner.x, y2: partner.y, width: TWINS.tetherWidth } : null;
+      e.reviveT = 0;
+      return;
+    }
+    if (!holding && e.lanceState !== 'fire') e.beam = null;
+    if (e.reviveT > 0) {
+      e.reviveT -= dt;
+      if (e.reviveT <= 0) {
+        // Too slow: the fallen twin returns at half HP.
+        const role = e.twinRole === 'sol' ? 'luna' : 'sol';
+        spawnTwin(m, root, role, e.x + 50, e.y, root.maxHp * TWINS.reviveHp);
+        env.particles?.spawnShockwave?.(e.x, e.y, 220, role === 'luna' ? 275 : 48, 5, 0.45);
+      }
+    }
+  },
+  trace(ctx, e, r) {
+    if (e.twinRole === 'luna') {
+      // A crescent moon.
+      ctx.moveTo(r, 0);
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.moveTo(r * 0.55 + r * 0.8, 0);
+      ctx.arc(r * 0.55, 0, r * 0.8, 0, Math.PI * 2);
+      return;
+    }
+    // A sun: a disc with eight corona spikes.
+    ctx.moveTo(r * 0.7, 0);
+    ctx.arc(0, 0, r * 0.7, 0, Math.PI * 2);
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      ctx.moveTo(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85);
+      ctx.lineTo(Math.cos(a + 0.2) * r * 1.3, Math.sin(a + 0.2) * r * 1.3);
+    }
+  },
+  overlay(ctx, e, r) {
+    if (e.beam) drawBeam(ctx, e.beam, e.lanceState === 'fire' ? e.hue : 320);
+    drawLanceAim(ctx, e);
+    if (e.reviveT > 0) {
+      // Revive countdown: a ring that closes as the fallen twin's return nears.
+      ctx.strokeStyle = `hsla(${e.twinRole === 'sol' ? 275 : 48}, 100%, 70%, 0.8)`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r * 1.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.reviveT / TWINS.reviveTime));
+      ctx.stroke();
+    }
+  },
+  onDeath(e, m) {
+    for (const o of twinsOf(e, m)) {
+      if (o === e) continue;
+      o.reviveT = TWINS.reviveTime; // finish it before its twin comes back
+      o.beam = null;
+    }
+  }
+};
+
 // --- Boss parts: hulls mounted on a boss (Hive Carrier bays). They ride a fixed spot on its hull,
 // have their own HP and AI, and pop when the boss dies.
 export const PART_STATS = {
@@ -1024,7 +1149,8 @@ export const BOSS_DEFS = {
   event_horizon: eventHorizon,
   architect,
   progenitor,
-  conductor
+  conductor,
+  eclipse_twins: eclipseTwins
 };
 
 export const isBossKind = (type) => Object.hasOwn(BOSS_DEFS, type);

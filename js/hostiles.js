@@ -9,12 +9,14 @@
 //   GATE    — two pylons and a beam (js/gates.js): fly through the beam to detonate it, shoot the hub to break it.
 //   MITOSIS — a cell that slowly grows and, at full size, splits in two. Kill it early.
 //   REPULSOR — a field that shoves your bullets away, guarding itself and whatever stands inside it.
+//   LANCER  — plants itself, telegraphs a line, then fires a sweeping beam (js/lancers.js).
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
 import { SERPENT, windToward } from './serpents.js';
 import { KESTREL, updateKestrel, traceKestrel } from './squadrons.js';
 import { turnToward } from './serpents.js';
 import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
+import { LANCE, lanceCycle, traceLancer, drawLanceAim, drawBeam } from './lancers.js';
 
 export const CARRIER = { range: 430, band: 70, launchEvery: 3.2, launch: 2, maxDrones: 6 };
 export const DRONE = { speed: 4.3, turnRate: 2.6, life: 7, launchKick: 3.5 };
@@ -35,6 +37,7 @@ export const HOSTILE_INFO = {
   carrier: { label: 'CARRIER', unlockWave: unlockWaveOf('carrier'), intro: 'HANGS BACK AND LAUNCHES HOMING DRONES — CHASE IT DOWN OR OUTRUN THE DRONES' },
   gate: { label: 'LASER GATE', unlockWave: unlockWaveOf('gate'), intro: 'FLY THROUGH THE BEAM TO DETONATE IT · THE PYLONS HURT — LURE A CROWD CLOSE FIRST' },
   repulsor: { label: 'REPULSOR', unlockWave: unlockWaveOf('repulsor'), intro: 'ITS FIELD SHOVES BULLETS AWAY · USE AREA DAMAGE, ARCS, MISSILES OR A DASH NOVA' },
+  lancer: { label: 'LANCER', unlockWave: unlockWaveOf('lancer'), intro: 'AIMS A LINE, LOCKS (RED), THEN SWEEPS A BEAM — STEP OFF THE LINE, NOT ALONG IT' },
   mitosis: { label: 'MITOSIS CELL', unlockWave: unlockWaveOf('mitosis'), intro: 'GROWS, THEN SPLITS IN TWO · KILL IT WHILE IT IS SMALL' },
   drone: { label: 'DRONE', unlockWave: unlockWaveOf('drone'), intro: 'HOMING KAMIKAZE FROM A CARRIER · BURNS OUT AFTER A FEW SECONDS — KEEP MOVING' }
 };
@@ -101,6 +104,13 @@ export function hostileKindStats(type, waveScale) {
         radius: 15, sides: 6, hue: 205, // Field azure
         score: 130, xp: 6, vRot: 0.04
       };
+    case 'lancer':
+      return {
+        hp: 40 * waveScale, maxHp: 40 * waveScale,
+        speed: 1.9 + Math.min(0.8, waveScale * 0.05),
+        radius: 13, sides: 4, hue: 0, // Beam red
+        score: 120, xp: 5, vRot: 0
+      };
     case 'drone':
       return {
         hp: 6 * waveScale, maxHp: 6 * waveScale,
@@ -114,7 +124,7 @@ export function hostileKindStats(type, waveScale) {
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2, mitosis: 1, repulsor: 2 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2, mitosis: 1, repulsor: 2, lancer: 1 };
 
 // Fast movers that leave a neon ribbon.
 export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel', 'drone']);
@@ -211,6 +221,21 @@ function updateMitosis(e, m, env) {
   });
 }
 
+// Closes to lance range and plants itself to aim and fire; strafes while it waits.
+function updateLancer(e, m, env) {
+  const { dirX, dirY, dist } = env;
+  if (lanceCycle(e, env)) {
+    e.vx *= 0.85;
+    e.vy *= 0.85;
+    e.rotation = e.lanceAngle;
+    return;
+  }
+  const radial = dist > LANCE.range + LANCE.band ? 0.22 : dist < LANCE.range - LANCE.band ? -0.18 : 0;
+  e.vx = (e.vx + (radial > 0 ? env.moveX : dirX) * radial - dirY * e.strafeSign * 0.08 + env.sepX) * 0.9;
+  e.vy = (e.vy + (radial > 0 ? env.moveY : dirY) * radial + dirX * e.strafeSign * 0.08 + env.sepY) * 0.9;
+  e.rotation = Math.atan2(dirY, dirX);
+}
+
 // Escorts the pack at mid range (its field is a shield for whatever stands in it).
 function updateRepulsor(e, m, env) {
   const { dirX, dirY, dist } = env;
@@ -239,7 +264,7 @@ function updateDrone(e, m, env) {
   e.rotation = Math.atan2(e.vy, e.vx);
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate, mitosis: updateMitosis, repulsor: updateRepulsor };
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate, mitosis: updateMitosis, repulsor: updateRepulsor, lancer: updateLancer };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {
@@ -283,6 +308,8 @@ export function traceHostileKind(ctx, e, r) {
     ctx.arc(r * 0.6, 0, r * 0.15, 0, Math.PI * 2);
   } else if (e.type === 'gate') {
     traceGate(ctx, e, r);
+  } else if (e.type === 'lancer') {
+    traceLancer(ctx, r);
   } else if (e.type === 'repulsor') {
     polygon(ctx, 6, r, 0);
     for (let k = 0; k < 3; k++) {
@@ -314,6 +341,11 @@ export function traceHostileKind(ctx, e, r) {
 
 // Post-hit HP ring for the hulk, so "this one takes a while" reads.
 export function drawHostileOverlay(ctx, e, r) {
+  if (e.type === 'lancer') {
+    drawLanceAim(ctx, e);
+    if (e.beam) drawBeam(ctx, e.beam, e.hue);
+    return;
+  }
   if (e.type === 'repulsor') {
     // The field: a rippling dashed bubble that flares when it turns a shot and dims as it drains;
     // overloaded, only a sputtering stub of it shows.

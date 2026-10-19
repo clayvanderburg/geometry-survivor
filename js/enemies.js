@@ -451,6 +451,7 @@ export class EnemyManager {
           tier: c.tier || 1, // veteran form of the core swarm (js/wave-plan.js)
           bossTier: c.bossTier || null,
           bossWave: c.bossWave || 0,
+          beam: null, // a live beam (lancers, twin tethers): { x1, y1, x2, y2, width }; Game checks the ship against it
           mount: null, // boss parts (Hive Carrier bays): the boss whose hull they ride
           leader: null, // serpent body segments: the hull ahead in the chain (js/serpents.js)
           deflect: false, // true: shots are blocked but do no damage (serpent bodies)
@@ -787,6 +788,7 @@ export class EnemyManager {
         : e.type === 'conduit' ? 250
         : e.type === 'gate' ? 110
         : e.type === 'repulsor' ? 140
+        : e.beam || e.lanceState === 'aim' ? 600
         : e.type === 'bruiser' && e.state === 'windup' ? 300
         : e.type === 'blinker' && e.state === 'telegraph' ? 280
         : e.type === 'gunner' && e.state === 'aim' ? 190

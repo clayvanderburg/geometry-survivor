@@ -11,6 +11,7 @@ import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
 import { spawnWing } from './squadrons.js';
 import { GATE, gatePylons, beamDistance } from './gates.js';
+import { LANCE, beamGap } from './lancers.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -178,7 +179,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -5010,6 +5011,11 @@ export class Game {
 
     for (const e of range ? [] : [...enemies].reverse()) { // range dummies never touch the ship
       if (e.dead) continue;
+      if (e.beam && p.invuln <= 0 && beamGap(e.beam, p.x, p.y) < p.radius + e.beam.width * 0.5) {
+        // A live beam (lancer sweep, twin tether) burns the ship like an orb hit.
+        this.damagePlayer((TUNING.enemyBulletDamage ?? 12) * LANCE.damageMult * damageRampAt(this.wave), undefined, enemyKind(e));
+        if (this.endRunIfDead()) return;
+      }
       if (e.type === 'gate') {
         if (this.gateContact(e, p)) return;
         continue;

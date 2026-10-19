@@ -441,6 +441,35 @@ const SCENES = {
     },
     noContactKill: true
   },
+  lancer: {
+    w: 640, loop: 9,
+    setup(s) { s.home(0.75, 0.5); s.spawn('lancer', s.W * 0.2, s.H * 0.5); },
+    onSpawn(s, e) { if (e.type === 'lancer') e.lanceT = 0.6; },
+    tick(s) {
+      const l = s.find('lancer');
+      // Sidestep the locked line.
+      if (l && l.lanceState === 'aim' && l.lanceT < 0.3) s.player.y += (s.player.y < s.H * 0.5 ? -1 : 1) * 3;
+      else s.player.y += (s.H * 0.5 - s.player.y) * 0.02;
+      if (!l || l.lanceState !== 'aim') s.autoFire(0.25);
+      if (s.count('lancer') === 0 && s.every(1)) s.spawn('lancer', s.W * 0.15, s.H * 0.5);
+    }
+  },
+  eclipse_twins: {
+    w: 900, loop: 14,
+    setup(s) {
+      s.home(0.5, 0.5);
+      s.manager.queueSpawn('eclipse_twins', s.W * 0.2, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
+    },
+    tick(s) {
+      s.kite(s.W * 0.5, s.H * 0.5, 70, 0.8);
+      if (s.t > 1.4) s.autoFire(0.12, e => e.isBoss);
+      // Down one twin so the survivor's rage and revive ring show.
+      if (s.t > 7 && s.every(20)) { const t = s.manager.enemies.find(e => e.twinRole === 'luna'); if (t) s.kill(t); }
+      s.bossEntrance();
+    },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
+    noContactKill: true
+  },
   boss: {
     w: 640, loop: 11,
     setup(s) {
@@ -785,7 +814,7 @@ const SILHOUETTE = {
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
   carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
   gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300],
-  repulsor: ['repulsor', 160], conductor: ['conductor', 280]
+  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], eclipse_twins: ['eclipse_twins', 220]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {
