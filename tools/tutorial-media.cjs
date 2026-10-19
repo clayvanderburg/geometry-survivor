@@ -103,8 +103,8 @@ const CLIPS = {
       g.applyLiveTuning('FORCE_LEVELUP');
     }
   },
-  // A boss warping in next to the ship in open space (the end of its warning, the arrival), then
-  // closing in while the ship holds its ground and shoots it.
+  // The wave-3 Brood Queen warping in next to the ship in open space (the end of its warning, the
+  // arrival with her swarmer ring), then closing in while the ship holds its ground and shoots.
   boss: {
     frames: 50, every: 5, zoom: 1.35, warmup: 120, hud: true,
     hudKeep: '#boss-hud',
@@ -121,12 +121,15 @@ const CLIPS = {
       g.camX = p.x - g.width / 2;
       g.camY = p.y - g.height / 2;
       g.wave = 3;
-      g.queueBossEncounter({ x: p.x + 270, y: p.y - 20, onScreen: true }, g.getWaveScale(), 'WAVE 3 WARDEN');
+      g.enemyManager.wave = 3;
+      g.spawnCooldown = 999;
+      g.queueBossEncounter({ x: p.x + 300, y: p.y - 20, onScreen: true }, g.getWaveScale(), { id: 'brood_queen', wave: 3 });
     },
     tick: (g, p) => {
       g.keys = {};
       p.vx = p.vy = 0;
-      const boss = g.enemyManager.enemies.find(e => e.type === 'boss' && !e.dead);
+      g.spawnCooldown = 999;
+      const boss = g.enemyManager.enemies.find(e => e.isBoss && !e.dead);
       if (boss) { g.mouse.x = boss.x - g.camX; g.mouse.y = boss.y - g.camY; }
     }
   },

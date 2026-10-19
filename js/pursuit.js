@@ -31,8 +31,21 @@ export function eliteMiningDps(tuning = TUNING) {
   return Math.max(0, (tuning.miningSpeed ?? 75) * (tuning.eliteMiningMult ?? 1));
 }
 
+// Rock-miners: elites, plus serpent heads (their bodies glide over rock behind them).
+export const minesRock = (e) => isElite(e) || (e?.type === 'serpent' && !e.leader);
+
+// This enemy's drill DPS: the elite base, × bossMiningMult for bosses (they bust right through) and
+// × serpentMiningMult for serpent heads.
+export function miningDpsFor(e, tuning = TUNING) {
+  const base = eliteMiningDps(tuning);
+  if (!(base > 0) || !minesRock(e)) return 0;
+  if (e.isBoss) return base * (tuning.bossMiningMult ?? 4);
+  if (!e.isLieutenant) return base * (tuning.serpentMiningMult ?? 2);
+  return base;
+}
+
 // True when this enemy goes through rock instead of round it.
-export const plowsThroughRock = (e, tuning = TUNING) => isElite(e) && eliteMiningDps(tuning) > 0;
+export const plowsThroughRock = (e, tuning = TUNING) => miningDpsFor(e, tuning) > 0;
 
 // Writes the steering direction into `out` ({ x, y }, unit length): straight at the ship, or along a
 // blocking rock's tangent. `probe` says whether this tick re-checks the look-ahead.

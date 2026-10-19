@@ -72,7 +72,8 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   assert.equal(calls.warnings, 1);
   assert.equal(g.getBossStage(), 1);
   const warning = g.getBossHudModel().warning;
-  assert.equal(warning.epithet, 'WAVE 3 WARDEN');
+  assert.equal(warning.name, 'BROOD QUEEN', 'wave 3 is the Brood Queen (js/wave-plan.js)');
+  assert.equal(warning.epithet, 'MOTHER OF THE SWARM');
   assert.ok(Math.abs(warning.eta - (TUNING.bossWarningTime - 1 / 60)) < 1e-9);
 
   let ticks = 1;
@@ -82,13 +83,15 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   assert.equal(calls.music.at(-2).boss, 1, 'music drops into the warning stage while the boss is inbound');
 
   const [boss] = liveBosses(g);
-  assert.equal(boss.name, 'PRISMATIC DREADNOUGHT');
-  assert.equal(boss.epithet, 'WAVE 3 WARDEN');
-  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult * TUNING.enemyHpMult, 'presentation does not change boss stats');
+  assert.equal(boss.type, 'brood_queen');
+  assert.equal(boss.name, 'BROOD QUEEN');
+  assert.equal(boss.bossTier, 'minor');
+  assert.equal(boss.maxHp, 650 * g.getWaveScale() * TUNING.bossHpMult * TUNING.enemyHpMult, 'a minor boss keeps the Dreadnought HP formula');
   assert.equal(calls.arrivals, 1);
   assert.deepEqual(g.enemyManager.bossArrivals, [], 'arrivals are drained once staged');
   assert.equal(g.bossCard.kind, 'arrival');
   assert.equal(g.bossCard.detail, `${Math.round(boss.maxHp).toLocaleString()} HP · ${Math.round(contactDamageAt(boss, 3))} CONTACT DMG`);
+  assert.equal(g.bossCard.kicker, '⚠ BOSS ENCOUNTER ⚠');
   assert.ok(g.shake <= 24, 'arrival shake stays within the existing cap');
   assert.equal(g.getBossStage(), 2);
   assert.equal(g.getBossHudModel().warning, null);
@@ -122,14 +125,24 @@ test('sandbox +Boss runs the same warning event, and reports when the cap blocks
   g.applyLiveTuning('SPAWN_BOSS');
   const [warning] = bossWarnings(g);
   assert.ok(warning, 'sandbox boss starts in the warning phase');
-  assert.equal(warning.config.epithet, 'WAVE 4 SANDBOX SIMULACRUM');
+  assert.equal(warning.config.name, 'BROOD QUEEN', 'the first press brings the first named boss');
   assert.equal(warning.timer, TUNING.bossWarningTime);
   assert.equal(calls.warnings, 1);
   assert.equal(banners.length, 0);
+  // Each press cycles to the next boss and wraps round to the first.
+  const names = [];
+  for (let i = 0; i < 12 && names.at(-1) !== 'BROOD QUEEN'; i++) {
+    g.enemyManager.spawnIndicators.length = 0;
+    g.applyLiveTuning('SPAWN_BOSS');
+    names.push(bossWarnings(g)[0].config.name);
+  }
+  assert.equal(names.at(-1), 'BROOD QUEEN');
+  assert.equal(names.length, 10, 'all ten bosses, then round again');
+  const warned = calls.warnings;
 
   g.enemyManager.enemies = Array.from({ length: g.enemyManager.maxEnemies }, () => ({ type: 'swarmer' }));
   g.applyLiveTuning('SPAWN_BOSS');
-  assert.equal(calls.warnings, 1);
+  assert.equal(calls.warnings, warned);
   assert.ok(banners[0].includes('ENEMY CAP REACHED'));
 });
 
@@ -203,7 +216,7 @@ test('boss defeat triggers a fixed-tick hit-stop then half-speed slow-mo and a r
 
   assert.equal(calls.defeats, 1);
   assert.equal(g.bossCard.kind, 'defeat');
-  assert.equal(g.bossCard.detail, '+1,500 PTS · SUPER RELIC CACHE · +1 BOMB');
+  assert.equal(g.bossCard.detail, '+1,500 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES · +1 BOMB');
   assert.equal(g.player.bombs, 3, 'existing boss rewards are unchanged');
   assert.equal(g.chests.length, 1);
   assert.equal(g.hitStopTicks, 6);
@@ -239,7 +252,7 @@ test('a full bomb stock is not advertised as a bomb reward', () => {
   g.enemyManager.enemies.push(boss);
   g.multiplier = 2;
   g.killEnemy(boss);
-  assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER RELIC CACHE');
+  assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES');
 });
 
 test('boss epithets climb with each three-wave encounter', () => {

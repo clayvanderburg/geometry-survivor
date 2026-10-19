@@ -315,6 +315,7 @@ test('Rocket Pods fire about once a second at LV 1; their cards add rockets and 
   const g = freshGame();
   fill(g.player, ['rockets']);
   g.player.invuln = 1e9;
+  g.triggerLevelUp = () => {}; // kills must not pause the run on a level-up card mid-count
   g.rocketTimer = 0;
   let volleys = 0;
   const fire = g.fireWingRockets.bind(g);

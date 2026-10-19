@@ -3,7 +3,15 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
-import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, packSize, LIGHT_ENEMY_TYPES } from './enemies.js';
+import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
+import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
+import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from './wave-plan.js';
+import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
+import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
+import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
+import { spawnWing } from './squadrons.js';
+import { GATE, gatePylons, beamDistance } from './gates.js';
+import { LANCE, beamGap } from './lancers.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
@@ -40,7 +48,7 @@ import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.
 import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
-  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, pickWavePack, lieutenantTypes
+  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
 import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
@@ -170,8 +178,13 @@ const KNOCKBACK_MAX = 4;
 const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
-  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit'
+  SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer'
 };
+// Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
+const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
+// Pull radius of a gravity well: its own (the Event Horizon's) or the vortex tuning.
+const pullRadiusOf = (w) => w.pullRadius ?? (TUNING.blackholePullRadius ?? 200);
 
 // Field Guide: how long the in-run "FIELD GUIDE UPDATED" toast stays up, and how often (fixed ticks)
 // the camera view is scanned for hostiles the player has never logged.
@@ -1075,9 +1088,11 @@ export class Game {
         this.renderHubUI();
         this.particles.spawnFloatText(p.x, p.y - 24, '+50 ❖ SANDBOX CORES!', '#d68fff', 15);
       } else if (sandboxAction === 'SPAWN_BOSS') {
-        // Same warning -> entrance event as a scheduled boss.
+        // Same warning -> entrance event as a scheduled boss; each press cycles to the next boss.
+        const roster = Object.keys(BOSS_DEFS);
+        const id = roster[(this.sandboxBossIndex = ((this.sandboxBossIndex ?? -1) + 1) % roster.length)];
         const bp = this.spawnPointOnscreen(40);
-        if (!this.queueBossEncounter(bp, this.getWaveScale(), `WAVE ${this.wave} SANDBOX SIMULACRUM`)) {
+        if (!this.queueBossEncounter(bp, this.getWaveScale(), { id, wave: this.wave, epithet: id === 'boss' ? `WAVE ${this.wave} SANDBOX SIMULACRUM` : '' })) {
           this.showBanner('⚠ ENEMY CAP REACHED — BOSS NOT SPAWNED ⚠');
         }
       } else if (sandboxAction === 'SPAWN_BLACKHOLE') {
@@ -1090,8 +1105,14 @@ export class Game {
       } else if (SANDBOX_ARCHETYPES[sandboxAction]) {
         const type = SANDBOX_ARCHETYPES[sandboxAction];
         const bp = this.spawnPointOnscreen(30);
-        if (!this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(), this.placedSpawn(bp))) {
-          this.showBanner(`⚠ ENEMY CAP REACHED — ${ARCHETYPE_INFO[type].label} NOT SPAWNED ⚠`);
+        const angle = Math.atan2(p.y - bp.y, p.x - bp.x);
+        const ok = type === 'serpent'
+          ? spawnSerpent(this.enemyManager, 'serpent', bp.x, bp.y, this.getWaveScale(type), SERPENT.segments, { angle, extra: this.placedSpawn(bp) })
+          : type === 'kestrel'
+            ? spawnWing(this.enemyManager, bp.x, bp.y, this.getWaveScale(type), 2, { angle, extra: this.placedSpawn(bp) }).length > 0
+            : this.enemyManager.queueSpawn(type, bp.x, bp.y, this.getWaveScale(type), this.placedSpawn(bp));
+        if (!ok) {
+          this.showBanner(`⚠ ENEMY CAP REACHED — ${INTEL_INFO[type].label} NOT SPAWNED ⚠`);
         }
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
@@ -1907,10 +1928,10 @@ export class Game {
 
     const enemies = this.enemyManager.enemies;
     for (const e of [...enemies].reverse()) {
-      if (e.dead) continue;
+      if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
-      // Bosses and lieutenants survive a supernova: it strips 40% of their max HP instead.
-      if (e.isBoss || e.isLieutenant) {
+      // Bosses, their mounted parts and lieutenants survive a supernova: it strips 40% of their max HP instead.
+      if (e.isBoss || e.isLieutenant || e.mount) {
         const dmg = e.maxHp * 0.4;
         this.runStats?.damage('supernova', Math.min(dmg, Math.max(0, e.hp)));
         e.hp -= dmg;
@@ -1962,6 +1983,11 @@ export class Game {
   // stats (js/run-stats.js) when it differs from `source` (sub-sources: helix, storm, collapse, ...).
   hitEnemy(e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const p = this.player;
+    if (e.deflect) {
+      // Armored hull (a serpent's body): the shot is stopped with a pale flash and does no damage.
+      e.hitFlash = Math.max(e.hitFlash || 0, 0.35);
+      return;
+    }
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
     const chance = dot || !p ? 0 : critChance(p);
@@ -2028,7 +2054,7 @@ export class Game {
       this.runStats.kill(by, e, this.elapsedTime);
     }
 
-    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? 1;
+    const tier = e.isBoss ? 4 : e.isLieutenant ? 3 : DEATH_TIER[e.type] ?? ARCHETYPE_DEATH_TIER[e.type] ?? HOSTILE_DEATH_TIER[e.type] ?? 1;
     const fx = DEATH_FX[tier];
     const intensity = fx.intensity;
     if (this.sound.playEnemyDeath) this.sound.playEnemyDeath(intensity);
@@ -2058,8 +2084,9 @@ export class Game {
 
     if (e.type === 'splitter' && !fromBomb) {
       const waveScale = this.getWaveScale('mini_splitter');
-      for (let k = 0; k < 3; k++) {
-        const a = e.rotation + (k * Math.PI * 2) / 3;
+      const frags = (e.tier || 1) >= 3 ? 4 : 3; // tier-3 veterans burst into four
+      for (let k = 0; k < frags; k++) {
+        const a = e.rotation + (k * Math.PI * 2) / frags;
         this.enemyManager.queueSpawn('mini_splitter', e.x + Math.cos(a) * 14, e.y + Math.sin(a) * 14, waveScale, {
           instant: true,
           vx: Math.cos(a) * 5,
@@ -2085,11 +2112,15 @@ export class Game {
     // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
     const ranged = !!this.range?.active;
     if (ranged) this.range.onKill(e);
+    // A split boss (Progenitor) pays out only when its last piece dies; read that before the death burst
+    // queues the next generation.
+    const bossPay = e.isBoss && bossDef(e.type)?.isFinalPiece?.(e, this.enemyManager) !== false;
+    if (e.isBoss) bossDef(e.type)?.onDeath?.(e, this.enemyManager);
 
     // Relic Supply Cache Drops! (Guaranteed on Bosses, very rare Luck-scaled drop on lesser enemies)
     const luck = this.player.stats.luck || 1.0;
     let bossBombGain = 0;
-    if (e.isBoss && !ranged) {
+    if (bossPay && !ranged) {
       const bombsBefore = this.player.bombs;
       this.player.bombs = Math.min(9, this.player.bombs + 1);
       bossBombGain = this.player.bombs - bombsBefore;
@@ -2135,7 +2166,7 @@ export class Game {
 
     const pts = Math.round(e.score * this.multiplier);
     this.score += pts;
-    if (e.isBoss) this.onBossDefeated(e, pts, bossBombGain);
+    if (bossPay) this.onBossDefeated(e, pts, bossBombGain);
     if (e.isLieutenant) this.onLieutenantDefeated(e, pts, fromBomb);
 
     const geomCount = e.isBoss ? 14 : e.isLieutenant ? 6 : e.type === 'blackhole' ? 4 : e.type === 'splitter' || e.type === 'bruiser' ? 2 : 1;
@@ -2157,16 +2188,17 @@ export class Game {
     }
 
     const maxWaveCores = Math.ceil((TUNING.maxWaveCores ?? 3) * this.player.stats.coreDropMult);
-    if (e.isBoss || this.coresDroppedThisWave < maxWaveCores) {
+    if (bossPay || this.coresDroppedThisWave < maxWaveCores) {
       const coreChance = (
-        e.isBoss ? 1.0 :
+        bossPay ? 1.0 :
         e.type === 'blackhole' ? 0.55 :
+        e.type === 'hulk' ? 0.3 :
         e.type === 'splitter' ? 0.08 :
         0
       ) * this.player.stats.coreDropMult;
 
       if (Math.random() < coreChance) {
-        const coreDrops = e.isBoss ? 3 : 1;
+        const coreDrops = bossPay ? (BOSS_TIER[e.bossTier]?.cores ?? 3) : 1;
         this.coresDroppedThisWave += coreDrops;
         for (let c = 0; c < coreDrops; c++) {
           const ca = Math.random() * Math.PI * 2;
@@ -2201,9 +2233,10 @@ export class Game {
 
   // Elites (lieutenants and bosses) make an entrance: on screen, well clear of the ship, where the
   // player can watch them materialize. eliteOnscreen 0 sends them through the off-screen ring instead.
-  eliteSpawnPoint(pad, warmup) {
+  // `rock: false` (bosses) may land on rock: the portal blasts it on arrival (bossPortalBlast).
+  eliteSpawnPoint(pad, warmup, { rock = true } = {}) {
     if (!(TUNING.eliteOnscreen ?? 1)) return this.spawnPoint(pad, warmup);
-    return this.spawnPointOnscreen(pad, TUNING.eliteSpawnMinDist ?? 380);
+    return pickOnscreenSpawn(this, { pad, minDist: TUNING.eliteSpawnMinDist ?? 380, rock });
   }
 
   // queueSpawn extras for a placed point: every placed spawn holds off materializing while the ship
@@ -2242,17 +2275,24 @@ export class Game {
   processPendingBossSpawns() {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
-      const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3);
-      if (!this.queueBossEncounter(bp, scheduled.waveScale, bossEpithet(scheduled.wave))) break;
+      const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3, { rock: !((TUNING.bossPortalBlast ?? 280) > 0) });
+      if (!this.queueBossEncounter(bp, scheduled.waveScale, scheduled)) break;
       this.pendingBossSpawns.shift();
     }
   }
 
   // Admission reserves the boss's enemy slot at once and the warning plays out on that reserved
   // spawn ring, so a boss that has been announced can never be refused by the cap on arrival.
-  queueBossEncounter(pos, waveScale, epithet) {
+  // `boss` is { id, wave, epithet? }: a named boss from js/bosses.js, or 'boss' (the Dreadnought).
+  queueBossEncounter(pos, waveScale, boss = {}) {
+    if (typeof boss === 'string') boss = { epithet: boss }; // a bare epithet: the Dreadnought
     const warmup = TUNING.bossWarningTime ?? 3.0;
-    if (!this.enemyManager.queueSpawn('boss', pos.x, pos.y, waveScale, this.placedSpawn(pos, { warmup, name: BOSS_NAME, epithet }))) return false;
+    const wave = boss.wave ?? this.wave;
+    const id = boss.id && (boss.id === 'boss' || bossBuilt(boss.id)) ? boss.id : 'boss';
+    const extra = id === 'boss'
+      ? { warmup, wave, name: BOSS_NAME, epithet: boss.epithet || bossEpithet(wave), bossTier: bossTier(wave) || 'minor' }
+      : { warmup, wave, ...(boss.epithet ? { epithet: boss.epithet } : {}) };
+    if (!this.enemyManager.queueSpawn(id, pos.x, pos.y, waveScale, this.placedSpawn(pos, extra))) return false;
     this.sound.playBossWarning();
     return true;
   }
@@ -2310,7 +2350,7 @@ export class Game {
   // One lieutenant per non-boss wave, `lieutenantDelay` seconds in. A pending boss keeps priority on
   // free enemy slots, and a lieutenant blocked by the cap simply retries on later ticks of the wave.
   updateLieutenantSchedule() {
-    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || this.wave % 3 === 0) return;
+    if (this.wave < (TUNING.lieutenantFirstWave ?? 2) || isBossWave(this.wave)) return;
     if (this.lieutenantWave === this.wave || this.waveTimer < (TUNING.lieutenantDelay ?? 6)) return;
     if (this.pendingBossSpawns.length > 0) return;
     if (this.spawnLieutenant()) this.lieutenantWave = this.wave;
@@ -2361,7 +2401,7 @@ export class Game {
 
   // First appearance of a new archetype this run: a one-line intel card on what it does.
   announceArchetype(type) {
-    const info = ARCHETYPE_INFO[type];
+    const info = INTEL_INFO[type];
     if (!info || this.seenArchetypes.has(type)) return;
     if (this.ltCardTimer > 0 && this.ltCard?.kind !== 'intel') return; // try again on its next pack
     this.seenArchetypes.add(type);
@@ -2400,6 +2440,9 @@ export class Game {
 
   // Entrance: layered shockwaves, a hard grid shove, capped screen shake and the title card.
   onBossArrived(e) {
+    // The portal blows apart any rock round it, so a boss never arrives wedged in an asteroid.
+    const blast = TUNING.bossPortalBlast ?? 280;
+    if (blast > 0) this.asteroidManager?.blastRocks?.(e.x, e.y, blast, (rock) => this.onRockShattered(rock));
     this.shake = Math.min(24, Math.max(this.shake, 20 * (TUNING.screenShakeMult ?? 1.0)));
     this.chromaFlash = Math.max(this.chromaFlash, 0.6);
     this.particles.spawnShockwave(e.x, e.y, 560, 48, 8, 0.8);
@@ -2409,8 +2452,9 @@ export class Game {
     this.grid.ripple?.(e.x, e.y, 560, 48);
     this.sound.playBossArrival();
     const hp = Math.round(e.maxHp).toLocaleString();
-    this.logGuideEntries(['boss']);
-    this.showBossCard('arrival', '⚠ BOSS ENCOUNTER ⚠', e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+    this.logGuideEntries([e.type]);
+    const kicker = (BOSS_TIER[e.bossTier] || BOSS_TIER.minor).kicker;
+    this.showBossCard('arrival', kicker, e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
   }
 
   // Defeat payoff: hit-stop then half-speed slow-mo (counted in fixed ticks), a gold flash,
@@ -2427,7 +2471,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 140, 600, 48);
     this.grid.ripple?.(e.x, e.y, 680, 48, 1.3);
     this.sound.playBossDefeat();
-    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE'];
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
   }
@@ -2538,39 +2582,60 @@ export class Game {
     const waveScale = this.getWaveScale();
     const pt = this.spawnPoint(90); // pack centre: room for the widest formation around it
 
-    // Weighted pack (TUNING spawnWeight*); newer archetypes join as their unlock wave arrives.
+    // Weighted pack (TUNING spawnWeight* × the wave theme, js/waves.js); new types join on their boss wave.
     const pack = pickWavePack(this.wave);
+    const roster = new Map(packRoster(pack, this.wave));
+    const count = (type) => roster.get(type) || 0;
     const em = this.enemyManager;
     const queuedBefore = em.spawnIndicators.length;
-    // Each member gets its own off-screen ring point (trailing distance args at call sites are unused).
-    const spread = (type, count) => {
-      for (let i = 0; i < count; i++) {
+    // Each member gets its own off-screen ring point.
+    const spread = (type, n) => {
+      for (let i = 0; i < n; i++) {
         const p2 = this.spawnPoint(30);
         em.queueSpawn(type, p2.x, p2.y, this.getWaveScale(type), this.placedSpawn(p2));
       }
     };
-    const since = type => Math.max(0, this.wave - ARCHETYPE_INFO[type].unlockWave);
     if (pack === 'swarm') {
-      const count = packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + this.wave * (TUNING.swarmPackPerWave ?? 2)));
-      em.spawnBoidSwarm(pt.x, pt.y, count, this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
+      em.spawnBoidSwarm(pt.x, pt.y, count('swarmer'), this.getWaveScale('swarmer'), this.worldWidth, this.worldHeight, this.placedSpawn(pt));
     } else if (pack === 'skirmish') {
-      const count = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(this.wave * (TUNING.skirmishPackPerWave ?? 0.6))));
-      for (let i = 0; i < count; i++) {
+      const n = count('pinwheel') + count('weaver');
+      for (let i = 0; i < n; i++) {
         const p2 = this.spawnPoint(30);
         em.queueSpawn(i % 2 === 0 ? 'pinwheel' : 'weaver', p2.x, p2.y, this.getWaveScale('pinwheel'), this.placedSpawn(p2));
       }
-    } else if (pack === 'splitter') {
-      spread('splitter', packSize(Math.min(TUNING.splitterPackMax ?? 99, 2 + Math.floor(this.wave * (TUNING.splitterPackPerWave ?? 0.4)))), 450, 750);
+    } else if (pack === 'mayfly') {
+      // One cloud: tight around a single ring point, so it arrives as a swarm of specks.
+      const n = count('mayfly');
+      for (let i = 0; i < n; i++) {
+        const m = packMemberPoint(this, pt, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120);
+        em.queueSpawn('mayfly', m.x, m.y, this.getWaveScale('mayfly'), this.placedSpawn(m));
+      }
     } else if (pack === 'blackhole') {
       em.queueSpawn('blackhole', pt.x, pt.y, waveScale, this.placedSpawn(pt));
-    } else if (pack === 'bruiser') {
-      spread('bruiser', packSize(Math.min(3, 1 + Math.floor(since('bruiser') / 4))), 460, 720);
-    } else if (pack === 'gunner') {
-      spread('gunner', packSize(Math.min(5, 2 + Math.floor(since('gunner') / 4))), 520, 760);
+    } else if (pack === 'serpent') {
+      for (let i = 0; i < count('serpent'); i++) {
+        const p2 = this.spawnPoint(SERPENT.gap * SERPENT.segments * 0.5);
+        const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
+        spawnSerpent(em, 'serpent', p2.x, p2.y, this.getWaveScale('serpent'), SERPENT.segments, { angle, extra: this.placedSpawn(p2) });
+      }
+    } else if (pack === 'mitosis') {
+      // A colony round one point (the roster doubles the head count for the HP budget).
+      const n = Math.ceil(count('mitosis') / 2);
+      for (let i = 0; i < n; i++) {
+        const c = packMemberPoint(this, pt, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90);
+        em.queueSpawn('mitosis', c.x, c.y, this.getWaveScale('mitosis'), this.placedSpawn(c));
+      }
+    } else if (pack === 'carrier') {
+      // The roster's drones are launched by the carriers over time, not spawned with them.
+      spread('carrier', count('carrier'));
+    } else if (pack === 'kestrel') {
+      // One V on a strafing run that starts lined up on the ship.
+      const p2 = this.spawnPoint(80);
+      const angle = this.player ? Math.atan2(this.player.y - p2.y, this.player.x - p2.x) : 0;
+      spawnWing(em, p2.x, p2.y, this.getWaveScale('kestrel'), count('kestrel') - 1, { angle, extra: this.placedSpawn(p2) });
     } else if (pack === 'shielder') {
       // Shielders lead a pinwheel escort, so the pack advances behind the plates.
-      const count = packSize(Math.min(3, 1 + Math.floor(since('shielder') / 5)));
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < count('shielder'); i++) {
         const p2 = this.spawnPoint(70);
         em.queueSpawn('shielder', p2.x, p2.y, waveScale, this.placedSpawn(p2));
         for (let k = 0; k < 2; k++) {
@@ -2578,23 +2643,85 @@ export class Game {
           em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
         }
       }
-    } else if (pack === 'blinker') {
-      spread('blinker', packSize(Math.min(7, 3 + Math.floor(since('blinker') / 3))), 480, 760);
+    } else if (pack === 'repulsor') {
+      // The repulsor walks its skirmish line in behind its field.
+      em.queueSpawn('repulsor', pt.x, pt.y, this.getWaveScale('repulsor'), this.placedSpawn(pt));
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2 + Math.PI / 4;
+        const esc = packMemberPoint(this, pt, Math.cos(a) * 55, Math.sin(a) * 55);
+        em.queueSpawn(k % 2 ? 'weaver' : 'pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
+      }
     } else if (pack === 'conduit') {
       // A Conduit always arrives with a pack to buff: pinwheels, plus a bruiser later on.
       em.queueSpawn('conduit', pt.x, pt.y, waveScale, this.placedSpawn(pt));
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < count('pinwheel'); k++) {
         const a = (k * Math.PI * 2) / 3;
         const esc = packMemberPoint(this, pt, Math.cos(a) * 60, Math.sin(a) * 60);
         em.queueSpawn('pinwheel', esc.x, esc.y, this.getWaveScale('pinwheel'), this.placedSpawn(esc));
       }
-      if (this.wave >= 8) {
+      if (count('bruiser') > 0) {
         const esc = packMemberPoint(this, pt, 80, 0);
         em.queueSpawn('bruiser', esc.x, esc.y, waveScale, this.placedSpawn(esc));
       }
+    } else {
+      for (const [type, n] of roster) spread(type, n);
     }
     // Only announce a newcomer that actually made it past the enemy cap.
-    if (ARCHETYPE_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+    if (INTEL_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
+  }
+
+  // One beam hit (lancer sweep, twin tether, Prism lighthouse): orb damage × LANCE.damageMult, on the ramp.
+  beamDamage(e) {
+    return (TUNING.enemyBulletDamage ?? 12) * LANCE.damageMult * damageRampAt(this.wave);
+  }
+
+  // A laser gate against the ship: a pylon hits like a hull; crossing the beam (hub included) detonates
+  // the gate. Returns true when the hit ended the run.
+  gateContact(e, p) {
+    // The beam first: a ship crossing it near a pylon still blows the gate rather than taking the hit.
+    const { d, t } = beamDistance(e, p.x, p.y);
+    if (d < p.radius && t > 0.06 && t < 0.94) {
+      this.detonateGate(e);
+      return false;
+    }
+    for (const q of gatePylons(e)) {
+      if (!shieldTouches(p, TUNING, q.x, q.y, GATE.pylonRadius)) continue;
+      if (p.invuln > 0) return false;
+      this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
+      return this.endRunIfDead();
+    }
+    return false;
+  }
+
+  // Flying through a gate: it blows, wrecking every hostile within GATE.blastRadius (bosses too).
+  detonateGate(e) {
+    if (e.dead) return;
+    const r = GATE.blastRadius;
+    this.particles.spawnShockwave(e.x, e.y, r, e.hue, 6, 0.45);
+    this.particles.spawnShockwave(e.x, e.y, r * 0.6, 0, 4, 0.3);
+    this.particles.spawnExplosionSparks(e.x, e.y, 40, e.hue, 3, 16, 2.4);
+    this.particles.spawnFloatText?.(e.x, e.y - 20, 'GATE BLAST!', '#ffe14a', 15);
+    this.grid.applyImpulse(e.x, e.y, 90, r * 1.4, e.hue);
+    this.addShake(8);
+    e.hp = 0;
+    e.lastStat = 'other';
+    this.killEnemy(e);
+    this.damageEnemiesInRadius(e.x, e.y, r, GATE.blastDamage * this.getWaveScale(), e.hue, 'other', KNOCKBACK.area * 2, 0.3);
+  }
+
+  // Seconds until the next pack: the wave's base interval, stretched or shrunk by the HP budget, and
+  // slowed (bossPackRate) while this boss wave's boss is still warning in or alive. The lull lasts only
+  // until the wave timer runs out: an unbeaten boss then faces full-rate packs.
+  packInterval() {
+    const lull = isBossWave(this.wave) && this.bossWaveFightActive() ? Math.max(0.05, TUNING.bossPackRate ?? 0.7) : 1;
+    return spawnIntervalAt(this.wave) * hpBudgetScale(this.wave) / lull;
+  }
+
+  bossWaveFightActive() {
+    if (this.pendingBossSpawns.some(b => b.wave === this.wave)) return true;
+    const em = this.enemyManager;
+    return em.enemies.some(e => e.isBoss && !e.dead && e.bossWave === this.wave)
+      || em.spawnIndicators.some(sp => sp.config?.isBoss && sp.config.bossWave === this.wave);
   }
 
   // Auto-aim: nearest target, but a hull whose shield plates face the ship counts as 260 px further
@@ -2608,7 +2735,9 @@ export class Game {
       const dx = e.x - x;
       const dy = e.y - y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const score = e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
+      // Armored serpent bodies count as much further away still: aim for the head.
+      const score = e.deflect ? d + 420
+        : e.shieldArc && shieldBlocks(e, e.x - dx / d * e.shieldRadius, e.y - dy / d * e.shieldRadius, dx, dy) ? d + 260 : d;
       if (score < bestScore) {
         bestScore = score;
         best = e;
@@ -3374,7 +3503,8 @@ export class Game {
     wells.length = 0;
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
-      if (enemies[i].type === 'blackhole' && !enemies[i].dead) wells.push(enemies[i]);
+      const e = enemies[i];
+      if ((e.type === 'blackhole' || e.gravityWell) && !e.dead) wells.push(e); // vortexes + the Event Horizon
     }
     return wells;
   }
@@ -3386,7 +3516,6 @@ export class Game {
     const wells = this.gravityWells;
     p.gravityTug = 0;
     if (!wells || wells.length === 0) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     const thrust = Math.max(0, p.stats.moveSpeed) * SHIP_THRUST_PER_TICK;
     let ax = 0;
     let ay = 0;
@@ -3397,7 +3526,7 @@ export class Game {
       const dy = w.y - p.y;
       const d = Math.hypot(dx, dy);
       if (d < 1e-6) continue;
-      const a = playerPullShare(d, radius, w.radius) * thrust;
+      const a = playerPullShare(d, pullRadiusOf(w), w.radius) * thrust;
       ax += (dx / d) * a;
       ay += (dy / d) * a;
     }
@@ -3418,7 +3547,6 @@ export class Game {
     const wells = this.gravityWells;
     const strength = TUNING.blackholeBulletBend ?? 0.22;
     if (!wells || wells.length === 0 || strength <= 0) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     for (let i = 0; i < this.bullets.length; i++) {
       const b = this.bullets[i];
       let ax = 0;
@@ -3428,7 +3556,7 @@ export class Game {
         if (w.dead) continue;
         const dx = w.x - b.x;
         const dy = w.y - b.y;
-        const k = wellPullScale(dx, dy, radius, strength, w.radius);
+        const k = wellPullScale(dx, dy, pullRadiusOf(w), strength * (w.bendMult || 1), w.radius);
         ax += dx * k;
         ay += dy * k;
       }
@@ -3442,17 +3570,59 @@ export class Game {
     }
   }
 
+  // Repulsor fields shove the ship's bullets outward (speed kept), so they curve away from anything
+  // inside. Missiles, arcs, blasts, orbit blades and singularities are not bullets and get through.
+  repelProjectiles() {
+    const enemies = this.enemyManager.enemies;
+    let fields = null;
+    for (let i = 0; i < enemies.length; i++) {
+      const f = enemies[i];
+      if (f.type === 'repulsor' && !f.dead && !(f.overloadT > 0)) (fields ||= []).push(f);
+    }
+    if (!fields) return;
+    const R = REPULSOR.field;
+    for (let i = 0; i < this.bullets.length; i++) {
+      const b = this.bullets[i];
+      for (let j = 0; j < fields.length; j++) {
+        const f = fields[j];
+        const dx = b.x - f.x;
+        const dy = b.y - f.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > R * R || d2 < 1) continue;
+        if (b.vx * dx + b.vy * dy >= 0) continue; // already heading out
+        if (f.overloadT > 0) continue;
+        if (b.repelledBy !== f) {
+          // A new bolt costs the field a point of charge; at zero it overloads and drops.
+          b.repelledBy = f;
+          f.fieldCharge = (f.fieldCharge ?? REPULSOR.charge) - 1;
+          if (f.fieldCharge <= 0) {
+            f.overloadT = REPULSOR.overload;
+            this.particles.spawnShockwave(f.x, f.y, REPULSOR.field, f.hue, 3, 0.3);
+            continue;
+          }
+        }
+        // Swing the heading toward straight out, harder the deeper it gets (head-on shots swerve too).
+        const speed = Math.hypot(b.vx, b.vy);
+        const a = turnAngleToward(Math.atan2(b.vy, b.vx), Math.atan2(dy, dx), REPULSOR.push * (1 - Math.sqrt(d2) / R) + 0.05);
+        b.vx = Math.cos(a) * speed;
+        b.vy = Math.sin(a) * speed;
+        f.repelFlash = 1;
+      }
+    }
+  }
+
   // Grid funnels and spiralling infall streams for every well (visual only).
   updateWellEffects() {
     const radius = TUNING.blackholePullRadius ?? 200;
-    const margin = Math.max(260, radius); // streams spawn up to 0.9 × pull radius from their well
+    const margin = Math.max(420, radius); // streams spawn up to 0.9 × pull radius from their well (the Event Horizon: 400)
     const onScreen = (x, y) => x > this.camX - margin && x < this.camX + this.width + margin &&
       y > this.camY - margin && y < this.camY + this.height + margin;
     for (let i = 0; i < this.gravityWells.length; i++) {
       const w = this.gravityWells[i];
       if (w.dead) continue;
-      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, radius, w.hue, 0.22);
-      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, radius * 0.9, w.hue, 1);
+      const r = pullRadiusOf(w);
+      this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, r, w.hue, 0.22);
+      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, r * 0.9, w.hue, 1);
     }
     for (let i = 0; i < this.singularities.length; i++) {
       const sg = this.singularities[i];
@@ -4518,7 +4688,9 @@ export class Game {
       this.coresDroppedThisWave = 0;
       this.sessionCores += 1;
       this.progression.addCores(1);
-      this.showBanner(`WAVE ${this.wave} // +1 ❖ VOID CORE`);
+      const tier = bossTier(this.wave);
+      const flag = tier === 'major' ? '☠ ' : tier ? '⚠ ' : '';
+      this.showBanner(`${flag}WAVE ${this.wave} // ${waveTheme(this.wave).name} // +1 ❖ VOID CORE`);
 
       if (this.asteroidManager.needsReplenish?.()) {
         const repPt = this.spawnAroundPlayer(850, 1400);
@@ -4526,19 +4698,20 @@ export class Game {
         this.asteroidManager.rebuildSpatialHash();
       }
 
-      if (this.wave % 3 === 0) {
-        this.pendingBossSpawns.push({ wave: this.wave, waveScale: this.getWaveScale() });
+      for (const id of bossesForWave(this.wave, bossBuilt)) {
+        this.pendingBossSpawns.push({ id, wave: this.wave, waveScale: this.getWaveScale() });
       }
     }
 
     // Scheduled encounters retain their wave scaling and get the first free slots.
     if (!range) {
+      this.enemyManager.wave = this.wave;
       this.processPendingBossSpawns();
       this.updateLieutenantSchedule();
       this.spawnCooldown -= dt;
       if (this.spawnCooldown <= 0) {
         this.spawnWavePack();
-        this.spawnCooldown = spawnIntervalAt(this.wave);
+        this.spawnCooldown = this.packInterval();
       }
     }
 
@@ -4715,6 +4888,7 @@ export class Game {
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
     this.bendProjectilesInWells();
+    this.repelProjectiles();
     this.updateBullets(dt);
     const enemies = this.enemyManager.enemies;
 
@@ -4798,6 +4972,25 @@ export class Game {
     this.enemyManager.view = spawnView(this);
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
+    // A shed tail (`noReward`) just crumbles away: no score, no drops.
+    const doomed = this.enemyManager.doomed;
+    if (doomed?.length) {
+      for (const e of doomed.splice(0)) {
+        if (e.noReward) {
+          const i = enemies.indexOf(e);
+          if (i !== -1 && !e.dead) {
+            e.dead = true;
+            enemies.splice(i, 1);
+            this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, 0.6);
+          }
+          continue;
+        }
+        e.hp = 0;
+        e.lastStat ||= 'other';
+        this.killEnemy(e, false);
+      }
+    }
     const arrivals = this.enemyManager.bossArrivals;
     if (arrivals?.length) {
       for (const boss of arrivals) this.onBossArrived(boss);
@@ -4823,6 +5016,15 @@ export class Game {
 
     for (const e of range ? [] : [...enemies].reverse()) { // range dummies never touch the ship
       if (e.dead) continue;
+      if (e.beam && p.invuln <= 0 && beamGap(e.beam, p.x, p.y) < p.radius + e.beam.width * 0.5) {
+        // A live beam (lancer sweep, twin tether) burns the ship like an orb hit.
+        this.damagePlayer(this.beamDamage(e), undefined, enemyKind(e));
+        if (this.endRunIfDead()) return;
+      }
+      if (e.type === 'gate') {
+        if (this.gateContact(e, p)) return;
+        continue;
+      }
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
@@ -4869,12 +5071,11 @@ export class Game {
         // Loose geoms drift into enemy black holes: kill the well to cash in the pile.
         const wells = this.gravityWells;
         if (wells && wells.length) {
-          const wellRadius = TUNING.blackholePullRadius ?? 200;
           const wellPull = TUNING.blackholePickupPull ?? 0.3;
           for (let w = 0; w < wells.length; w++) {
             const well = wells[w];
             if (well.dead) continue;
-            const k = wellPullScale(well.x - g.x, well.y - g.y, wellRadius, wellPull, well.radius * 0.6);
+            const k = wellPullScale(well.x - g.x, well.y - g.y, pullRadiusOf(well), wellPull, well.radius * 0.6);
             g.vx += (well.x - g.x) * k;
             g.vy += (well.y - g.y) * k;
           }
@@ -5887,7 +6088,7 @@ export class Game {
     const enemies = this.enemyManager.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (e.type !== 'blackhole' || !inView(e.x, e.y, e.radius)) continue;
+      if ((e.type !== 'blackhole' && !e.gravityWell) || !inView(e.x, e.y, e.radius)) continue;
       ctx.moveTo(e.x + e.radius * 0.9, e.y);
       ctx.arc(e.x, e.y, e.radius * 0.9, 0, Math.PI * 2);
     }
@@ -5949,7 +6150,6 @@ export class Game {
   drawGravityTethers(ctx, p) {
     const wells = this.gravityWells;
     if (!wells || wells.length === 0 || !(p.gravityTug > 0)) return;
-    const radius = TUNING.blackholePullRadius ?? 200;
     ctx.save();
     ctx.setLineDash([4, 9]);
     ctx.lineDashOffset = -(this.elapsedTime || 0) * 40;
@@ -5958,7 +6158,7 @@ export class Game {
       const w = wells[i];
       if (w.dead) continue;
       const d = Math.hypot(w.x - p.x, w.y - p.y);
-      const f = playerPullShare(d, radius, w.radius);
+      const f = playerPullShare(d, pullRadiusOf(w), w.radius);
       if (f <= 0 || d < 1) continue;
       const ux = (w.x - p.x) / d;
       const uy = (w.y - p.y) / d;

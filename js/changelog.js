@@ -12,6 +12,21 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.34.0',
+    date: '2026-10-19',
+    title: 'Boss Campaign',
+    notes: [
+      { type: 'new', text: 'BOSS CAMPAIGN: a minor boss every 3rd wave and a major boss every 6th, each with its own look and attacks. New enemies now debut alongside a boss instead of on a fixed wave.' },
+      { type: 'new', text: 'Ten bosses, one every 3rd wave: BROOD QUEEN, OUROBOROS, WING COMMANDER, HIVE CARRIER, EVENT HORIZON, ARCHITECT, PROGENITOR, CONDUCTOR, ECLIPSE TWINS, THE PRISM.' },
+      { type: 'new', text: 'New enemies: MAYFLIES, SERPENTS, KESTREL V-wings, CARRIERS + DRONES, HULKS, LASER GATES (fly through to blow one up), MITOSIS CELLS, REPULSORS and LANCERS.' },
+      { type: 'new', text: 'Every wave has a theme (MAYFLY BLOOM, STAMPEDE, CROSSFIRE...) that tilts which enemies show up. Past wave 30, bosses come in pairs.' },
+      { type: 'new', text: 'Veteran forms: swarmers, pinwheels, weavers, splitters and mayflies grow an extra edge and a little speed at waves 11 and 21. Late splitters burst into four.' },
+      { type: 'balance', text: 'Enemies debut later (bruisers 6, blinkers 9, gunners 12, vortexes 15, shielders 18, conduits 24); every wave keeps the same total enemy HP per second.' },
+      { type: 'balance', text: 'While a boss wave\'s boss is up, packs arrive 30% less often, until the wave ends. Major bosses have 1.8x HP and drop 5 Void Cores.' },
+      { type: 'balance', text: 'Bosses bust through asteroids 4x faster than before, and a boss portal blows apart the rock around it. Serpent heads drill rock and their bodies glide over it.' }
+    ]
+  },
+  {
     version: '0.33.0',
     date: '2026-10-19',
     title: 'Shield Capacitor',
