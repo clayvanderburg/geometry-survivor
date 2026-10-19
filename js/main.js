@@ -2222,9 +2222,10 @@ export class Game {
 
   // Elites (lieutenants and bosses) make an entrance: on screen, well clear of the ship, where the
   // player can watch them materialize. eliteOnscreen 0 sends them through the off-screen ring instead.
-  eliteSpawnPoint(pad, warmup) {
+  // `rock: false` (bosses) may land on rock: the portal blasts it on arrival (bossPortalBlast).
+  eliteSpawnPoint(pad, warmup, { rock = true } = {}) {
     if (!(TUNING.eliteOnscreen ?? 1)) return this.spawnPoint(pad, warmup);
-    return this.spawnPointOnscreen(pad, TUNING.eliteSpawnMinDist ?? 380);
+    return pickOnscreenSpawn(this, { pad, minDist: TUNING.eliteSpawnMinDist ?? 380, rock });
   }
 
   // queueSpawn extras for a placed point: every placed spawn holds off materializing while the ship
@@ -2263,7 +2264,7 @@ export class Game {
   processPendingBossSpawns() {
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
-      const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3);
+      const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3, { rock: !((TUNING.bossPortalBlast ?? 280) > 0) });
       if (!this.queueBossEncounter(bp, scheduled.waveScale, scheduled)) break;
       this.pendingBossSpawns.shift();
     }
@@ -2428,6 +2429,9 @@ export class Game {
 
   // Entrance: layered shockwaves, a hard grid shove, capped screen shake and the title card.
   onBossArrived(e) {
+    // The portal blows apart any rock round it, so a boss never arrives wedged in an asteroid.
+    const blast = TUNING.bossPortalBlast ?? 280;
+    if (blast > 0) this.asteroidManager?.blastRocks?.(e.x, e.y, blast, (rock) => this.onRockShattered(rock));
     this.shake = Math.min(24, Math.max(this.shake, 20 * (TUNING.screenShakeMult ?? 1.0)));
     this.chromaFlash = Math.max(this.chromaFlash, 0.6);
     this.particles.spawnShockwave(e.x, e.y, 560, 48, 8, 0.8);

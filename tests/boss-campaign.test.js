@@ -221,8 +221,9 @@ test('Game.killEnemy runs a boss\'s death burst and pays a major boss five cores
   assert.equal(g.geoms.filter(x => x.isCore).length, BOSS_TIER.major.cores);
 });
 
-test('mayflies twitch toward the ship; hulks are slow, sturdy sponges', () => {
+test('mayflies twitch toward the ship; hulks are slow, sturdy sponges', (t) => {
   resetTuning();
+  t.mock.method(Math, 'random', seeded(11)); // deterministic twitching
   const m = new EnemyManager();
   const player = { x: 2600, y: 2000 };
   m.queueSpawn('mayfly', 2000, 2000, 1, { instant: true });

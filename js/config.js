@@ -148,6 +148,9 @@ export const DEFAULT_TUNING = {
   eliteEmergeTime: 1.2,
   eliteMining: 1,
   eliteMiningMult: 1.0,
+  bossMiningMult: 4, // bosses grind at this many times the elite rate: they bust right through rock
+  serpentMiningMult: 2, // serpent heads mine too (their bodies glide over rock)
+  bossPortalBlast: 280, // px: rock within this radius of a boss's portal is blown up as it arrives
 
   // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
   pierceFalloff: 0.7,
@@ -382,7 +385,10 @@ export const TUNING_SCHEMA = [
       { key: 'eliteEntranceTime', label: 'Lieutenant Materialize Time', type: 'range', min: 1.0, max: 5.0, step: 0.1, unit: 's' },
       { key: 'eliteEmergeTime', label: 'Elite Slow Emergence After Arrival', type: 'range', min: 0, max: 3.0, step: 0.1, unit: 's' },
       { key: 'eliteMining', label: 'Elites Grind Through Asteroids', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
-      { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' }
+      { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' },
+      { key: 'bossMiningMult', label: 'Boss Mining Speed (x Elite Rate)', type: 'range', min: 1, max: 12, step: 0.5, unit: 'x' },
+      { key: 'serpentMiningMult', label: 'Serpent Head Mining Speed (x Elite Rate)', type: 'range', min: 0, max: 6, step: 0.25, unit: 'x' },
+      { key: 'bossPortalBlast', label: 'Boss Portal Blasts Rock Within', type: 'range', min: 0, max: 600, step: 10, unit: 'px' }
     ]
   },
   {

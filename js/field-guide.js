@@ -38,14 +38,21 @@ const pct = (v) => `${Math.round(v * 100)}%`;
 const secs = (v) => `${+v.toFixed(2)} s`;
 
 // Elite mining wording (lieutenant and boss entries, mining mechanic); empty when the tuner turns it off.
-function eliteGrindSpeed() {
-  const mult = TUNING.eliteMiningMult ?? 1;
+// `extra` multiplies the elite rate (bosses: bossMiningMult, serpent heads: serpentMiningMult).
+function eliteGrindSpeed(extra = 1) {
+  const mult = (TUNING.eliteMiningMult ?? 1) * extra;
   const base = Math.abs(mult - 1) < 1e-9 ? 'your base drill speed' : `${+mult.toFixed(2)}× your base drill speed`;
-  return `${base} (${Math.round(eliteMiningDps())}/s)`;
+  return `${base} (${Math.round(eliteMiningDps() * extra)}/s)`;
 }
 function eliteGrindText() {
   if (!(eliteMiningDps() > 0)) return '';
   return ` It grinds through asteroids at ${eliteGrindSpeed()}, unaffected by your drill upgrades, instead of going round, and the broken rock drops its ore for you.`;
+}
+function bossGrindText() {
+  const blast = TUNING.bossPortalBlast ?? 280;
+  const portal = blast > 0 ? ` Its portal blows apart every rock within ${blast} px as it arrives.` : '';
+  if (!(eliteMiningDps() > 0)) return portal;
+  return ` It busts through asteroids at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)}, and the broken rock drops its ore for you.${portal}`;
 }
 
 // `what` and `tip` may be functions so their numbers always come from the live constants/TUNING.
@@ -117,7 +124,7 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'serpent', name: 'SERPENT', group: 'archetype', unlockWave: unlockWaveOf('serpent'),
-    what: () => `An indigo arrowhead trailing ${SERPENT.segments} armored body plates that follow it like a rope. It winds toward you in long S-curves. Only the head takes damage: the body stops your shots cold and stings on contact. Kill the head and the body pops plate by plate. Debuts with the Ouroboros.`,
+    what: () => `An indigo arrowhead trailing ${SERPENT.segments} armored body plates that follow it like a rope. It winds toward you in long S-curves. Only the head takes damage: the body stops your shots cold and stings on contact. Kill the head and the body pops plate by plate. The head drills through asteroids${eliteMiningDps() > 0 ? ` at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}` : ''} and the body glides over them. Debuts with the Ouroboros.`,
     tip: 'Get ahead of it, not behind: shoot the head as it turns toward you. Auto-aim and homing weapons prefer the head; area blasts on the body are wasted.'
   },
   {
@@ -128,17 +135,17 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
-    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${eliteGrindText()}`,
+    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${bossGrindText()}`,
     tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
   },
   {
     id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
-    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${eliteGrindText()}`,
+    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${bossGrindText()}`,
     tip: 'Only the head counts. When it starts to coil, dash out through the gap where head meets tail before the ring closes, and step off the red lane before it strikes.'
   },
   {
     id: 'boss', name: BOSS_NAME, group: 'boss', boss: true, unlockWave: dreadnoughtWave,
-    what: () => `The fleet's line boss: it takes any boss wave whose named boss has not arrived yet. A cyan octagon with a gold spike crown and magenta halo that drives straight at you; health bars at the top of the screen.${eliteGrindText()}`,
+    what: () => `The fleet's line boss: it takes any boss wave whose named boss has not arrived yet. A cyan octagon with a gold spike crown and magenta halo that drives straight at you; health bars at the top of the screen.${bossGrindText()}`,
     tip: 'Clear the fodder during the warning, then kite in wide circles. A kill drops a guaranteed Super Relic Cache and a spare Supernova.'
   }
 ];
@@ -383,7 +390,8 @@ export const MECHANIC_ENTRIES = [
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
       'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
-      ...(eliteMiningDps() > 0 ? [`Elites (lieutenants and bosses) are the exception: they grind through rock in their way at ${eliteGrindSpeed()} and leave the ore behind; a shield crystal they crush heals no one.`] : []),
+      ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
+      ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
       `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
     ]
   },

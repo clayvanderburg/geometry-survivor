@@ -82,8 +82,11 @@ test('an elite pressed against a rock grinds it at exactly the base mining DPS, 
     const am = field([rock]);
     const ship = farShip(2600, 2000);
     const e = { x: 0, y: 0, vx: 0, vy: 0, radius: 22, type: 'pinwheel', ...flags };
-    pressTicks(am, e, rock, ship, 60);
-    assert.ok(Math.abs((rock.maxHp - rock.hp) - DEFAULT_TUNING.miningSpeed) < 1e-6, `${JSON.stringify(flags)}: ${rock.maxHp - rock.hp} hp in 1 s`);
+    // Bosses bust through at bossMiningMult × the elite rate; a short press so the rock survives it.
+    const ticks = flags.isBoss ? 15 : 60;
+    const want = DEFAULT_TUNING.miningSpeed * (flags.isBoss ? DEFAULT_TUNING.bossMiningMult : 1) * ticks / 60;
+    pressTicks(am, e, rock, ship, ticks);
+    assert.ok(Math.abs((rock.maxHp - rock.hp) - want) < 1e-6, `${JSON.stringify(flags)}: ${rock.maxHp - rock.hp} hp in ${ticks} ticks`);
     assert.ok(rock.hitFlash > 0, 'the rock flashes like it does under the drill');
     assert.equal(am.isDrilling, false, 'the ship is not drilling');
     // Still a solid obstacle: the hull ends the tick outside the rock.
@@ -101,7 +104,7 @@ test('an elite pressed against a rock grinds it at exactly the base mining DPS, 
 test('elites grind at most the two rocks they are pressed into, and only rock in the way', () => {
   resetTuning();
   // Three rocks fanned in front of the elite, all touching it; a fourth touching from behind.
-  const e = { x: 2000, y: 2000, vx: 0, vy: 0, radius: 30, isBoss: true };
+  const e = { x: 2000, y: 2000, vx: 0, vy: 0, radius: 30, isLieutenant: true };
   const ship = farShip(2800, 2000);
   const ahead = [0, 0.9, -0.9].map(a => rockAt(2000 + Math.cos(a) * 68, 2000 + Math.sin(a) * 68, 40));
   const behind = rockAt(2000 - 69, 2000, 40);
@@ -267,15 +270,18 @@ test('elites plow straight through rock; normal chasers keep the detour steering
   resetTuning();
 });
 
-test('Field Guide lieutenant and boss entries say they grind through asteroids at your base drill speed', () => {
+test('Field Guide lieutenant and boss entries give their mining speed', () => {
   resetTuning();
   const text = (id) => HOSTILE_ENTRIES.find(x => x.id === id).what();
-  for (const id of ['lieutenant', 'boss']) {
-    assert.match(text(id), /grinds through asteroids at your base drill speed \(75\/s\)/, id);
+  assert.match(text('lieutenant'), /grinds through asteroids at your base drill speed \(75\/s\)/);
+  for (const id of HOSTILE_ENTRIES.filter(x => x.boss).map(x => x.id)) {
+    assert.match(text(id), /busts through asteroids at 4× your base drill speed \(300\/s\)/, id);
+    assert.match(text(id), /portal blows apart every rock within 280 px/, id);
   }
   const mining = MECHANIC_ENTRIES.find(x => x.id === 'mining').body().join(' ');
-  assert.match(mining, /Elites .* grind through rock/);
+  assert.match(mining, /lieutenants grind through rock/);
+  assert.match(mining, /bosses bust through/);
   TUNING.eliteMining = 0;
-  assert.doesNotMatch(text('boss'), /grinds/);
+  assert.doesNotMatch(text('boss'), /busts/);
   resetTuning();
 });

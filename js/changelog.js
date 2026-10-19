@@ -21,9 +21,9 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'New enemies: MAYFLY clouds (wave 3), SERPENTS whose bodies block shots (wave 6), and the HULK, the old Prismatic Dreadnought as a slow armored sponge (wave 15).' },
       { type: 'new', text: 'Every wave has a theme (MAYFLY BLOOM, STAMPEDE, CROSSFIRE...) that tilts which enemies show up. Past wave 30, bosses come in pairs.' },
       { type: 'new', text: 'Veteran forms: swarmers, pinwheels, weavers, splitters and mayflies grow an extra edge and a little speed at waves 11 and 21. Late splitters burst into four.' },
-      { type: 'balance', text: 'Enemies debut later: bruisers on wave 6, blinkers 9, gunners 12, vortexes 15, shielders 18, conduits 24.' },
-      { type: 'balance', text: 'Packs are paced so every wave still brings the same total enemy HP per second as before.' },
-      { type: 'balance', text: 'While a boss wave\'s boss is up, packs arrive 30% less often, until the wave ends. Major bosses have 1.8x HP and drop 5 Void Cores.' }
+      { type: 'balance', text: 'Enemies debut later (bruisers 6, blinkers 9, gunners 12, vortexes 15, shielders 18, conduits 24); every wave keeps the same total enemy HP per second.' },
+      { type: 'balance', text: 'While a boss wave\'s boss is up, packs arrive 30% less often, until the wave ends. Major bosses have 1.8x HP and drop 5 Void Cores.' },
+      { type: 'balance', text: 'Bosses bust through asteroids 4x faster than before, and a boss portal blows apart the rock around it. Serpent heads drill rock and their bodies glide over it.' }
     ]
   },
   {

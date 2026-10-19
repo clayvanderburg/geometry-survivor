@@ -1,6 +1,6 @@
 // Destructible Geometric Asteroid Clusters & Dedicated Crab-Claw Rotary Drilling
 import { TUNING } from './config.js';
-import { isElite, eliteMiningDps } from './pursuit.js';
+import { miningDpsFor } from './pursuit.js';
 
 // Elite mining: a lieutenant/boss grinds the rock(s) it is pressed against on its way to the ship.
 export const ELITE_GRIND_CONTACT = 6; // px of surface gap that still counts as pressed against the rock
@@ -181,6 +181,25 @@ export class AsteroidManager {
     }
   }
 
+  // Blow up every rock touching a circle (a boss's portal opening): each goes through the normal shatter
+  // path as if an elite broke it (ore drops, not counted as your mining). Returns how many broke.
+  blastRocks(x, y, radius, onRockShattered) {
+    let broken = 0;
+    for (let i = this.asteroids.length - 1; i >= 0; i--) {
+      const rock = this.asteroids[i];
+      if (rock.hp <= 0) continue;
+      const reach = radius + rock.radius;
+      if ((rock.x - x) ** 2 + (rock.y - y) ** 2 > reach * reach) continue;
+      rock.hp = 0;
+      rock.brokenBy = 'elite';
+      this.asteroids.splice(i, 1);
+      onRockShattered?.(rock);
+      broken++;
+    }
+    if (broken) this.rebuildSpatialHash();
+    return broken;
+  }
+
   rebuildSpatialHash() {
     this.spatialGrid.clear();
     this.maxRockRadius = this.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
@@ -326,16 +345,20 @@ export class AsteroidManager {
     // 3. Enemies vs Asteroids (Enemies are blocked and funneled through your carved tunnels!)
     // Elites (lieutenants, bosses) are blocked too, but grind the rock they press into at the ship's
     // BASE drill DPS (eliteMiningDps: TUNING.miningSpeed × eliteMiningMult, no player upgrades).
-    const eliteDps = eliteMiningDps();
+    // Bosses grind at bossMiningMult × that and serpent heads at serpentMiningMult × (miningDpsFor).
     this.eliteGrinds = 0;
     let grindBest = Infinity;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      const grinds = eliteDps > 0 && isElite(e);
+      if (e.leader) continue; // serpent body plates glide over rock behind their head
+      const eliteDps = miningDpsFor(e);
+      const grinds = eliteDps > 0;
       const contact = grinds ? ELITE_GRIND_CONTACT : 0;
-      // Up to two touched rocks, ranked by how squarely they sit on the line to the ship.
+      // Up to two touched rocks, ranked by how squarely they sit in the way: on the line to the ship
+      // or along the hull's own heading, whichever is squarer (a coiling boss mines where it goes).
       let g0 = null, g1 = null, s0 = 0, s1 = 0;
       const toShip = grinds ? Math.hypot(player.x - e.x, player.y - e.y) || 1 : 1;
+      const spd = grinds ? Math.hypot(e.vx, e.vy) : 0;
       const nearEnemy = this.getNearbyAsteroids(e.x, e.y, this.cellsFor(e.radius + contact));
       for (let j = 0; j < nearEnemy.length; j++) {
         const rock = nearEnemy[j];
@@ -348,7 +371,9 @@ export class AsteroidManager {
           const touch = minDist + contact;
           // Pressed against it, and the rock is on the ship's side of the elite (it is in the way).
           if (dSq < touch * touch && dSq > 0.01) {
-            const ahead = ((player.x - e.x) * -dx + (player.y - e.y) * -dy) / (toShip * Math.sqrt(dSq));
+            const d = Math.sqrt(dSq);
+            const shipAhead = ((player.x - e.x) * -dx + (player.y - e.y) * -dy) / (toShip * d);
+            const ahead = spd > 0.5 ? Math.max(shipAhead, (e.vx * -dx + e.vy * -dy) / (spd * d)) : shipAhead;
             if (ahead > s0) { g1 = g0; s1 = s0; g0 = rock; s0 = ahead; }
             else if (ahead > s1) { g1 = rock; s1 = ahead; }
           }
