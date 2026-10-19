@@ -66,7 +66,8 @@ test('Breakthrough cards name their weapon, show the DPS gain, and are one-shot'
 test('every transform names its weapon in the summary', () => {
   const NAMES = { blaster: 'Autocannon', rockets: 'Rocket Pod', missiles: 'Swarm Missile', lightning: 'Tesla Arc', singularity: 'Vortex Singularit',
     orbitals: 'Orbit Blade', mines: 'Proximity Mines', turret: 'Sentry Turret', drones: 'Escort Drone', grenades: 'Plasma Grenade', gas: 'Corrosive Gas Trail',
-    flamethrower: 'Flamethrower' };
+    flamethrower: 'Flamethrower',
+    shockfield: 'Electric Shield Field' };
   for (const id of Object.keys(TRANSFORMS)) assert.ok(NAMES[id], `${id} needs a name to check`);
   for (const [id, byLevel] of Object.entries(TRANSFORMS)) {
     for (const m of BREAKTHROUGH_LEVELS) assert.match(byLevel[m].summary, new RegExp(NAMES[id]), `${id} LV ${m}`);

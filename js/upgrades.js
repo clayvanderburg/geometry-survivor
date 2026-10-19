@@ -50,7 +50,8 @@ const CORE_INFO = {
   drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
   gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship: enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
-  flamethrower: { headline: 'flameRange', summary: 'Sprays a short cone of fire where you aim: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' }
+  flamethrower: { headline: 'flameRange', summary: 'Sprays a short cone of fire where you aim: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
+  shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
@@ -173,6 +174,7 @@ export const UPGRADE_POOL = [
   ...weaponGroup('grenades'),
   ...weaponGroup('gas'),
   ...weaponGroup('flamethrower'),
+  ...weaponGroup('shockfield'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
@@ -300,7 +302,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'electric');
     },
-    summary: 'ELECTRIC weapons hit harder: Tesla arcs and Storm Protocol chains.',
+    summary: 'ELECTRIC weapons hit harder: Tesla arcs, Storm Protocol chains and Shock Field discharges.',
     apply(player) {
       addTagDamage(player, 'electric');
     }

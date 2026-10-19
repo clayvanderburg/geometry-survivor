@@ -75,6 +75,11 @@ export const WEAPONS = [
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
     summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+  },
+  {
+    id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
+    color: '#9ff4ff',
+    summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
   }
 ];
 

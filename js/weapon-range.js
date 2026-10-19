@@ -73,7 +73,7 @@ const STAT_LABELS = {
   lightning: 'Tesla Arc', emp: 'EMP Grenades', singularity: 'Vortex Core', collapse: 'Vortex Collapse', orbital: 'Orbit Blades',
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades', gas: 'Gas Trail', gas_pocket: 'Gas Pockets', gas_shroud: 'Toxic Shroud',
   burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
-  burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
 const STAT_GROUP = buildSourceGroups(WEAPONS);
 // Weapon credited with each stat in the LIVE / POTENTIAL compare. Burn ticks are left out: a weapon's

@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.0',
+    date: '2026-10-19',
+    title: 'Electric Shield Field',
+    notes: [
+      { type: 'new', text: 'NEW WEAPON: Electric Shield Field. A charged ring round your hull discharges when enemies get close, zapping and stunning everything inside, then recharges.' },
+      { type: 'new', text: 'It is a defensive weapon, not shield: it never repairs your shield (HARDCORE rules are unchanged). Its HUD chip shows the recharge.' },
+      { type: 'new', text: 'Always SHOCK: Status Potency, Duration, Application, Shock Conductor and Shock Amplifier all work with it. Stun Coils cards stun longer.' },
+      { type: 'new', text: 'Breakthroughs: Arc Lash arcs into enemies just outside, Repulsor Surge throws them back and recharges your dash, Thunderclap Overcharge bursts when a pack closes in.' }
+    ]
+  },
+  {
     version: '0.38.1',
     date: '2026-10-19',
     title: 'Gas Trail & Drone Buffs',

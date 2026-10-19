@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, flameBurnRank } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
@@ -430,6 +430,41 @@ export const WEAPON_SCALING = {
   flamePuddleDamageMult: (b) => W.flamePuddleShare * W.flameStreamDps(b) * W.flamePuddleEvery / (W.flamePuddleLife / W.flamePuddleTick),
   flameRingDamageMult: (b) => W.flameRingShare * W.flameStreamDps(b) * W.flameRingEvery,
 
+  // --- Electric Shield Field (stats: damage, recharge, radius, stun) -------------------------------
+  // A defensive field round the hull (js/shock-field.js). Once charged, the first enemy to cross its
+  // radius sets off a DISCHARGE that hits everything inside for the same damage and SHOCKs it (its
+  // element is fixed: rank fieldStunRank, through the shared stun rules), then it recharges for
+  // fieldCooldown s. It never touches the ship's shield. Potential counts one discharge per cooldown
+  // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
+  // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
+  fieldRadius: (b) => 125 + 12 * (b?.r?.radius || 0),
+  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge),
+  fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
+  fieldHitShare: 1,
+  fieldKnock: 1.2, // a light outward shove on every discharge
+  // Transforms: Arc Lash (each discharge also arcs into the lashArcs nearest enemies within lashRangeMult x
+  // the radius but outside the field, for lashShare of the discharge each, valued at lashHitShare), Repulsor Surge (discharges
+  // throw enemies out by repulseImpulse px/tick of drift and cut the dash cooldown by dashRefund s: no
+  // extra attacks, so every discharge hits BT_TRANSFORM_DPS harder), Thunderclap Overcharge (every
+  // discharge banks a charge, up to overchargeStore; a full bank fires a thunderclap over
+  // overchargeRadiusMult x the radius for overchargeShare of a discharge as soon as overchargePack
+  // enemies are inside it or a boss or lieutenant enters the field, valued at overchargeHitShare).
+  lashArcs: 3,
+  lashShare: 0.35,
+  lashHitShare: 0.35, // an arc lands on one straggler while a discharge lands on the whole crowd inside: valued at this share
+  lashRangeMult: 2.2,
+  repulseImpulse: 8,
+  dashRefund: 0.5,
+  overchargeStore: 3,
+  overchargeShare: 1.2,
+  overchargeRadiusMult: 1.6,
+  overchargePack: 8,
+  overchargeHitShare: 1.25, // it only fires on a pack of 8+ in a wider ring: valued a little above a discharge
+  fieldUnits: (b) => W.fieldHitShare + (b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare : 0)
+    + (b.t12 ? W.fieldHitShare * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0),
+  // Damage of one discharge to each enemy in the field.
+  fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -594,6 +629,13 @@ export const POTENTIAL_DPS = {
     const puddles = b.t8 ? W.flamePuddleDamageMult(b) * (W.flamePuddleLife / W.flamePuddleTick) / W.flamePuddleEvery * W.flamePuddleHitShare : 0;
     const ring = b.t12 ? W.flameRingDamageMult(b) / W.flameRingEvery * W.flameRingHitShare : 0;
     return stream + puddles + ring;
+  },
+  shockfield: (b) => {
+    const d = W.fieldDamageMult(b);
+    const discharge = W.fieldHitShare * d;
+    const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
+    const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
+    return (discharge + lash + clap) / W.fieldCooldown(b);
   }
 };
 
@@ -616,7 +658,8 @@ export const WEAPON_TAGS = {
   siege: ['deployable', 'explosive', 'area'],
   grenade: ['projectile', 'explosive', 'area'],
   gas: ['area', 'corrode'],
-  flame: ['area', 'burn']
+  flame: ['area', 'burn'],
+  shockfield: ['electric', 'area']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -652,7 +695,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', shockfield: 'shockfield'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -695,6 +738,7 @@ export function weaponDamage(p, weapon, b) {
     case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -711,6 +755,7 @@ export const siegeShellRadius = (p) => W.siegeShellRadius * areaMult(p);
 export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grenadeBlastRadius(b) * areaMult(p);
 export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) * areaMult(p);
 export const flameRange = (p, b = weaponBuild(p, 'flamethrower')) => W.flameRange(b) * areaMult(p);
+export const fieldRadius = (p, b = weaponBuild(p, 'shockfield')) => W.fieldRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);

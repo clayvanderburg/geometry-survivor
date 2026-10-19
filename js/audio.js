@@ -1566,6 +1566,90 @@ export class SoundEngine {
     buzz.stop(t + 0.1);
   }
 
+  // Electric Shield Field discharge: a bright snap (falling saw zap through a band-passed crackle) over a
+  // short sub thump. Throttled hard (a discharge fires at most about once a second), and soft enough
+  // to sit under the weapon mix.
+  playFieldDischarge(hits = 1) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.2;
+    if (!this.claimVoice('field', 110, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const body = 0.8 + Math.min(0.35, hits * 0.04);
+
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(4200, t);
+    band.frequency.exponentialRampToValueAtTime(1300, t + dur);
+    band.Q.value = 1.6;
+    const crackle = this.ctx.createGain();
+    crackle.gain.setValueAtTime(0.001, t);
+    for (let k = 0; k < 9; k++) crackle.gain.setValueAtTime((0.03 + Math.random() * 0.1) * Math.pow(1 - k / 9, 1.5) * body, t + k * 0.018);
+    crackle.gain.setValueAtTime(0.0001, t + dur);
+    noise.connect(band);
+    band.connect(crackle);
+    crackle.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, dur + 0.02);
+
+    const zap = this.ctx.createOscillator();
+    const zapGain = this.ctx.createGain();
+    zap.type = 'sawtooth';
+    zap.frequency.setValueAtTime(2100 + Math.random() * 200, t);
+    zap.frequency.exponentialRampToValueAtTime(260, t + 0.09);
+    zapGain.gain.setValueAtTime(0.045 * body, t);
+    zapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    zap.connect(zapGain);
+    zapGain.connect(this.sfxGain);
+    zap.start(t);
+    zap.stop(t + 0.11);
+
+    const thump = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(150, t);
+    thump.frequency.exponentialRampToValueAtTime(48, t + 0.14);
+    thumpGain.gain.setValueAtTime(0.09 * body, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    thump.connect(thumpGain);
+    thumpGain.connect(this.sfxGain);
+    thump.start(t);
+    thump.stop(t + 0.17);
+  }
+
+  // Thunderclap Overcharge: a crack, then a low rolling boom (low-passed noise) under a sub drop.
+  playThunderclap() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.7;
+    if (!this.claimVoice('thunderclap', 400, 1, dur)) return;
+    this.playFieldDischarge(8);
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(1400, t);
+    low.frequency.exponentialRampToValueAtTime(140, t + dur);
+    const roll = this.ctx.createGain();
+    roll.gain.setValueAtTime(0.001, t);
+    roll.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    roll.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(roll);
+    roll.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.2, dur + 0.02);
+
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(90, t);
+    sub.frequency.exponentialRampToValueAtTime(32, t + 0.45);
+    subGain.gain.setValueAtTime(0.14, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.52);
+  }
+
   // Missile salvo: a band-swept noise whoosh with a soft thump, plus a quick "fft" per extra
   // missile (up to 3) so the volley sounds like several launches.
   playMissileLaunch(count = 1) {

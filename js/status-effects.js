@@ -97,7 +97,7 @@ export function applyShock(e, lv, p = null) {
 }
 
 // Apply the element of the weapon behind `source` (Autocannon bolts and Pulsar Helix bolts share the
-// Autocannon's; Storm Protocol and EMP arcs are Tesla arcs; Corrosive Gas Trail is always CORROSIVE).
+// Autocannon's; Storm Protocol and EMP arcs are Tesla arcs; Corrosive Gas Trail is always CORROSIVE, Electric Shield Field always SHOCK).
 // Weapons without an element apply nothing.
 export function applyOnHitStatuses(p, e, source) {
   if (e.dead || statusImmune(e)) return;
