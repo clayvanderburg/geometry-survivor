@@ -50,7 +50,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   let r = rowsById(p);
   assert.equal(r.damage.base, String(TUNING.baseDamage));
   assert.equal(r.damage.permanent, '+10%');
-  assert.equal(r.maxHp.permanent, '+10');
+  assert.equal(r.maxHp.permanent, '+8');
   assert.equal(r.critChance.base, '5%');
   assert.equal(r.critChance.permanent, '+2%');
   assert.equal(r.moveSpeed.permanent, '+4%');
@@ -68,8 +68,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.damage.run, '+25%');
   assert.equal(r.damage.permanent, '+10%', 'the armory share is unchanged by cards');
   assert.equal(r.moveSpeed.run, '+16%');
-  assert.equal(r.maxHp.run, '+25');
-  assert.equal(r.maxHp.total, String(BASE_SHIELD + 10 + 25));
+  assert.equal(r.maxHp.run, '+15');
+  assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 7.5 + 15)));
   assert.equal(r.critChance.run, '+10%');
   assert.equal(r.critChance.total, '17%');
   assert.equal(r.tag_explosive.run, '+30%');

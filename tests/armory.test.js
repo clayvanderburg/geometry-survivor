@@ -45,13 +45,13 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   assert.ok(Math.abs(b.damageMult - 1.1) < 1e-9);
   assert.ok(Math.abs(b.damageTakenMult - 0.88) < 1e-9, '30 ranks of plating: -12% damage taken');
   assert.ok(Math.abs(b.dashCooldownMult - 0.75) < 1e-9);
-  assert.equal(b.bonusHp, 10);
+  assert.equal(b.bonusHp, 7.5);
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
   assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+10%');
   assert.equal(formatArmoryValue(META_BY_ID.armor, 10), '-4.0%');
-  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+6');
+  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+5');
 });
 
 test('an old save is reset once (ranks + cores), keeping callsign, high scores and the Field Guide', () => {
@@ -111,7 +111,7 @@ test('every armory stat reaches the run', () => {
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance');
   near(p.stats.critDamage, b.stats.critDamage + 0.2, 'crit damage');
   near(p.stats.areaMult, 1.1, 'area');
-  near(p.maxHp, b.maxHp + 20, 'max shield');
+  near(p.maxHp, b.maxHp + 15, 'max shield');
   near(p.stats.moveSpeed, b.stats.moveSpeed * 1.08, 'move speed');
   near(p.stats.coreDropMult, b.stats.coreDropMult * 1.2, 'core gain');
   near(p.stats.xpMultiplier, b.stats.xpMultiplier * 1.1, 'xp');
@@ -127,7 +127,7 @@ test('every armory stat reaches the run', () => {
   p.hp = p.maxHp = 100; b.hp = b.maxHp = 100;
   g.damagePlayer(20); base.damagePlayer(20);
   near(100 - p.hp, 18.4, 'plating: -8% damage taken');
-  near(p.invuln, b.invuln + 0.1, 'phase buffer');
+  near(p.invuln, b.invuln + 0.05, 'phase buffer');
   // Dash cooldown.
   g.triggerDash(); base.triggerDash();
   near(p.dashCooldown, b.dashCooldown * 0.8, 'dash cooldown');

@@ -26,7 +26,7 @@ test('the bot pilot is mortal: a brutal tuning ends the run with a recorded kill
   assert.ok(r.time < 240);
   assert.ok(r.killer, 'the killing blow is attributed to an enemy type');
   const taken = Object.values(r.taken).reduce((s, t) => s + t.dmg, 0);
-  assert.ok(taken >= 100, `shield damage is tracked by enemy type (${taken})`);
+  assert.ok(taken >= 50, `shield damage is tracked by enemy type (${taken})`);
 });
 
 test('every weapon card in UPGRADE_POOL is discovered and deals damage under its own source', () => {

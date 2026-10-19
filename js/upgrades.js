@@ -148,8 +148,8 @@ export const UPGRADE_POOL = [
     shieldCard: true, // raises and repairs the shield: never offered in HARDCORE (js/modes.js)
     apply(player) {
       player.stats.moveSpeed *= 1.16;
-      player.maxHp += 25;
-      player.hp = Math.min(player.maxHp, player.hp + 45);
+      player.maxHp += 15; // 25 before v0.32
+      player.hp = Math.min(player.maxHp, player.hp + 30); // 45 before v0.32
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
   },
@@ -668,13 +668,13 @@ export function acquireWeapon(player, id) {
 }
 
 // Seconds of invulnerability after a shield hit, before the Void Armory's Phase Buffer.
-export const HIT_INVULN_BASE = 0.65;
+export const HIT_INVULN_BASE = 0.4; // 0.65 before v0.32: ramming through whole packs cost only a hit or two a second
 
 // The ship at run start, before any card: TUNING's base values with the Void Armory bonuses
 // (progression.js armoryBonuses; {} gives the bare base). resetRun builds the player from it, and the pause
 // menu builds it with no bonuses to split each stat into BASE / PERMANENT / THIS RUN (js/run-overview.js).
-// Shield a run starts with, before Void Armory bonuses (100 before v0.29, 90 before v0.31: harder passes).
-export const BASE_SHIELD = 85;
+// Shield a run starts with, before Void Armory bonuses (100 before v0.29, 90 before v0.31, 85 before v0.32: harder passes).
+export const BASE_SHIELD = 75;
 
 export function runStartPlayer(bonuses = {}, t = TUNING) {
   const maxHp = BASE_SHIELD + (bonuses.bonusHp || 0);
