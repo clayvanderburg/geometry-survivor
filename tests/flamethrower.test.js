@@ -59,7 +59,7 @@ const enemy = (p, dx, dy, r = 10) => ({ type: 'swarmer', x: p.x + dx, y: p.y + d
 const run = (r, seconds, firing = true) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, firing); };
 const hitSet = (r) => new Set(r.hits.map((x) => x.e));
 
-test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and five single-stat cards', () => {
+test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and six single-stat cards', () => {
   const w = WEAPON_BY_ID.flamethrower;
   assert.equal(w.name, 'Flamethrower');
   assert.equal(w.category, 'PRIMARY');
@@ -71,15 +71,15 @@ test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN t
   const groups = buildSourceGroups(WEAPONS);
   assert.equal(groups.flame, 'flamethrower');
   assert.equal(groups.burn_flamethrower, 'flamethrower', 'its burn ticks are credited to it');
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'burn']);
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false]);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'turn', 'burn']);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, false]);
   for (const c of STAT_CARDS.flamethrower) assert.match(c.summary, /^Flamethrower:/);
   assert.equal(ELEMENT_CARDS.flamethrower, undefined, 'no element cards: FIRE is built in');
   assert.deepEqual(BREAKTHROUGH_LEVELS.map((m) => TRANSFORMS.flamethrower[m].name), ['Twin Nozzle', 'Napalm Puddles', 'Inferno Ring']);
 });
 
 test('every flame formula reads only its own rank; LV 1 numbers', () => {
-  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, burn: W.flameBurnRank, damage: W.flameDamageMult };
+  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, turn: W.flameTurnRate, burn: W.flameBurnRank, damage: W.flameDamageMult };
   const base = levelBuild('flamethrower', 1);
   for (const card of STAT_CARDS.flamethrower) {
     const b = makeBuild('flamethrower', 5, { [card.stat]: 3 });
@@ -309,4 +309,30 @@ test('drawing costs a fixed handful of fills however many flames are in the air'
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'fill' ? () => { fills++; } : k === 'stroke' ? () => { strokes++; } : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
   r.ft.draw(ctx, { camX: 0, camY: 0, width: 4200, height: 4200 });
   assert.ok(fills <= 5 && strokes === 0, `${fills} fills, ${strokes} strokes`);
+});
+
+test('the nozzle swivels toward the aim instead of snapping, faster with Swivel Mount', () => {
+  const turned = (cards) => {
+    const p = flamePlayer({ cards });
+    const r = rig(p, []);
+    run(r, 0.2);
+    assert.ok(Math.abs(r.ft.nozzles[0].angle) < 1e-9, 'starts on the aim');
+    p.angle = Math.PI / 2; // auto-aim jumps to a target straight above
+    run(r, 0.5);
+    return r.ft.nozzles[0].angle;
+  };
+  const base = turned([]);
+  assert.ok(Math.abs(base - W.flameTurnRate(levelBuild('flamethrower', 1)) * 0.5) < 0.03, `swivels ~${base.toFixed(2)} rad in 0.5 s, not a snap`);
+  const fast = turned([['flamethrower_turn', 6]]);
+  assert.ok(fast > base * 2, 'Swivel Mount turns it much faster');
+  const p = flamePlayer();
+  const r = rig(p, []);
+  run(r, 0.1);
+  p.angle = Math.PI / 2;
+  run(r, 3);
+  assert.ok(Math.abs(r.ft.nozzles[0].angle - Math.PI / 2) < 1e-9, 'it settles exactly on the aim');
+  p.angle = -Math.PI / 2 + 0.2; // short way round: through 0, not through pi
+  run(r, 0.1, false);
+  run(r, 0.05);
+  assert.ok(r.ft.nozzles[0].angle < Math.PI / 2, 'turns the short way round');
 });

@@ -399,6 +399,9 @@ export const WEAPON_SCALING = {
   flameRange: (b) => 254 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1
   flameConeHalf: (b) => 0.3 + 0.09 * (b?.r?.cone || 0), // radians either side of the aim (~17 deg at LV 1); +0.045 per rank before v0.39.1
   flameBurnRank,
+  // The nozzle swivels toward the aim at this many radians per second (it used to snap, which made
+  // auto-aim jerk the cone between targets): ~80 deg/s at LV 1, +35% per Swivel Mount rank.
+  flameTurnRate: (b) => 1.4 * (1 + 0.35 * (b?.r?.turn || 0)),
   flameEdgeFalloff: 0.35,
   flameBurnShare: 0.35, // its burn stacks tick at 35% of the usual FIRE DPS (burnStackDps)
   flameHitShare: 2.2,

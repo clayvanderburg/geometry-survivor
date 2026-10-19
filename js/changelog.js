@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.2',
+    date: '2026-10-19',
+    title: 'Swivel Nozzle',
+    notes: [
+      { type: 'balance', text: 'The Flamethrower nozzle now swings round to your aim at its own pace instead of snapping between targets, so the cone sweeps smoothly.' },
+      { type: 'new', text: 'New Flamethrower card: SWIVEL MOUNT turns the nozzle 35% faster per rank (up to 6).' }
+    ]
+  },
+  {
     version: '0.39.1',
     date: '2026-10-19',
     title: 'Longer Flames',
