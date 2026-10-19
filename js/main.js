@@ -2670,6 +2670,11 @@ export class Game {
     if (INTEL_INFO[pack] && em.spawnIndicators.length > queuedBefore) this.announceArchetype(pack);
   }
 
+  // One beam hit (lancer sweep, twin tether, Prism lighthouse): orb damage × LANCE.damageMult, on the ramp.
+  beamDamage(e) {
+    return (TUNING.enemyBulletDamage ?? 12) * LANCE.damageMult * damageRampAt(this.wave);
+  }
+
   // A laser gate against the ship: a pylon hits like a hull; crossing the beam (hub included) detonates
   // the gate. Returns true when the hit ended the run.
   gateContact(e, p) {
@@ -5013,7 +5018,7 @@ export class Game {
       if (e.dead) continue;
       if (e.beam && p.invuln <= 0 && beamGap(e.beam, p.x, p.y) < p.radius + e.beam.width * 0.5) {
         // A live beam (lancer sweep, twin tether) burns the ship like an orb hit.
-        this.damagePlayer((TUNING.enemyBulletDamage ?? 12) * LANCE.damageMult * damageRampAt(this.wave), undefined, enemyKind(e));
+        this.damagePlayer(this.beamDamage(e), undefined, enemyKind(e));
         if (this.endRunIfDead()) return;
       }
       if (e.type === 'gate') {

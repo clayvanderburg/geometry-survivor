@@ -240,6 +240,13 @@ function installInstrumentation(game, metrics) {
     return dmg;
   };
 
+  // Beams (lancers, twin tethers, the Prism's lighthouse) are scored to the hull that carries them.
+  game.beamDamage = function (e) {
+    const dmg = proto.beamDamage.call(this, e);
+    metrics.hurt(e, Math.min(dmg, Math.max(0, game.player.hp)), dmg, game);
+    return dmg;
+  };
+
   const addCores = game.progression.addCores.bind(game.progression);
   game.progression.addCores = (n) => { metrics.cores += n; addCores(n); };
 }
