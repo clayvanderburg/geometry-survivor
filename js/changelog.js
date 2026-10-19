@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.38.0',
+    date: '2026-10-19',
+    title: 'Flamethrower',
+    notes: [
+      { type: 'new', text: 'NEW WEAPON: Flamethrower. Sprays a short cone of fire where you aim, scorching everything in it and setting it on FIRE. Get close: the flames only reach about 200 px.' },
+      { type: 'new', text: 'Its FIRE is built in, so STATUS cards and the Fire Amplifier boost it. Sticky Gel cards make the burn hotter. Asteroids block the flames.' },
+      { type: 'new', text: 'Flamethrower Breakthroughs: Twin Nozzle (sprays behind you too), Napalm Puddles (burning puddles at the flame tips) and Inferno Ring (a ring of fire that shoves enemies back).' }
+    ]
+  },
+  {
     version: '0.37.2',
     date: '2026-10-19',
     title: 'Bomb Reminder',

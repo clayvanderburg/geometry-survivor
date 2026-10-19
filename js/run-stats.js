@@ -22,6 +22,7 @@ export const SUB_SOURCES = Object.freeze({
   burn_missiles: 'missiles',
   burn_lightning: 'lightning',
   burn_grenades: 'grenades',
+  burn_flamethrower: 'flamethrower', // the Flamethrower's built-in FIRE
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse

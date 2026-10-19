@@ -70,6 +70,11 @@ export const WEAPONS = [
     id: 'gas', name: 'Corrosive Gas Trail', hudName: 'Gas Trail', levelId: 'gas', levelKey: 'gas', category: 'AUTONOMOUS', tagSources: ['gas'],
     color: '#5dff6e',
     summary: 'Vents a trail of corrosive gas behind your ship. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
+  },
+  {
+    id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
+    color: '#ffa526',
+    summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
   }
 ];
 

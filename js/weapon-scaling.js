@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, flameBurnRank } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
@@ -387,6 +387,49 @@ export const WEAPON_SCALING = {
   pocketDamageMult: (b) => W.pocketShare * W.gasDamageMult(b) * W.pocketEvery / W.gasTick(b),
   shroudDamageMult: (b) => W.shroudShare * W.gasDamageMult(b),
 
+  // --- Flamethrower (stats: damage, rate, range, cone, burn) -------------------------------------
+  // A continuous cone of fire along the turret aim (like the Autocannon), sprayed while firing. Every
+  // scorch (flameTickRate per second) hits everything inside the cone, near hits full and the tip at
+  // 1 - flameEdgeFalloff, and sets it on FIRE (its built-in element: weapon-levels.js FIXED_ELEMENTS,
+  // rank flameBurnRank = 1 + Sticky Gel ranks). Asteroids are cover: the flames stop at a rock face, so
+  // a rock shadows the slice of the cone behind it while the rest burns on (flamethrower.js).
+  // Potential counts a scorch on flameHitShare targets: the cone always catches a pack and its burn is
+  // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
+  flameTickRate: (b) => 8 * rateMult(b.r.rate),
+  flameRange: (b) => 195 + 20 * (b?.r?.range || 0),
+  flameConeHalf: (b) => 0.3 + 0.045 * (b?.r?.cone || 0), // radians either side of the aim (~17 deg at LV 1)
+  flameBurnRank,
+  flameEdgeFalloff: 0.35,
+  flameBurnShare: 0.35, // its burn stacks tick at 35% of the usual FIRE DPS (burnStackDps)
+  flameHitShare: 2.2,
+  // Transforms: Twin Nozzle (a rear nozzle at flameRearRange of the reach, scorching like the front one,
+  // valued at flameRearHitShare: fewer enemies sit behind you), Napalm Puddles (a burning puddle at the
+  // flames' tip every flamePuddleEvery s, worth flamePuddleShare of the stream's one-target DPS per
+  // target over its life), Inferno Ring (every flameRingEvery s a ring of fire of flameRingRadiusMult x
+  // the reach, worth flameRingShare of the stream's one-target DPS over that interval, valued at
+  // flameRingHitShare: it hits the whole pack around you).
+  flameRearRange: 0.75,
+  flameRearHitShare: 0.7,
+  flamePuddleEvery: 0.5,
+  flamePuddleLife: 2.5,
+  flamePuddleTick: 0.25,
+  flamePuddleRadius: 42,
+  flamePuddleShare: 0.5,
+  flamePuddleHitShare: 1.5,
+  flameRingEvery: 2.5,
+  flameRingRadiusMult: 1.3,
+  flameRingShare: 0.25,
+  flameRingHitShare: 2,
+  flameRingKnock: 2.4,
+  flameUnits: (b) => W.flameHitShare * (1 + (b.t4 ? W.flameRearHitShare : 0))
+    + (b.t8 ? W.flamePuddleShare * W.flamePuddleHitShare : 0) + (b.t12 ? W.flameRingShare * W.flameRingHitShare : 0),
+  // Damage of one scorch on one target.
+  flameDamageMult: (b) => lv1('flamethrower', 'flamethrower', (b0) => DPS_TARGET(1) / (W.flameTickRate(b0) * W.flameUnits(b0))) * hitMult(b) * tfScale(b, W.flameUnits),
+  // One target's damage per second from the stream (the unit puddles and the ring are measured in).
+  flameStreamDps: (b) => W.flameTickRate(b) * W.flameDamageMult(b),
+  flamePuddleDamageMult: (b) => W.flamePuddleShare * W.flameStreamDps(b) * W.flamePuddleEvery / (W.flamePuddleLife / W.flamePuddleTick),
+  flameRingDamageMult: (b) => W.flameRingShare * W.flameStreamDps(b) * W.flameRingEvery,
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -545,7 +588,13 @@ export const POTENTIAL_DPS = {
     return W.grenadeCount(b) * (blast + bomblets + cloud) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
   },
   gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
-    + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0)
+    + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0),
+  flamethrower: (b) => {
+    const stream = W.flameStreamDps(b) * W.flameHitShare * (1 + (b.t4 ? W.flameRearHitShare : 0)); // front (+ rear) nozzle
+    const puddles = b.t8 ? W.flamePuddleDamageMult(b) * (W.flamePuddleLife / W.flamePuddleTick) / W.flamePuddleEvery * W.flamePuddleHitShare : 0;
+    const ring = b.t12 ? W.flameRingDamageMult(b) / W.flameRingEvery * W.flameRingHitShare : 0;
+    return stream + puddles + ring;
+  }
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -566,7 +615,8 @@ export const WEAPON_TAGS = {
   drone: ['deployable', 'projectile', 'kinetic'],
   siege: ['deployable', 'explosive', 'area'],
   grenade: ['projectile', 'explosive', 'area'],
-  gas: ['area', 'corrode']
+  gas: ['area', 'corrode'],
+  flame: ['area', 'burn']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -602,7 +652,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -644,6 +694,7 @@ export function weaponDamage(p, weapon, b) {
     case 'siege': base = d * W.turretDamageMult(sourceBuild(p, weapon, b)) * W.siegeShellDamageMult * (TUNING.deployableDamageMult ?? 1); break;
     case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'flame': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -659,6 +710,7 @@ export const mineBlastRadius = (p, b = weaponBuild(p, 'mines')) => W.mineBlastRa
 export const siegeShellRadius = (p) => W.siegeShellRadius * areaMult(p);
 export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grenadeBlastRadius(b) * areaMult(p);
 export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) * areaMult(p);
+export const flameRange = (p, b = weaponBuild(p, 'flamethrower')) => W.flameRange(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);
@@ -688,7 +740,10 @@ export function sourceElement(p, source) {
   return null;
 }
 
-export const burnStackDps = (p, lv) => baseDamage(p) * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire');
+// `weapon`: the weapon that lit the fire. The Flamethrower's built-in burn runs at W.flameBurnShare (it
+// coats a whole pack eight times a second, where other weapons light one target per hit).
+export const burnStackDps = (p, lv, weapon = null) => baseDamage(p) * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire')
+  * (weapon === 'flamethrower' ? W.flameBurnShare : 1);
 export const burnMaxStacks = (p, lv) => W.burnMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
 export const burnDuration = (p) => W.burnDuration * statusDurationMult(p);
 export const chillSlow = (lv, isBoss = false, p = null) =>

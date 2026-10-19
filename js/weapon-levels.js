@@ -103,6 +103,13 @@ export const STAT_CARDS = {
     card('gas', 'gas_rate', 'rate', 'Gas Trail Reactivity', 'gasTickRate', 'Corrosive Gas Trail: the gas eats into hulls more often. Only tick rate.', cap(8)),
     card('gas', 'gas_radius', 'radius', 'Gas Trail Plume Size', 'gasRadius', 'Corrosive Gas Trail: wider clouds. Only cloud size.'),
     card('gas', 'gas_linger', 'linger', 'Gas Trail Linger', 'gasLife', 'Corrosive Gas Trail: clouds hang in the air longer before they thin out. Only cloud lifetime.')
+  ],
+  flamethrower: [
+    card('flamethrower', 'flamethrower_damage', 'damage', 'Flamethrower Plasma Fuel', 'flameDamage', 'Flamethrower: hotter fuel. Only flame damage.'),
+    card('flamethrower', 'flamethrower_rate', 'rate', 'Flamethrower Fuel Pump', 'flameTickRate', 'Flamethrower: pumps more fuel, so the flames scorch more often. Only scorch rate.', cap(8)),
+    card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
+    card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
+    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burnMax', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4))
   ]
 };
 
@@ -146,7 +153,8 @@ const ELEMENT_EFFECT_TEXT = {
   shock: 'SHOCK targets: a short stun, sometimes a long one. More ranks stun longer and more often.'
 };
 export const ELEMENT_WEAPON_LABEL = {
-  blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades'
+  blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades',
+  flamethrower: 'Flamethrower' // built-in FIRE (FIXED_ELEMENTS): no element cards, but the same status rows
 };
 // player.weapons / upgradeLevels key of a weapon's element card.
 export const elementKey = (weapon, element) => `${weapon}_${element}`;
@@ -168,8 +176,21 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // Weapons born with an element instead of taking element cards (never infusable, never re-locked).
 // Their element counts like an infused one (STATUS cards, Amplifiers, Supercritical, HUD tag); its rank
 // grows with the weapon level (fixedElementRank: 1 at LV 1, +1 at each Breakthrough level).
-export const FIXED_ELEMENTS = { gas: 'corrode' };
+// The Flamethrower always burns: its FIRE rank is 1 + its Sticky Gel ('burn' stat) ranks instead
+// (ACROSS THE BOARD's free utility rank included), up to ELEMENT_MAX_RANKS (FIXED_ELEMENT_RANK).
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
+export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || 0));
+// Flamethrower FIRE rank read straight from the card ranks and Breakthroughs (no build allocated:
+// status-effects.js asks on every flame hit). Equals flameBurnRank(weaponBuild(p, 'flamethrower')).
+export function flameElementRank(p) {
+  const bt = p?.breakthroughs?.flamethrower;
+  let atb = 0;
+  if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
+  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.flamethrower_burn || 0) + atb * BT_BOOST_RANKS);
+}
+// Fixed-element weapons whose rank does not follow the level rule above.
+const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank };
 
 // A weapon's element and its rank ({ element, rank }), or null when it has none. Reads player.weapons
 // (kept in step with the card ranks by the cards' apply()).
@@ -177,7 +198,7 @@ export const ELEMENT_KEYS = Object.fromEntries(ELEMENT_WEAPONS.map((weapon) => [
 export function weaponElement(p, weapon) {
   const w = p?.weapons;
   const fixed = FIXED_ELEMENTS[weapon];
-  if (fixed) return w?.[weapon] > 0 ? { element: fixed, rank: fixedElementRank(w[weapon]), fixed: true } : null;
+  if (fixed) return w?.[weapon] > 0 ? { element: fixed, rank: FIXED_ELEMENT_RANK[weapon] ? FIXED_ELEMENT_RANK[weapon](p) : fixedElementRank(w[weapon]), fixed: true } : null;
   const keys = ELEMENT_KEYS[weapon];
   if (!w || !keys) return null;
   for (let i = 0; i < keys.length; i++) {
@@ -202,7 +223,7 @@ export function elementsOf(p, weapons = ELEMENT_WEAPONS) {
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER'
 };
 
 // Transforms: one per weapon per milestone (30 in all), each changing how the weapon works.
@@ -262,6 +283,11 @@ export const TRANSFORMS = {
     6: tf('seek', 'Seeking Miasma', 'Corrosive Gas Trail clouds creep toward the nearest enemy instead of hanging where you left them, and eat harder.'),
     12: tf('pockets', 'Volatile Pockets', 'Corrosive Gas Trail leaves a volatile gas pocket every second or so: it swells, then bursts in a corrosive blast when an enemy comes close.'),
     18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
+  },
+  flamethrower: {
+    6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle that sprays fire straight behind you, a little shorter than the front one.'),
+    12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
+    18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
   }
 };
 

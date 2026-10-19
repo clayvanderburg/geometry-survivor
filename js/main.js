@@ -16,6 +16,7 @@ import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
+import { Flamethrower } from './flamethrower.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -421,6 +422,7 @@ export class Game {
         drones: 0,
         grenades: 0,
         gas: 0,
+        flamethrower: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -446,6 +448,7 @@ export class Game {
     (this.deployables ||= new Deployables()).clear();
     (this.grenades ||= new Grenades()).clear();
     (this.gasTrail ||= new GasTrail()).clear();
+    (this.flamethrower ||= new Flamethrower()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     this.missileSalvos = 0;
     this.turretShots = 0;
@@ -4785,6 +4788,7 @@ export class Game {
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
+      if (this.flamethrower?.firing) this.flamethrower.silence(this); // no roar under menus or game over
       // A button held through a menu must not fire a dash or nova (or re-pause) as play starts.
       this.gpDashLatch = !!gp?.dash;
       this.gpBombLatch = !!gp?.bomb;
@@ -5000,6 +5004,8 @@ export class Game {
         this.rocketTimer = W.wingRocketCooldown(b);
       }
     }
+    // Flamethrower: a cone of fire along the aim while firing (js/flamethrower.js).
+    this.flamethrower?.update(dt, this, shouldFire);
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -6187,6 +6193,7 @@ export class Game {
     this.grenades?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
+    this.flamethrower?.draw(ctx, this);
     this.grenades?.drawAir(ctx, this);
 
     const p = this.player;

@@ -7,7 +7,7 @@
 // be hurt; kills drop nothing (no XP, caches, cores or score) and the run is never recorded or uploaded.
 // main.js keeps a handful of one-line hooks (startGame, update, hitEnemy, killEnemy, game over); the
 // panel lives in js/weapon-range-ui.js. Everything else here is DOM-free, so tests drive it headless.
-import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, elementKey, makeBuild } from './weapon-levels.js';
+import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, FIXED_ELEMENTS, elementKey, makeBuild } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponSlots, weaponLevel } from './loadout.js';
 import { UPGRADE_BY_ID, acquireWeapon, applyUpgradeLevels, applyBreakthrough, markBreakthroughOffered, loadoutAllows } from './upgrades.js';
 import { waveScaleAt, LIGHT_ENEMY_TYPES } from './enemies.js';
@@ -73,12 +73,12 @@ const STAT_LABELS = {
   lightning: 'Tesla Arc', emp: 'EMP Grenades', singularity: 'Vortex Core', collapse: 'Vortex Collapse', orbital: 'Orbit Blades',
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades', gas: 'Gas Trail', gas_pocket: 'Gas Pockets', gas_shroud: 'Toxic Shroud',
   burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
-  burn_grenades: 'Grenade Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
 const STAT_GROUP = buildSourceGroups(WEAPONS);
 // Weapon credited with each stat in the LIVE / POTENTIAL compare. Burn ticks are left out: a weapon's
 // potential DPS does not count its element.
-const WEAPON_OF = { ...STAT_GROUP, burn: null, ...Object.fromEntries(ELEMENT_WEAPONS.map((id) => [`burn_${id}`, null])) };
+const WEAPON_OF = { ...STAT_GROUP, burn: null, ...Object.fromEntries([...ELEMENT_WEAPONS, ...Object.keys(FIXED_ELEMENTS)].map((id) => [`burn_${id}`, null])) };
 
 const clampInt = (v, lo, hi, fallback = lo) => {
   const n = Math.round(Number(v));

@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange,
   burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
   doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -51,7 +51,7 @@ function elementRows(w) {
     return e && e.element === want ? fn(e.rank) : null;
   };
   const rows = [
-    { id: `${w}:burnMax`, label: `${L} max burn DPS`, get: (p) => at(p, 'fire', (lv) => burnStackDps(p, lv) * burnMaxStacks(p, lv)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
+    { id: `${w}:burnMax`, label: `${L} max burn DPS`, get: (p) => at(p, 'fire', (lv) => burnStackDps(p, lv, w) * burnMaxStacks(p, lv)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
     { id: `${w}:burnStacks`, label: `${L} burn max stacks`, get: (p) => at(p, 'fire', (lv) => burnMaxStacks(p, lv)), fmt: int },
     { id: `${w}:chill`, label: `${L} chill slow`, get: (p) => at(p, 'frost', (lv) => chillSlow(lv, false, p)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `HITS CHILL // -${row.fmt(a)} SPEED` },
     { id: `${w}:chillDuration`, label: `${L} chill duration`, get: (p) => at(p, 'frost', (lv) => chillDuration(p, lv)), fmt: secs },
@@ -173,6 +173,14 @@ export const STAT_ROWS = [
   { id: 'grenadeBlast', label: 'Grenade blast radius', get: (p) => wb(p, 'grenades', (b) => grenadeBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'GRENADE BLAST RADIUS' },
   { id: 'grenadeRange', label: 'Throw range', get: (p) => wb(p, 'grenades', W.grenadeRange), fmt: int, headline: 'count', unit: 'GRENADE THROW RANGE' },
   { id: 'grenadeElement', label: 'Grenade element', get: (p) => wb(p, 'grenades', () => grenadeElement(p).label), fmt: (v) => v },
+  // Flamethrower (FIRE is built in: its burn rows come from elementRows('flamethrower') below)
+  { id: 'flameDamage', label: 'Flame damage / scorch', get: (p) => wb(p, 'flamethrower', (b) => weaponDamage(p, 'flame', b)), fmt: dec1, headline: 'pct', unit: 'FLAME DAMAGE' },
+  { id: 'flameTickRate', label: 'Scorches / s', get: (p) => wb(p, 'flamethrower', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'FLAME SCORCH RATE' },
+  { id: 'flameRange', label: 'Flame reach', get: (p) => wb(p, 'flamethrower', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'FLAME REACH', newText: (a) => `FLAMETHROWER // ${a} PX REACH` },
+  { id: 'flameCone', label: 'Cone width', get: (p) => wb(p, 'flamethrower', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
+  { id: 'flameRear', label: 'Rear nozzle reach', get: (p) => wb(p, 'flamethrower', (b) => (b.t4 ? flameRange(p, b) * W.flameRearRange : null)), fmt: int, newText: (a) => `REAR NOZZLE // ${a} PX` },
+  { id: 'flamePuddle', label: 'Napalm puddle damage / tick', get: (p) => wb(p, 'flamethrower', (b) => (b.t8 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b) : null)), fmt: dec1, newText: () => 'NAPALM PUDDLES' },
+  { id: 'flameRing', label: 'Inferno Ring damage', get: (p) => wb(p, 'flamethrower', (b) => (b.t12 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b) : null)), fmt: dec1, newText: () => `INFERNO RING EVERY ${W.flameRingEvery}s` },
   { id: 'empArcs', label: 'EMP arcs / grenade blast', get: (p) => (p.weapons.empGrenades && ownsWeapon(p, 'grenades') ? W.empArcs : null), fmt: int, newText: (a) => `GRENADE BLASTS ARC // ${a} ZAPS` },
 
   // Corrosive Gas Trail (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
@@ -214,7 +222,8 @@ export const STAT_ROWS = [
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
   // Elements (status-effects.js): each infused weapon's status at its element rank
-  ...ELEMENT_WEAPONS.flatMap(elementRows)
+  ...ELEMENT_WEAPONS.flatMap(elementRows),
+  ...elementRows('flamethrower')
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -383,7 +392,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

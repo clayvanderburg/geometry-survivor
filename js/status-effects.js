@@ -9,7 +9,7 @@ import {
   WEAPON_SCALING as W, TAG_INFO, SOURCE_WEAPON, burnStackDps, burnMaxStacks, burnDuration, chillSlow, chillDuration,
   corrodePerStack, corrodeMaxStacks, corrodeDuration, doubleStackChance, shockStun, shockLongStun, shockLongChance, stunResist, stunImmunity
 } from './weapon-scaling.js';
-import { ELEMENT_KEYS, weaponElement } from './weapon-levels.js';
+import { ELEMENT_KEYS, FIXED_ELEMENTS, weaponElement } from './weapon-levels.js';
 
 export const STATUS_COLORS = { burn: TAG_INFO.burn.color, chill: TAG_INFO.chill.color, corrode: TAG_INFO.corrode.color, shock: TAG_INFO.shock.color };
 
@@ -17,7 +17,7 @@ export const STATUS_COLORS = { burn: TAG_INFO.burn.color, chill: TAG_INFO.chill.
 export const DOT_SOURCES = { burn: true };
 
 // Burn ticks are credited to the weapon that lit the fire (run-stats.js SUB_SOURCES: burn_<weapon>).
-export const BURN_STATS = Object.fromEntries(Object.keys(ELEMENT_KEYS).map((id) => [id, `burn_${id}`]));
+export const BURN_STATS = Object.fromEntries([...Object.keys(ELEMENT_KEYS), ...Object.keys(FIXED_ELEMENTS)].map((id) => [id, `burn_${id}`]));
 
 // Embers and sparks are capped per tick so a burning (or stunned) 200-enemy swarm stays cheap.
 const MAX_EMBERS_PER_TICK = 4;
@@ -54,7 +54,7 @@ export function applyBurn(p, e, lv, weapon = 'blaster') {
   const burning = s.burn > 0;
   if (!burning) s.burnTick = 0; // a fresh ignition waits one full interval before its first tick
   const max = burnMaxStacks(p, lv);
-  const dps = burnStackDps(p, lv);
+  const dps = burnStackDps(p, lv, weapon);
   // Two weapons on fire may feed one blaze: it keeps the stronger stack cap and stack DPS.
   s.burnMax = burning ? Math.max(s.burnMax, max) : max;
   s.burnDps = burning ? Math.max(s.burnDps, dps) : dps;
