@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.31.2',
+    date: '2026-10-19',
+    title: 'Nothing Left Behind',
+    notes: [
+      { type: 'balance', text: 'XP geoms, Void Cores and gold coins no longer fade away. Lead the swarm around and circle back for them any time.' }
+    ]
+  },
+  {
     version: '0.31.1',
     date: '2026-10-18',
     title: 'Mid-Game Pressure',

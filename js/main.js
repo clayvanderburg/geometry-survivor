@@ -83,6 +83,8 @@ export function radarSize(width, height, shortShare = 0.55) {
   return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
 }
 
+const MAX_LOOSE_GEOMS = 400; // loose XP geoms on the field before the oldest start merging (see mergeLooseGeoms)
+
 // Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
 // as a small laptop window: enemies spawn just off screen, so a tiny view would put them on top of the ship.
 // Touch play zooms out a further 30% (TOUCH_VIEW_MIN_SIDE): thumbs cover part of the screen.
@@ -1802,7 +1804,6 @@ export class Game {
           xp: 0,
           rotation: Math.random() * Math.PI * 2,
           hue: 48,
-          life: 30,
           magnetized: false
         });
       }
@@ -1831,7 +1832,6 @@ export class Game {
         xp: 4,
         rotation: 0,
         hue: 285,
-        life: 25,
         magnetized: true
       });
     } else if (Math.random() < 0.42) {
@@ -1844,7 +1844,6 @@ export class Game {
         xp: 1,
         rotation: 0,
         hue: 185,
-        life: 14,
         magnetized: false
       });
     }
@@ -2153,7 +2152,6 @@ export class Game {
         xp: Math.max(1, Math.round(killXp / geomCount)),
         rotation: Math.random() * Math.PI * 2,
         hue: e.isBoss || e.isLieutenant ? 48 : 145,
-        life: 16,
         magnetized: fromBomb
       });
     }
@@ -2183,7 +2181,6 @@ export class Game {
             xp: 2,
             rotation: Math.random() * Math.PI * 2,
             hue: 280,
-            life: 24,
             magnetized: fromBomb
           });
         }
@@ -2352,7 +2349,7 @@ export class Game {
       this.geoms.push({
         isCore: true, coreAmount: 1, x: e.x, y: e.y,
         vx: Math.cos(ca) * 3, vy: Math.sin(ca) * 3,
-        xp: 2, rotation: 0, hue: 280, life: 24, magnetized: true
+        xp: 2, rotation: 0, hue: 280, magnetized: true
       });
     }
     this.coresDroppedThisWave += cores;
@@ -4428,6 +4425,25 @@ export class Game {
     }
   }
 
+  // Geoms never expire, so a long run could pile up thousands. Past MAX_LOOSE_GEOMS loose XP geoms, the
+  // oldest folds into its nearest loose neighbour (no XP lost); merged geoms draw a little bigger.
+  mergeLooseGeoms() {
+    const loose = [];
+    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.magnetized) loose.push(g);
+    let excess = loose.length - MAX_LOOSE_GEOMS;
+    for (let i = 0; excess > 0; i++, excess--) {
+      const g = loose[i];
+      let into = null, best = Infinity;
+      for (let j = i + 1; j < loose.length; j++) {
+        const d = (loose[j].x - g.x) ** 2 + (loose[j].y - g.y) ** 2;
+        if (d < best) { best = d; into = loose[j]; }
+      }
+      into.xp += g.xp;
+      into.merged = (into.merged || 0) + (g.merged || 0) + 1;
+      this.geoms.splice(this.geoms.indexOf(g), 1);
+    }
+  }
+
   update(dt) {
     // A boss-kill hit-stop/slow-mo tick freezes the world, grid and particles together.
     const held = this.state === 'PLAYING' && this.consumeTimeDilation();
@@ -4833,11 +4849,11 @@ export class Game {
       }
     }
 
-    // 10. Update Geoms & Void Cores
+    // 10. Update Geoms & Void Cores. Pickups never expire: you can kite a swarm away and circle back for them.
+    this.mergeLooseGeoms();
     for (let i = this.geoms.length - 1; i >= 0; i--) {
       const g = this.geoms[i];
       g.rotation += g.isCore ? 0.12 : g.isGold ? 0.05 : 0.08;
-      g.life -= dt;
 
       const dx = p.x - g.x;
       const dy = p.y - g.y;
@@ -4899,10 +4915,6 @@ export class Game {
           break;
         }
         continue;
-      }
-
-      if (g.life <= 0) {
-        this.geoms.splice(i, 1);
       }
     }
 
@@ -5710,7 +5722,7 @@ export class Game {
     for (let i = 0; i < this.geoms.length; i++) {
       const g = this.geoms[i];
       if (g.x < this.camX - 40 || g.x > this.camX + this.width + 40 || g.y < this.camY - 40 || g.y > this.camY + this.height + 40) continue;
-      const alpha = g.life < 2 ? (g.life * 0.5) : 0.92;
+      const alpha = 0.92;
       ctx.save();
       ctx.translate(g.x, g.y);
       ctx.rotate(g.rotation);
@@ -5768,6 +5780,7 @@ export class Game {
       } else {
         ctx.strokeStyle = `hsla(${g.hue}, 100%, 62%, ${alpha})`;
         ctx.lineWidth = 2;
+        if (g.merged) { const k = Math.min(2, 1 + Math.log2(1 + g.merged) * 0.2); ctx.scale(k, k); }
         ctx.beginPath();
         ctx.moveTo(0, -6.5);
         ctx.lineTo(5, 0);

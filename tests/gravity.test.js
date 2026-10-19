@@ -192,8 +192,8 @@ test('loose geoms sink into a black hole while magnetized geoms still fly to the
   const { game, manager } = arena();
   const bh = addEnemy(manager, 'blackhole', 2000, 2000);
   game.player.x = 1000; game.player.y = 1000;
-  const loose = { isCore: false, x: 2120, y: 2000, vx: 0, vy: 0, xp: 1, rotation: 0, hue: 145, life: 16 };
-  const magnet = { isCore: false, x: 2060, y: 2000, vx: 0, vy: 0, xp: 1, rotation: 0, hue: 145, life: 16, magnetized: true };
+  const loose = { isCore: false, x: 2120, y: 2000, vx: 0, vy: 0, xp: 1, rotation: 0, hue: 145 };
+  const magnet = { isCore: false, x: 2060, y: 2000, vx: 0, vy: 0, xp: 1, rotation: 0, hue: 145, magnetized: true };
   game.geoms = [loose, magnet];
   const startMagnetDist = Math.hypot(magnet.x - 1000, magnet.y - 1000);
   for (let t = 0; t < 60; t++) { pin(bh, 2000, 2000); game.update(1 / 60); }

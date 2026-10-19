@@ -339,7 +339,7 @@ test('run report: weapon bars with share and DPS, top threats with the final blo
 
 test('a simulated run fills the same stats the browser uploads, matching the balance harness attribution', async () => {
   const h = await import('../tools/balance/harness.mjs');
-  const r = h.simulateRun({ strategy: { name: 'explosive', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest'], weapons: ['missiles', 'lightning'] }, seed: 'stats:1', maxSeconds: 150 });
+  const r = h.simulateRun({ strategy: { name: 'explosive', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest'], weapons: ['missiles', 'lightning'] }, seed: 'stats:2', maxSeconds: 150 });
   const s = r.stats;
   assert.equal(s.schema, 1);
   assert.equal(s.version, GAME_VERSION);
