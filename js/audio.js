@@ -1716,6 +1716,45 @@ export class SoundEngine {
     this.playMissileImpact(vol);
   }
 
+  // Corrosive Gas Trail vent: a soft, low-passed hiss sweeping down (rare and quiet: the trail vents all the time).
+  playGasVent() {
+    if (!this.claimVoice('gasVent', 600, 1, 0.4)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(2400, t);
+    band.frequency.exponentialRampToValueAtTime(700, t + 0.38);
+    band.Q.value = 1.4;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.03, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.5, 0.42);
+  }
+
+  // Volatile gas pocket bursting: a wet bubble "blorp" (a sine dropping fast) over a short fizz.
+  playGasBurst() {
+    if (!this.claimVoice('gasBurst', 90, 2, 0.25)) return;
+    this.tone(520, 0, 0.16, 0.07, 'sine', 140);
+    this.tone(260, 0.02, 0.12, 0.04, 'triangle', 90);
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'highpass';
+    band.frequency.setValueAtTime(1800, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.05, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.24);
+  }
+
   // Orbit blade contact: a short metallic grind tick (blades touch every tick, so heavily throttled).
   playBladeHit() {
     if (!this.enabled || !this.ctx) return;

@@ -15,6 +15,7 @@ import { LANCE, beamGap } from './lancers.js';
 import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
+import { GasTrail } from './gas-trail.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -416,6 +417,7 @@ export class Game {
         turret: 0,
         drones: 0,
         grenades: 0,
+        gas: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -440,6 +442,7 @@ export class Game {
     this.damageNumbers?.clear();
     (this.deployables ||= new Deployables()).clear();
     (this.grenades ||= new Grenades()).clear();
+    (this.gasTrail ||= new GasTrail()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     this.missileSalvos = 0;
     this.turretShots = 0;
@@ -4945,6 +4948,7 @@ export class Game {
     // so their bolts move, bend and collide with everything else this tick.
     this.deployables?.update(dt, this);
     this.grenades?.update(dt, this);
+    this.gasTrail?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -6090,6 +6094,7 @@ export class Game {
     for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
     this.weaponFx?.draw(ctx, this);
 
+    this.gasTrail?.drawGround(ctx, this);
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
