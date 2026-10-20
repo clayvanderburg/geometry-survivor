@@ -629,3 +629,39 @@ test('purges apply to every mode\'s boards', async () => {
   await get(handler, 'all');
   for (const key of keys) assert.deepEqual(store.board(key).map((e) => e.name), ['ACE'], key);
 });
+
+test('deploy previews and branch deploys use their own test board; production keeps the live one', async () => {
+  const { deployContext, storeNameFor } = await import('../netlify/lib/deploy-context.mjs');
+  const { STORE_NAME } = await import('../netlify/lib/leaderboard.mjs');
+  assert.equal(deployContext({ deploy: { context: 'production' } }), 'production');
+  assert.equal(deployContext({ deploy: { context: 'deploy-preview' } }), 'deploy-preview');
+  assert.equal(deployContext({}, (k) => (k === 'CONTEXT' ? 'branch-deploy' : undefined)), 'branch-deploy', 'the CONTEXT env var as a fallback');
+  assert.equal(deployContext(undefined), 'production', 'no context at all: production, as before');
+  assert.equal(storeNameFor(STORE_NAME, 'production'), 'leaderboard', 'the live store name never changes');
+  for (const ctx of ['deploy-preview', 'branch-deploy', 'dev']) assert.equal(storeNameFor(STORE_NAME, ctx), 'leaderboard-preview');
+
+  // The handler opens the store for each request's own deploy context.
+  const stores = new Map();
+  const { handler } = setup({ store: (context) => {
+    const name = storeNameFor(STORE_NAME, deployContext(context));
+    if (!stores.has(name)) stores.set(name, new FakeStore());
+    return stores.get(name);
+  } });
+  const postIn = (ctx, payload) => handler(new Request('https://game.example/api/scores', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload)
+  }), { ip: freshIp(), deploy: { context: ctx } });
+  assert.equal((await postIn('deploy-preview', run({ name: 'PREVIEW ACE' }))).status, 201);
+  assert.equal((await postIn('production', run({ name: 'LIVE ACE' }))).status, 201);
+  assert.deepEqual(stores.get('leaderboard').board().map(e => e.name), ['LIVE ACE'], 'the preview run never reaches the live board');
+  assert.deepEqual(stores.get('leaderboard-preview').board().map(e => e.name), ['PREVIEW ACE']);
+});
+
+test('stats: preview runs go to the stats-preview store', async () => {
+  const { createStatsHandler, STATS_STORE } = await import('../netlify/lib/stats.mjs');
+  const { deployContext, storeNameFor } = await import('../netlify/lib/deploy-context.mjs');
+  const opened = [];
+  const handler = createStatsHandler({ store: (context) => { opened.push(storeNameFor(STATS_STORE, deployContext(context))); return { list: async () => ({ blobs: [] }), get: async () => null, getWithMetadata: async () => null, setJSON: async () => ({ modified: true }) }; }, log: null });
+  await handler(new Request('https://game.example/api/stats/summary'), { deploy: { context: 'deploy-preview' } });
+  await handler(new Request('https://game.example/api/stats/summary'), { deploy: { context: 'production' } });
+  assert.deepEqual(opened, ['stats-preview', 'stats']);
+});

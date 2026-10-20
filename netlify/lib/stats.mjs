@@ -211,10 +211,10 @@ export function createStatsHandler({
     try {
       const path = new URL(req.url).pathname.replace(/\/+$/, '');
       if (path.endsWith('/summary')) {
-        if (req.method === 'GET' || req.method === 'HEAD') return await handleSummary(req, store());
+        if (req.method === 'GET' || req.method === 'HEAD') return await handleSummary(req, store(context));
         return json(405, { error: 'method not allowed' }, { allow: 'GET, HEAD' });
       }
-      if (req.method === 'POST') return await handlePost(req, context, store());
+      if (req.method === 'POST') return await handlePost(req, context, store(context));
       return json(405, { error: 'method not allowed' }, { allow: 'POST' });
     } catch (err) {
       log?.error?.('[stats]', err);
