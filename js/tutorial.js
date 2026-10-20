@@ -52,7 +52,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'mine', title: 'MINE ASTEROIDS', media: 'mine.webp',
       alt: 'The ship drilling through asteroids with gold and green veins',
       lines: [
-        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, and a tunnel is an escape route.',
+        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
         '[[gold:◆ Gold veins]] pay gold to change your upgrade choices. [[green:Green veins]] restore your shield. [[purple:Purple cores]] give ❖ Void Cores.'
       ]
     },

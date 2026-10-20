@@ -22,6 +22,7 @@ import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
+import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
@@ -89,8 +90,8 @@ import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
 const RADAR_STORAGE_KEY = 'vexolith_radar';
 const RADAR_BASE_SIZE = 152;
-const RADAR_ROCK_STRIDE = { rock: 3, gold_vein: 1, shield_vein: 1, core_vein: 0 }; // bitmask: draw when (index & mask) === 0
-const RADAR_ROCK_COLORS = [['rgba(0, 195, 255, 0.38)', ['rock', 'shield_vein']], ['#ffcc00', ['gold_vein']], ['#d68fff', ['core_vein']]];
+const RADAR_ROCK_STRIDE = { rock: 7, gold_vein: 1, shield_vein: 1, core_vein: 0, bedrock: 0 }; // bitmask: draw when (index & mask) === 0 (plain rock: every 8th node)
+const RADAR_ROCK_COLORS = [['rgba(0, 195, 255, 0.38)', ['rock', 'shield_vein']], ['#ffcc00', ['gold_vein']], ['#d68fff', ['core_vein']], ['rgba(222, 210, 255, 0.85)', ['bedrock']]];
 const RADAR_SCALE = 2.5; // on-screen size vs the original 152 px radar
 function loadRadarVisible() {
   try { return globalThis.localStorage?.getItem(RADAR_STORAGE_KEY) !== '0'; } catch { return true; }
@@ -467,6 +468,7 @@ export class Game {
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
+    (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
     this.turretShots = 0;
     this.orbitalFlingTimer = 0;
@@ -1169,6 +1171,8 @@ export class Game {
         if (!ok) {
           this.showBanner(`⚠ ENEMY CAP REACHED — ${INTEL_INFO[type].label} NOT SPAWNED ⚠`);
         }
+      } else if (sandboxAction === 'OPEN_RIFT') {
+        if (!this.rifts?.openNow(this)) this.particles.spawnFloatText(p.x, p.y - 24, 'NO ROOM FOR A RIFT (OR ONE IS OPEN)', '#e07bff', 14);
       } else if (sandboxAction === 'REGEN_ASTEROIDS') {
         this.asteroidManager.generateSector(p.x, p.y);
         this.particles.spawnFloatText(p.x, p.y - 24, '☄ ASTEROID SECTOR REGENERATED!', '#00ffaa', 15);
@@ -1974,7 +1978,7 @@ export class Game {
 
   triggerDash() {
     const p = this.player;
-    if (p.dashCooldown > 0) return;
+    if (p.dashCooldown > 0 || this.rifts?.holdsShip()) return;
 
     // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
     // with the invulnerability to match.
@@ -5155,7 +5159,11 @@ export class Game {
       this.gpBombLatch = gp.bomb;
     }
 
-    if (p.dashTimer > 0) {
+    // Mid rift-jump the rift moves the ship (js/rifts.js): no steering, dashing or gravity tug.
+    const jumping = !!this.rifts?.holdsShip();
+    if (jumping) {
+      p.gravityTug = 0;
+    } else if (p.dashTimer > 0) {
       p.dashTimer -= dt;
       p.gravityTug = 0; // Dashes cut straight through gravity wells
       this.particles.spawnAfterimage(p.x, p.y, p.angle, p.radius, 188);
@@ -5192,6 +5200,9 @@ export class Game {
     const pad = p.radius + 24;
     p.x = Math.max(pad, Math.min(this.worldWidth - pad, p.x));
     p.y = Math.max(pad, Math.min(this.worldHeight - pad, p.y));
+    // Space-time rifts: open/seal on their timer, and swallow the ship when it flies in (the jump
+    // moves the ship and cuts the camera to the far side).
+    this.rifts?.update(dt, this);
     this.grid.applyWake?.(p.x, p.y, p.vx, p.vy);
 
     const targetCamX = Math.max(0, Math.min(this.worldWidth - this.width, p.x - this.width * 0.5));
@@ -5239,7 +5250,7 @@ export class Game {
     updateShipAnimation(p, dt);
 
     // 3. Primary Weapon Firing
-    const shouldFire = this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
+    const shouldFire = !jumping && (this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)));
     if (shouldFire && ownsWeapon(p, 'blaster')) {
       this.fireAccumulator += dt * blasterFireRate(p);
       while (this.fireAccumulator >= 1) {
@@ -6302,7 +6313,7 @@ export class Game {
     ctx.strokeRect(mx, my, mapSize, mapSize);
 
     // 1. Asteroid Clusters & Rich Veins. The field has ~940 small rocks (about twice the old count), so
-    // blips are thinned to about the old density: every 4th plain rock, every 2nd gold or shield vein
+    // blips are thinned to about the old density: every 8th plain rock node (masses pack about twice as many), every 2nd gold or shield vein
     // (as before), and every deep core vein (rare and worth a Void Core).
     // One pass per color, so the fill style is set three times a frame instead of once per blip.
     const rocks = this.asteroidManager.asteroids;
@@ -6310,7 +6321,7 @@ export class Game {
       ctx.fillStyle = color;
       for (let i = 0; i < rocks.length; i++) {
         const r = rocks[i];
-        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0) continue;
+        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0 || r.border) continue; // the radar frame is the wall
         const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
         ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
       }
@@ -6322,6 +6333,8 @@ export class Game {
       ctx.fillStyle = '#ffee00';
       ctx.fillRect(mx + ch.x * scaleX - 3 * k, my + ch.y * scaleY - 3 * k, 6 * k, 6 * k);
     }
+
+    this.rifts?.drawRadar(ctx, mx, my, scaleX, scaleY, k);
 
     // 3. Enemies on Radar
     const enemies = this.enemyManager.enemies;
@@ -6388,6 +6401,8 @@ export class Game {
       if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
       else if (enemies[i].isLieutenant) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#dfe6ff', 'LT');
     }
+    const rift = this.rifts?.active;
+    if (rift && rift.phase !== 'seal') this.drawEdgeArrow(ctx, rift.x, rift.y, '#e07bff', 'RIFT');
     if (soonest < Infinity) {
       const pulse = 0.5 + 0.5 * Math.cos(soonest * Math.PI * 5);
       ctx.strokeStyle = `rgba(255, 42, 85, ${0.16 + pulse * 0.38})`;
@@ -6482,18 +6497,22 @@ export class Game {
     }
     this.grid.draw(ctx, this.camX, this.camY, this.width, this.height);
 
-    // 2. Glowing Outer Sector Boundary Wall
-    ctx.save();
-    ctx.strokeStyle = `rgba(255, 0, 127, ${0.55 + beatPulse * 0.35})`;
-    ctx.lineWidth = 5;
-    ctx.strokeRect(12, 12, this.worldWidth - 24, this.worldHeight - 24);
-    ctx.restore();
+    // 2. Outer Sector Boundary: a bedrock wall (drawn with the asteroids); a glowing line where there is
+    // none (the Weapon Range's empty field, or the bedrock wall switched off).
+    if (!this.asteroidManager.bordered) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 0, 127, ${0.55 + beatPulse * 0.35})`;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(12, 12, this.worldWidth - 24, this.worldHeight - 24);
+      ctx.restore();
+    }
 
     // 3. Draw Destructible Asteroid Clusters & Active Mining Laser Beams
     this.asteroidManager.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Event horizons: opaque discs under the additive layer so wells read as holes punched in the grid.
     this.drawWellHorizons(ctx);
+    this.rifts?.drawVoid(ctx, this); // the same for the void inside a space-time rift
 
     // 4. Draw Geoms, Relic Chests, Singularities, Bullets, Missiles, Enemies & Player in Additive Mode
     ctx.save();
@@ -6642,6 +6661,7 @@ export class Game {
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
+    this.rifts?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawBossWarps(ctx, this);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
@@ -6655,12 +6675,25 @@ export class Game {
     if (this.state !== 'GAMEOVER') {
       this.drawGravityTethers(ctx, p);
       drawShipWake(ctx, p, TUNING);
-      this.drawPlayerShield(ctx, p, beatPulse);
+      // Mid rift-jump the ship spins and shrinks into the rift, then pops back out of the exit.
+      const pose = this.rifts?.shipPose() ?? { scale: 1, spin: 0 };
+      const posed = pose.scale !== 1 || pose.spin !== 0;
+      if (posed) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(pose.spin);
+        ctx.scale(Math.max(0.001, pose.scale), Math.max(0.001, pose.scale));
+        ctx.translate(-p.x, -p.y);
+      }
+      if (pose.scale > 0.02) {
+        this.drawPlayerShield(ctx, p, beatPulse);
 
-      if (p.weapons.orbitals > 0) this.drawOrbitBlades(ctx, p);
+        if (p.weapons.orbitals > 0) this.drawOrbitBlades(ctx, p);
 
-      this.deployables?.drawEscorts(ctx, this);
-      this.drawCrabShip(ctx, p);
+        this.deployables?.drawEscorts(ctx, this);
+        this.drawCrabShip(ctx, p);
+      }
+      if (posed) ctx.restore();
     } else {
       this.deathSeq?.drawWorld(ctx, TUNING);
     }

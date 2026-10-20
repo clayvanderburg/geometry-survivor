@@ -14,7 +14,7 @@ export const CHANGELOG = Object.freeze([
   {
     version: '0.43.0',
     date: '2026-10-20',
-    title: 'Victory at Wave 50',
+    title: 'Victory, Rifts & Bedrock',
     notes: [
       { type: 'new', text: 'VICTORY: beat the wave-50 boss to win the campaign. Then fly on into ENDLESS for a higher score (bosses come in pairs), or end the run and bank it as a win.' },
       { type: 'balance', text: 'Bosses are spread out: a minor boss every 5th wave and a major boss every 10th (was every 3rd and 6th).' },
@@ -22,7 +22,12 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Twenty new wave themes fill the longer campaign, from PINCER and LOCUST STORM to SIEGE LINE, PLAGUE SHIP and THE GLARE.' },
       { type: 'new', text: 'No more outrunning bosses: one left far behind tears a rift open near you and warps back into the fight.' },
       { type: 'new', text: 'The OUROBOROS now arrives coiled up round its head, then unwinds and comes for you.' },
-      { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels straight through asteroids, bore-charges down a marked lane and spits gravel at you while it digs. Rock is no cover from it.' }
+      { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels straight through asteroids, bore-charges down a marked lane and spits gravel at you while it digs. Rock is no cover from it.' },
+      { type: 'new', text: 'Space-time rifts: about every 40 seconds a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
+      { type: 'new', text: 'An arrow at the screen edge and a ring on the radar point to an open rift. It closes after about 9 seconds.' },
+      { type: 'new', text: 'Bedrock: violet rock that nothing can break, not your drills, elites or bosses. Clumps of it turn up in every sector, most as the hard core of an asteroid.' },
+      { type: 'new', text: 'Solid asteroids: every cluster is now one solid mass. Drill into it and the edge breaks into loose chunks, one at a time. Ore runs through in short seams.' },
+      { type: 'new', text: 'The edge of the sector is now a wall of bedrock instead of a glowing red line.' }
     ]
   },
   {

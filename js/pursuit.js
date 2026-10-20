@@ -8,6 +8,7 @@
 //     visibly on the minimap, and nothing ever changes speed on screen.
 //   - Elites (lieutenants and bosses) skip the detour while elite mining is on: they plow straight at
 //     the ship and grind through whatever rock is in the way (AsteroidManager.update, section 3).
+//     Bedrock (unbreakable) is the exception: they steer round it like everyone else.
 // Vortexes (internal type 'blackhole') never take part: they drift, they don't chase.
 import { TUNING } from './config.js';
 
@@ -55,12 +56,13 @@ export function steerAroundRocks(e, dirX, dirY, dist, terrain, dt, probe, out) {
   out.x = dirX;
   out.y = dirY;
   if (!terrain?.getNearbyAsteroids || !pursues(e)) return out;
-  if (plowsThroughRock(e)) {
-    // Straight line: rock in the way is ground down on contact, never steered round.
+  // Plowers go in a straight line: rock in the way is ground down on contact, never steered round.
+  // Only bedrock (which nothing grinds) turns them.
+  const plows = plowsThroughRock(e);
+  if (plows && !e.detourRock?.unbreakable) {
     e.detourRock = null;
     e.detourT = undefined;
     e.detourSide = 0;
-    return out;
   }
 
   if (probe) {
@@ -72,7 +74,7 @@ export function steerAroundRocks(e, dirX, dirY, dist, terrain, dt, probe, out) {
     let blockS = Infinity;
     for (let i = 0; i < rocks.length; i++) {
       const rock = rocks[i];
-      if (rock.hp !== undefined && rock.hp <= 0) continue;
+      if ((rock.hp !== undefined && rock.hp <= 0) || (plows && !rock.unbreakable)) continue;
       const rx = rock.x - e.x;
       const ry = rock.y - e.y;
       const s = rx * dirX + ry * dirY; // distance along the line to the ship
