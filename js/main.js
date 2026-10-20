@@ -43,7 +43,7 @@ import {
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
-import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue, armorySpent } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -99,6 +99,7 @@ export function radarSize(width, height, shortShare = 0.55) {
   return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
 }
 
+const ARMORY_REFUND_CONFIRM_MS = 4000; // REFUND ALL disarms if the confirming click doesn't come in time
 const MAX_LOOSE_GEOMS = 400; // loose XP geoms on the field before the oldest start merging (see mergeLooseGeoms)
 
 // Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
@@ -315,7 +316,6 @@ export class Game {
     this.overview = new RunOverview(this);
     this.titleShip = new ShipPreview(document.getElementById('title-ship-canvas'), { tuning: TUNING });
     this.hudHidden = false; // [H]: hide every HUD overlay for this session (not saved)
-    this.watchXpBarWidth();
     this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
@@ -506,17 +506,6 @@ export class Game {
     this.renderScale = this.viewScale * dpr;
     this.canvas.width = Math.round(vw * dpr);
     this.canvas.height = Math.round(vh * dpr);
-  }
-
-  // The desktop shield bar is exactly half the XP bar's length: keep --xp-bar-width on #hud in step with it.
-  watchXpBarWidth() {
-    const xp = document.querySelector?.('.xp-bar-container');
-    const hud = document.getElementById('hud');
-    if (!xp || !hud?.style || typeof ResizeObserver !== 'function') return;
-    new ResizeObserver(([entry]) => {
-      const w = entry.borderBoxSize?.[0]?.inlineSize ?? xp.offsetWidth;
-      if (w > 0) hud.style.setProperty('--xp-bar-width', `${w}px`);
-    }).observe(xp);
   }
 
   // Shield under LOW_SHIELD_PCT: the screen edges pulse red (only while a run is on screen).
@@ -1214,11 +1203,13 @@ export class Game {
     tabs.className = 'armory-tabs';
     const tabDefs = [{ id: 'all', label: 'ALL', icon: '' }, ...ARMORY_CATEGORIES];
     tabs.innerHTML = tabDefs.map((c) => `<button class="armory-tab${this.armoryCat === c.id ? ' active' : ''}" data-armory-key="cat:${c.id}" aria-pressed="${this.armoryCat === c.id}">${c.icon ? c.icon + ' ' : ''}${c.label}</button>`).join('')
-      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`;
+      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`
+      + this.armoryRefundButtonHtml();
     tabs.querySelectorAll('[data-armory-key^="cat:"]').forEach((btn) => btn.addEventListener('click', () => {
       this.armoryCat = btn.dataset.armoryKey.slice(4);
       this.renderHubUI();
     }));
+    tabs.querySelector('[data-armory-key="refund"]')?.addEventListener('click', () => this.onArmoryRefund());
     container.appendChild(tabs);
 
     if (prog.data.armoryResetNotice) {
@@ -1266,6 +1257,30 @@ export class Game {
         || container.querySelector(`[data-armory-key^="cat:"].active`);
       if (again) this.menuNav.setFocus(again);
     }
+  }
+
+  // REFUND ALL: the first click arms it (the button asks to confirm and shows the refund), a second click
+  // within ARMORY_REFUND_CONFIRM_MS resets every rank and pays back every core spent on them.
+  armoryRefundButtonHtml() {
+    const refund = armorySpent(this.progression.data.ranks);
+    const armed = refund > 0 && this.armoryRefundArmed;
+    const label = armed ? `CONFIRM: REFUND ❖ ${refund.toLocaleString()}?` : '↺ REFUND ALL';
+    const title = refund > 0 ? `Reset every armory rank and get back all ${refund.toLocaleString()} Void Cores spent` : 'Nothing to refund yet';
+    return `<button class="armory-refund-btn${armed ? ' armed' : ''}" data-armory-key="refund" title="${title}" ${refund > 0 ? '' : 'disabled'}>${label}</button>`;
+  }
+
+  onArmoryRefund() {
+    this.sound.init();
+    clearTimeout(this.armoryRefundTimer);
+    if (!this.armoryRefundArmed) {
+      this.armoryRefundArmed = true;
+      this.armoryRefundTimer = setTimeout(() => { this.armoryRefundArmed = false; this.renderHubUI(); }, ARMORY_REFUND_CONFIRM_MS);
+      this.sound.playUiSelect?.();
+    } else {
+      this.armoryRefundArmed = false;
+      if (this.progression.refundAll() > 0) this.sound.playUiConfirm?.();
+    }
+    this.renderHubUI();
   }
 
   // Both board panels (title + game over) share one tab and one view.
@@ -2581,16 +2596,18 @@ export class Game {
 
     const hud = document.getElementById('hud')?.getBoundingClientRect?.();
     const bars = document.getElementById('boss-hud')?.getBoundingClientRect?.();
-    const pill = document.getElementById('nova-indicator')?.getBoundingClientRect?.();
     let top = '';
     if (!this.touchMode && hud) {
-      const below = Math.max(168, pill?.height > 0 ? pill.bottom - hud.top + 40 : 0, bars?.height > 0 ? bars.bottom - hud.top + 14 : 0);
+      // The SUPERNOVA gauge sits in the bottom dock, so the banner only has to clear the boss bars up top.
+      const below = Math.max(168, bars?.height > 0 ? bars.bottom - hud.top + 14 : 0);
       top = `${Math.round(below)}px`;
     }
     if (el.style && el.style.top !== top) el.style.top = top;
 
     // Arrow: leaves the banner edge nearest the target and curves into the target's facing side.
-    const target = document.getElementById(this.touchMode ? 'touch-nova' : 'nova-indicator');
+    const target = this.touchMode
+      ? document.getElementById('touch-nova')
+      : document.querySelector?.('#nova-indicator .dock-gauge') || document.getElementById('nova-indicator');
     const t = target?.getBoundingClientRect?.();
     const c = el.getBoundingClientRect?.();
     const box = arrow.getBoundingClientRect?.();
@@ -5463,19 +5480,29 @@ export class Game {
     document.getElementById('level-display').textContent = `LVL ${p.level}`;
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-    const hpFill = document.getElementById('hp-bar-fill');
-    hpFill.style.width = `${hpPct}%`;
-    hpFill.style.background = hpPct < 35
-      ? 'linear-gradient(90deg, #ff2a55, #ff7700)'
-      : hpPct < 70
-      ? 'linear-gradient(90deg, #ffcc00, #00ff88)'
-      : 'linear-gradient(90deg, #00f3ff, #00ffaa)';
+    document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
+    // The ghost trails the fill (CSS transition delay), so a hit leaves a fading chunk behind.
+    const ghost = document.getElementById('hp-bar-ghost');
+    if (ghost) ghost.style.width = `${hpPct}%`;
+    const shieldLevel = hpPct < 35 ? 'low' : hpPct < 70 ? 'mid' : 'high'; // colours the bar (CSS)
+    const shieldGroup = document.getElementById('shield-group');
+    if (shieldGroup?.getAttribute?.('data-level') !== shieldLevel) shieldGroup?.setAttribute?.('data-level', shieldLevel);
     document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
     this.updateLowShieldVignette();
 
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
-    document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
+    const dashEl = document.getElementById('dash-indicator');
+    dashEl?.style?.setProperty?.('--ready', (dashReadyPct / 100).toFixed(3));
+    dashEl?.classList?.[dashReadyPct >= 100 ? 'add' : 'remove']('ready');
     document.getElementById('bombs-count').textContent = p.bombs;
+    document.getElementById('nova-indicator')?.classList?.[p.bombs > 0 ? 'remove' : 'add']('empty');
+    // The bottom dock centres itself in the space left of the radar (bottom-right) on narrow windows.
+    const radarReserve = this.radarVisible && !this.touchMode
+      ? Math.round((radarSize(this.width, this.height) + 18) * (this.viewScale || 1)) : 0;
+    if (radarReserve !== this.radarReserve) {
+      this.radarReserve = radarReserve;
+      document.getElementById('hud')?.style?.setProperty?.('--radar-reserve', `${radarReserve}px`);
+    }
     if (this.touchMode) this.touch?.setStatus(dashReadyPct / 100, p.bombs);
 
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // old saves, and every upgrade actually reaching the run. The balance harness builds a real headless Game.
 const h = await import('../tools/balance/harness.mjs');
 const {
-  META_UPGRADES, META_BY_ID, ARMORY_CATEGORIES, ARMORY_VERSION, STARTING_CORES, armoryCost, armoryBonuses, formatArmoryValue,
+  META_UPGRADES, META_BY_ID, ARMORY_CATEGORIES, ARMORY_VERSION, STARTING_CORES, armoryCost, armoryBonuses, formatArmoryValue, armorySpent,
   normalizeSave, ProgressionManager
 } = await import('../js/progression.js');
 const { TUNING } = await import('../js/config.js');
@@ -99,6 +99,24 @@ test('buying: costs escalate, insufficient cores and max rank refuse, the notice
   assert.equal(prog.buyUpgrade('nope'), false);
   prog.dismissArmoryNotice();
   assert.equal(JSON.parse(store.get('vectra_survivor_save_v2')).armoryResetNotice, false);
+});
+
+test('REFUND ALL resets every rank and pays back exactly what was spent', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  store.set('vectra_survivor_save_v2', JSON.stringify({ armory: ARMORY_VERSION, pilotName: 'ACE', cores: 2000 }));
+  const prog = new ProgressionManager();
+  assert.equal(prog.refundAll(), 0, 'nothing bought, nothing refunded');
+  assert.equal(prog.data.cores, 2000);
+  for (const id of ['damage', 'damage', 'damage', 'maxHp', 'luck', 'bombs']) assert.equal(prog.buyUpgrade(id), true);
+  const spent = 2000 - prog.data.cores;
+  assert.equal(armorySpent(prog.data.ranks), spent);
+  assert.equal(prog.refundAll(), spent);
+  assert.equal(prog.data.cores, 2000, 'every core back');
+  assert.ok(META_UPGRADES.every((u) => prog.getRank(u.id) === 0), 'every rank back to 0');
+  const saved = JSON.parse(store.get('vectra_survivor_save_v2'));
+  assert.equal(saved.cores, 2000, 'persisted');
+  assert.equal(saved.ranks.damage, 0);
 });
 
 test('every armory stat reaches the run', () => {

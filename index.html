@@ -65,21 +65,36 @@
         </div>
 
         <div class="hud-right">
-          <div class="bars-wrapper">
-            <div class="bar-group">
-              <span class="bar-label">SHIELD</span>
+          <!-- Desktop: the ability dock, pinned bottom centre (DASH · SHIELD · SUPERNOVA). Touch play keeps
+               the shield up here in the top-right column and has its own DASH / NOVA buttons. -->
+          <div id="ability-dock" class="bars-wrapper">
+            <div class="ability-pill dock-ability" id="dash-indicator" title="Dash [Space / Right-Click]">
+              <div class="dock-gauge" aria-hidden="true">
+                <svg class="dock-icon" viewBox="0 0 24 24"><path d="M4 6l6 6-6 6M12 6l6 6-6 6" /></svg>
+              </div>
+              <div class="dock-meta">
+                <span class="dock-name">DASH</span>
+                <span class="key-hint">SPACE</span>
+              </div>
+            </div>
+            <div class="bar-group" id="shield-group" data-level="high">
+              <div class="bar-head">
+                <span class="bar-label">SHIELD</span>
+                <span id="hp-text">100/100</span>
+              </div>
               <div class="hp-bar-outer">
+                <div id="hp-bar-ghost"></div>
                 <div id="hp-bar-fill"></div>
               </div>
-              <span id="hp-text">100/100</span>
             </div>
-            <div class="ability-group">
-              <div class="ability-pill" id="dash-indicator" title="Dash [Space / Right-Click]">
-                <span class="key-hint">SPACE</span> DASH
-                <div class="cooldown-fill" id="dash-cd"></div>
+            <div class="ability-pill dock-ability" id="nova-indicator" title="Supernova Bomb [E / Q]">
+              <div class="dock-meta">
+                <span class="dock-name">SUPERNOVA</span>
+                <span class="key-hint">E</span>
               </div>
-              <div class="ability-pill" id="nova-indicator" title="Supernova Bomb [E / Q]">
-                <span class="key-hint">E</span> SUPERNOVA (<span id="bombs-count">2</span>)
+              <div class="dock-gauge" aria-hidden="true">
+                <svg class="dock-icon" viewBox="0 0 24 24"><path d="M12 2.5l2.2 6.6 6.8.2-5.4 4.1 2 6.6L12 16l-5.6 4 2-6.6L3 9.3l6.8-.2z" /></svg>
+                <span id="bombs-count" class="dock-count">2</span>
               </div>
             </div>
           </div>
