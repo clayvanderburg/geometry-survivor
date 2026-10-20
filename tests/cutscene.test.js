@@ -11,7 +11,7 @@ globalThis.BroadcastChannel = undefined;
 
 const { typedLength, typeDuration, blipAt, mouthFrame, readHold, registerSpeaker, DialogueBox } = await import('../js/dialogue.js');
 const { Cutscene, estimateDuration, validateScript } = await import('../js/cutscene.js');
-const { OPENING_SCENE, CAST, INTRO_SEEN_KEY, MINER_NAME, readIntroSeen, writeIntroSeen, registerStoryCast } = await import('../js/story.js');
+const { OPENING_SCENE, SCENES, CAST, INTRO_SEEN_KEY, MINER_NAME, readIntroSeen, writeIntroSeen, registerStoryCast } = await import('../js/story.js');
 const { CutsceneStage } = await import('../js/cutscene-stage.js');
 const { MINER_PORTRAIT_SRC } = await import('../js/portraits.js');
 const { Game } = await import('../js/main.js');
@@ -38,6 +38,7 @@ test('typewriter: characters appear over typeDuration, punctuation adds a beat, 
   }
   assert.equal(blipAt('a b', 1), false, 'no blip on a space');
   assert.equal(blipAt('ab', 0), true);
+  assert.equal(blipAt('▼◆', 0), true, 'alien glyphs blip too');
   assert.equal(mouthFrame(1.23, false), 0, 'the mouth closes once the line is typed');
   assert.ok([0, 1, 2].includes(mouthFrame(0.2, true)));
   assert.ok(readHold('x'.repeat(500)) <= 2.6, 'a read hold stays short');
@@ -98,6 +99,8 @@ test('the opening scene: a valid script, about 30–45 s, the full cast, a warp-
   assert.ok(kinds.indexOf('gates') > kinds.indexOf('tremor') && kinds.indexOf('swarm') > kinds.indexOf('gates'));
   assert.equal(kinds.at(-1), 'cut', 'it ends on a hard cut');
   assert.ok(MINER_NAME.length > 0);
+  assert.equal(SCENES.opening, OPENING_SCENE, 'Game.playCutscene(id) finds scenes by id');
+  assert.ok(lines.filter((s) => s.who === 'vex').every((s) => !/[a-z]/i.test(s.text)), 'the Vex never speak our language');
   assert.ok(existsSync(new URL(MINER_PORTRAIT_SRC, root)), 'the miner portrait is on disk');
 });
 

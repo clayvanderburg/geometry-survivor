@@ -1,7 +1,8 @@
 // PORTRAITS for the dialogue box (js/dialogue.js): 72×72 pixel art, drawn a frame at a time on the box's
 // canvas (CSS scales it up pixel-crisp). Each one has a talk animation driven by `mouth` (0 / 1 / 2).
-//   miner    — our pilot, cropped from the splash key art (assets/cutscene/miner.png): mouth flaps, the
-//              cigarette bobs and glows, a glint sweeps the visor shades now and then (his "blink").
+//   miner    — our pilot, cropped from the splash key art (assets/cutscene/miner.png, cigarette painted
+//              out to keep it PG): mouth flaps, his toothpick bobs and flicks, a glint sweeps the visor
+//              shades now and then (his "blink").
 //   dispatch — ASTRA MINING mission control, audio only: the Astra logo on a CRT and a voice waveform.
 //   vex      — the alien overseer: an inverted triangle hull-face in the alien ships' magenta and violet
 //              with a glowing core that flares as it speaks.
@@ -17,8 +18,7 @@ const px = (ctx, x, y, w = 1, h = 1) => ctx.fillRect(x | 0, y | 0, w, h);
 // Pixel landmarks in miner.png (72×72): the mouth sits just left of the cigarette, at the face's profile.
 export const MINER_FACE = Object.freeze({
   mouth: { x: 49, y: 44, w: 4 },
-  cig: { x: 54, y: 41, w: 14, h: 3 },
-  ember: { x: 65, y: 42 },
+  pick: { x: 53, y: 43, len: 9 },
   visor: { x0: 31, x1: 57, y0: 26, y1: 31 }
 });
 
@@ -43,18 +43,24 @@ export function drawMiner(ctx, { t = 0, mouth = 0 } = {}) {
     return;
   }
   ctx.drawImage(img, 0, 0, S, S);
-  // Talking: the jaw drops a pixel or two and the cigarette rides it down.
+  // Talking: the jaw drops a pixel or two.
   if (mouth > 0) {
-    ctx.drawImage(img, F.cig.x, F.cig.y, F.cig.w, F.cig.h, F.cig.x, F.cig.y + 1, F.cig.w, F.cig.h);
     ctx.fillStyle = '#1a0710';
     px(ctx, F.mouth.x, F.mouth.y, F.mouth.w, mouth);
     ctx.fillStyle = '#7a2a2a';
     px(ctx, F.mouth.x + 1, F.mouth.y + mouth, F.mouth.w - 2, 1);
   }
-  // The ember breathes.
-  const glow = 0.55 + 0.45 * Math.sin(t * 5.3);
-  ctx.fillStyle = `rgba(255, ${150 + glow * 80 | 0}, 90, ${0.5 + glow * 0.5})`;
-  px(ctx, F.ember.x, F.ember.y + (mouth > 0 ? 1 : 0), 2, 1);
+  // The toothpick: rides the jaw while he talks, cocks up with a flick every few seconds while idle.
+  const flick = mouth > 0 ? 0 : (t % 2.7 < 0.35 ? -2 : 0);
+  const tipRise = 2 - flick + (mouth > 0 ? -mouth : 0);
+  const base = mouth > 0 ? 1 : 0;
+  for (let i = 0; i < F.pick.len; i++) {
+    const y = F.pick.y + base - Math.round((i / (F.pick.len - 1)) * tipRise);
+    ctx.fillStyle = '#5a3a1c';
+    px(ctx, F.pick.x + i, y + 1);
+    ctx.fillStyle = i === F.pick.len - 1 ? '#fff4d0' : '#e8c48a';
+    px(ctx, F.pick.x + i, y);
+  }
   // Visor glint: a bright slanted streak sweeps the shades every few seconds.
   const cycle = (t + 0.8) % 3.4;
   if (cycle < 0.45) {

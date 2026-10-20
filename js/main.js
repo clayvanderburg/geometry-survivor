@@ -54,7 +54,7 @@ import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
 import { SplashScreen } from './splash.js';
 import { CutsceneStage } from './cutscene-stage.js';
-import { OPENING_SCENE, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
+import { SCENES, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -6076,10 +6076,17 @@ export class Game {
     return this;
   }
 
-  // Plays over a fresh, untouched sector (nothing is recorded); `launchAfter` hard-cuts into the run
-  // (tutorial and weapon pick first, when they're due) instead of going back to the title.
+  // The opening, from LAUNCH (`launchAfter`: hard-cut into the run, tutorial and weapon pick first when
+  // they're due) or the INTRO button (back to the title).
   playIntro({ launchAfter = false } = {}) {
-    if (this.state !== 'TITLE' || this.cutscene.active || this.guideOpen || this.notesOpen || this.tutorialOpen || this.startPickOpen) return false;
+    return this.playCutscene('opening', { onEnd: (reason) => this.onIntroEnded(reason, launchAfter) });
+  }
+
+  // Any scene in SCENES (js/story.js) by id, from the title: plays over a fresh, untouched sector
+  // (nothing is recorded). `onEnd(reason)` defaults to going back to the title.
+  playCutscene(id, { onEnd = () => this.returnToTitle() } = {}) {
+    const script = SCENES[id];
+    if (!script || this.state !== 'TITLE' || this.cutscene.active || this.guideOpen || this.notesOpen || this.tutorialOpen || this.startPickOpen) return false;
     this.sound.init();
     this.closeMobileWindows();
     this.resetRun();
@@ -6088,7 +6095,7 @@ export class Game {
     this.state = 'CUTSCENE';
     this.resetInput();
     globalThis.document?.activeElement?.blur?.();
-    if (this.cutscene.play(OPENING_SCENE, { onEnd: (reason) => this.onIntroEnded(reason, launchAfter) })) return true;
+    if (this.cutscene.play(script, { onEnd })) return true;
     this.state = 'TITLE';
     title?.classList.remove('hidden');
     return false;

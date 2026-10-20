@@ -93,15 +93,18 @@ export class CutsceneStage {
     cb?.(reason);
   }
 
-  // The ship parks on the right face of a good-sized rock near the sector's centre (a gold vein if one is
-  // close), claws in, facing left; the warp gates will open on the right, above the dialogue box.
+  // The ship parks on the right face of the biggest asteroid near the sector's centre, claws in, facing left; the warp gates will open on the right, above the dialogue box.
   setup() {
     const g = this.game;
     const p = g.player;
     p.vx = p.vy = 0;
-    const rocks = (g.asteroidManager?.asteroids || []).filter((r) => !r.unbreakable && r.hp > 0 && r.radius >= 20);
-    const score = (r) => Math.hypot(r.x - p.x, r.y - p.y) - r.radius * 4 - (r.oreType === 'gold_vein' ? 250 : 0);
-    const rock = rocks.filter((r) => Math.hypot(r.x - p.x, r.y - p.y) < 800).sort((a, b) => score(a) - score(b))[0] || null;
+    // Asteroids are groups of nodes: take the biggest group nearby and drill its rightmost node.
+    const rocks = (g.asteroidManager?.asteroids || []).filter((r) => !r.unbreakable && r.hp > 0 && Math.hypot(r.x - p.x, r.y - p.y) < 800);
+    const groups = new Map();
+    for (const r of rocks) groups.set(r.group || r, [...(groups.get(r.group || r) || []), r]);
+    const mass = (list) => list.reduce((t, r) => t + r.radius * r.radius, 0);
+    const best = [...groups.values()].sort((a, b) => mass(b) - mass(a))[0] || [];
+    const rock = best.sort((a, b) => (b.x + b.radius) - (a.x + a.radius))[0] || null;
     this.rock = rock;
     if (rock) {
       p.x = rock.x + rock.radius + p.radius * 1.55;

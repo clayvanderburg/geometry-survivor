@@ -56,12 +56,14 @@ export function readHold(text) {
   return Math.min(2.6, 0.9 + String(text).length * 0.022);
 }
 
-// Does typing character `i` of `text` make a blip? Letters and digits only, every BLIP_EVERY-th one.
+// Does typing character `i` of `text` make a blip? Letters, digits and glyphs (alien speech), never
+// spaces or punctuation; every BLIP_EVERY-th one.
+const VOICED = /[^\s.,!?;:…'"“”‘’()—-]/u;
 export function blipAt(text, i) {
   const ch = String(text)[i];
-  if (!ch || !/[\p{L}\p{N}]/u.test(ch)) return false;
+  if (!ch || !VOICED.test(ch)) return false;
   let letters = 0;
-  for (let k = 0; k <= i; k++) if (/[\p{L}\p{N}]/u.test(text[k])) letters++;
+  for (let k = 0; k <= i; k++) if (VOICED.test(text[k])) letters++;
   return (letters - 1) % BLIP_EVERY === 0;
 }
 
