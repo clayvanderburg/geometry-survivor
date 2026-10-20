@@ -2486,10 +2486,9 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
     this.grid.ripple?.(e.x, e.y, 560, 48);
     this.sound.playBossArrival();
-    const hp = Math.round(e.maxHp).toLocaleString();
     this.logGuideEntries([e.type]);
-    const kicker = (BOSS_TIER[e.bossTier] || BOSS_TIER.minor).kicker;
-    this.showBossCard('arrival', kicker, e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+    // The arrival card is just the name and title (no kicker or stats line).
+    this.showBossCard('arrival', '', e, '');
     // The run's first boss: remind the pilot the Supernova bombs exist (a bomb strips 40% of a boss's HP).
     if (!this.novaCalloutDone && this.player?.bombs > 0 && !this.range?.active) {
       this.novaCalloutDone = true;
@@ -2646,7 +2645,6 @@ export class Game {
       if (!row) continue;
       document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
       document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
-      document.getElementById(`boss-bar-hp-${i}`).textContent = `${row.hp.toLocaleString()} / ${row.maxHp.toLocaleString()}`;
       document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
     }
     const moreEl = document.getElementById('boss-bar-more');

@@ -17,8 +17,8 @@ import { lanceCycle, drawLanceAim, drawBeam, beamFrom } from './lancers.js';
 // Shared base: the Dreadnought's numbers. Major bosses carry more HP and pay out more.
 export const BOSS_BASE_HP = 650;
 export const BOSS_TIER = {
-  minor: { hp: 1, score: 1500, xp: 30, cores: 3, kicker: '⚠ BOSS ENCOUNTER ⚠' },
-  major: { hp: 1.8, score: 2600, xp: 50, cores: 5, kicker: '☠ MAJOR BOSS ☠' }
+  minor: { hp: 1, score: 1500, xp: 30, cores: 3 },
+  major: { hp: 1.8, score: 2600, xp: 50, cores: 5 }
 };
 
 export function bossHp(waveScale, tier = 'minor') {

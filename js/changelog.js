@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.5',
+    date: '2026-10-20',
+    title: 'Cleaner Boss Cards',
+    notes: [
+      { type: 'new', text: 'Boss arrival cards and boss health bars show just the boss name and title (no HP numbers or stat line).' },
+      { type: 'fix', text: 'Lieutenant names above their health bars are bigger and easier to read.' }
+    ]
+  },
+  {
     version: '0.39.4',
     date: '2026-10-20',
     title: 'HUD & Low Shield Warning',
