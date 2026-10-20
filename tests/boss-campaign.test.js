@@ -53,30 +53,31 @@ const step = (manager, player, ticks = 1) => {
   for (let i = 0; i < ticks; i++) manager.update(1 / 60, player, [], silent, silent, 4200, 4200);
 };
 
-test('boss waves: minor every 4th, major every 8th, and the schedule names one boss per campaign boss wave', () => {
-  assert.equal(plan.BOSS_EVERY, 4);
-  assert.equal(plan.MAJOR_BOSS_EVERY, 8);
-  assert.equal(plan.CAMPAIGN_WAVES, 40);
-  for (const w of [1, 2, 3, 5, 6, 7, 9, 30]) assert.equal(plan.bossTier(w), null, `wave ${w}`);
-  assert.equal(plan.bossTier(4), 'minor');
-  assert.equal(plan.bossTier(8), 'major');
-  assert.equal(plan.bossTier(12), 'minor');
-  assert.equal(plan.bossTier(40), 'major');
-  for (let w = 4; w <= 40; w += 4) assert.ok(plan.BOSS_SCHEDULE[w], `wave ${w} has a boss`);
+test('boss waves: minor every 5th, major every 10th, and the schedule names one boss per campaign boss wave', () => {
+  assert.equal(plan.BOSS_EVERY, 5);
+  assert.equal(plan.MAJOR_BOSS_EVERY, 10);
+  assert.equal(plan.CAMPAIGN_WAVES, 50);
+  assert.equal(plan.FINAL_BOSS, 'prism');
+  for (const w of [1, 2, 3, 4, 6, 7, 8, 9, 12, 48]) assert.equal(plan.bossTier(w), null, `wave ${w}`);
+  assert.equal(plan.bossTier(5), 'minor');
+  assert.equal(plan.bossTier(10), 'major');
+  assert.equal(plan.bossTier(15), 'minor');
+  assert.equal(plan.bossTier(50), 'major');
+  for (let w = 5; w <= 50; w += 5) assert.ok(plan.BOSS_SCHEDULE[w], `wave ${w} has a boss`);
   assert.equal(Object.keys(plan.BOSS_SCHEDULE).length, 10);
-  assert.deepEqual(plan.bossesForWave(4, bossBuilt), ['brood_queen']);
-  assert.deepEqual(plan.bossesForWave(5, bossBuilt), []);
+  assert.deepEqual(plan.bossesForWave(5, bossBuilt), ['brood_queen']);
+  assert.deepEqual(plan.bossesForWave(6, bossBuilt), []);
   // Unbuilt slots fall back to the Dreadnought stand-in.
-  assert.deepEqual(plan.bossesForWave(8, () => false), ['boss']);
-  assert.deepEqual(plan.bossesForWave(8, () => true), [plan.BOSS_SCHEDULE[8]]);
+  assert.deepEqual(plan.bossesForWave(10, () => false), ['boss']);
+  assert.deepEqual(plan.bossesForWave(10, () => true), [plan.BOSS_SCHEDULE[10]]);
 });
 
-test('past wave 40 bosses come in combos: two minors, or a major with a minor', () => {
+test('past wave 50 (endless) bosses come in combos: two minors, or a major with a minor', () => {
   const all = () => true;
-  const minor = new Set([4, 12, 20, 28, 36].map(w => plan.BOSS_SCHEDULE[w]));
-  const major = new Set([8, 16, 24, 32, 40].map(w => plan.BOSS_SCHEDULE[w]));
-  for (const w of [41, 42, 43, 45]) assert.deepEqual(plan.bossesForWave(w, all), [], `wave ${w}`);
-  for (let w = 44; w <= 120; w += 4) {
+  const minor = new Set([5, 15, 25, 35, 45].map(w => plan.BOSS_SCHEDULE[w]));
+  const major = new Set([10, 20, 30, 40, 50].map(w => plan.BOSS_SCHEDULE[w]));
+  for (const w of [51, 52, 53, 54, 56]) assert.deepEqual(plan.bossesForWave(w, all), [], `wave ${w}`);
+  for (let w = 55; w <= 150; w += 5) {
     const ids = plan.bossesForWave(w, all);
     assert.equal(ids.length, 2, `wave ${w}`);
     if (plan.bossTier(w) === 'minor') assert.ok(ids.every(id => minor.has(id)), `wave ${w}: ${ids}`);
@@ -85,15 +86,15 @@ test('past wave 40 bosses come in combos: two minors, or a major with a minor', 
   }
 });
 
-test('every wave has a theme; past 40 two earlier themes are remixed', () => {
-  assert.equal(plan.WAVE_THEMES.length, 41, 'one theme per campaign wave');
-  assert.equal(new Set(plan.WAVE_THEMES.slice(1).map(t => t.name)).size, 40, 'every campaign theme has its own name');
-  for (let w = 1; w <= 80; w++) {
+test('every wave has a theme; past 50 two earlier themes are remixed', () => {
+  assert.equal(plan.WAVE_THEMES.length, 51, 'one theme per campaign wave');
+  assert.equal(new Set(plan.WAVE_THEMES.slice(1).map(t => t.name)).size, 50, 'every campaign theme has its own name');
+  for (let w = 1; w <= 100; w++) {
     const t = plan.waveTheme(w);
     assert.ok(t && t.name.length > 3, `wave ${w}`);
     for (const [id, m] of Object.entries(t.bias || {})) assert.ok(m > 0, `${w} ${id}`);
   }
-  assert.match(plan.waveTheme(41).name, / × /);
+  assert.match(plan.waveTheme(51).name, / × /);
 });
 
 test('new hostiles debut only on boss waves, never before, and a theme tilts the pack mix', () => {
@@ -107,14 +108,14 @@ test('new hostiles debut only on boss waves, never before, and a theme tilts the
     for (let i = 0; i < 6000; i++) { const p = pickWavePack(wave, rand); c[p] = (c[p] || 0) + 1; }
     return c;
   };
-  assert.ok(!counts(3).mayfly, 'no mayflies before the Brood Queen');
-  assert.ok(counts(4).mayfly > 0);
-  // MAYFLY BLOOM (wave 5) triples the mayfly weight.
-  const bloom = counts(5).mayfly / 6000;
+  assert.ok(!counts(4).mayfly, 'no mayflies before the Brood Queen');
+  assert.ok(counts(5).mayfly > 0);
+  // MAYFLY BLOOM (wave 6) triples the mayfly weight.
+  const bloom = counts(6).mayfly / 6000;
   const plain = 14 / (40 + 20 + 18 + 14);
   assert.ok(bloom > plain * 1.8, `bloom share ${bloom.toFixed(2)} vs plain ${plain.toFixed(2)}`);
   TUNING.spawnWeightMayfly = 0;
-  assert.ok(!counts(5).mayfly, 'a zero weight still disables a pack');
+  assert.ok(!counts(6).mayfly, 'a zero weight still disables a pack');
   resetTuning();
 });
 
@@ -137,41 +138,41 @@ test('HP budget: each wave brings the same HP per second as the pre-campaign tab
 
 test('packs slow by bossPackRate while a boss wave\'s boss is up, and only until the wave ends', () => {
   resetTuning();
-  const g = campaignGame({ wave: 4 });
-  const base = spawnIntervalAt(4) * hpBudgetScale(4);
+  const g = campaignGame({ wave: 5 });
+  const base = spawnIntervalAt(5) * hpBudgetScale(5);
   assert.ok(Math.abs(g.packInterval() - base) < 1e-9, 'no boss yet: the normal pace');
-  g.pendingBossSpawns.push({ id: 'brood_queen', wave: 4, waveScale: 1 });
+  g.pendingBossSpawns.push({ id: 'brood_queen', wave: 5, waveScale: 1 });
   assert.ok(Math.abs(g.packInterval() - base / TUNING.bossPackRate) < 1e-9, 'a pending boss already slows packs');
   g.pendingBossSpawns.length = 0;
-  g.enemyManager.queueSpawn('brood_queen', 3000, 3000, 1, { instant: true, wave: 4 });
+  g.enemyManager.queueSpawn('brood_queen', 3000, 3000, 1, { instant: true, wave: 5 });
   step(g.enemyManager, g.player, 2);
   assert.ok(g.enemyManager.enemies.some(e => e.isBoss));
   assert.ok(Math.abs(g.packInterval() - base / TUNING.bossPackRate) < 1e-9, 'a live boss slows packs');
-  g.wave = 5;
-  assert.ok(Math.abs(g.packInterval() - spawnIntervalAt(5) * hpBudgetScale(5)) < 1e-9, 'next wave: full rate, boss or not');
+  g.wave = 6;
+  assert.ok(Math.abs(g.packInterval() - spawnIntervalAt(6) * hpBudgetScale(6)) < 1e-9, 'next wave: full rate, boss or not');
 });
 
 test('a boss wave schedules its named boss with its tier; lieutenants skip boss waves', () => {
   resetTuning();
-  const g = campaignGame({ wave: 3 });
+  const g = campaignGame({ wave: 4 });
   g.waveTimer = TUNING.waveLength;
   g.update(1 / 60);
-  assert.equal(g.wave, 4);
+  assert.equal(g.wave, 5);
   const warn = g.enemyManager.spawnIndicators.find(sp => sp.config.isBoss);
   assert.equal(warn.type, 'brood_queen');
   assert.equal(warn.config.bossTier, 'minor');
-  assert.equal(warn.config.bossWave, 4);
+  assert.equal(warn.config.bossWave, 5);
   g.waveTimer = 10;
   g.updateLieutenantSchedule();
   assert.equal(g.enemyManager.spawnIndicators.filter(sp => sp.config.isLieutenant).length, 0);
-  // Wave 8 brings the first major boss, at major-boss rewards.
-  g.wave = 7;
+  // Wave 10 brings the first major boss, at major-boss rewards.
+  g.wave = 9;
   g.waveTimer = TUNING.waveLength;
   g.enemyManager.spawnIndicators.length = 0;
   g.update(1 / 60);
-  const eight = g.enemyManager.spawnIndicators.find(sp => sp.config.isBoss);
-  assert.equal(eight.type, bossBuilt(plan.BOSS_SCHEDULE[8]) ? plan.BOSS_SCHEDULE[8] : 'boss');
-  assert.equal(eight.config.bossTier, 'major');
+  const ten = g.enemyManager.spawnIndicators.find(sp => sp.config.isBoss);
+  assert.equal(ten.type, bossBuilt(plan.BOSS_SCHEDULE[10]) ? plan.BOSS_SCHEDULE[10] : 'boss');
+  assert.equal(ten.config.bossTier, 'major');
   assert.equal(BOSS_TIER.major.cores, 5);
 });
 
@@ -684,10 +685,10 @@ test('The Prism: swarm ring, then gate cages, then a gravity well with orb rings
   resetTuning();
   const { PRISM } = await import('../js/bosses.js');
   const { bossBuilt: built } = await import('../js/bosses.js');
-  for (let w = 4; w <= 40; w += 4) assert.ok(built(plan.BOSS_SCHEDULE[w]), `wave ${w} has its named boss`);
-  const g = campaignGame({ wave: 40 });
+  for (let w = 5; w <= 50; w += 5) assert.ok(built(plan.BOSS_SCHEDULE[w]), `wave ${w} has its named boss`);
+  const g = campaignGame({ wave: 50 });
   const m = g.enemyManager;
-  m.queueSpawn('prism', 2300, 2000, waveScaleAt(40), { instant: true, wave: 40 });
+  m.queueSpawn('prism', 2300, 2000, waveScaleAt(50), { instant: true, wave: 50 });
   step(m, g.player, 5);
   const p = m.enemies.find(e => e.type === 'prism');
   assert.equal(p.bossTier, 'major');

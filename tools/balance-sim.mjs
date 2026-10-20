@@ -253,7 +253,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const finished = rowsW.filter(p => p.hpEnd !== null);
       rows.push([w, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
     }
-    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 4th)`);
+    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 5th)`);
     out.push(table(['wave', 'runs alive', 'deaths', 'HP lost', 'kills', 'enemies on field', 'shield at end', 'level at end'], rows));
 
     // Time-to-kill per enemy type per wave bucket.

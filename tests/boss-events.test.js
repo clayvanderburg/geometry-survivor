@@ -46,7 +46,7 @@ function bossGame() {
       playBossWarning() { calls.warnings++; }, playBossArrival() { calls.arrivals++; }, playBossDefeat() { calls.defeats++; },
       setMusicState(state) { calls.music.push(state); }, playExplosion() {}, playGeomPickup() {}
     },
-    state: 'PLAYING', pendingBossSpawns: [], wave: 3, waveTimer: 0, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
+    state: 'PLAYING', pendingBossSpawns: [], wave: 4, waveTimer: 0, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
     camX: 0, camY: 0, worldWidth: 4200, worldHeight: 4200, width: 1280, height: 720,
     keys: {}, mouse: { x: 640, y: 360, down: false }, autoFire: false, autoAim: false,
     bullets: [], missiles: [], singularities: [], chests: [], geoms: [],
@@ -65,14 +65,14 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   const { g, calls } = bossGame();
   g.waveTimer = TUNING.waveLength;
   tick(g);
-  assert.equal(g.wave, 4);
+  assert.equal(g.wave, 5);
   assert.deepEqual(g.pendingBossSpawns, [], 'admission happens on the scheduling tick when a slot is free');
   assert.equal(bossWarnings(g).length, 1);
   assert.equal(liveBosses(g).length, 0);
   assert.equal(calls.warnings, 1);
   assert.equal(g.getBossStage(), 1);
   const warning = g.getBossHudModel().warning;
-  assert.equal(warning.name, 'BROOD QUEEN', 'wave 4 is the Brood Queen (js/wave-plan.js)');
+  assert.equal(warning.name, 'BROOD QUEEN', 'wave 5 is the Brood Queen (js/wave-plan.js)');
   assert.equal(warning.epithet, 'MOTHER OF THE SWARM');
   assert.ok(Math.abs(warning.eta - (TUNING.bossWarningTime - 1 / 60)) < 1e-9);
 
@@ -255,11 +255,11 @@ test('a full bomb stock is not advertised as a bomb reward', () => {
   assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES');
 });
 
-test('boss epithets climb with each four-wave encounter', () => {
-  assert.equal(bossEpithet(4), 'WAVE 4 WARDEN');
-  assert.equal(bossEpithet(8), 'WAVE 8 SENTINEL');
-  assert.equal(bossEpithet(12), 'WAVE 12 TYRANT');
-  assert.equal(bossEpithet(20), 'WAVE 20 ANNIHILATOR');
+test('boss epithets climb with each five-wave encounter', () => {
+  assert.equal(bossEpithet(5), 'WAVE 5 WARDEN');
+  assert.equal(bossEpithet(10), 'WAVE 10 SENTINEL');
+  assert.equal(bossEpithet(15), 'WAVE 15 TYRANT');
+  assert.equal(bossEpithet(25), 'WAVE 25 ANNIHILATOR');
   assert.equal(bossEpithet(42), 'WAVE 42 ANNIHILATOR');
 });
 
@@ -344,4 +344,44 @@ test('the first boss of a run shows the Supernova bomb reminder once, pointing a
   ticks = 0;
   while (liveBosses(fresh).length === 0 && ticks < 400) { tick(fresh); ticks++; }
   assert.ok(!(fresh.novaCalloutTimer > 0), 'no reminder with no bombs to use');
+});
+
+test('beating the wave-50 final boss opens VICTORY: continue into ENDLESS, or end the run as a win', async () => {
+  Object.assign(TUNING, DEFAULT_TUNING);
+  const { CAMPAIGN_WAVES, FINAL_BOSS } = await import('../js/wave-plan.js');
+  const { g } = bossGame();
+  Object.assign(g, { wave: CAMPAIGN_WAVES, victoryTimer: 0, campaignWon: false, kills: 1234, score: 98765 });
+  const finalBoss = { type: FINAL_BOSS, bossWave: CAMPAIGN_WAVES, bossTier: 'major', x: 2100, y: 2000, hue: 200, name: 'THE PRISM', epithet: '' };
+
+  // A non-final wave's boss (or the final boss type fought earlier, e.g. in the sandbox) wins nothing.
+  g.onBossDefeated({ ...finalBoss, bossWave: 40 }, 2600, 0);
+  assert.equal(g.victoryTimer, 0);
+
+  g.onBossDefeated(finalBoss, 2600, 0);
+  assert.ok(g.victoryTimer > 0, 'the final boss starts the victory countdown');
+  let ticks = 0;
+  while (g.state === 'PLAYING' && ticks < 600) { tick(g); ticks++; }
+  assert.equal(g.state, 'VICTORY', `VICTORY after ${ticks} ticks`);
+  assert.ok(ticks >= 2.5 * 60, 'it waits out the death payoff first');
+  assert.equal(g.campaignWon, true);
+  assert.ok(!hidden('victory-modal'));
+  assert.match(document.getElementById('victory-stats').innerHTML, /98,765/);
+  const t = g.elapsedTime;
+  tick(g, 30);
+  assert.equal(g.elapsedTime, t, 'the run is paused behind the screen');
+
+  // CONTINUE: the run goes on, endless; the final boss can't win it twice.
+  g.continueEndless();
+  assert.equal(g.state, 'PLAYING');
+  assert.ok(hidden('victory-modal'));
+  g.onBossDefeated(finalBoss, 2600, 0);
+  assert.equal(g.victoryTimer, 0, 'one victory per run');
+
+  // END RUN: the results screen is a win.
+  const ends = [];
+  g.triggerGameOver = (opts) => ends.push(opts);
+  g.state = 'VICTORY';
+  g.endVictoriousRun();
+  assert.deepEqual(ends, [{ victory: true }]);
+  assert.ok(hidden('victory-modal'));
 });

@@ -110,17 +110,17 @@ test('campaign boss HP multiplier scales the named bosses only, not their XP, li
   assert.equal(DEFAULT_TUNING.campaignBossHpMult, 2);
 });
 
-test('waves advance every waveLength seconds and bosses stay on every fourth wave', () => {
+test('waves advance every waveLength seconds and bosses stay on every fifth wave', () => {
   withTuning({ waveLength: 31 }, () => {
-    const g = rampGame({ wave: 3 });
+    const g = rampGame({ wave: 4 });
     g.waveTimer = 30.9;
     g.update(1 / 60);
-    assert.equal(g.wave, 3, 'not yet');
+    assert.equal(g.wave, 4, 'not yet');
     g.waveTimer = 31;
     g.update(1 / 60);
-    assert.equal(g.wave, 4);
+    assert.equal(g.wave, 5);
     assert.equal(g.waveTimer, 0);
-    assert.ok(g.enemyManager.spawnIndicators.some(sp => sp.config.isBoss) || g.pendingBossSpawns.length === 1, 'wave 4 schedules a boss');
+    assert.ok(g.enemyManager.spawnIndicators.some(sp => sp.config.isBoss) || g.pendingBossSpawns.length === 1, 'wave 5 schedules a boss');
   });
 });
 
@@ -158,9 +158,9 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
   assert.equal(queued({ splitterPackPerWave: 0.5, packSizeMult: 0.5 }, 'spawnWeightSplitter', 10), 4);
   assert.equal(queued({ splitterPackPerWave: 0.5, splitterPackMax: 5 }, 'spawnWeightSplitter', 10), 5);
   assert.equal(queued({ skirmishPackPerWave: 1, skirmishPackMax: 8 }, 'spawnWeightSkirmish', 10), 8);
-  assert.equal(queued({ packSizeMult: 2 }, 'spawnWeightBlinker', 12), 6, 'capped packs scale too');
-  assert.equal(queued({ mayflyPackPerWave: 1 }, 'spawnWeightMayfly', 9), 12 + 5, 'mayfly clouds grow from their debut wave');
-  assert.equal(queued({ mayflyPackPerWave: 1, mayflyPackMax: 14 }, 'spawnWeightMayfly', 9), 14);
+  assert.equal(queued({ packSizeMult: 2 }, 'spawnWeightBlinker', 15), 6, 'capped packs scale too');
+  assert.equal(queued({ mayflyPackPerWave: 1 }, 'spawnWeightMayfly', 10), 12 + 5, 'mayfly clouds grow from their debut wave');
+  assert.equal(queued({ mayflyPackPerWave: 1, mayflyPackMax: 14 }, 'spawnWeightMayfly', 10), 14);
   withTuning({ packSizeMult: 0.25 }, () => assert.equal(packSize(1), 1, 'never below one hull'));
 });
 
