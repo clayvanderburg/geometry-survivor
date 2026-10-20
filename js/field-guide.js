@@ -10,10 +10,11 @@ import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserCha
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
 import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
+import { BORER } from './borers.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
-import { BOSS_SCHEDULE, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
+import { BOSS_SCHEDULE, BOSS_EVERY, MAJOR_BOSS_EVERY, CAMPAIGN_WAVES, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
@@ -34,7 +35,7 @@ export const GUIDE_GROUPS = [
 ];
 
 // Wave a named boss leads (from the campaign schedule).
-const bossWave = (id) => +(Object.keys(BOSS_SCHEDULE).find(w => BOSS_SCHEDULE[w] === id) ?? 3);
+const bossWave = (id) => +(Object.keys(BOSS_SCHEDULE).find(w => BOSS_SCHEDULE[w] === id) ?? BOSS_EVERY);
 const veteranNote = ' From wave 11 they field a veteran form with an extra edge, and from wave 21 another, each a little faster.';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -164,6 +165,11 @@ export const HOSTILE_ENTRIES = [
     id: 'lancer', name: 'LANCER', group: 'archetype', unlockWave: unlockWaveOf('lancer'),
     what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a dashed line at you for ${secs(LANCE.aimTime)}. The line locks (turns red) for the last ${secs(LANCE.lockAt)}, then it fires a ${LANCE.length} px beam that sweeps ${Math.round(LANCE.sweep * 180 / Math.PI)}° to one side over ${secs(LANCE.fireTime)}. Debuts with the Eclipse Twins.`,
     tip: 'When the line turns red, step sideways off it, against the sweep if you can guess it. Punish it while it is planted.'
+  },
+  {
+    id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),
+    what: () => `A bronze drill-nose that tunnels straight through asteroids toward you. Close in, it aims a dashed lane for ${secs(BORER.aim)} (red for the last ${secs(BORER.lockAt)}), then bore-charges down it, shattering any rock in the way. While its drill is in rock it spits the gravel back at you: ${BORER.gravelShots} slow shards every ${secs(BORER.gravelEvery)}. Debuts with the Wing Commander.`,
+    tip: 'Rock is no cover from it: keep it in open space, sidestep the red lane and punish it while it vents after a charge.'
   },
   {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
@@ -361,7 +367,7 @@ export const MECHANIC_ENTRIES = [
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
-      `A minor boss every 3rd wave and a major boss every 6th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Past wave 30 bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
+      `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
       `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
       `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
     ]
@@ -468,6 +474,8 @@ export const MECHANIC_ENTRIES = [
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
       'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
+      'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
+      'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
       ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
       `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`

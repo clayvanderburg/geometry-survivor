@@ -1408,6 +1408,95 @@ export class SoundEngine {
     this.proceduralExplosion(1.7);
   }
 
+  // Space-time rift tearing open: a rising shimmer of detuned saws over a band-swept noise rip.
+  playRiftOpen() {
+    if (!this.claimVoice('rift_open', 300, 1, 1.1)) return;
+    const t = this.ctx.currentTime;
+    [220, 223.5, 331].forEach((f, k) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = k === 2 ? 'triangle' : 'sawtooth';
+      osc.frequency.setValueAtTime(f * 0.5, t);
+      osc.frequency.exponentialRampToValueAtTime(f * 2, t + 0.9);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.05, t + 0.5);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.05);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 1.1);
+    });
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 6;
+    band.frequency.setValueAtTime(300, t);
+    band.frequency.exponentialRampToValueAtTime(3200, t + 0.7);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.1, 0.85);
+  }
+
+  // Ship sucked into a rift: a steep falling "suck" sweep with a sub thump at the bottom.
+  playRiftWarp() {
+    if (!this.claimVoice('rift_warp', 200, 1, 0.45)) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1400, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.34);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.12, t + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.4);
+  }
+
+  // Ship spat out of the exit rift: a bright rising chirp on a soft boom.
+  playRiftExit() {
+    if (!this.claimVoice('rift_exit', 200, 1, 0.5)) return;
+    const t = this.ctx.currentTime;
+    [330, 495, 660].forEach((f, k) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * 0.6, t + k * 0.03);
+      osc.frequency.exponentialRampToValueAtTime(f * 1.6, t + 0.3);
+      gain.gain.setValueAtTime(0.09, t + k * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t + k * 0.03);
+      osc.stop(t + 0.5);
+    });
+    this.proceduralExplosion(0.9);
+  }
+
+  // Rift sealing: a short descending zip.
+  playRiftClose() {
+    if (!this.claimVoice('rift_close', 300, 1, 0.35)) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(900, t);
+    osc.frequency.exponentialRampToValueAtTime(140, t + 0.28);
+    gain.gain.setValueAtTime(0.035, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  }
+
   // Boss warning klaxon: three siren blasts over a swelling sub drone.
   playBossWarning() {
     if (!this.enabled || !this.ctx) return;

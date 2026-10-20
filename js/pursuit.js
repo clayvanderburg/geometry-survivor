@@ -8,6 +8,7 @@
 //     visibly on the minimap, and nothing ever changes speed on screen.
 //   - Elites (lieutenants and bosses) skip the detour while elite mining is on: they plow straight at
 //     the ship and grind through whatever rock is in the way (AsteroidManager.update, section 3).
+//     Bedrock (unbreakable) is the exception: they steer round it like everyone else.
 // Vortexes (internal type 'blackhole') never take part: they drift, they don't chase.
 import { TUNING } from './config.js';
 
@@ -31,8 +32,8 @@ export function eliteMiningDps(tuning = TUNING) {
   return Math.max(0, (tuning.miningSpeed ?? 75) * (tuning.eliteMiningMult ?? 1));
 }
 
-// Rock-miners: elites, plus serpent heads (their bodies glide over rock behind them).
-export const minesRock = (e) => isElite(e) || (e?.type === 'serpent' && !e.leader);
+// Rock-miners: elites, plus serpent heads (their bodies glide over rock behind them) and borers.
+export const minesRock = (e) => isElite(e) || (e?.type === 'serpent' && !e.leader) || e?.type === 'borer';
 
 // This enemy's drill DPS: the elite base, × bossMiningMult for bosses (they bust right through) and
 // × serpentMiningMult for serpent heads.
@@ -40,6 +41,8 @@ export function miningDpsFor(e, tuning = TUNING) {
   const base = eliteMiningDps(tuning);
   if (!(base > 0) || !minesRock(e)) return 0;
   if (e.isBoss) return base * (tuning.bossMiningMult ?? 4);
+  // A borer's drill: borerMiningMult, and boreMiningMult mid-charge (rock in its lane shatters).
+  if (e.type === 'borer') return base * (e.state === 'bore' ? (tuning.boreMiningMult ?? 30) : (tuning.borerMiningMult ?? 3));
   if (!e.isLieutenant) return base * (tuning.serpentMiningMult ?? 2);
   return base;
 }
@@ -53,12 +56,13 @@ export function steerAroundRocks(e, dirX, dirY, dist, terrain, dt, probe, out) {
   out.x = dirX;
   out.y = dirY;
   if (!terrain?.getNearbyAsteroids || !pursues(e)) return out;
-  if (plowsThroughRock(e)) {
-    // Straight line: rock in the way is ground down on contact, never steered round.
+  // Plowers go in a straight line: rock in the way is ground down on contact, never steered round.
+  // Only bedrock (which nothing grinds) turns them.
+  const plows = plowsThroughRock(e);
+  if (plows && !e.detourRock?.unbreakable) {
     e.detourRock = null;
     e.detourT = undefined;
     e.detourSide = 0;
-    return out;
   }
 
   if (probe) {
@@ -70,7 +74,7 @@ export function steerAroundRocks(e, dirX, dirY, dist, terrain, dt, probe, out) {
     let blockS = Infinity;
     for (let i = 0; i < rocks.length; i++) {
       const rock = rocks[i];
-      if (rock.hp !== undefined && rock.hp <= 0) continue;
+      if ((rock.hp !== undefined && rock.hp <= 0) || (plows && !rock.unbreakable)) continue;
       const rx = rock.x - e.x;
       const ry = rock.y - e.y;
       const s = rx * dirX + ry * dirY; // distance along the line to the ship
