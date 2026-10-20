@@ -220,13 +220,12 @@ function benchDps(id, lv, tuning = {}) {
 test('class-based balance: every weapon has a class and every class a target', () => {
   for (const id of IDS) assert.ok(CLASS_TARGET[WEAPON_CLASS[id]], `${id} needs a WEAPON_CLASS with a CLASS_TARGET`);
   assert.equal(WEAPON_CLASS.blaster, 'aimed');
-  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'aimed'), ['blaster', 'harpoon']);
+  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'aimed'), ['blaster', 'raillance', 'harpoon']);
   assert.equal(CLASS_TARGET.aimed.perTarget, 1, 'the Autocannon is the reference');
   assert.equal(CLASS_TARGET.auto.perTarget, 0.85);
   assert.deepEqual(CLASS_TARGET.area.perTarget, [0.6, 0.7]);
   assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'auto'), ['drones', 'turret', 'glaive']);
   assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'defensive'), ['shockfield', 'orbitals']);
-  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'aimed'), ['blaster', 'raillance']);
 });
 
 test('class-based balance: the Rail Lance (aimed) realizes ~100% of the Autocannon at LV 3 and LV 6', () => {
