@@ -186,6 +186,12 @@ const CLIPS = {
         await shoot(path.join(frameDir, 'frame-000.png'));
       } else {
         await page.locator('#btn-start-game').click();
+        // LAUNCH opens the starting-weapon pick first: take the first card once its double-click guard is past.
+        const startPick = page.locator('#start-pick-modal:not(.hidden) #start-pick-options > *');
+        if (await startPick.count()) {
+          await page.waitForTimeout(350);
+          await startPick.first().click();
+        }
         await page.waitForTimeout(400);
         // Grab the running Game and stop its loop so only our steps advance it (as in frame-capture).
         await page.evaluate(async ({ setup, hud, zoom, hudKeep, hudCss }) => {
