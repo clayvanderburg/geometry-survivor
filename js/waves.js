@@ -25,7 +25,8 @@ export const WAVE_PACKS = [
   { id: 'conduit', lead: 'conduit', weightKey: 'spawnWeightConduit' },
   { id: 'repulsor', lead: 'repulsor', weightKey: 'spawnWeightRepulsor' },
   { id: 'lancer', lead: 'lancer', weightKey: 'spawnWeightLancer' },
-  { id: 'borer', lead: 'borer', weightKey: 'spawnWeightBorer' }
+  { id: 'borer', lead: 'borer', weightKey: 'spawnWeightBorer' },
+  { id: 'hatchery', lead: 'hatchery', weightKey: 'spawnWeightHatchery' }
 ].map(p => ({ ...p, get unlockWave() { return unlockWaveOf(p.lead); } }));
 
 // The spawn table before the campaign (v0.33): every pack but these from wave 1. The HP budget
@@ -101,6 +102,12 @@ export function packRoster(id, wave, legacy = false) {
     case 'lancer': return [['lancer', Math.min(4, 2 + Math.floor(s('lancer') / 6))]];
     // A pair of borers (three from twelve waves after their debut).
     case 'borer': return [['borer', Math.min(3, 2 + Math.floor(s('borer') / 12))]];
+    // A hatchery (two from twelve waves after its debut), plus the hatchlings it breeds over its life
+    // (counted for the HP budget, not spawned here).
+    case 'hatchery': {
+      const n = Math.min(2, 1 + Math.floor(s('hatchery') / 12));
+      return [['hatchery', n], ['hatchling', n * 8]];
+    }
     case 'conduit': return [['conduit', 1], ['pinwheel', 3], ['bruiser', wave >= 8 ? 1 : 0]];
     default: return [];
   }
