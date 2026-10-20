@@ -190,6 +190,76 @@ export function drawPlayerShield(ctx, p, beatPulse, tuning, shieldRotation = 0, 
     ctx.restore();
   }
 
+// Ship animation state (visual only, never read by the simulation): throttle, banking, turret recoil
+// and the engine wake. The game steps it once per sim tick; previews that never call it get a
+// speed-derived throttle and no bank, recoil or wake.
+const WAKE_POINTS = 22;
+const WAKE_LIFE = 0.38; // seconds a wake point glows
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+export function updateShipAnimation(p, dt) {
+  const speed = Math.hypot(p.vx || 0, p.vy || 0);
+  const cruise = Math.max(1, p.stats?.moveSpeed || 5);
+  const dashing = (p.dashTimer || 0) > 0;
+  const k = Math.min(1, dt * 10);
+  p.throttle = (p.throttle || 0) + ((dashing ? 1.6 : Math.min(1, speed / cruise)) - (p.throttle || 0)) * k;
+
+  // Bank into turns: the hull's turn rate, smoothed. Positive turns clockwise on screen.
+  const heading = hullHeading(p);
+  const turn = p.prevHullAngle == null || dt <= 0 ? 0 : wrapAngle(heading - p.prevHullAngle) / dt;
+  p.prevHullAngle = heading;
+  p.bank = (p.bank || 0) + (Math.max(-1, Math.min(1, turn / 7)) - (p.bank || 0)) * Math.min(1, dt * 8);
+
+  if (p.recoil > 0) p.recoil = Math.max(0, p.recoil - dt * 14);
+
+  // Engine wake: the thruster nozzle's world position each tick, newest first; points are recycled.
+  const wake = (p.wake ||= []);
+  for (let i = 0; i < wake.length; i++) wake[i].age += dt;
+  while (wake.length && wake[wake.length - 1].age > WAKE_LIFE) wake.pop();
+  if (p.throttle > 0.08) {
+    const pt = wake.length >= WAKE_POINTS ? wake.pop() : {};
+    pt.x = p.x - Math.cos(heading) * p.radius * 0.92;
+    pt.y = p.y - Math.sin(heading) * p.radius * 0.92;
+    pt.age = 0;
+    pt.power = Math.min(1.6, p.throttle);
+    wake.unshift(pt);
+  }
+}
+
+// Turret kick for one shot (decays in updateShipAnimation).
+export function kickShipRecoil(p, amount = 1) {
+  p.recoil = Math.max(p.recoil || 0, amount);
+}
+
+// Glowing ribbon left by the engine, drawn under the shield and hull: tapers and fades with age.
+export function drawShipWake(ctx, p, tuning) {
+  const wake = p.wake;
+  if (!wake || wake.length < 2) return;
+  const carapaceCol = tuning.carapaceColor || '#00f3ff';
+  const intensity = tuning.vfxIntensity ?? 1;
+  const r = p.radius;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
+    for (let i = 0; i < wake.length - 1; i++) {
+      const a = wake[i], b = wake[i + 1];
+      const fade = 1 - b.age / WAKE_LIFE;
+      if (fade <= 0) break;
+      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) > 160) continue; // a teleport, not a streak
+      const power = a.power;
+      ctx.globalAlpha = Math.min(1, fade * fade * (pass === 0 ? 0.26 : 0.3) * Math.min(1, power) * intensity);
+      ctx.lineWidth = (pass === 0 ? r * 0.95 : r * 0.16) * (0.3 + 0.7 * fade) * (power > 1 ? 1.35 : 1);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance.now()) {
     const r = p.radius;
     const flashAlpha = p.invuln > 0 && Math.floor(now / 50) % 2 === 0 ? 0.45 : 1;
@@ -209,9 +279,34 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.save();
     ctx.rotate(hullHeading(p));
 
-    // 1a. Swept-back wings off the flanks, with a wing-tip running light that pulses with speed
+    // 1a. Thruster plume off the tail: a flickering cone that stretches with throttle (dashes flare it).
     const speed = Math.min(1, Math.hypot(p.vx || 0, p.vy || 0) / 5);
+    const throttle = p.throttle ?? speed;
+    const flicker = 0.85 + 0.15 * Math.sin(now * 0.047) * Math.sin(now * 0.031 + 1.3);
+    const plumeLen = r * (0.4 + 1.25 * throttle) * flicker;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let pass = 0; pass < 2; pass++) {
+      const len = pass === 0 ? plumeLen : plumeLen * 0.55;
+      const halfW = r * (pass === 0 ? 0.3 : 0.14) * (0.8 + 0.2 * Math.min(1, throttle));
+      ctx.globalAlpha = (pass === 0 ? 0.42 : 0.9) * flashAlpha;
+      ctx.fillStyle = pass === 0 ? carapaceCol : '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.8, -halfW);
+      ctx.lineTo(-r * 0.8 - len, 0);
+      ctx.lineTo(-r * 0.8, halfW);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 1b. Swept-back wings off the flanks, with a wing-tip running light that pulses with speed. Banking
+    // into a turn foreshortens the inside wing and stretches the outside one a touch.
+    const bank = Math.max(-1, Math.min(1, p.bank || 0));
     for (let side = -1; side <= 1; side += 2) {
+      const lean = bank * side;
+      ctx.save();
+      ctx.scale(1, 1 - (lean > 0 ? 0.26 : -0.06) * Math.abs(lean));
       for (let pass = 0; pass < 2; pass++) {
         ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
         ctx.globalAlpha = (pass === 0 ? 0.55 : 0.95) * flashAlpha;
@@ -236,10 +331,11 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.beginPath();
       ctx.arc(-r * 1.04, side * r * 1.88, 1.6 + speed * 1.2, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
     ctx.globalAlpha = flashAlpha;
 
-    // 1b. Wide Geometric Crab Carapace (Hexagonal Armored Shell)
+    // 1c. Wide Geometric Crab Carapace (Hexagonal Armored Shell)
     for (let pass = 0; pass < 2; pass++) {
       ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
       ctx.globalAlpha = (pass === 0 ? 0.65 : 1.0) * flashAlpha;
@@ -273,7 +369,7 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
 
     ctx.restore(); // End hull orientation
 
-    // 1c. Twin Pincer Arms + Spinning Conical Rotary Drills, on their own heading (p.drillAngle): they
+    // 1d. Twin Pincer Arms + Spinning Conical Rotary Drills, on their own heading (p.drillAngle): they
     // swing round the hull toward the rock being drilled.
     ctx.save();
     ctx.rotate(p.drillAngle ?? hullHeading(p));
@@ -354,18 +450,21 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
 
     ctx.restore(); // End drill-arm orientation
 
-    // 2. Central 360° Rotating Plasma Blaster Turret (aims toward p.angle)
+    // 2. Central 360° Rotating Plasma Blaster Turret (aims toward p.angle); each shot kicks the barrels
+    // back and the hub a little less.
     ctx.save();
     ctx.rotate(p.angle);
+    const recoil = Math.max(0, Math.min(1, p.recoil || 0));
+    ctx.translate(-recoil * 1.5, 0);
 
-    ctx.strokeStyle = carapaceCol;
+    ctx.strokeStyle = recoil > 0.5 ? '#ffffff' : carapaceCol;
     ctx.lineWidth = 2.2;
     // Twin Turret Barrels
     ctx.beginPath();
     ctx.moveTo(2, -3.5);
-    ctx.lineTo(r * 0.95, -3.5);
+    ctx.lineTo(r * 0.95 - recoil * 3, -3.5);
     ctx.moveTo(2, 3.5);
-    ctx.lineTo(r * 0.95, 3.5);
+    ctx.lineTo(r * 0.95 - recoil * 3, 3.5);
     ctx.stroke();
 
     // Central Diamond Turret Hub

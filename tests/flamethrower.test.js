@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage,
-  flameRange, burnStackDps
+  flameRange, statusDotShare
 } = await import('../js/weapon-scaling.js');
 const {
   STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, makeBuild, levelBuild, weaponBuild, weaponElement,
@@ -51,7 +51,7 @@ function rig(p, enemies, rocks = [], { spin = false } = {}) {
     asteroidManager: { getNearbyAsteroids: () => rocks, cellsFor: () => 3 },
     sound: { setFlameRoar: (v) => roar.push(v), playFlameBurst() {} },
     weaponFx: { pools: [], addPool(x) { this.pools.push(x); } },
-    hitEnemy(e, dmg, source) { hits.push({ e, dmg, source }); applyOnHitStatuses(p, e, source); },
+    hitEnemy(e, dmg, source) { hits.push({ e, dmg, source }); applyOnHitStatuses(p, e, source, dmg); },
     damageEnemiesInRadius(x, y, radius, dmg, hue, source, knock) { blasts.push({ x, y, radius, dmg, source, knock }); }
   };
   const ft = new Flamethrower();
@@ -139,7 +139,7 @@ test('built-in FIRE: rank from Sticky Gel and ACROSS THE BOARD, STATUS cards and
   const before = weaponDamage(p, 'flame');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.fire_damage, levelJump: 1 });
   assert.ok(near(weaponDamage(p, 'flame') / before, 1 + W.elementDamageStep), 'Fire Amplifier boosts the flames');
-  assert.ok(near(burnStackDps(p, 2, 'flamethrower'), burnStackDps(p, 2) * W.flameBurnShare), 'its burn runs at flameBurnShare');
+  assert.ok(statusDotShare(p, 'fire', 4) > statusDotShare(p, 'fire', 1), 'a higher burn rank burns more of each scorch');
   assert.match(weaponChipsHtml(p), /FIRE/, 'the HUD chip wears FIRE');
   discardWeapon(p, 'flamethrower');
   assert.equal(weaponElement(p, 'flamethrower'), null);
@@ -157,7 +157,7 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
   assert.deepEqual(reach.rows.map((r) => r.id), ['flameRange']);
   assert.match(describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_cone, levelJump: 2 }).headline, /CONE WIDTH/);
   const gel = describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_burn, levelJump: 1 });
-  assert.ok(gel.rows.some((r) => r.id === 'flamethrower:burnMax'), 'Sticky Gel shows the burn it adds');
+  assert.ok(gel.rows.some((r) => r.id === 'flamethrower:burn'), 'Sticky Gel shows the burn it adds');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.flamethrower_rate, levelJump: 5 });
   const t = describeBreakthrough(p, 'flamethrower', 6, 'transform');
   assert.equal(t.name, 'Twin Nozzle');

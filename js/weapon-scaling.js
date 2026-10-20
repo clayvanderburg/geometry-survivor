@@ -234,6 +234,9 @@ export const WEAPON_SCALING = {
   novaRadius: (lv) => 140 + lv * 35,
   novaDamage: (lv) => 35 * lv,
   dashCooldown: (lv, base) => Math.max(0.2, base - lv * 0.14),
+  // Blink Drive: the dash becomes a teleport of blinkDistance(lv) px along the move direction (the aim
+  // when parked), landing short of any rock in the way.
+  blinkDistance: (lv) => 220 + 60 * (Math.max(1, lv) - 1),
 
   // --- Proximity Mines (stats: damage, capacity, rate, radius, fuse) ------------------------------
   // Dropped behind the ship on a timer while a slot is free; they arm after TUNING.mineArmTime, burst
@@ -361,6 +364,11 @@ export const WEAPON_SCALING = {
   gasLife: (b) => 2.6 + 1.2 * (b?.r?.linger || 0), // +0.4 s / rank before v0.38.1
   gasTick: (b) => 0.3 / rateMult(b.r.rate),
   gasPuffSpacing: 0.7,
+  // Every dash also vents one giant round cloud where the ship was: gasDashRadiusMult x the cloud radius,
+  // lingering gasDashLifeMult x as long. Overlapping clouds never stack on one enemy, so it adds reach
+  // (more enemies gassed at once), not potential DPS.
+  gasDashRadiusMult: 2.6,
+  gasDashLifeMult: 1.5,
   gasGrow: 0.35,
   gasFade: 0.3,
   gasHitShare: 3,
@@ -403,7 +411,6 @@ export const WEAPON_SCALING = {
   // ~5 s at LV 1), +35% per Spin Rotor rank.
   flameTurnRate: (b) => 1.2 * (1 + 0.35 * (b?.r?.turn || 0)),
   flameEdgeFalloff: 0.35,
-  flameBurnShare: 1, // its burn stacks tick at the usual FIRE DPS (35% while it aimed: a spinning cone re-lights a pack far less often)
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Transforms: Twin Nozzle (a rear nozzle at flameRearRange of the reach (the same stream), scorching like the front one,
   // valued at flameRearHitShare: fewer enemies sit behind you), Napalm Puddles (a burning puddle at the
@@ -488,51 +495,91 @@ export const WEAPON_SCALING = {
   areaStep: 0.15,
 
   // Elements (weapon-levels.js ELEMENT_CARDS): `lv` below is the rank of a weapon's element card (1-5).
-  // BURN (FIRE): each hit adds a stack and refreshes the timer; stacks tick together every burnTickInterval s.
-  burnStackDpsMult: (lv) => 0.3 + lv * 0.15,
-  burnMaxStacks: (lv) => 3 + lv,
-  burnDuration: 3,
-  burnTickInterval: 0.5,
+  // STACKS (Deep Rock Galactic: Survivor style): every hit of an element weapon adds stacks of its status,
+  // stacksPerDamage per base damage the hit deals times the element's potency (elementPotency(lv) x Status
+  // Potency). Stacks are uncapped: every statusTick s they tick (damage, slow, freeze rolls, spreading),
+  // then a fifth of them wears off (statusDecay); below statusMinStacks they are gone. So a stack is worth
+  // 1 / statusDecay ticks, and a weapon's DoT is a fixed share of its own hit damage (statusDotShare).
+  // Stacks follow damage (not a flat count per hit) so slow, heavy weapons and fast, light ones build
+  // statuses at the same rate for the same damage.
+  statusTick: 0.5,
+  statusDecay: 0.2,
+  statusMinStacks: 1,
+  stacksPerDamage: 10,
+  elementPotency: (lv) => 1 + 0.25 * (Math.max(1, lv) - 1),
 
-  // CHILL (FROST): blasts and hits slow movement; it refreshes, it does not stack.
-  chillSlow: (lv) => 0.25 + lv * 0.05,
-  chillDuration: (lv) => 1.8 + lv * 0.3,
+  // BURN (FIRE): the strongest DoT. Each tick a burning enemy may set the nearest enemy within
+  // burnSpreadReach of its hull alight with burnSpreadShare of its stacks.
+  burnPerStack: 0.007, // x base damage per stack per tick (35% of a hit's damage as burn at rank 1)
+  burnSpreadChance: 0.25,
+  burnSpreadShare: 0.5,
+  burnSpreadReach: 36,
+  burnSpreadMinStacks: 5,
 
-  // CORRODE (CORROSIVE): each hit adds a stack of +damage taken from every source, up to a cap.
-  corrodePerStack: 0.07, // 0.05 while it was a free global card (Nanite Swarm, before v0.34); element ranks now cost weapon levels
-  corrodeMaxStacks: (lv) => 4 + lv,
-  corrodeDuration: 4,
+  // COLD (FROST): no damage. Cold stacks slow the target (up to chillSlow(lv) at the freeze threshold)
+  // and every tick may FREEZE it (freezeTickChance x pressure^2, certain at full pressure). The threshold
+  // is cold worth freezeHpShare of the target's max HP, so tough hulls take longer to freeze (bosses x
+  // freezeResistBoss, lieutenants x freezeResistLieutenant). A frozen enemy stops dead and can't attack
+  // for freezeDuration(lv) s and takes frozenDamageTaken more damage; then its cold is gone and it can't
+  // freeze again for freezeImmunity s.
+  chillSlow: (lv) => 0.3 + 0.05 * (Math.max(1, lv) - 1),
+  freezeHpShare: 0.3,
+  freezeTickChance: 0.35,
+  freezeDuration: (lv) => 1.2 + 0.15 * (Math.max(1, lv) - 1),
+  freezeImmunity: 1.5,
+  freezeResistLieutenant: 1.5,
+  freezeResistBoss: 3,
+  frozenDamageTaken: 0.25,
 
-  // STUN (SHOCK): a hit on an enemy that is neither stunned nor stun-immune stuns it for shockStun(lv) s,
-  // or for shockLongStun s with chance shockLongChance(lv). Stunned enemies stop moving and attacking.
-  // When a stun ends the enemy is immune to stuns for stunImmunity s, so nothing is stun-locked:
-  // at rank 1 an enemy under constant fire is stunned ~40% of the time, ~60% with every Shock card maxed.
-  // Bosses and lieutenants resist (TUNING shockBossMult / shockLieutenantMult of the duration) and
+  // CORRODE (CORROSIVE): a light DoT, and every stack makes the target take corrodeVulnPerStack more
+  // damage from every source (DoTs included), up to corrodeCap(lv).
+  corrodeDotPerStack: 0.0035,
+  corrodeVulnPerStack: 0.004,
+  corrodeCap: (lv) => 0.3 + 0.075 * (Math.max(1, lv) - 1),
+
+  // SHOCK: every hit is a quick zap stun (shockStun(lv) s), or with chance shockLongChance(lv) a long
+  // shockLongStun s stun. Stunned enemies stop moving and attacking; when a stun ends the enemy is
+  // stun-immune for stunImmunity s, so nothing is stun-locked. Shock stacks only hurt while the target
+  // touches another enemy (within shockTouchGap px, hull to hull): each tick it then takes its shock DoT
+  // and CONDUCTS shockConductShare of its stacks into up to shockConductMax touching enemies with fewer,
+  // zapping them too, so a packed swarm (a vortex's ball) lights up end to end. Shocked targets are
+  // also easier to crit: +shockCritPerStack crit chance per stack, up to shockCritCap.
+  // Bosses and lieutenants resist stuns (TUNING shockBossMult / shockLieutenantMult of the duration) and
   // shake stuns off for longer (stunImmunityBoss / stunImmunityLieutenant).
-  shockStun: (lv) => 0.3 + (Math.max(1, lv) - 1) * 0.05,
-  shockLongChance: (lv) => 0.3 + (Math.max(1, lv) - 1) * 0.03,
-  shockLongStun: 1.5,
-  stunImmunity: 1,
+  shockDotPerStack: 0.0035,
+  shockTouchGap: 6,
+  shockConductShare: 0.35,
+  shockConductMax: 4,
+  shockConductMinStacks: 5,
+  shockCritPerStack: 0.0015,
+  shockCritCap: 0.2,
+  shockStun: (lv) => 0.12 + 0.02 * (Math.max(1, lv) - 1),
+  shockLongChance: (lv) => 0.2 + 0.03 * (Math.max(1, lv) - 1),
+  shockLongStun: 1.2,
+  stunImmunity: 0.75,
   stunImmunityLieutenant: 1.5,
   stunImmunityBoss: 3,
-  shockLongChanceMax: 0.75,
+  shockLongChanceMax: 0.6,
 
   // Global status cards (upgrades.js, category STATUS). None of them raises a weapon's level.
-  // Status Potency: burn DPS and damage taken per corrode stack +20%, chill slow +10% (relative), stuns +5% longer.
-  potencyStep: 0.2,
-  potencyChillStep: 0.1,
-  potencyStunStep: 0.05,
-  // Status Application: +1 burn / corrode max stack, +10% chance a hit adds two stacks, +2% long-stun chance.
-  applicationStacks: 1,
-  applicationDoubleStep: 0.1,
+  // Status Potency: +15% stacks per hit for every element.
+  potencyStep: 0.15,
+  // Status Reactions (id status_application): fire spreads +5% more often, the freeze threshold drops 8%,
+  // +2% long-stun chance, +5% corrode cap per rank.
+  applicationSpreadStep: 0.05,
+  applicationFreezeStep: 0.08,
   applicationShockStep: 0.02,
-  // Status Duration: burn, chill and corrode last +20% longer, stuns +5%.
-  durationStep: 0.2,
+  applicationCorrodeStep: 0.05,
+  // Status Duration: stacks wear off 5% slower per rank (a fifth per tick -> 0.19, 0.18 ...; never below
+  // half, so overcharged cards top out at twice the ticks), freezes last +10% and stuns +5% longer.
+  durationStep: 0.05,
+  durationFreezeStep: 0.1,
   durationStunStep: 0.05,
-  // Shock Conductor: +4% long-stun chance and stuns +10% longer per rank.
+  // Shock Conductor: +4% long-stun chance, stuns +10% longer and +5% of the stacks conducted per rank.
   conductorChanceStep: 0.04,
   conductorDurationStep: 0.1,
-  // Element damage cards: weapons of that element hit +15% harder per rank (FIRE: burn ticks too).
+  conductorShareStep: 0.05,
+  // Element damage cards: weapons of that element hit +15% harder per rank, and their DoT ticks too.
   elementDamageStep: 0.15
 };
 
@@ -633,6 +680,10 @@ export const POTENTIAL_DPS = {
     const ring = b.t12 ? W.flameRingDamageMult(b) / W.flameRingEvery * W.flameRingHitShare : 0;
     return stream + puddles + ring;
   },
+  // The Cryo Sprayer and Acid Sprayer are the Flamethrower's twins: the same cone, numbers and
+  // Breakthrough shapes (W.flame* formulas read only the build's ranks), with FROST / CORROSIVE built in.
+  cryospray: (b) => POTENTIAL_DPS.flamethrower(b),
+  acidspray: (b) => POTENTIAL_DPS.flamethrower(b),
   shockfield: (b) => {
     const d = W.fieldDamageMult(b);
     const discharge = W.fieldHitShare * d;
@@ -662,6 +713,8 @@ export const WEAPON_TAGS = {
   grenade: ['projectile', 'explosive', 'area'],
   gas: ['area', 'corrode'],
   flame: ['area', 'burn'],
+  cryo: ['area', 'chill'],
+  acid: ['area', 'corrode'],
   shockfield: ['electric', 'area']
 };
 
@@ -698,7 +751,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -740,7 +793,7 @@ export function weaponDamage(p, weapon, b) {
     case 'siege': base = d * W.turretDamageMult(sourceBuild(p, weapon, b)) * W.siegeShellDamageMult * (TUNING.deployableDamageMult ?? 1); break;
     case 'grenade': base = d * W.grenadeDamageMult(sourceBuild(p, weapon, b)); break;
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
-    case 'flame': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
@@ -774,7 +827,6 @@ export function critMultiplier(p, afflicted = false) {
 // elementDamage multipliers). `p` may be omitted for the bare card numbers.
 const rk = (p, key) => p?.stats?.[key] || 0;
 export const statusPotency = (p) => 1 + W.potencyStep * rk(p, 'statusPotency');
-export const statusDurationMult = (p) => 1 + W.durationStep * rk(p, 'statusDuration');
 // Weapons of `element` deal this multiple of their damage (Element damage cards).
 export const elementDamageMult = (p, element) => (element ? p?.stats?.elementDamage?.[element] ?? 1 : 1);
 // Element of the weapon a damage source belongs to, or null ('helix' -> blaster's, 'rocket' -> rockets'...).
@@ -788,27 +840,41 @@ export function sourceElement(p, source) {
   return null;
 }
 
-// `weapon`: the weapon that lit the fire. The Flamethrower's built-in burn runs at W.flameBurnShare (it
-// coats a whole pack eight times a second, where other weapons light one target per hit).
-export const burnStackDps = (p, lv, weapon = null) => baseDamage(p) * W.burnStackDpsMult(lv) * (TUNING.burnDamageMult ?? 1) * statusPotency(p) * elementDamageMult(p, 'fire')
-  * (weapon === 'flamethrower' ? W.flameBurnShare : 1);
-export const burnMaxStacks = (p, lv) => W.burnMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
-export const burnDuration = (p) => W.burnDuration * statusDurationMult(p);
+// Stacks one hit adds: per base damage dealt, times the element rank's potency and Status Potency.
+export const stacksPerBaseDamage = (p, lv) => W.stacksPerDamage * W.elementPotency(lv) * statusPotency(p);
+export const stacksForHit = (p, lv, dmg) => (dmg > 0 ? (dmg / Math.max(1e-9, baseDamage(p))) * stacksPerBaseDamage(p, lv) : 0);
+// Share of the stacks that wear off every tick (Status Duration slows it), and the ticks one stack lives
+// on average (1 / decay: the first tick lands before any decay).
+export const statusDecay = (p) => W.statusDecay * Math.max(0.5, 1 - W.durationStep * rk(p, 'statusDuration'));
+// DoT per stack per tick, x base damage applied by the caller (status-effects.js multiplies by baseDamage).
+const DOT_PER_STACK = { fire: () => W.burnPerStack, corrode: () => W.corrodeDotPerStack, shock: () => W.shockDotPerStack };
+const DOT_TUNING = { fire: 'burnDamageMult', corrode: 'corrodeMult', shock: null };
+export const dotPerStack = (p, element) => (DOT_PER_STACK[element] ? baseDamage(p) * DOT_PER_STACK[element]()
+  * (DOT_TUNING[element] ? TUNING[DOT_TUNING[element]] ?? 1 : 1) * elementDamageMult(p, element) : 0);
+// Share of a hit's damage that comes back later as its element's DoT (burn, acid, or shock while touching).
+export const statusDotShare = (p, element, lv) => (DOT_PER_STACK[element] ? stacksPerBaseDamage(p, lv) * DOT_PER_STACK[element]()
+  * (DOT_TUNING[element] ? TUNING[DOT_TUNING[element]] ?? 1 : 1) * elementDamageMult(p, element) / statusDecay(p) : 0);
+// Kept for card previews written against the old burn model: burn damage per second a stack deals.
+export const burnStackDps = (p) => dotPerStack(p, 'fire') / W.statusTick;
+export const burnSpreadChance = (p) => Math.min(1, W.burnSpreadChance + W.applicationSpreadStep * rk(p, 'statusApplication'));
+// FROST: slow at the freeze threshold, the threshold in stacks for an enemy, and how long a freeze lasts.
 export const chillSlow = (lv, isBoss = false, p = null) =>
-  Math.min(0.9, W.chillSlow(lv) * (TUNING.chillSlowMult ?? 1) * (1 + W.potencyChillStep * rk(p, 'statusPotency'))) * (isBoss ? (TUNING.chillBossMult ?? 0.4) : 1);
-export const chillDuration = (p, lv) => W.chillDuration(lv) * statusDurationMult(p);
-export const corrodePerStack = (p = null) => W.corrodePerStack * (TUNING.corrodeMult ?? 1) * statusPotency(p);
-export const corrodeMaxStacks = (p, lv) => W.corrodeMaxStacks(lv) + W.applicationStacks * rk(p, 'statusApplication');
-export const corrodeDuration = (p) => W.corrodeDuration * statusDurationMult(p);
-// Chance that a burn / corrode hit adds two stacks instead of one (Status Application).
-export const doubleStackChance = (p) => Math.min(1, W.applicationDoubleStep * rk(p, 'statusApplication'));
+  Math.min(0.9, W.chillSlow(lv) * (TUNING.chillSlowMult ?? 1)) * (isBoss ? (TUNING.chillBossMult ?? 0.4) : 1);
+export const freezeResist = (e) => (e?.isBoss ? W.freezeResistBoss : e?.isLieutenant ? W.freezeResistLieutenant : 1);
+export const freezeShare = (p) => W.freezeHpShare * Math.max(0.2, 1 - W.applicationFreezeStep * rk(p, 'statusApplication'));
+export const freezeThreshold = (p, e) => Math.max(W.statusMinStacks, freezeShare(p) * ((e?.maxHp || 1) / Math.max(1e-9, baseDamage(p))) * W.stacksPerDamage * freezeResist(e));
+export const freezeDuration = (p, lv) => W.freezeDuration(lv) * (1 + W.durationFreezeStep * rk(p, 'statusDuration'));
+// CORRODE: damage taken per stack and the cap at a rank.
+export const corrodeVulnPerStack = () => W.corrodeVulnPerStack * (TUNING.corrodeMult ?? 1);
+export const corrodeCap = (p, lv) => W.corrodeCap(lv) + W.applicationCorrodeStep * rk(p, 'statusApplication');
+// SHOCK: share of the stacks conducted into touching enemies each tick.
+export const shockConductShare = (p) => Math.min(0.9, W.shockConductShare + W.conductorShareStep * rk(p, 'shockConductor'));
 // Stun lengths (before boss / lieutenant resistance) and the long-stun chance.
-export const stunDurationMult = (p) => 1 + W.potencyStunStep * rk(p, 'statusPotency') + W.durationStunStep * rk(p, 'statusDuration')
-  + W.conductorDurationStep * rk(p, 'shockConductor');
+export const stunDurationMult = (p) => 1 + W.durationStunStep * rk(p, 'statusDuration') + W.conductorDurationStep * rk(p, 'shockConductor');
 export const shockStun = (p, lv) => W.shockStun(lv) * stunDurationMult(p);
 export const shockLongStun = (p) => W.shockLongStun * stunDurationMult(p);
 export const shockLongChance = (p, lv) => Math.min(W.shockLongChanceMax, W.shockLongChance(lv)
   + W.applicationShockStep * rk(p, 'statusApplication') + W.conductorChanceStep * rk(p, 'shockConductor'));
-// Share of a stun an elite keeps (bosses barely feel it) and how long it then shrugs stuns off.
+// Share of a stun (and of a freeze) an elite keeps (bosses barely feel it) and how long it then shrugs stuns off.
 export const stunResist = (e) => (e?.isBoss ? TUNING.shockBossMult ?? 0.2 : e?.isLieutenant ? TUNING.shockLieutenantMult ?? 0.5 : 1);
 export const stunImmunity = (e) => (e?.isBoss ? W.stunImmunityBoss : e?.isLieutenant ? W.stunImmunityLieutenant : W.stunImmunity);

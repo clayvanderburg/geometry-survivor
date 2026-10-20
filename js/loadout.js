@@ -69,12 +69,22 @@ export const WEAPONS = [
   {
     id: 'gas', name: 'Corrosive Gas Trail', hudName: 'Gas Trail', levelId: 'gas', levelKey: 'gas', category: 'AUTONOMOUS', tagSources: ['gas'],
     color: '#5dff6e',
-    summary: 'Vents a trail of corrosive gas behind your ship. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
+    summary: 'Vents a trail of corrosive gas behind your ship, and a giant cloud every time you dash. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
   },
   {
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
     summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+  },
+  {
+    id: 'cryospray', name: 'Cryo Sprayer', hudName: 'Cryo Sprayer', levelId: 'cryospray', levelKey: 'cryospray', category: 'PRIMARY', tagSources: ['cryo'],
+    color: '#8fe8ff',
+    summary: 'A nozzle spins round the ship spraying a cone of frost. Everything in it builds COLD: it slows, then FREEZES solid. Rocks block the spray. Always FROST.'
+  },
+  {
+    id: 'acidspray', name: 'Acid Sprayer', hudName: 'Acid Sprayer', levelId: 'acidspray', levelKey: 'acidspray', category: 'PRIMARY', tagSources: ['acid'],
+    color: '#9dff4a',
+    summary: 'A nozzle spins round the ship spraying a cone of acid. Everything in it CORRODES: acid ticks, and it takes more damage from everything. Rocks block the spray. Always CORROSIVE.'
   },
   {
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
