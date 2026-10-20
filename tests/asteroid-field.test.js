@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// The asteroid field: solid masses of small nodes and loose clusters of classic rocks, covering about the
-// share of the arena the classic field did and paying about as much ore, and a spatial hash that still
-// finds every rock.
+// The asteroid field: solid masses of small nodes (plus small groups and singles) covering about the share
+// of the arena the classic field did and paying about as much ore, every node breaking at the same rate,
+// the mining phases (solid -> freed chunk -> broken), and a spatial hash that still finds every rock.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
-const { AsteroidManager, CLUSTER_SPREAD, REPLENISH_SHARE, MASS_NODE_MIN, MASS_NODE_RANGE, ROCK_REF } = await import('../js/asteroids.js');
+const { AsteroidManager, REPLENISH_SHARE, MASS_NODE_MIN, MASS_NODE_RANGE } = await import('../js/asteroids.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 
 function seeded(seed) {
@@ -48,46 +48,65 @@ test('the field covers as much of the arena and pays as much ore as the classic 
   const per = (fn) => fields.reduce((t, am) => t + fn(am), 0) / fields.length;
   const ore = (type) => per((am) => am.asteroids.filter((r) => r.oreType === type).length);
   const coverage = per((am) => coverageOf(am, 8000));
-  assert.ok(coverage > 0.1 && coverage < 0.15, `coverage ${coverage}`);
+  assert.ok(coverage > 0.09 && coverage < 0.15, `coverage ${coverage}`);
   assert.ok(ore('gold_vein') > 110 && ore('gold_vein') < 170, `gold veins ${ore('gold_vein')}`);
   assert.ok(ore('shield_vein') > 45 && ore('shield_vein') < 90, `shield veins ${ore('shield_vein')}`);
   assert.ok(ore('core_vein') > 3 && ore('core_vein') < 16, `core veins ${ore('core_vein')}`);
-  // Loose rocks keep the classic size, and a plain one still drills in about a second at base speed.
-  const loose = fields.flatMap((am) => am.asteroids.filter((r) => !r.unbreakable && !r.mass));
-  const meanR = loose.reduce((a, r) => a + r.radius, 0) / loose.length;
-  assert.ok(meanR >= 26 && meanR <= 31, `loose rock mean radius ${meanR}`);
-  const plain = loose.filter((r) => r.oreType === 'rock');
-  assert.ok(plain.reduce((a, r) => a + r.maxHp, 0) / plain.length / TUNING.miningSpeed < 1.3, 'plain rock HP');
-  assert.ok(CLUSTER_SPREAD > 200, 'loose clusters keep their footprint');
+  // Every node takes the same time to break: plain rock has the classic rock's HP (~a second at base
+  // drill speed) whatever its size, and each vein type its own classic HP.
+  const rocks = fields.flatMap((am) => am.asteroids.filter((r) => !r.unbreakable));
+  for (const type of ['rock', 'gold_vein', 'shield_vein', 'core_vein']) {
+    const hps = new Set(rocks.filter((r) => r.oreType === type).map((r) => r.maxHp.toFixed(6)));
+    assert.equal(hps.size, 1, `${type}: one HP for every node`);
+  }
+  const plainHp = rocks.find((r) => r.oreType === 'rock').maxHp;
+  assert.ok(plainHp / TUNING.miningSpeed > 0.8 && plainHp / TUNING.miningSpeed < 1.3, `plain node ${plainHp} HP`);
 });
 
-test('about half the clusters are solid masses: small nodes packed into one piece, ore in seams', () => {
+test('every asteroid is a solid mass of small nodes packed into one piece, with small groups and singles between', () => {
   Object.assign(TUNING, DEFAULT_TUNING);
   const [am] = sectors(1);
-  const masses = am.groups.filter((g) => g.kind === 'mass');
-  const loose = am.groups.filter((g) => g.kind === 'loose');
-  assert.ok(masses.length >= 12 && loose.length >= 12, `${masses.length} masses, ${loose.length} loose clusters`);
+  const groups = am.groups.filter((g) => g.kind === 'mass');
+  const sizes = groups.map((g) => g.nodes.length);
+  assert.ok(sizes.filter((n) => n >= 25).length >= 25, `${sizes.filter((n) => n >= 25).length} big masses`);
+  assert.ok(sizes.filter((n) => n === 1).length >= 8, 'singles');
+  assert.ok(sizes.filter((n) => n >= 2 && n <= 7).length >= 8, 'small groups');
   const sizeMult = TUNING.rockSizeMult;
-  for (const g of masses) {
-    const nodes = g.nodes;
-    if (nodes.length < 8) continue; // squeezed by a wall or the start zone
-    // One connected piece, tightly packed: every node overlaps a neighbour by a good margin.
-    for (const a of nodes) {
+  for (const g of groups) {
+    for (const a of g.nodes) {
       assert.ok(a.radius >= MASS_NODE_MIN * sizeMult - 1e-6 && a.radius <= (MASS_NODE_MIN + MASS_NODE_RANGE) * sizeMult + 1e-6);
-      // (a node grown onto a bedrock core may hang off the bedrock rather than another rock node)
+      assert.ok(!a.freed, 'untouched rock starts solid');
+      if (g.nodes.length < 2) continue;
+      // One connected, tightly packed piece (a node grown onto a bedrock core may hang off the bedrock).
       assert.ok(am.getNearbyAsteroids(a.x, a.y, 1).some((b) => b !== a && Math.hypot(a.x - b.x, a.y - b.y) < (a.radius + b.radius) * 0.8), 'packed');
-    }
-    // HP scales with area: a node half the classic rock's radius has about a quarter of its HP.
-    const plain = nodes.filter((r) => r.oreType === 'rock');
-    for (const r of plain) {
-      const ref = ROCK_REF * sizeMult;
-      assert.ok(Math.abs(r.maxHp / ((r.radius / ref) ** 2) - plain[0].maxHp / ((plain[0].radius / ref) ** 2)) < 1e-6, 'HP per area');
     }
   }
   // Veins come in seams: most vein nodes touch another node of the same ore.
-  const veins = masses.flatMap((g) => g.nodes.filter((r) => r.oreType === 'gold_vein' || r.oreType === 'shield_vein'));
+  const veins = groups.flatMap((g) => g.nodes.filter((r) => r.oreType === 'gold_vein' || r.oreType === 'shield_vein'));
   const inSeam = veins.filter((a) => veins.some((b) => b !== a && b.oreType === a.oreType && Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius));
   assert.ok(inSeam.length / veins.length > 0.5, `${inSeam.length}/${veins.length} vein nodes in seams`);
+});
+
+test('mining phases: a node comes free when ground, and its neighbours come free when it breaks', () => {
+  Object.assign(TUNING, DEFAULT_TUNING);
+  const am = new AsteroidManager(4200, 4200);
+  const nodes = am.spawnMassCluster(2000, 2000, null, { reach: 120 });
+  am.rebuildSpatialHash();
+  const target = nodes.reduce((best, n) => (n.x < best.x ? n : best));
+  const silent = new Proxy({}, { get: () => () => {} });
+  const p = { x: target.x - target.radius - 18, y: target.y, vx: 0, vy: 0, radius: 15, angle: 0, hullAngle: 0, drillAngle: 0, stats: { miningSpeed: 75, miningRange: 43 } };
+  const touching = nodes.filter((n) => n !== target && Math.hypot(n.x - target.x, n.y - target.y) < n.radius + target.radius);
+  am.update(1 / 60, p, [], [], () => {}, silent);
+  assert.ok(target.freed, 'ground node comes free');
+  assert.ok(target.group.dirty, 'its group redraws without it');
+  const broken = [];
+  for (let i = 0; i < 300 && !broken.includes(target); i++) {
+    p.x = target.x - target.radius - 18; p.y = target.y;
+    am.update(1 / 60, p, [], [], (r) => broken.push(r), silent);
+  }
+  assert.ok(broken.includes(target), 'it breaks');
+  assert.ok(touching.length && touching.every((n) => n.freed || n.hp <= 0), 'the rock touching it came free');
+  assert.ok(nodes.some((n) => !n.freed), 'the rest of the mass stays solid');
 });
 
 test('spatial queries find every rock near a point and cellsFor tracks the smaller max radius', () => {

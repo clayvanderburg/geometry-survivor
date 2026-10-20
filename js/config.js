@@ -59,10 +59,10 @@ export const DEFAULT_TUNING = {
   rockSizeMult: 0.8,
   goldVeinChance: 0.15,
   bedrockBorder: 1, // the arena edge is a wall of unbreakable bedrock (off: a glowing line)
-  bedrockFormations: 6, // slots for random bedrock clumps (blobs, ridges, branching arms) in the sector...
-  bedrockFormationChance: 0.5, // ...each filled with this chance (about 3 per sector)
-  bedrockWrapChance: 0.85, // chance a clump is buried in a mineable mass (the hard core of an asteroid)
-  massClusterChance: 0.5, // share of asteroid clusters that are one solid mass of small nodes (the rest: loose rocks)
+  bedrockFormations: 7, // slots for random bedrock clumps (blobs, ridges, branching arms) in the sector...
+  bedrockFormationChance: 0.7, // ...each filled with this chance (about 5 per sector)
+  bedrockWrapChance: 0.85, // chance a clump is wrapped in a mineable asteroid (its hard core, showing through)
+  rockDebris: 40, // small groups (2-6 nodes) and single nodes scattered between the asteroids
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -322,7 +322,7 @@ export const TUNING_SCHEMA = [
       { key: 'bedrockFormations', label: 'Bedrock Formation Slots (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
       { key: 'bedrockFormationChance', label: 'Chance Each Bedrock Slot Fills', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
       { key: 'bedrockWrapChance', label: 'Bedrock Buried in an Asteroid', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
-      { key: 'massClusterChance', label: 'Solid Asteroid Masses (Share of Clusters)', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'rockDebris', label: 'Small Rock Groups & Singles (Regen Sector)', type: 'range', min: 0, max: 150, step: 1, unit: '' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },

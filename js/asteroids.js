@@ -8,10 +8,7 @@ export const ELITE_GRIND_MAX_ROCKS = 2; // rocks one elite grinds at once (the t
 
 // Sector layout. Rocks are small and many (TUNING.rockSizeMult 0.8, ~2x the old 1.15x count at a
 // similar share of the map); a cluster keeps the old footprint and packs more rocks into it.
-export const CLUSTER_SPREAD = 224; // px from a cluster's centre along its main axis (before elongation)
-export const CLUSTER_ROCKS_MIN = 28; // placement attempts per cluster (overlapping rocks are skipped)
-export const CLUSTER_ROCKS_RANGE = 26;
-export const ROCK_HP_BASE = 22; // plain rock HP = (base + radius x 1.05) x rockHpMult
+export const ROCK_HP_BASE = 22; // plain node HP = (base + ROCK_REF radius x 1.05) x rockHpMult: every node the same
 export const CORE_VEIN_RADIUS = 85; // deep cores only within this distance of the cluster centre
 export const CORE_VEIN_CHANCE = 0.08;
 export const SHIELD_VEIN_CHANCE = 0.07;
@@ -21,11 +18,16 @@ export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer
 // nodes are drawn as one solid shape (draw(): every node's rim, then every body over it, then a raised
 // top face), so a tight pack of nodes reads as one big rock that the claws chew apart a few nodes at a
 // time (Deep Rock Galactic style).
-//   * Asteroid MASSES (TUNING.massClusterChance of clusters): small nodes packed tight into one big,
-//     irregular shape (a blob, an elongated ridge or a lobed lump), with ore in short seams of nodes.
-//     Node HP and ore odds scale with node AREA against the classic rock (ROCK_REF), so a mass takes
-//     about as long to mine per area, and pays about as much ore, as the same rock as separate rocks.
-//   * Loose clusters (the rest): the classic scatter of separate rocks.
+//   * Every asteroid cluster is a MASS: small nodes packed tight into one big, irregular shape (a blob,
+//     an elongated ridge or a lobed lump) in a range of sizes, with ore in short seams of nodes. Small
+//     groups and single nodes (TUNING.rockDebris) are scattered between them.
+//   * Mining phases: a mass is drawn solid until the claws (or an elite) bite into it. The node being
+//     ground, and the neighbours of every node that breaks, come FREE: each is drawn as its own rock
+//     (the classic look: its own rim and bevel) until it breaks in turn, so the mined edge crumbles
+//     into loose chunks.
+//   * Every node takes the same time to break (classic rock HP, whatever its size; veins their classic
+//     HP). Ore odds scale with node AREA against the classic rock (ROCK_REF), so the field pays about
+//     what the classic field did.
 //
 // Bedrock: unbreakable rock (level design, the arena wall, and the hard cores of some asteroids).
 // Nothing breaks it: not the drill-claws, elite grinding, boss portals or blasts. It blocks ships,
@@ -37,7 +39,8 @@ export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer
 //   addBedrockBorder()             the arena wall (nodes flagged `border`)
 // then rebuildSpatialHash(). Each generated sector gets the border (TUNING.bedrockBorder) and
 // TUNING.bedrockFormations slots of clumps, each filled with TUNING.bedrockFormationChance; a clump is
-// usually buried in a mineable mass grown onto it (TUNING.bedrockWrapChance): the hard core of an asteroid.
+// usually wrapped in a mineable mass grown onto it (TUNING.bedrockWrapChance): the hard core of an
+// asteroid, drawn over the rock round it so it shows from the start.
 export const BEDROCK_RADIUS = 36; // default node radius
 export const BEDROCK_HP = 1e9; // never drained; finite so every `hp > 0` check treats it as solid
 export const BEDROCK_HUE = 268;
@@ -45,16 +48,16 @@ export const isBedrock = (rock) => !!rock?.unbreakable;
 
 export const MASS_NODE_MIN = 22; // mass node radius: MIN + random RANGE, x TUNING.rockSizeMult
 export const MASS_NODE_RANGE = 14;
-export const MASS_REACH_MIN = 95; // px from its centre a mass grows to: MIN + random RANGE
-export const MASS_REACH_RANGE = 85;
+export const MASS_REACH_MIN = 60; // px from its centre a mass grows to: MIN + random^0.8 x RANGE
+export const MASS_REACH_RANGE = 125;
 export const ROCK_REF = 37; // radius of the average classic rock (x rockSizeMult): HP and ore odds scale by area against it
 export const SEAM_EXTRA = 1.2; // average nodes added to a vein node to make a seam (its odds are divided to match)
 export const MASS_PACKING = 0.72; // packed nodes overlap: their summed area overstates the rock by about this much
-export const MASS_CORE_CHANCE = 0.18; // a mass's one deep-core roll (a classic cluster averages ~0.18 cores)
+export const MASS_CORE_CHANCE = 0.18; // a mass's one deep-core roll (a classic cluster averaged ~0.18 cores)
 export const BORDER_GAP = 36; // px mineable rock keeps clear of the arena wall (a ship fits through)
-// The raised top face, as a share of each node's outline. Mass and bedrock nodes overlap their
-// neighbours' top faces into one continuous surface (a solid rock); a loose rock keeps a bevel all round.
-export const TOP_FACE = { loose: 0.66, mass: 0.86, bedrock: 0.8 };
+// The raised top face, as a share of each node's outline. Solid rock and bedrock nodes overlap their
+// neighbours' top faces into one continuous surface; a freed node (a loose chunk) keeps a bevel all round.
+export const TOP_FACE = { freed: 0.66, mass: 0.86, bedrock: 0.8 };
 
 // Numeric spatial-hash key (no string building per query: ~1000 rocks are probed many times a tick).
 // Unique for cell coordinates in [-1024, 3071], far beyond the arena.
@@ -133,7 +136,7 @@ function rockLook(a) {
     }
     path.closePath();
   }
-  const topScale = bedrock ? TOP_FACE.bedrock : a.mass ? TOP_FACE.mass : TOP_FACE.loose;
+  const topScale = bedrock ? TOP_FACE.bedrock : TOP_FACE.mass;
   const base = { path, cos: Math.cos(a.rotation), sin: Math.sin(a.rotation), isRich, bedrock, topScale };
   if (bedrock) {
     // A dark crack across the top face (local frame), so bedrock reads as weathered stone.
@@ -151,9 +154,7 @@ function rockLook(a) {
     body: isRich ? `hsl(${a.hue}, 55%, 11%)` : 'rgb(8, 14, 30)',
     top: isRich ? `hsl(${a.hue}, 65%, 20%)` : 'rgb(15, 28, 54)',
     flash: `hsl(${a.hue}, 80%, 34%)`,
-    // Cobble seams: a faint hint on a solid mass (brighter once a node is damaged), clearer on a loose rock.
-    seam: isRich ? `hsla(${a.hue}, 100%, 70%, ${a.mass ? 0.18 : 0.35})` : `rgba(110, 170, 255, ${a.mass ? 0.07 : 0.16})`,
-    seamHurt: isRich ? `hsla(${a.hue}, 100%, 72%, 0.5)` : 'rgba(140, 190, 255, 0.35)',
+    seam: isRich ? `hsla(${a.hue}, 100%, 70%, 0.18)` : 'rgba(110, 170, 255, 0.07)',
     core: `hsla(${a.hue}, 100%, 78%, 0.85)`
   };
   return a.look;
@@ -224,9 +225,10 @@ function buildGroup(g) {
   const mats = new Map();
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const a of g.nodes) {
+    if (a.freed) continue; // drawn on its own (drawFreed)
     const look = rockLook(a);
     let m = mats.get(a.oreType);
-    if (!m) mats.set(a.oreType, (m = { look, rim: null, body: null, top: new Path2D(), extra: null }));
+    if (!m) mats.set(a.oreType, (m = { look, ore: look.isRich, rim: null, body: null, top: new Path2D(), extra: null }));
     const wv = worldVerts(a);
     if (isInterior(a, g.nodes)) {
       addPoly(m.top, wv, a.x, a.y, 1);
@@ -394,7 +396,7 @@ export class AsteroidManager {
         const cx = clump.reduce((t, n) => t + n.x, 0) / clump.length;
         const cy = clump.reduce((t, n) => t + n.y, 0) / clump.length;
         const extent = Math.max(...clump.map((n) => Math.hypot(n.x - cx, n.y - cy) + n.radius));
-        this.spawnMassCluster(cx, cy, avoid, { seeds: clump, reach: extent + 50 + Math.random() * 70 });
+        this.spawnMassCluster(cx, cy, avoid, { seeds: clump, reach: extent + 40 + Math.random() * 70 });
         wrapped++;
       }
     }
@@ -411,6 +413,8 @@ export class AsteroidManager {
 
       this.spawnCluster(cx, cy, avoid);
     }
+    const debris = Math.max(0, Math.round(TUNING.rockDebris ?? 0));
+    for (let d = 0; d < debris; d++) this.spawnDebris(avoid);
 
     this.sectorRockCount = this.breakableCount();
     this.rebuildSpatialHash();
@@ -530,8 +534,8 @@ export class AsteroidManager {
     return nodes;
   }
 
-  // A random bedrock clump somewhere in the arena, kept out of `avoid` ({ x, y, radius }): mostly small
-  // to medium, now and then big. Returns its nodes.
+  // A random bedrock clump somewhere in the arena, kept out of `avoid` ({ x, y, radius }), 70-200 px
+  // across from its heart. Returns its nodes.
   spawnBedrockFormation(avoid = null) {
     const margin = 420;
     let cx = 0;
@@ -541,32 +545,29 @@ export class AsteroidManager {
       cy = margin + Math.random() * (this.worldHeight - margin * 2);
       if (!avoid || Math.hypot(cx - avoid.x, cy - avoid.y) > avoid.radius + 300) break;
     }
-    return this.addBedrockClump(cx, cy, 45 + Math.pow(Math.random(), 1.5) * 165);
+    return this.addBedrockClump(cx, cy, 70 + Math.random() * 130);
   }
 
-  // A mineable rock node: HP and (for veins) ore by `oreType`, both scaled by area against ROCK_REF
-  // when `scaled` (mass nodes), so mining time and ore per area match the classic rocks.
-  makeRock(x, y, radius, oreType, scaled, group = newGroup(scaled ? 'mass' : 'loose')) {
+  // A mineable rock node. Every node takes the same time to break: plain rock has the classic rock's
+  // HP (at ROCK_REF), veins their classic HP, whatever the node's size.
+  makeRock(x, y, radius, oreType, group = newGroup('mass')) {
     const sizeMult = TUNING.rockSizeMult ?? 0.8;
     const hpMult = TUNING.rockHpMult ?? 1.6;
     // Vein HP was set for the old 1.15x rocks: it shrinks with rock size so drilling time per area holds.
     const veinHp = hpMult * Math.min(1, sizeMult / 1.15);
-    const ref = ROCK_REF * sizeMult;
-    const area = scaled ? (radius / ref) ** 2 * MASS_PACKING : 1;
-    let maxHp = scaled ? (ROCK_HP_BASE + ref * 1.05) * hpMult * area : (ROCK_HP_BASE + radius * 1.05) * hpMult;
+    let maxHp = (ROCK_HP_BASE + ROCK_REF * sizeMult * 1.05) * hpMult;
     let hue = 205;
-    if (oreType === 'core_vein') { maxHp = 80 * veinHp * area; hue = 285; }
-    else if (oreType === 'gold_vein') { maxHp = 58 * veinHp * area; hue = 46; }
-    else if (oreType === 'shield_vein') { maxHp = 48 * veinHp * area; hue = 155; }
-    const sides = scaled ? 7 + Math.floor(Math.random() * 2) : 6 + Math.floor(Math.random() * 3);
+    if (oreType === 'core_vein') { maxHp = 80 * veinHp; hue = 285; }
+    else if (oreType === 'gold_vein') { maxHp = 58 * veinHp; hue = 46; }
+    else if (oreType === 'shield_vein') { maxHp = 48 * veinHp; hue = 155; }
+    const sides = 7 + Math.floor(Math.random() * 2);
     const rock = {
       x,
       y,
       radius,
       sides,
-      mass: !!scaled,
       group,
-      verts: scaled ? nodeVerts(radius, sides, 0.86, 1.1) : nodeVerts(radius, sides, 0.82, 1.14),
+      verts: nodeVerts(radius, sides, 0.86, 1.1),
       rotation: Math.random() * Math.PI * 2,
       oreType,
       hp: maxHp,
@@ -578,29 +579,33 @@ export class AsteroidManager {
     return rock;
   }
 
-  // A fresh cluster at (cx, cy): a mass (TUNING.massClusterChance) or a loose scatter.
+  // A fresh asteroid at (cx, cy) (each wave's replenish, and the sector's clusters).
   // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
   spawnCluster(cx, cy, avoid = null) {
-    if (Math.random() < (TUNING.massClusterChance ?? 0.5)) this.spawnMassCluster(cx, cy, avoid);
-    else this.spawnLooseCluster(cx, cy, avoid);
+    return this.spawnMassCluster(cx, cy, avoid);
   }
 
-  // An asteroid mass: small nodes accreted into one big irregular shape (a blob, an elongated ridge or
-  // a lumpy, lobed rock) up to `reach` px from (cx, cy), grown from `seeds` when given (a bedrock clump
-  // it buries). Ore comes in short seams: a node that rolls a vein spreads it to a neighbour or two.
-  spawnMassCluster(cx, cy, avoid = null, { seeds = null, reach = MASS_REACH_MIN + Math.random() * MASS_REACH_RANGE } = {}) {
-    const sizeMult = TUNING.rockSizeMult ?? 0.8;
-    const kind = Math.floor(Math.random() * 3);
-    const a0 = Math.random() * Math.PI * 2;
-    const axes = kind === 1 ? [a0, a0 + Math.PI] : kind === 2 ? [a0, a0 + 2 + Math.random(), a0 - 2 - Math.random()] : [];
-    const edgeFor = (r) => Math.max(80, r + 60);
+  // Placement check for new rock near (cx, cy) within `reach`: inside the arena with a ship-wide gap
+  // from its edge, clear of `avoid`, and clear of bedrock (coating it, never buried in it).
+  rockSpot(cx, cy, reach, avoid) {
     const nearBedrock = this.asteroids.filter((b) => b.unbreakable && Math.hypot(b.x - cx, b.y - cy) < reach + b.radius + BORDER_GAP + 60);
-    const ok = (x, y, r) => {
-      const e = edgeFor(r);
+    return (x, y, r) => {
+      const e = Math.max(80, r + 60);
       if (x < e || y < e || x > this.worldWidth - e || y > this.worldHeight - e) return false;
       if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < r + avoid.radius) return false;
       return clearOfBedrock(nearBedrock, x, y, r);
     };
+  }
+
+  // An asteroid mass: small nodes accreted into one big irregular shape (a blob, an elongated ridge or
+  // a lumpy, lobed rock) up to `reach` px from (cx, cy), grown from `seeds` when given (a bedrock clump
+  // it wraps).
+  spawnMassCluster(cx, cy, avoid = null, { seeds = null, reach = MASS_REACH_MIN + Math.pow(Math.random(), 0.8) * MASS_REACH_RANGE } = {}) {
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
+    const kind = Math.floor(Math.random() * 3);
+    const a0 = Math.random() * Math.PI * 2;
+    const axes = kind === 1 ? [a0, a0 + Math.PI] : kind === 2 ? [a0, a0 + 2 + Math.random(), a0 - 2 - Math.random()] : [];
+    const ok = this.rockSpot(cx, cy, reach, avoid);
     const nodeR = () => (MASS_NODE_MIN + Math.random() * MASS_NODE_RANGE) * sizeMult;
     const meanR = (MASS_NODE_MIN + MASS_NODE_RANGE / 2) * sizeMult;
     let pool = seeds;
@@ -612,9 +617,30 @@ export class AsteroidManager {
     const count = Math.round((Math.PI * reach * reach) / (meanR * meanR * 2.6));
     const nodes = seeds?.length ? [] : [pool[0]];
     nodes.push(...accrete(pool, count, { cx, cy, reach, axes, axisBias: kind === 0 ? 0 : 0.55, radius: nodeR, ok }));
+    return this.placeNodes(nodes, cx, cy, Math.random() < MASS_CORE_CHANCE);
+  }
 
-    // Ore seams. Odds per node scale with its area (against the classic rock, less the packing overlap),
-    // divided by the seam length, so a mass pays about as much ore as the same rock in classic rocks.
+  // Debris between the asteroids: a single node or a small group of 2-6, somewhere in the arena.
+  spawnDebris(avoid = null) {
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
+    const cx = 200 + Math.random() * (this.worldWidth - 400);
+    const cy = 200 + Math.random() * (this.worldHeight - 400);
+    const ok = this.rockSpot(cx, cy, 120, avoid);
+    const nodeR = () => (MASS_NODE_MIN + Math.random() * MASS_NODE_RANGE) * sizeMult;
+    const r = nodeR();
+    if (!ok(cx, cy, r)) return [];
+    const nodes = [{ x: cx, y: cy, radius: r }];
+    const extra = Math.random() < 0.45 ? 0 : 1 + Math.floor(Math.random() * 5);
+    if (extra) nodes.push(...accrete(nodes, extra, { cx, cy, reach: 110, radius: nodeR, ok }));
+    return this.placeNodes(nodes, cx, cy, false);
+  }
+
+  // Ore for a set of nodes, then the rock nodes themselves (one draw group). Ore comes in short seams:
+  // a node that rolls a vein spreads it to a neighbour or two. Odds per node scale with its area
+  // (against the classic rock, less the packing overlap), divided by the seam length, so rock pays
+  // about as much ore per area as the classic rocks did. `core`: one deep core at the heart.
+  placeNodes(nodes, cx, cy, core) {
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
     const ore = new Array(nodes.length).fill('rock');
     const ref = ROCK_REF * sizeMult;
     const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
@@ -634,8 +660,7 @@ export class AsteroidManager {
         last = nodes[best];
       }
     };
-    // A deep core (one node, no seam) sits at the heart: the mineable node nearest the centre.
-    if (nodes.length && Math.random() < MASS_CORE_CHANCE) {
+    if (core && nodes.length) {
       let best = 0;
       for (let i = 1; i < nodes.length; i++) if (Math.hypot(nodes[i].x - cx, nodes[i].y - cy) < Math.hypot(nodes[best].x - cx, nodes[best].y - cy)) best = i;
       ore[best] = 'core_vein';
@@ -648,56 +673,23 @@ export class AsteroidManager {
       else if (roll < (goldChance + SHIELD_VEIN_CHANCE) * w) seam(i, 'shield_vein');
     }
     const group = newGroup('mass');
-    return nodes.map((n, i) => this.makeRock(n.x, n.y, n.radius, ore[i], true, group));
+    return nodes.map((n, i) => this.makeRock(n.x, n.y, n.radius, ore[i], group));
   }
 
-  // The classic loose cluster: separate rocks scattered round (cx, cy), touching but mostly apart.
-  // A cluster's footprint is fixed (CLUSTER_SPREAD); rock size only sets how many rocks fit in it, so
-  // smaller rocks (TUNING.rockSizeMult) give a denser field of more, smaller rocks rather than a smaller one.
-  spawnLooseCluster(cx, cy, avoid = null) {
-    const numRocks = CLUSTER_ROCKS_MIN + Math.floor(Math.random() * CLUSTER_ROCKS_RANGE);
-    const mainAngle = Math.random() * Math.PI * 2;
-    const elongation = 1.2 + Math.random() * 1.4;
-    const sizeMult = TUNING.rockSizeMult ?? 0.8;
-    const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
-    const nearBedrock = this.asteroids.filter((b) => b.unbreakable && Math.hypot(b.x - cx, b.y - cy) < CLUSTER_SPREAD * 3 + b.radius + BORDER_GAP + 60);
+  // A node comes FREE (drawn as its own rock) when it is first ground, or a neighbour breaks.
+  free(rock) {
+    if (rock.freed || rock.unbreakable) return;
+    rock.freed = true;
+    if (rock.group) rock.group.dirty = true;
+  }
 
-    const placed = [];
-    const group = newGroup('loose');
-    for (let i = 0; i < numRocks; i++) {
-      const spreadA = mainAngle + (Math.random() - 0.5) * 2.2;
-      const dist = Math.pow(Math.random(), 0.65) * CLUSTER_SPREAD;
-      const rx = cx + Math.cos(spreadA) * dist * elongation + (Math.random() - 0.5) * 45;
-      const ry = cy + Math.sin(spreadA) * dist + (Math.random() - 0.5) * 45;
-
-      const radius = (26 + Math.random() * 22) * sizeMult;
-      // Leave a wall gap wide enough for the ship to pass.
-      const edge = Math.max(80, radius + 60);
-      const x = Math.max(edge, Math.min(this.worldWidth - edge, rx));
-      const y = Math.max(edge, Math.min(this.worldHeight - edge, ry));
-      if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < radius + avoid.radius) continue;
-
-      let tooClose = false;
-      for (let j = 0; j < placed.length; j++) {
-        const other = placed[j];
-        const minDist = (radius + other.radius) * 0.68;
-        if (Math.hypot(x - other.x, y - other.y) < minDist) {
-          tooClose = true;
-          break;
-        }
-      }
-      if (tooClose || !clearOfBedrock(nearBedrock, x, y, radius)) continue;
-
-      // Deep cores sit near the cluster's heart; the rest roll gold, then shield, then plain rock.
-      const distFromCore = Math.hypot(x - cx, y - cy);
-      const roll = Math.random();
-      const coreBand = distFromCore < CORE_VEIN_RADIUS ? CORE_VEIN_CHANCE : 0;
-      const oreType = roll < coreBand ? 'core_vein'
-        : roll < coreBand + goldChance ? 'gold_vein'
-          : roll < coreBand + goldChance + SHIELD_VEIN_CHANCE ? 'shield_vein' : 'rock';
-      placed.push(this.makeRock(x, y, radius, oreType, false, group));
+  // A node broke: the rock touching it comes free, so the mined edge crumbles into loose chunks.
+  loosenAround(rock) {
+    const near = this.getNearbyAsteroids(rock.x, rock.y, this.cellsFor(rock.radius));
+    for (let i = 0; i < near.length; i++) {
+      const n = near[i];
+      if (n !== rock && n.hp > 0 && Math.hypot(n.x - rock.x, n.y - rock.y) < (n.radius + rock.radius) * 1.05) this.free(n);
     }
-    return placed;
   }
 
   // Blow up every rock touching a circle (a boss's portal opening): each goes through the normal shatter
@@ -712,6 +704,7 @@ export class AsteroidManager {
       rock.hp = 0;
       rock.brokenBy = 'elite';
       this.asteroids.splice(i, 1);
+      this.loosenAround(rock);
       onRockShattered?.(rock);
       broken++;
     }
@@ -843,6 +836,7 @@ export class AsteroidManager {
         const torque = l && r ? twinTorque : (l || r) && split ? twinTorque / 2 : 1.0;
         rock.hp -= miningDps * torque * dt;
         rock.hitFlash = 0.85;
+        this.free(rock);
         {
           // Contact point: the rock face toward the nearer claw.
           const cx0 = distLeft < distRight ? leftClawX : rightClawX;
@@ -987,6 +981,7 @@ export class AsteroidManager {
         const rock = this.asteroids[i];
         if (rock.hp <= 0) {
           this.asteroids.splice(i, 1);
+          this.loosenAround(rock);
           onRockShattered(rock);
         }
       }
@@ -1008,6 +1003,7 @@ export class AsteroidManager {
     const cy = rock.y + ny * rock.radius;
     rock.hp -= dps * dt;
     rock.hitFlash = 0.85;
+    this.free(rock);
     const hue = rock.oreType && rock.oreType !== 'rock' ? rock.hue : 32;
     grindFx(rock, cx, cy, hue, particles);
     const vfx = typeof particles?.intensity === 'number' ? particles.intensity : 1;
@@ -1026,11 +1022,11 @@ export class AsteroidManager {
     return false;
   }
 
-  // Rocks in view. Bedrock first, then mineable rock over it (rock grown onto a bedrock core overlaps
-  // its edge). Overlapping nodes merge into one solid shape by drawing in passes: every rim, then every
-  // body over them (hiding each rim inside the shape, so only the outer edge keeps one), then the raised
-  // top faces, then detail. Grouped nodes draw from their group's shared paths (buildGroup); nodes being
-  // drilled are redrawn on top with their hit flash, cracks and hot spot.
+  // Rocks in view: solid rock, then the freed chunks on it, then bedrock over both (a bedrock core
+  // wrapped in an asteroid shows from the start). Overlapping nodes merge into one solid shape by
+  // drawing in passes: every rim, then every body over them (hiding each rim inside the shape, so only
+  // the outer edge keeps one), then the raised top faces, then detail. Grouped nodes draw from their
+  // group's shared paths (buildGroup); freed nodes each draw as their own rock (drawFreed).
   draw(ctx, camX, camY, viewW, viewH) {
     const pad = 70 + (this.maxRockRadius || 0);
     const minX = camX - pad;
@@ -1044,10 +1040,10 @@ export class AsteroidManager {
     const gy0 = Math.floor(minY / cs) - 1, gy1 = Math.floor(maxY / cs) + 1;
     const bed = (this.visibleBedrock ||= []);
     const rock = (this.visibleRock ||= []);
-    const live = (this.visibleLive ||= []);
+    const freed = (this.visibleFreed ||= []);
     bed.length = 0;
     rock.length = 0;
-    live.length = 0;
+    freed.length = 0;
 
     for (let gx = gx0; gx <= gx1; gx++) {
       for (let gy = gy0; gy <= gy1; gy++) {
@@ -1056,9 +1052,8 @@ export class AsteroidManager {
         for (let i = 0; i < cell.length; i++) {
           const a = cell[i];
           if (a.hp <= 0 || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
-          if (grouped && a.group) {
-            if (a.hitFlash > 0 || a.hp < a.maxHp * 0.97) live.push(a);
-          } else (a.unbreakable ? bed : rock).push(a);
+          if (a.freed) freed.push(a);
+          else if (!grouped || !a.group) (a.unbreakable ? bed : rock).push(a);
         }
       }
     }
@@ -1075,14 +1070,15 @@ export class AsteroidManager {
         (g.kind === 'bedrock' ? gb : gr).push(g);
       }
       ctx.setTransform(base);
-      if (gb.length) this.drawGroups(ctx, gb);
-      if (bed.length) this.drawNodes(ctx, base, bed);
       if (gr.length) this.drawGroups(ctx, gr);
       if (rock.length) this.drawNodes(ctx, base, rock);
-      if (live.length) this.drawLiveNodes(ctx, base, live);
-    } else {
+      if (freed.length) this.drawFreed(ctx, base, freed);
+      if (gb.length) this.drawGroups(ctx, gb);
       if (bed.length) this.drawNodes(ctx, base, bed);
+    } else {
       if (rock.length) this.drawNodes(ctx, base, rock);
+      if (freed.length) this.drawFreed(ctx, base, freed);
+      if (bed.length) this.drawNodes(ctx, base, bed);
     }
     ctx.globalCompositeOperation = 'source-over';
     if (base) ctx.setTransform(base);
@@ -1090,26 +1086,35 @@ export class AsteroidManager {
 
   // Grouped nodes, a few fills per group: rims and bodies of the exposed nodes, every top face (an
   // interior node's covers its whole outline), then ore cores and bedrock cracks. No wide strokes: on a
-  // CPU-rastered canvas they cost several times a fill. Seams show only on damaged nodes (drawLiveNodes).
+  // CPU-rastered canvas they cost several times a fill. A node in play is freed and drawn on its own.
   drawGroups(ctx, groups) {
-    for (const g of groups) {
-      for (const m of g.mats) {
-        if (!m.rim) continue;
-        ctx.fillStyle = m.look.rim;
-        ctx.fill(m.rim);
+    // Each pass paints every group's plain rock, then every group's ore, so a seam where two asteroids
+    // overlap is never painted over by the neighbour's rock.
+    for (let ore = 0; ore < 2; ore++) {
+      for (const g of groups) {
+        for (const m of g.mats) {
+          if (!m.rim || m.ore !== !!ore) continue;
+          ctx.fillStyle = m.look.rim;
+          ctx.fill(m.rim);
+        }
       }
     }
-    for (const g of groups) {
-      for (const m of g.mats) {
-        if (!m.body) continue;
-        ctx.fillStyle = m.look.body;
-        ctx.fill(m.body);
+    for (let ore = 0; ore < 2; ore++) {
+      for (const g of groups) {
+        for (const m of g.mats) {
+          if (!m.body || m.ore !== !!ore) continue;
+          ctx.fillStyle = m.look.body;
+          ctx.fill(m.body);
+        }
       }
     }
-    for (const g of groups) {
-      for (const m of g.mats) {
-        ctx.fillStyle = m.look.top;
-        ctx.fill(m.top);
+    for (let ore = 0; ore < 2; ore++) {
+      for (const g of groups) {
+        for (const m of g.mats) {
+          if (m.ore !== !!ore) continue;
+          ctx.fillStyle = m.look.top;
+          ctx.fill(m.top);
+        }
       }
     }
     for (const g of groups) {
@@ -1122,22 +1127,30 @@ export class AsteroidManager {
     }
   }
 
-  // Nodes being drilled (or damaged), over their group: the top face with its hit flash, a brighter
-  // seam, then cracks and the hot spot. A node being ground shudders a pixel or so.
-  drawLiveNodes(ctx, base, list) {
+  // Freed nodes, each its own rock (the classic look): a rim, its body, a bevelled top face (hit-flashed
+  // while it is ground), then ore core, cracks and the hot spot. A node being ground shudders a pixel.
+  drawFreed(ctx, base, list) {
     for (let i = 0; i < list.length; i++) {
       const a = list[i];
       const look = rockLook(a);
       const jit = a.hitFlash > 0.4 ? 1.3 : 0;
       a.jx = jit ? (Math.random() - 0.5) * jit * 2 : 0;
       a.jy = jit ? (Math.random() - 0.5) * jit * 2 : 0;
-      nodeBegin(ctx, base, a, look, look.topScale);
-      ctx.fillStyle = a.hitFlash > 0 ? look.flash : look.top;
-      const path = nodePath(ctx, a, look);
+      const flashing = a.hitFlash > 0;
+      nodeBegin(ctx, base, a, look, 1 + look.rimW / (2 * a.radius));
+      ctx.fillStyle = flashing ? '#ffffff' : look.rim;
+      let path = nodePath(ctx, a, look);
       if (path) ctx.fill(path); else ctx.fill();
-      ctx.strokeStyle = look.seamHurt || look.seam;
-      ctx.lineWidth = 1.1 / look.topScale;
-      if (path) ctx.stroke(path); else ctx.stroke();
+      nodeEnd(ctx, base);
+      nodeBegin(ctx, base, a, look, 1);
+      ctx.fillStyle = look.body;
+      path = nodePath(ctx, a, look);
+      if (path) ctx.fill(path); else ctx.fill();
+      nodeEnd(ctx, base);
+      nodeBegin(ctx, base, a, look, TOP_FACE.freed);
+      ctx.fillStyle = flashing ? look.flash : look.top;
+      path = nodePath(ctx, a, look);
+      if (path) ctx.fill(path); else ctx.fill();
       nodeEnd(ctx, base);
       nodeBegin(ctx, base, a, look, 1);
       this.drawNodeDetail(ctx, a, look);
@@ -1185,7 +1198,7 @@ export class AsteroidManager {
       const path = nodePath(ctx, a, look);
       if (path) ctx.fill(path); else ctx.fill();
       // Faint cobble seam round each top face: the nodes the mass will break into.
-      ctx.strokeStyle = a.hp < a.maxHp * 0.97 && look.seamHurt ? look.seamHurt : look.seam;
+      ctx.strokeStyle = look.seam;
       ctx.lineWidth = 1.1 / look.topScale;
       if (path) ctx.stroke(path); else ctx.stroke();
       nodeEnd(ctx, base);

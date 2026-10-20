@@ -469,7 +469,7 @@ export const MECHANIC_ENTRIES = [
     body: () => [
       'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
       'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
-      'Big asteroids are solid masses: your claws chew them apart a few chunks at a time, and ore runs through them in short seams.',
+      'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
       ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
       `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`

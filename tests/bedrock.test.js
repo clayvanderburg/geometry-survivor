@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 // Bedrock (js/asteroids.js): unbreakable rock made of overlapping nodes: clumps (blobs, ridges, arms) in
 // all sizes, walls and the arena border. Nothing breaks it (drill-claws, elite grinding, boss portal
 // blasts), it blocks the ship, it never counts toward replenishing the sector, asteroids coat it without
-// burying it (most clumps are an asteroid's hard core), and elites steer round it instead of plowing.
+// burying it (most clumps are an asteroid's hard core, drawn over the rock so it shows), and elites steer round it instead of plowing.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
@@ -116,7 +116,7 @@ test('bedrock never counts toward replenishing; rock may coat it but never burie
   reset();
 });
 
-test('the standard sector is walled in, and gets a few bedrock clumps, mostly buried in asteroids', () => {
+test('the standard sector is walled in, and gets several bedrock clumps, most of them the core of an asteroid', () => {
   reset();
   let clumps = 0, buried = 0;
   const N = 20;
@@ -141,7 +141,7 @@ test('the standard sector is walled in, and gets a few bedrock clumps, mostly bu
     }
   }
   const mean = clumps / N;
-  assert.ok(mean > 1.5 && mean < 4.5, `about 3 clumps per sector (${mean})`);
+  assert.ok(mean > 3.5 && mean < 6.5, `about 5 clumps per sector (${mean})`);
   assert.ok(buried / clumps > 0.6, `most clumps are the hard core of an asteroid (${buried}/${clumps})`);
 });
 
