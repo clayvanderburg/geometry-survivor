@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.4',
+    date: '2026-10-20',
+    title: 'HUD & Low Shield Warning',
+    notes: [
+      { type: 'new', text: 'When your shield drops under 30%, the edges of the screen pulse red.' },
+      { type: 'new', text: 'HUD: the hotkey buttons sit above the shield, DASH and SUPERNOVA are twice as big, and the shield bar matches the XP bar.' },
+      { type: 'fix', text: 'The first-boss bomb reminder waits for the boss title card, sits under the boss health bar and is lighter. On phones it stays in the top-right corner.' }
+    ]
+  },
+  {
     version: '0.39.3',
     date: '2026-10-20',
     title: 'Matched Nozzles',

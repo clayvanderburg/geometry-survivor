@@ -150,6 +150,7 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 // Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
+const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges pulse red
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
@@ -311,6 +312,7 @@ export class Game {
     this.overview = new RunOverview(this);
     this.titleShip = new ShipPreview(document.getElementById('title-ship-canvas'), { tuning: TUNING });
     this.hudHidden = false; // [H]: hide every HUD overlay for this session (not saved)
+    this.watchXpBarWidth();
     this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
@@ -496,6 +498,25 @@ export class Game {
     this.renderScale = this.viewScale * dpr;
     this.canvas.width = Math.round(vw * dpr);
     this.canvas.height = Math.round(vh * dpr);
+  }
+
+  // The desktop shield bar is exactly half the XP bar's length: keep --xp-bar-width on #hud in step with it.
+  watchXpBarWidth() {
+    const xp = document.querySelector?.('.xp-bar-container');
+    const hud = document.getElementById('hud');
+    if (!xp || !hud?.style || typeof ResizeObserver !== 'function') return;
+    new ResizeObserver(([entry]) => {
+      const w = entry.borderBoxSize?.[0]?.inlineSize ?? xp.offsetWidth;
+      if (w > 0) hud.style.setProperty('--xp-bar-width', `${w}px`);
+    }).observe(xp);
+  }
+
+  // Shield under LOW_SHIELD_PCT: the screen edges pulse red (only while a run is on screen).
+  updateLowShieldVignette() {
+    const p = this.player;
+    const live = ['PLAYING', 'UPGRADE', 'CHEST', 'PAUSED'].includes(this.state) && !this.range?.active;
+    const low = live && p?.maxHp > 0 && p.hp > 0 && p.hp / p.maxHp < LOW_SHIELD_PCT;
+    setHidden(document.getElementById('low-shield-vignette'), !low);
   }
 
   setTouchMode(on) {
@@ -1674,6 +1695,7 @@ export class Game {
   // submitted: only triggerGameOver does that) or MAIN MENU after a game over (already recorded).
   returnToTitle() {
     this.state = 'TITLE';
+    this.updateLowShieldVignette();
     this.setQuitConfirm(false);
     globalThis.document?.activeElement?.blur?.();
     for (const id of ['pause-modal', 'upgrade-modal', 'chest-modal', 'gameover-modal']) document.getElementById(id)?.classList.add('hidden');
@@ -2476,11 +2498,16 @@ export class Game {
   }
 
   // The first-boss bomb reminder: a big banner plus a dashed arrow curving from it to the bomb counter
-  // (the NOVA button on touch), which glows while the arrow points at it.
+  // (the NOVA button on touch), which glows while the arrow points at it. It waits for the boss title
+  // card to clear, and on desktop sits just under the boss health bars (touch: the top-right corner, CSS).
+  novaCalloutShowing() {
+    return this.novaCalloutTimer > 0 && !(this.bossCardTimer > 0);
+  }
+
   updateNovaCallout() {
     const el = document.getElementById('nova-callout');
     const arrow = document.getElementById('nova-callout-arrow');
-    const on = this.novaCalloutTimer > 0;
+    const on = this.novaCalloutShowing();
     setHidden(el, !on);
     setHidden(arrow, !on);
     for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[on ? 'add' : 'remove']('nova-callout-target');
@@ -2493,6 +2520,16 @@ export class Game {
     const sub = `${how} · YOU HAVE ${n} · EACH ONE TEARS 40% OFF A BOSS`;
     const subEl = document.getElementById('nova-callout-sub');
     if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+
+    const hud = document.getElementById('hud')?.getBoundingClientRect?.();
+    const bars = document.getElementById('boss-hud')?.getBoundingClientRect?.();
+    const pill = document.getElementById('nova-indicator')?.getBoundingClientRect?.();
+    let top = '';
+    if (!this.touchMode && hud) {
+      const below = Math.max(168, pill?.height > 0 ? pill.bottom - hud.top + 40 : 0, bars?.height > 0 ? bars.bottom - hud.top + 14 : 0);
+      top = `${Math.round(below)}px`;
+    }
+    if (el.style && el.style.top !== top) el.style.top = top;
 
     // Arrow: leaves the banner edge nearest the target and curves into the target's facing side.
     const target = document.getElementById(this.touchMode ? 'touch-nova' : 'nova-indicator');
@@ -4572,6 +4609,7 @@ export class Game {
       return;
     }
     this.state = 'GAMEOVER';
+    this.updateLowShieldVignette();
     // The run is over: the mode's TUNING overlay comes off (this.mode still names the run for the results).
     clearTuningOverlay();
     const rules = modeRules(this);
@@ -4815,7 +4853,7 @@ export class Game {
     }
 
     if (this.bossCardTimer > 0) this.bossCardTimer = Math.max(0, this.bossCardTimer - dt);
-    if (this.novaCalloutTimer > 0) this.novaCalloutTimer = Math.max(0, this.novaCalloutTimer - dt);
+    if (this.novaCalloutShowing()) this.novaCalloutTimer = Math.max(0, this.novaCalloutTimer - dt);
     if (this.ltCardTimer > 0) this.ltCardTimer = Math.max(0, this.ltCardTimer - dt);
     if (held) {
       this.updateHUD();
@@ -5315,6 +5353,7 @@ export class Game {
       ? 'linear-gradient(90deg, #ffcc00, #00ff88)'
       : 'linear-gradient(90deg, #00f3ff, #00ffaa)';
     document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
+    this.updateLowShieldVignette();
 
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;

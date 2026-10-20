@@ -321,6 +321,10 @@ test('the first boss of a run shows the Supernova bomb reminder once, pointing a
   while (liveBosses(g).length === 0 && ticks < 400) { tick(g); ticks++; }
   assert.ok(g.novaCalloutTimer > 0, 'the first boss arrival starts the reminder');
   g.updateNovaCallout();
+  assert.ok(hidden('nova-callout'), 'it waits for the boss title card to clear');
+  while (g.bossCardTimer > 0 && ticks < 1000) { tick(g); ticks++; }
+  assert.ok(g.novaCalloutTimer > 5 - 2 / 60, 'its 5 s only start once the card is gone');
+  g.updateNovaCallout();
   assert.ok(!hidden('nova-callout') && !hidden('nova-callout-arrow'), 'banner and arrow are on screen');
   assert.ok(document.getElementById('nova-indicator').classList.contains('nova-callout-target'), 'the bomb counter glows');
   assert.equal(document.getElementById('nova-callout-sub').textContent, 'PRESS E · YOU HAVE 2 · EACH ONE TEARS 40% OFF A BOSS');

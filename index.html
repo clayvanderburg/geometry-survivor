@@ -17,6 +17,9 @@
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
 
+    <!-- Low shield (< 30%): the screen edges pulse red (Game.updateLowShieldVignette) -->
+    <div id="low-shield-vignette" class="low-shield-vignette hidden" aria-hidden="true"></div>
+
     <!-- Touch controls (js/touch-controls.js): left half moves, right half aims, plus DASH / NOVA -->
     <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
       <div class="touch-stick" data-stick="move"><div class="touch-knob"></div></div>
