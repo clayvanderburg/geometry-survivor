@@ -12,6 +12,17 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.4',
+    date: '2026-10-20',
+    title: 'Rock and Stone Turrets',
+    notes: [
+      { type: 'balance', text: 'Sentry Turret now works like Deep Rock Galactic: Survivor: you hold 2 turret charges. Stand still for half a second and they all go down; a new charge reloads every 6 s.' },
+      { type: 'balance', text: 'On the move, a charge that reloads into a full bank drops by itself, so turrets still trickle out while you kite. Each fires for 10 s. The weapon chip shows your charges.' },
+      { type: 'balance', text: 'Turret cards: Bigger Cogs (damage), Tighten Springs (fire rate), Loosen Bolts (reload), Add Punch (pierce). Bolts pierce 2 enemies. Count and Lifetime cards are gone.' },
+      { type: 'balance', text: 'Turret Breakthroughs: Extra Capacity (LV 6, +1 charge), Tank Tracks (LV 12, turrets roll after you), LMG Overload (LV 18, 2x fire rate). Twin Barrels and Mortar are gone.' }
+    ]
+  },
+  {
     version: '0.43.1',
     date: '2026-10-20',
     title: 'Stun Arcs Built In',

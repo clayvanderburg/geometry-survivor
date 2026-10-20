@@ -42,9 +42,11 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
-// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
+// Turret 2.8 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
+// DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
+// pierce, so less of the curve is lost to overkill.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -91,7 +93,7 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
-export const TURRET_MAX_ACTIVE = 9; // 3 + Sentry Turret Count (cap 6)
+export const TURRET_MAX_ACTIVE = 12; // 10 s lifetime / 1.43 s fastest reload (7 out) + a full bank of 3, with room
 
 export const WEAPON_SCALING = {
   // --- Autocannon (stats: damage, prism, rate, pierce) -----------------------------------------------
@@ -311,41 +313,37 @@ export const WEAPON_SCALING = {
   mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)),
   mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
 
-  // --- Sentry Turret (stats: damage, rate, lifetime, redeploy) ------------------------------------
-  // Planted at the ship, shoots the nearest enemy it can see past cover. Live turrets at once follow
-  // lifetime / redeploy (never above TURRET_MAX_ACTIVE).
-  // Deep Rock Galactic: Survivor style: you carry turretMaxActive turrets (3 at LV 1). Standing still you
-  // plant every ready one in quick succession (turretDropStill s apart); on the move one every
-  // turretDropMoving s. A turret lasts turretDuration s; its slot then recharges for turretCooldown s.
-  // Potential DPS counts every turret out (the user-facing rule: DPS is measured with all of them down),
-  // so Lifetime and Redeploy are UTILITY (they keep them out more of the time).
-  turretCooldown: (b) => 2.5 / (1 + 0.25 * b.r.redeploy), // was 5 s
-  turretDuration: (b) => 10 + 1.5 * b.r.lifetime,
-  turretMaxActive: (b) => Math.min(TURRET_MAX_ACTIVE, 3 + (b.r.count || 0)),
+  // --- Sentry Turret (stats: damage, rate, reload, pierce) ---------------------------------------
+  // Deep Rock Galactic: Survivor's LMG Gun Platform (v0.43.4). You hold turret CHARGES (2; Extra Capacity
+  // +1). Stand still for turretStillTime s and every held charge goes down, turretDropStill s apart, at the
+  // ship. One charge comes back every turretReload s; a charge that comes back while you already hold
+  // the most you can carry deploys by itself (so turrets trickle out on the move too). Each turret fires
+  // for turretDuration s, then breaks down. Planted turrets stay put (Tank Tracks makes them follow you).
+  // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
+  // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
+  // drop at once.
+  turretCharges: (b) => 2 + (b.t4 ? 1 : 0),
+  turretReload: (b) => 6 / rateMult(b.r.reload),
+  turretDuration: () => 10,
+  turretStillTime: 0.5,
   turretDropStill: 0.25,
-  turretDropMoving: 1.2,
   turretRange: () => 476, // +40% (was 340)
-  turretFireRate: (b) => 6.1 * rateMult(b.r.rate),
-  // Turrets counted for potential DPS: all of them out.
-  turretAverageActive: (b) => W.turretMaxActive(b),
+  turretFireRate: (b) => 6.1 * rateMult(b.r.rate) * (b.t12 ? W.overloadRate : 1),
+  turretPierce: (b) => 2 + (b?.r?.pierce || 0), // enemies one bolt can hit (each one behind takes a little less)
+  // Turrets out on average (the potential counts them; never above the pool).
+  turretAverageActive: (b) => Math.min(TURRET_MAX_ACTIVE, W.turretDuration(b) / W.turretReload(b)),
   turretBoltSpeed: 13,
-  // Transforms: Twin Barrels (2 bolts per shot), Mobile Sentries (planted turrets drift after the ship at
-  // turretFollowSpeed px/s into a ring turretFollowRadius px around it: no extra attacks, so its rescale
-  // makes every bolt BT_TRANSFORM_DPS harder), Mortar Battery (a shell every
-  // mortarEvery s worth 22% of the turret's bolt damage, valued at mortarHitShare).
-  turretBarrels: (b) => (b.t4 ? 2 : 1),
-  turretFollowSpeed: 105, // px/s: about a third of the ship's cruising speed, so they trail behind
+  // Breakthroughs = DRG's overclocks: Extra Capacity (LV 6: +1 charge), Tank Tracks (LV 12: planted turrets
+  // roll after the ship at turretFollowSpeed px/s, ~43% of its cruising speed as in DRG, into a ring
+  // turretFollowRadius px around it), LMG Overload (LV 18: x overloadRate fire rate, each bolt lighter).
+  // Extra Capacity and Tank Tracks add no attacks, so their rescale makes every bolt BT_TRANSFORM_DPS harder.
+  turretFollowSpeed: 130, // 43% of the ship's 300 px/s base cruise
   turretFollowRadius: 95,
-  mortarEvery: 1.5,
-  mortarShare: 0.22,
-  mortarRadius: 60,
-  mortarDelay: 0.7,
-  mortarFalloff: 0.8, // hits hard at the target, fading to 20% at the rim
-  mortarHitShare: 1.75, // a shell on a pack catches its neighbours too: valued at this share
-  turretShotUnits: (b) => W.turretBarrels(b),
-  turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare * W.mortarHitShare : 0)),
-  turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
-  mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
+  overloadRate: 2,
+  overloadSpread: 0.07, // rad: LMG Overload sprays a little
+  turretShotUnits: (b) => (b.t12 ? W.overloadRate : 1),
+  turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b),
+  turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, W.turretShotUnits),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
@@ -726,8 +724,7 @@ export const POTENTIAL_DPS = {
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
     + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
   mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
-  turret: (b) => W.turretAverageActive(b) * (W.turretFireRate(b) * W.turretShotUnits(b) * W.turretDamageMult(b)
-    + (b.t12 ? W.mortarDamageMult(b) * W.mortarHitShare / W.mortarEvery : 0)),
+  turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b),
   drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);

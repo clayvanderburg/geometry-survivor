@@ -22,6 +22,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 | 2026-10-20 | **Tesla Arc is always SHOCK** ("it's friggin lightning"): stun arcs are its baseline, like the Flamethrower's FIRE. It has no element cards; its SHOCK rank follows its level (+1 at LV 6/12/18). |
 | 2026-10-20 | **Class-based weapon balance** (replaces "all offensive weapons equal" for realized damage): per target at equal level vs the Autocannon (100%): automatic single-target (Drones, Turret) ~85%; area weapons 60–70% per target, about even in total against packs; close-range defensive (Shock Field, Orbit Blades) lower by design. Encoded as `WEAPON_CLASS` / `CLASS_TARGET`; area targets enforced once enemies-hit-per-blast is measured. |
+| 2026-10-20 | **Sentry Turret works like Deep Rock Galactic: Survivor's LMG Gun Platform** (Clay, v0.43.4): 2 charges, stand still 0.5 s to drop them all, one charge back every 6 s, a reload into a full bank auto-deploys, fixed 10 s lifetime, no cap on turrets out. Cards follow DRG's upgrades (Bigger Cogs / Tighten Springs / Loosen Bolts / Add Punch); Breakthroughs follow its overclocks (Extra Capacity / Tank Tracks / LMG Overload). Stays in the auto class (~85% of the Autocannon). |
 
 ## Priorities (in order)
 

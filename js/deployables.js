@@ -50,7 +50,7 @@ export function isDeployableTarget(e) {
 export class Deployables {
   constructor() {
     this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0, cluster: false, seeker: false }));
-    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, mortarT: 0 }));
+    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0 }));
     this.drones = Array.from({ length: DRONE_POOL }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0,
       trailX: new Float32Array(TRAIL_LEN), trailY: new Float32Array(TRAIL_LEN), trailHead: 0, trailCount: 0
@@ -66,11 +66,25 @@ export class Deployables {
     for (const t of this.turrets) t.target = null;
     for (const d of this.drones) { d.target = null; d.trailCount = 0; }
     this.mineTimer = 0.5;
-    this.turretTimer = 0.8; // first plant of a run
-    // Recharge timers of turret slots whose turret expired (a slot is ready again when its timer ends).
-    this.turretRecharge = [];
+    // Sentry Turret charges (DRG: Survivor's LMG Gun Platform): held charges (null until the turret is
+    // first equipped, then a full bank), the reload toward the next one, the gap between drops and how
+    // long the ship has stood still.
+    this.turretCharges = null;
+    this.turretReloadT = 0;
+    this.turretTimer = 0;
+    this.turretStill = 0;
     this.time = 0;
     this.maxRock = -1;
+  }
+
+  // Turret bank for the HUD chip (held charges plus the reload toward the next, as a share of a full
+  // bank, in tenths); null until the turret is equipped.
+  turretHudCharge(p) {
+    if (this.turretCharges === null || !p.weapons?.turret) return null;
+    const lv = weaponBuild(p, 'turret');
+    const max = W.turretCharges(lv);
+    const held = this.turretCharges >= max ? max : this.turretCharges + Math.min(1, this.turretReloadT / W.turretReload(lv));
+    return Math.floor((held / max) * 10) / 10;
   }
 
   get activeCount() {
@@ -197,21 +211,34 @@ export class Deployables {
   }
 
   // ---- Sentry Turrets ----
+  // Deep Rock Galactic: Survivor rules: stand still turretStillTime s and every held charge goes down,
+  // turretDropStill s apart. A charge comes back every turretReload s; one that comes back while the bank
+  // is full deploys by itself, wherever the ship is.
   updateTurrets(dt, game, level) {
     const p = game.player;
     if (level) {
-      this.turretTimer -= dt;
-      for (let k = this.turretRecharge.length - 1; k >= 0; k--) {
-        this.turretRecharge[k] -= dt;
-        if (this.turretRecharge[k] <= 0) this.turretRecharge.splice(k, 1);
+      const max = W.turretCharges(level);
+      if (this.turretCharges === null) this.turretCharges = max; // first equipped: a full bank
+      this.turretCharges = Math.min(this.turretCharges, max);
+      const room = this.turretCount < TURRET_POOL;
+      const reload = W.turretReload(level);
+      this.turretReloadT += dt;
+      if (this.turretReloadT >= reload) {
+        if (this.turretCharges < max) {
+          this.turretCharges++;
+          this.turretReloadT -= reload;
+        } else if (room) {
+          this.deployTurret(game, level); // overflow: the bank is full, so this one goes straight down
+          this.turretReloadT -= reload;
+        } else this.turretReloadT = reload; // every turret in the pool is out: hold it
       }
-      // Ready turrets: the carried total minus those planted and those still recharging. Parked, they go
-      // down in quick succession; on the move, one every turretDropMoving s.
-      const ready = Math.min(TURRET_POOL, W.turretMaxActive(level)) - this.turretCount - this.turretRecharge.length;
-      if (this.turretTimer <= 0 && ready > 0 && this.anyTargetNear(game, p.x, p.y, W.turretRange(level) * 1.5)) {
+      const moving = Math.hypot(p.vx || 0, p.vy || 0) > 0.6;
+      this.turretStill = moving ? 0 : this.turretStill + dt;
+      this.turretTimer -= dt;
+      if (this.turretStill >= W.turretStillTime && this.turretTimer <= 0 && this.turretCharges > 0 && this.turretCount < TURRET_POOL) {
+        this.turretCharges--;
         this.deployTurret(game, level);
-        const moving = Math.hypot(p.vx || 0, p.vy || 0) > 0.6;
-        this.turretTimer = moving ? W.turretDropMoving : W.turretDropStill;
+        this.turretTimer = W.turretDropStill;
       }
     }
     // Live turrets fire at the player's current turret level, so an upgrade improves them at once.
@@ -226,12 +253,11 @@ export class Deployables {
         t.target = null;
         this.turrets[i] = this.turrets[this.turretCount - 1];
         this.turrets[--this.turretCount] = t;
-        this.turretRecharge.push(W.turretCooldown(lv)); // its slot recharges before it can be planted again
         game.particles.spawnShockwave(t.x, t.y, 34 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2, 0.22, true);
         game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
         continue;
       }
-      // Mobile Sentries: drift after the ship into a ring around it, each turret at its own spot on the ring.
+      // Tank Tracks: roll after the ship into a ring around it, each turret at its own spot on the ring.
       if (lv.t8) this.followShip(t, i, p, dt);
       t.target = this.trackTarget(game, t, t.x, t.y, range, TURRET_BOLT_RADIUS, dt);
       const tgt = t.target;
@@ -239,15 +265,6 @@ export class Deployables {
         t.aim += dt * 0.9; // idle sweep
         t.fireAcc = Math.min(1, t.fireAcc + dt * rate);
         continue;
-      }
-      // Mortar Battery: a shell lobbed onto the target every mortarEvery s.
-      if (lv.t12) {
-        t.mortarT -= dt;
-        if (t.mortarT <= 0) {
-          t.mortarT += W.mortarEvery;
-          game.weaponFx?.schedule({ x: tgt.x, y: tgt.y, fromX: t.x, fromY: t.y, delay: W.mortarDelay, radius: W.mortarRadius * (p.stats.areaMult ?? 1),
-            damage: weaponDamage(p, 'turret', lv) * W.mortarDamageMult(lv) / W.turretDamageMult(lv), hue: DEPLOYABLE_HUES.turret, source: 'turret', style: 'mortar', knock: MINE_KNOCK, falloff: W.mortarFalloff });
-        }
       }
       const want = Math.atan2(tgt.y - t.y, tgt.x - t.x);
       const diff = wrapAngle(want - t.aim);
@@ -303,7 +320,6 @@ export class Deployables {
     t.life = t.maxLife = W.turretDuration(level);
     t.aim = p.angle;
     t.fireAcc = 1;
-    t.mortarT = W.mortarEvery;
     t.target = null;
     t.retarget = 0;
     t.flash = 0;
@@ -333,21 +349,18 @@ export class Deployables {
   fireTurretBolt(game, t, level) {
     const p = game.player;
     const damage = weaponDamage(p, 'turret', level);
-    // Twin Barrels: two bolts side by side.
-    const barrels = W.turretBarrels(level);
-    for (let k = 0; k < barrels; k++) {
-      const lateral = barrels > 1 ? (k === 0 ? -5 : 5) * TURRET_SCALE : 0;
-      const ox = -Math.sin(t.aim) * lateral, oy = Math.cos(t.aim) * lateral;
-      const b = this.fireBolt(game, t.x + ox, t.y + oy, t.aim, TURRET_MUZZLE, W.turretBoltSpeed, damage,
-        DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
-      b.sweepX = t.x + ox; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
-      b.sweepY = t.y + oy;
-      if (p.weapons.siegeBattery) {
-        b.blastRadius = siegeShellRadius(p);
-        b.blastDamage = weaponDamage(p, 'siege', level);
-        b.blastStat = 'siege'; // run stats: shell bursts are Siege Battery damage
-        b.hue = 24; // amber-hot shells read as explosive
-      }
+    // LMG Overload: a little spray.
+    const aim = level.t12 ? t.aim + (Math.random() - 0.5) * 2 * W.overloadSpread : t.aim;
+    const b = this.fireBolt(game, t.x, t.y, aim, TURRET_MUZZLE, W.turretBoltSpeed, damage,
+      DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
+    b.pierce = W.turretPierce(level);
+    b.sweepX = t.x; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
+    b.sweepY = t.y;
+    if (p.weapons.siegeBattery) {
+      b.blastRadius = siegeShellRadius(p);
+      b.blastDamage = weaponDamage(p, 'siege', level);
+      b.blastStat = 'siege'; // run stats: shell bursts are Siege Battery damage
+      b.hue = 24; // amber-hot shells read as explosive
     }
     t.flash = 1;
     if (game.sound.playTurretShot) game.sound.playTurretShot();

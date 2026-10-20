@@ -79,11 +79,13 @@ export const STAT_CARDS = {
     card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
   ],
   turret: [
-    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
-    card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.', cap(8)),
-    card('turret', 'turret_count', 'count', 'Sentry Turret Count', 'turretMaxActive', 'Sentry Turret: carry one more turret.', cap(6)),
-    card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
-    card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Recharge', 'turretCooldown', 'Sentry Turret: an expired turret is ready to plant again sooner. Only recharge.')
+    // Deep Rock Galactic: Survivor's LMG upgrades (Bigger Cogs, Tighten Springs, Loosen Bolts, Add Punch).
+    // turret_redeploy keeps its id (it was the slot recharge, now charge reload); Count and Lifetime are
+    // retired (RETIRED_STAT_CARDS).
+    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bigger Cogs', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
+    card('turret', 'turret_rate', 'rate', 'Sentry Turret Tighten Springs', 'turretFireRate', 'Sentry Turret: shoots faster. Only fire rate.', cap(8)),
+    card('turret', 'turret_redeploy', 'reload', 'Sentry Turret Loosen Bolts', 'turretReload', 'Sentry Turret: turret charges come back faster, so more turrets are out at once. Only reload speed.', cap(8)),
+    card('turret', 'turret_pierce', 'pierce', 'Sentry Turret Add Punch', 'turretPierce', 'Sentry Turret: each bolt punches through one more enemy (each one behind takes a little less). Only pierce.', cap(4))
   ],
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
@@ -140,6 +142,12 @@ export const STAT_CARDS = {
 };
 
 export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
+// Stat cards that no longer exist, by id: old run stats still name them, and nothing else reads them
+// (runs are not saved mid-run, and a weapon's ranks are looked up only for its current cards).
+export const RETIRED_STAT_CARDS = Object.freeze({
+  turret_count: 'Sentry Turret Count (retired)',
+  turret_lifetime: 'Sentry Turret Lifetime (retired)'
+});
 export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.id, c]));
 
 // --- Element infusion (v0.34) ----------------------------------------------------------------------
@@ -307,9 +315,9 @@ export const TRANSFORMS = {
     18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, each a little weaker, tossed out toward the nearest enemy.')
   },
   turret: {
-    6: tf('twin', 'Twin Barrels', 'Sentry Turrets fire two bolts per shot, side by side.'),
-    12: tf('mobile', 'Mobile Sentries', 'Sentry Turrets slowly follow you around instead of staying where they were planted, and their bolts hit harder.'),
-    18: tf('mortar', 'Mortar Battery', 'Sentry Turrets also lob mortar shells that crash down on enemies in range.')
+    6: tf('capacity', 'Extra Capacity', 'Sentry Turret: carry one more turret charge, and every bolt hits harder.'),
+    12: tf('mobile', 'Tank Tracks', 'Sentry Turrets roll after you instead of staying where they were planted, and their bolts hit harder.'),
+    18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
   },
   drones: {
     6: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
@@ -350,8 +358,8 @@ export const TRANSFORMS = {
 
 // Which stats add damage output (POWER) vs. only shape the weapon (UTILITY): tests and the Field Guide.
 // A longer-lived singularity grinds longer, so its lifetime is POWER too. Everything else (size, radius,
-// pull, reach, range, spin, pierce, capacity, fuse, turret lifetime and recharge: turret DPS is counted
-// with every turret out) is UTILITY.
+// pull, reach, range, spin, pierce, capacity, fuse) is UTILITY. Sentry Turret reload is POWER: more
+// charges back means more turrets out.
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
 export const BOOST_NAME = 'Across the Board';

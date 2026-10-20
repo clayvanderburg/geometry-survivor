@@ -5614,7 +5614,7 @@ export class Game {
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
     // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
-    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge() });
+    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge(), turret: this.deployables?.turretHudCharge(p) });
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
