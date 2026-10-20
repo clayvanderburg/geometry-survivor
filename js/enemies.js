@@ -11,6 +11,7 @@ import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
 import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
+import { bossRam, drawBossRam } from './boss-ram.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -46,14 +47,23 @@ export function waveScaleAt(wave, { light = false } = {}) {
   const perWave = TUNING.waveHpPerWave ?? 0.25;
   const growth = TUNING.waveHpGrowth ?? 1.09;
   const from = TUNING.waveHpGrowthFrom ?? 6;
-  return (start + (wave - 1) * perWave) * Math.pow(growth, easeIn(wave - from, TUNING.waveHpGrowthRamp ?? 0));
+  return (start + (wave - 1) * perWave) * Math.pow(growth, easeIn(wave - from, TUNING.waveHpGrowthRamp ?? 0)) * lateHpScaleAt(wave);
+}
+
+// The late-campaign squeeze: a second compounding stage from waveHpLateFrom (eased in over
+// waveHpLateRamp waves), so the back half of the campaign outgrows a build that coasted through the front.
+export function lateHpScaleAt(wave) {
+  const from = TUNING.waveHpLateFrom ?? 30;
+  return Math.pow(TUNING.waveHpLateGrowth ?? 1, easeIn(wave - from, TUNING.waveHpLateRamp ?? 0));
 }
 
 // Contact and plasma-orb damage multiplier of a wave: damageRampBase, plus damageRampPerWave per wave
-// after damageRampFrom, eased in over damageRampSmooth waves.
+// after damageRampFrom, eased in over damageRampSmooth waves; from damageRampLateFrom another
+// damageRampLatePerWave per wave on top (eased in over damageRampLateSmooth).
 export function damageRampAt(wave) {
   const past = easeIn(wave - (TUNING.damageRampFrom ?? 5), TUNING.damageRampSmooth ?? 0);
-  return (TUNING.damageRampBase ?? 1) + past * (TUNING.damageRampPerWave ?? 0.08);
+  const late = easeIn(wave - (TUNING.damageRampLateFrom ?? 30), TUNING.damageRampLateSmooth ?? 0);
+  return (TUNING.damageRampBase ?? 1) + past * (TUNING.damageRampPerWave ?? 0.08) + late * (TUNING.damageRampLatePerWave ?? 0);
 }
 
 // XP carried by a kill at a given wave: the enemy's base XP × (1 + xpPerWave·(w−1)).
@@ -75,8 +85,10 @@ export function packSize(count) {
 }
 
 // Contact damage of a hull touching the ship at a given wave (bosses hit harder).
+// Contact damage of a hull at a wave: contactDamage (bosses: bossContactDamage) × contactMult × the ramp.
 export function contactDamageAt(e, wave) {
-  return (e.isBoss ? 38 * (e.contactMult || 1) : 18 * (e.contactMult || 1)) * damageRampAt(wave);
+  const base = e.isBoss ? (TUNING.bossContactDamage ?? 38) : (TUNING.contactDamage ?? 18);
+  return base * (e.contactMult || 1) * damageRampAt(wave);
 }
 
 // Per-tick decay of hit knockback displacement (fixed 60 Hz): total travel ≈ impulse × 5.
@@ -558,6 +570,7 @@ export class EnemyManager {
           updateHostileKind(e, this, env);
         } else if (isBossKind(e.type)) {
           bossDef(e.type).update(e, this, env);
+          bossRam(e, bossDef(e.type).ram, env); // the shared telegraphed charge (js/boss-ram.js)
         } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
           // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
         } else if (e.type === 'swarmer') {
@@ -923,7 +936,10 @@ export class EnemyManager {
       drawArchetypeOverlay(ctx, e, r);
       drawHostileOverlay(ctx, e, r);
       if (e.mount) drawPartOverlay(ctx, e, r);
-      if (e.isBoss) bossDef(e.type)?.overlay?.(ctx, e, r);
+      if (e.isBoss) {
+        bossDef(e.type)?.overlay?.(ctx, e, r);
+        drawBossRam(ctx, e, bossDef(e.type)?.ram);
+      }
       if (e.isLieutenant) {
         drawLieutenantAura(ctx, e, r);
         drawLieutenantBar(ctx, e, r);
