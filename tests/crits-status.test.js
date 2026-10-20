@@ -263,17 +263,17 @@ test('COLD slows as it builds, then FREEZES solid: held still, +25% damage taken
 test('CORRODE: acid ticks, and every stack amplifies every source (DoTs included) up to the rank cap', () => {
   reset();
   const p = makePlayer();
-  applyUpgradeLevels(p, byId('lightning'));
-  applyUpgradeLevels(p, byId('lightning_corrode'));
+  applyUpgradeLevels(p, byId('rockets'));
+  applyUpgradeLevels(p, byId('rockets_corrode'));
   const e = enemy();
   const g = game([e], p);
-  withRandom(0.99, () => g.hitEnemy(e, 20, 'lightning'));
+  withRandom(0.99, () => g.hitEnemy(e, 20, 'rocket'));
   const stacks = e.st.corrode;
   assert.ok(Math.abs(damageTakenMult(e) - (1 + stacks * W.corrodeVulnPerStack)) < 1e-12);
-  for (let i = 0; i < 50; i++) withRandom(0.99, () => g.hitEnemy(e, 100, 'lightning'));
+  for (let i = 0; i < 50; i++) withRandom(0.99, () => g.hitEnemy(e, 100, 'rocket'));
   const amp = 1 + W.corrodeCap(1);
   assert.ok(Math.abs(damageTakenMult(e) - amp) < 1e-12, 'capped');
-  assert.ok(Math.abs(row('lightning:corrodeMax').get(p) - (amp - 1)) < 1e-12);
+  assert.ok(Math.abs(row('rockets:corrodeMax').get(p) - (amp - 1)) < 1e-12);
 
   const hp = e.hp;
   withRandom(0.99, () => g.hitEnemy(e, 10, 'orbital'));
@@ -293,8 +293,7 @@ test('CORRODE: acid ticks, and every stack amplifies every source (DoTs included
 test('SHOCK conducts between touching enemies: charge and zaps spread down a packed line, a lone hull takes no shock damage', () => {
   reset();
   const p = makePlayer();
-  applyUpgradeLevels(p, byId('lightning'));
-  applyUpgradeLevels(p, byId('lightning_shock'));
+  applyUpgradeLevels(p, byId('lightning')); // Tesla Arc is always SHOCK (no element card)
   const touch = 15 + 15 + 3;
   const a = enemy({ x: 2000 }), b = enemy({ x: 2000 + touch }), c = enemy({ x: 2000 + 2 * touch });
   const lone = enemy({ x: 3000 });
@@ -317,7 +316,7 @@ test('SHOCK conducts between touching enemies: charge and zaps spread down a pac
 test('vortexes take statuses like any enemy; only invulnerable hulls are immune', () => {
   reset();
   const p = makePlayer();
-  p.weapons.blaster_fire = 1; p.weapons.missiles_frost = 1; p.weapons.lightning_corrode = 1;
+  p.weapons.blaster_fire = 1; p.weapons.missiles_frost = 1; p.weapons.lightning = 1; // Tesla Arc: always SHOCK
   const vortex = enemy({ type: 'blackhole', hp: 1e6, maxHp: 1e6 });
   const shielded = enemy({ invulnerable: true, hp: 1e6, maxHp: 1e6 });
   const g = game([vortex, shielded], p);
@@ -326,7 +325,7 @@ test('vortexes take statuses like any enemy; only invulnerable hulls are immune'
     withRandom(0.99, () => g.hitEnemy(shielded, 1, source));
   }
   assert.ok(vortex.st && vortex.st.burn > 0, 'a FIRE Autocannon ignites a vortex');
-  assert.ok(vortex.st.cold > 0 && vortex.st.corrode > 0, 'FROST missiles chill it, CORROSIVE arcs corrode it');
+  assert.ok(vortex.st.cold > 0 && vortex.st.shock > 0, 'FROST missiles chill it, Tesla arcs shock it');
   assert.equal(shielded.st, undefined);
 });
 
@@ -365,7 +364,7 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
   const p = makePlayer(); // equips only Autocannon (PROJECTILE KINETIC)
   for (const id of ['tag_explosive', 'tag_electric', 'tag_area']) assert.equal(byId(id).req(p), false, id);
-  for (const id of ['rockets_frost', 'lightning_corrode']) assert.equal(loadoutAllows(p, byId(id)), false, id);
+  for (const id of ['rockets_frost', 'grenades_corrode']) assert.equal(loadoutAllows(p, byId(id)), false, id);
   assert.equal(byId('tag_kinetic').req(p), true, 'the Autocannon is kinetic');
   assert.equal(loadoutAllows(p, byId('blaster_fire')), true, 'Autocannon bolts can burn');
   p.loadout = ['blaster', 'rockets'];

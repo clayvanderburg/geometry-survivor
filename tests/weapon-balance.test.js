@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Weapon balance rule (weapon-scaling.js): every weapon has the same potential DPS at LV 1, and each
-// POWER card adds the same damage output on every weapon, so weapons built for damage stay equal.
-// UTILITY cards (size, radius, reach, pull...) add none. Difficulty of use is tuned separately.
+// Weapon balance (weapon-scaling.js). The MODEL: every weapon has the same potential DPS at LV 1 (times
+// its deliberate trims), and each POWER card adds the same damage output on every weapon; UTILITY cards
+// (size, radius, reach, pull...) add none. The TARGET (Clay, v0.43.1) is class-based: realized damage per
+// target vs the Autocannon at equal level, by WEAPON_CLASS / CLASS_TARGET, measured in the card bench.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
+const { UPGRADE_BY_ID, applyUpgradeLevels, discardWeapon } = await import('../js/upgrades.js');
 const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
 // Weapons whose damage depends on something other than attacking: shards need kills, the dash nova
@@ -28,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x4.2', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -174,6 +176,51 @@ test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder
   assert.ok(W.orbitalRadius(max) <= 300, `ring radius ${W.orbitalRadius(max)} px`);
   const step = W.orbitalSpin(max) * W.orbitalRadius(max) / 60;
   assert.ok(step <= 2 * (14 + 18), `blade step ${step.toFixed(1)} px/tick`);
+});
+
+// Realized own DPS of a weapon alone (no Autocannon unless it is the one benched) with a damage-focused
+// build at weapon level `lv` (Damage ranks, then fire-rate ranks past 11), in the card bench: the mean of
+// the still-pack and chasing-crowd scenarios over 2 seeds.
+const DAMAGE_BUILD = { blaster: ['blaster_damage', 'firerate'], drones: ['drones_damage', 'drones_rate'], turret: ['turret_damage', 'turret_rate'] };
+const SOURCES = { blaster: ['blaster', 'helix'], drones: ['drone'], turret: ['turret', 'siege'] };
+function benchDps(id, lv) {
+  const [dmg, rate] = DAMAGE_BUILD[id];
+  const setup = (p) => {
+    if (id !== 'blaster') {
+      applyUpgradeLevels(p, UPGRADE_BY_ID[id]);
+      discardWeapon(p, 'blaster');
+    }
+    if (lv > 1) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[dmg], levelJump: Math.min(lv - 1, 10) });
+    if (lv > 11) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[rate], levelJump: lv - 11 });
+  };
+  let sum = 0;
+  for (const scenario of ['pack', 'chase']) {
+    for (let seedIndex = 0; seedIndex < 2; seedIndex++) {
+      const r = h.benchUpgrade({ scenario, seedIndex, setup });
+      sum += SOURCES[id].reduce((a, s) => a + (r.dps[s] || 0), 0);
+    }
+  }
+  return sum / 4;
+}
+
+test('class-based balance: every weapon has a class and every class a target', () => {
+  for (const id of IDS) assert.ok(CLASS_TARGET[WEAPON_CLASS[id]], `${id} needs a WEAPON_CLASS with a CLASS_TARGET`);
+  assert.equal(WEAPON_CLASS.blaster, 'aimed');
+  assert.equal(CLASS_TARGET.aimed.perTarget, 1, 'the Autocannon is the reference');
+  assert.equal(CLASS_TARGET.auto.perTarget, 0.85);
+  assert.deepEqual(CLASS_TARGET.area.perTarget, [0.6, 0.7]);
+  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'auto'), ['drones', 'turret']);
+  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'defensive'), ['shockfield', 'orbitals']);
+});
+
+test('class-based balance: automatic single-target weapons realize ~85% of the Autocannon at LV 3 and LV 6', () => {
+  for (const lv of [3, 6]) {
+    const ref = benchDps('blaster', lv);
+    for (const id of ['drones', 'turret']) {
+      const share = benchDps(id, lv) / ref;
+      assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `${id} LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    }
+  }
 });
 
 test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and drones; wide mines', () => {

@@ -286,7 +286,7 @@ test('the HUD lists each weapon once (slot chip, real level) and nothing else; u
   g.updateHUD();
   const bar = elements.get('active-weapons-bar').innerHTML;
   assert.match(bar, /Autocannon LV 6</);
-  assert.match(bar, /Tesla Arc LV 3</);
+  assert.match(bar, /Tesla Arc LV 3 <span class="weapon-el"[^>]*>SHOCK</, 'the Tesla Arc is always SHOCK');
   assert.match(bar, /Grenades LV 3 <span class="weapon-el"[^>]*>FIRE</, 'an infused weapon shows its element');
   assert.ok(!bar.includes('Status Potency') && !bar.includes('Thermite'), 'no upgrade row on the HUD');
 

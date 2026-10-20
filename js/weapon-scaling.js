@@ -41,11 +41,34 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data.
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
+// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
+
+// Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
+// as a share of the Autocannon's (the aimed single-target reference). The shared potential curve above is
+// the model the trims are applied to; this is what they aim at, measured in the card bench
+// (tests/weapon-balance.test.js). Automatic single-target weapons give up a little for aiming themselves.
+// Area weapons hit several enemies, so they deal less to each one but about as much in total against a
+// pack (`pack`). Close-range defensive weapons sit lower by design: the last line of defense. Only the
+// `enforced` classes are tested today: the area and defensive numbers wait for the Balance lane's
+// measurement of real enemies hit per blast / pass, so the tests record where those weapons sit instead.
+export const WEAPON_CLASS = Object.freeze({
+  blaster: 'aimed',
+  drones: 'auto', turret: 'auto',
+  rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
+  lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
+  shockfield: 'defensive', orbitals: 'defensive'
+});
+export const CLASS_TARGET = Object.freeze({
+  aimed: Object.freeze({ perTarget: 1, enforced: true }),
+  auto: Object.freeze({ perTarget: 0.85, enforced: true }),
+  area: Object.freeze({ perTarget: [0.6, 0.7], pack: 1, enforced: false }),
+  defensive: Object.freeze({ perTarget: 'below auto', enforced: false })
+});
 const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
@@ -321,7 +344,7 @@ export const WEAPON_SCALING = {
   mortarHitShare: 1.75, // a shell on a pack catches its neighbours too: valued at this share
   turretShotUnits: (b) => W.turretBarrels(b),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare * W.mortarHitShare : 0)),
-  turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
+  turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
   mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
@@ -336,7 +359,7 @@ export const WEAPON_SCALING = {
   podShare: 0.22,
   podBlast: 60,
   droneUnits: (b) => W.droneCount(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
-  droneDamageMult: (b) => lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
+  droneDamageMult: (b) => lv1Trim('drones') * lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
   podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
 
   // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------
