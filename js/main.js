@@ -43,7 +43,7 @@ import {
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
-import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue, armorySpent } from './progression.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -1230,6 +1230,22 @@ export class Game {
       container.appendChild(notice);
     }
 
+    if (prog.data.refundNotes.length) {
+      const total = prog.data.refundNotes.reduce((n, r) => n + r.cores, 0);
+      const names = prog.data.refundNotes.map((r) => r.name).join(', ');
+      const notice = document.createElement('div');
+      notice.className = 'armory-notice';
+      notice.innerHTML = `<b>ARMORY UPDATE // ❖ ${total.toLocaleString()} VOID CORES REFUNDED</b>
+        <span>These upgrades changed, so your ranks in them were reset and every core you spent on them is back in your wallet: ${names}.</span>
+        <button class="armory-notice-ok" data-armory-key="refund-notice">GOT IT</button>`;
+      notice.querySelector('button').addEventListener('click', () => { prog.dismissRefundNotes(); this.renderHubUI(); });
+      container.appendChild(notice);
+    }
+    const early = document.createElement('div');
+    early.className = 'armory-early';
+    early.textContent = 'Early access: upgrades may change. Void Cores spent on changed upgrades are always refunded.';
+    container.appendChild(early);
+
     for (const upg of META_UPGRADES) {
       if (this.armoryCat !== 'all' && upg.cat !== this.armoryCat) continue;
       const rank = prog.getRank(upg.id);
@@ -1270,7 +1286,7 @@ export class Game {
   // REFUND ALL: the first click arms it (the button asks to confirm and shows the refund), a second click
   // within ARMORY_REFUND_CONFIRM_MS resets every rank and pays back every core spent on them.
   armoryRefundButtonHtml() {
-    const refund = armorySpent(this.progression.data.ranks);
+    const refund = this.progression.armorySpent();
     const armed = refund > 0 && this.armoryRefundArmed;
     const label = armed ? `CONFIRM: REFUND ❖ ${refund.toLocaleString()}?` : '↺ REFUND ALL';
     const title = refund > 0 ? `Reset every armory rank and get back all ${refund.toLocaleString()} Void Cores spent` : 'Nothing to refund yet';
