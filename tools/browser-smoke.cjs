@@ -11,7 +11,10 @@ const { chromium } = require(process.argv[2] || 'playwright');
    if(url.hostname !== '127.0.0.1') return route.abort();
    const file = path.resolve(root,'.'+(url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname)));
    if(path.relative(root,file).startsWith('..')) return route.abort();
-   try { await route.fulfill({body:await fs.readFile(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[path.extname(file)] || 'application/octet-stream'}); }
+   try {
+     let body = await fs.readFile(file);
+     if(url.pathname === '/js/main.js') body = Buffer.from(body.toString().replace('() => new Game()', '() => (globalThis.__game = new Game())'));
+     await route.fulfill({body,contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[path.extname(file)] || 'application/octet-stream'}); }
    catch { await route.fulfill({status:404,body:'Not found'}); }
  });
  const page = await context.newPage();
@@ -45,8 +48,19 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await page.locator('#btn-tutorial-skip').click();
  if(await page.locator('#tutorial-modal').isVisible()) throw Error('SKIP TUTORIAL did not close it');
  if(await page.evaluate(()=>localStorage.getItem('vexolith_tutorial_seen'))!=='1') throw Error('Skipping should remember the tutorial was seen');
+ // Then the starting-weapon pick: one card per choice, the default lit; the run waits, and a clicked card launches it with that weapon.
+ await page.locator('#start-pick-modal').waitFor({state:'visible'});
+ if(!await page.locator('#title-modal').isVisible()) throw Error('The run should wait for the starting-weapon pick');
+ const pickCards = page.locator('#start-pick-options > *');
+ if(await pickCards.count() !== 3) throw Error('The starting-weapon pick needs its 3 cards');
+ if(!/\bpicked\b/.test(await pickCards.first().getAttribute('class'))) throw Error('The default starting weapon should be lit');
+ await page.waitForTimeout(400); // past the double-click guard
+ await pickCards.nth(1).click();
  await page.waitForTimeout(1200);
- if(await page.locator('#title-modal').isVisible()) throw Error('Skipping the first-launch tutorial should start the run');
+ if(await page.locator('#start-pick-modal').isVisible()) throw Error('Choosing a starting weapon should close the pick');
+ if(await page.locator('#title-modal').isVisible()) throw Error('Choosing a starting weapon should start the run');
+ if(JSON.stringify(await page.evaluate(()=>__game.player.loadout))!=='["rockets"]') throw Error('The run should start with the picked weapon (rockets) alone');
+ if(await page.evaluate(()=>localStorage.getItem('vexolith_start_weapon'))!=='rockets') throw Error('The starting-weapon pick should be remembered');
  if(await page.locator('#mode-hud-badge').innerText() !== '⚡ BLITZ') throw Error('A BLITZ run needs its HUD badge');
  await page.keyboard.press('p');
  if(!await page.locator('#pause-modal').isVisible()) throw Error('Pause did not open');
@@ -55,7 +69,17 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await page.locator('#hud-volume-slider').focus();
  await page.keyboard.press('p');
  if(!await page.locator('#pause-modal').isVisible()) throw Error('Slider swallowed pause');
+ // Restart from pause asks for the starting weapon again (the last pick lit); Esc backs out to the pause menu, [3] launches missiles.
  await page.locator('#btn-pause-restart').click();
+ await page.locator('#start-pick-modal').waitFor({state:'visible'});
+ if(!/\bpicked\b/.test(await pickCards.nth(1).getAttribute('class'))) throw Error('The last starting weapon should be lit');
+ await page.keyboard.press('Escape');
+ if(await page.locator('#start-pick-modal').isVisible() || !await page.locator('#pause-modal').isVisible()) throw Error('Esc on the pick should go back to the pause menu');
+ await page.locator('#btn-pause-restart').click();
+ await page.locator('#start-pick-modal').waitFor({state:'visible'});
+ await page.keyboard.press('3');
+ if(await page.locator('#start-pick-modal').isVisible() || await page.evaluate(()=>__game.state)!=='PLAYING') throw Error('[3] on the pick should launch the run');
+ if(JSON.stringify(await page.evaluate(()=>__game.player.loadout))!=='["missiles"]') throw Error('[3] should start the run with missiles');
  await page.keyboard.press('t');
  if(await page.locator('#tuner-drawer').isVisible()) throw Error('Plain T must not open the hidden tuner');
  if(await page.locator('text=/TUNER|TUNING/ >> visible=true').count()) throw Error('A tuner link is visible to players');
@@ -91,10 +115,15 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await blocked.locator('#tutorial-modal').waitFor({state:'visible'});
  await blocked.keyboard.press('Escape');
  if(await blocked.locator('#tutorial-modal').isVisible()) throw Error('Esc did not skip the tutorial');
+ // The starting-weapon pick still works without storage: Enter launches the lit default.
+ await blocked.locator('#start-pick-modal').waitFor({state:'visible'});
+ await blocked.keyboard.press('Enter');
+ if(await blocked.locator('#start-pick-modal').isVisible()) throw Error('Enter on the pick should launch the run');
+ if(JSON.stringify(await blocked.evaluate(()=>__game.player.loadout))!=='["blaster"]') throw Error('Enter should launch the lit default weapon');
  await blocked.waitForTimeout(300);
  await blocked.keyboard.press('p');
  if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (every load and refresh, key continues to the title), first-launch tutorial (next/back/skip into the run/remembered), blocked-storage boot + tutorial + patch notes + mode pick; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (every load and refresh, key continues to the title), first-launch tutorial (next/back/skip into the starting-weapon pick/remembered), starting-weapon pick (click/[3]/Enter launch with that weapon, remembered, Esc back to pause), blocked-storage boot + tutorial + pick + patch notes + mode pick; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});
