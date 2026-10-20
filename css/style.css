@@ -4568,6 +4568,8 @@ body.touch-mode #chest-rewards-grid { grid-template-columns: repeat(auto-fit, mi
 body.touch-mode .upgrade-option:not(.card-detail-card) { padding: 10px 10px 8px; }
 body.touch-mode .upgrade-option:not(.card-detail-card):hover { transform: none; }
 body.touch-mode .upgrade-option:not(.card-detail-card) :is(.upg-key, .upg-tags, .upg-stats, .weapon-clip) { display: none; }
+/* MORE view: the Breakthrough clip, kept short enough that its text still fits on a landscape phone. */
+body.touch-mode .card-detail-card .weapon-clip { width: min(100%, calc(38vh * 16 / 9)); margin-inline: auto; }
 /* What the card actually does, in brief: the full text and stats are behind MORE. */
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-summary {
   display: -webkit-box;

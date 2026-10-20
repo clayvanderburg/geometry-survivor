@@ -27,18 +27,21 @@ const VIEW = { width: 960, height: 540 };
 const OUT_WIDTH = 360; // shown ~320 css px wide in the Field Guide and on the Breakthrough card
 const WEAPON_CLIP_LEVEL = 5;
 const BREAKTHROUGH_LEVELS = [6, 12, 18];
-const FRAMES = 40;
+const FRAMES = 40; // per clip, unless a tweak says otherwise
 const EVERY = 4; // sim ticks per frame: 15 fps
 const WARMUP = 120; // ticks before the first frame, so deployables, orbits and clouds are already out
 const ZOOM = 1.5;
 
 // The ship sits still in a close ring of still targets (wave HP, so they break and come back) and lets the
 // weapon work. Per-weapon tweaks: `drift` flies the ship in a slow loop (trails and dash effects need it),
-// `dash` dashes every N ticks (dash-triggered effects), `dummies` overrides the targets (CHASERS follow).
+// `dash` dashes every N ticks (dash-triggered effects), `dummies` overrides the targets (CHASERS follow),
+// `frames` lengthens the loop, `warmup` the lead-in before it.
 const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that follow a moving ship
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
-  shockfield: { drift: true, dash: 60, dummies: CHASERS }
+  shockfield: { drift: true, dash: 60, dummies: CHASERS },
+  mines: { warmup: 600, frames: 60, dummies: CHASERS }, // one mine per 2 s: lay a field first, then let targets walk in
+  lightning: { frames: 60 } // strikes are spaced out: a longer loop catches more of them
 };
 
 (async () => {
@@ -166,9 +169,11 @@ async function capture(browser, clip, tmp) {
 
     const frameDir = path.join(tmp, clip.name);
     fs.mkdirSync(frameDir, { recursive: true });
-    await step(WARMUP, 0);
-    for (let i = 0; i < FRAMES; i++) {
-      if (i > 0) await step(EVERY, WARMUP + i * EVERY);
+    const warmup = tweak.warmup || WARMUP;
+    await step(warmup, 0);
+    const frames = tweak.frames || FRAMES;
+    for (let i = 0; i < frames; i++) {
+      if (i > 0) await step(EVERY, warmup + i * EVERY);
       await page.screenshot({ path: path.join(frameDir, `frame-${String(i).padStart(3, '0')}.png`) });
     }
     if (errors.length) throw new Error(`page errors: ${errors.join(' | ')}`);
@@ -176,7 +181,7 @@ async function capture(browser, clip, tmp) {
     const out = path.join(outDir, `${clip.name}.webp`);
     execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(Math.round(60 / EVERY)), '-i', path.join(frameDir, 'frame-%03d.png'),
       '-vf', `scale=${OUT_WIDTH}:-2:flags=lanczos`, '-c:v', 'libwebp_anim', '-quality', '40', '-compression_level', '6', '-loop', '0', out]);
-    console.log(`${clip.name}: ${FRAMES} frames -> ${path.relative(root, out)} (${Math.round(fs.statSync(out).size / 1024)} KB)`);
+    console.log(`${clip.name}: ${frames} frames -> ${path.relative(root, out)} (${Math.round(fs.statSync(out).size / 1024)} KB)`);
   } finally {
     await context.close();
   }
