@@ -508,9 +508,9 @@ export class EnemyManager {
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
       const e = enemies[i];
-      // SHOCK stun (status-effects.js): the hull freezes in place, no steering, no attacks, no spin. Gravity
-      // drift and knockback still move it, and touching it still hurts.
-      const stunned = e.st !== undefined && e.st.stunT > 0;
+      // SHOCK stun or FROST freeze (status-effects.js): the hull holds in place, no steering, no attacks,
+      // no spin. Gravity drift and knockback still move it, and touching it still hurts.
+      const stunned = e.st !== undefined && (e.st.stunT > 0 || e.st.frozenT > 0);
       if (!stunned) e.rotation += e.vRot;
       e.pulsePhase += dt * 6;
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt * 6);
@@ -813,7 +813,7 @@ export class EnemyManager {
       const r = e.radius * pulse;
       // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
       // version of their own hue, so the archetype stays recognisable.
-      const chilled = e.st && e.st.chillT > 0;
+      const chilled = e.st && (e.st.cold > 0 || e.st.frozenT > 0);
       const stunned = e.st && e.st.stunT > 0;
       const zap = stunned && Math.floor(e.st.stunT * 14) % 2 === 0;
       const color = e.hitFlash > 0

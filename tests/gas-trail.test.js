@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // x BT_TRANSFORM_DPS, the fixed CORROSIVE element (STATUS card gating, Corrosive Amplifier), the trail
 // itself (venting, one tick per enemy, corrosion, fading), each Breakthrough, and cheap drawing.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage, gasCloudRadius } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, corrodeCap, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage, gasCloudRadius } = await import('../js/weapon-scaling.js');
 const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, FIXED_ELEMENTS, makeBuild, levelBuild, weaponBuild, weaponElement, BT_TRANSFORM_DPS, BREAKTHROUGH_LEVELS } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon, eligibleUpgrades, ownedElements } = await import('../js/upgrades.js');
 const { WEAPONS, WEAPON_BY_ID, weaponTags, weaponLevel } = await import('../js/loadout.js');
@@ -123,11 +123,13 @@ test('fixed CORROSIVE element: corrode rank follows the level, STATUS cards and 
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.corrode_damage, levelJump: 1 });
   assert.ok(near(weaponDamage(p, 'gas'), before * (1 + W.elementDamageStep)));
 
-  // A gas hit corrodes at the trail's rank; Status Application raises the stack cap.
+  // A gas hit corrodes at the trail's rank: stacks follow its damage, damage taken stops at the rank's cap.
   const e = { type: 'swarmer', hp: 100, maxHp: 100, radius: 10 };
-  for (let i = 0; i < 20; i++) applyOnHitStatuses(p, e, 'gas');
-  assert.equal(e.st.corrode, W.corrodeMaxStacks(4));
-  assert.ok(damageTakenMult(e) > 1);
+  applyOnHitStatuses(p, e, 'gas', weaponDamage(p, 'gas'));
+  assert.ok(e.st.corrode > 0 && damageTakenMult(e) > 1);
+  assert.equal(e.st.corrodeStat, 'corrode_gas', 'acid ticks are credited to the trail');
+  for (let i = 0; i < 200; i++) applyOnHitStatuses(p, e, 'gas', weaponDamage(p, 'gas'));
+  assert.ok(Math.abs(damageTakenMult(e) - (1 + corrodeCap(p, 4))) < 1e-9, 'capped at rank 4');
   discardWeapon(p, 'gas');
   assert.equal(weaponElement(p, 'gas'), null, 'the element leaves with the weapon');
 });
@@ -144,7 +146,7 @@ test('gas cards preview their own stat; the pick and Breakthrough cards name the
   const size = describeUpgrade(p, { ...UPGRADE_BY_ID.gas_radius, levelJump: 1 });
   assert.equal(size.rows[0].id, 'gasRadius');
   const potency = describeUpgrade(p, { ...UPGRADE_BY_ID.status_potency, levelJump: 1 });
-  assert.ok(potency.rows.some((r) => r.id === 'gasCorrode'), 'Status Potency previews the gas corrosion');
+  assert.ok(potency.rows.some((r) => r.id === 'gasAcid'), 'Status Potency previews the gas acid');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.gas_damage, levelJump: 5 });
   const t = describeBreakthrough(p, 'gas', 6, 'transform');
   assert.equal(t.id, 'bt:gas:6:transform');
@@ -362,4 +364,29 @@ test('drawing costs a fixed handful of paths however long the trail is, and skip
   g.gasTrail.drawGround(ctx, g);
   assert.equal(arcs, 0);
   assert.equal(new GasTrail().drawGround(silent, g), undefined, 'an empty trail draws nothing');
+});
+
+test('every dash vents one giant round cloud that gasses enemies far outside the trail; no gas weapon, no cloud', () => {
+  const { g, p } = freshPlayer();
+  g.enemyManager.enemies.length = 0;
+  const r = gasCloudRadius(p) * W.gasDashRadiusMult;
+  const e = g.enemyManager.getArchetype('swarmer', 1);
+  // Just inside the dash cloud, far outside an ordinary puff, on the side the ship dashes away from.
+  g.enemyManager.enemies.push(Object.assign(e, { x: p.x - r * 0.8, y: p.y, vx: 0, vy: 0, speed: 0, hp: 1e7, maxHp: 1e7, trail: e.trail || [] }));
+  p.vx = 3; p.vy = 0;
+  const before = g.gasTrail.count;
+  g.triggerDash();
+  assert.equal(g.gasTrail.dashClouds, 1);
+  assert.equal(g.gasTrail.count, before + 1);
+  const cloud = g.gasTrail.puffs[g.gasTrail.count - 1];
+  assert.ok(near(cloud.radius, r), 'giant: gasDashRadiusMult x the cloud radius');
+  assert.ok(near(cloud.life, W.gasLife(weaponBuild(p, 'gas')) * W.gasDashLifeMult));
+  for (let i = 0; i < 60; i++) g.update(1 / 60);
+  assert.ok(e.hp < e.maxHp && e.st?.corrode > 0, 'the enemy in the dash cloud is gassed and corroded');
+
+  const dry = h.createHeadlessGame();
+  dry.resetRun();
+  dry.state = 'PLAYING';
+  dry.triggerDash();
+  assert.equal(dry.gasTrail.dashClouds, 0, 'no Gas Trail, no dash cloud');
 });

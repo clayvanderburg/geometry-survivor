@@ -6,10 +6,10 @@ import { TUNING } from './config.js';
 import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChances, acquireWeapon, UPGRADE_BY_ID } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
-  tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, burnStackDps, chillSlow, corrodePerStack,
+  tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, chillSlow,
   blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius,
-  burnMaxStacks, chillDuration, corrodeMaxStacks, shockStun, shockLongStun, shockLongChance, statusPotency, statusDurationMult,
-  doubleStackChance, stunDurationMult, elementDamageMult, baseDamage
+  shockStun, shockLongStun, shockLongChance, statusPotency, statusDecay, statusDotShare, stacksPerBaseDamage, burnSpreadChance,
+  freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
@@ -35,6 +35,7 @@ const tagBoost = (p, tag) => p.stats.tagDamage?.[tag] ?? 1;
 const rank = (p, key) => p.stats?.[key] || 0;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
+const blinkRank = (p) => p.upgradeLevels?.blink_drive || 0;
 const sec1 = (v) => `${v.toFixed(1)}s`;
 // A weapon's rows show only while it is equipped (any weapon, Autocannon included, can be discarded);
 // `fn` gets the weapon's build (level, stat ranks, Breakthroughs).
@@ -51,15 +52,18 @@ function elementRows(w) {
     return e && e.element === want ? fn(e.rank) : null;
   };
   const rows = [
-    { id: `${w}:burnMax`, label: `${L} max burn DPS`, get: (p) => at(p, 'fire', (lv) => burnStackDps(p, lv, w) * burnMaxStacks(p, lv)), fmt: dec1, headline: 'pct', unit: 'MAX BURN DPS', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} BURN DPS` },
-    { id: `${w}:burnStacks`, label: `${L} burn max stacks`, get: (p) => at(p, 'fire', (lv) => burnMaxStacks(p, lv)), fmt: int },
-    { id: `${w}:chill`, label: `${L} chill slow`, get: (p) => at(p, 'frost', (lv) => chillSlow(lv, false, p)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `HITS CHILL // -${row.fmt(a)} SPEED` },
-    { id: `${w}:chillDuration`, label: `${L} chill duration`, get: (p) => at(p, 'frost', (lv) => chillDuration(p, lv)), fmt: secs },
-    { id: `${w}:corrodeMax`, label: `${L} max damage taken`, get: (p) => at(p, 'corrode', (lv) => corrodePerStack(p) * corrodeMaxStacks(p, lv)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `HITS CORRODE // ${row.fmt(a)} DMG TAKEN` },
-    { id: `${w}:corrodeStacks`, label: `${L} corrode max stacks`, get: (p) => at(p, 'corrode', (lv) => corrodeMaxStacks(p, lv)), fmt: int },
-    { id: `${w}:stun`, label: `${L} stun`, get: (p) => at(p, 'shock', (lv) => shockStun(p, lv)), fmt: secs, headline: (b, a) => `+${(a - b).toFixed(2)}s STUN`, newText: (a, row) => `HITS STUN // ${row.fmt(a)} STUN` },
+    { id: `${w}:burn`, label: `${L} burn (of hit damage)`, get: (p) => at(p, 'fire', (lv) => statusDotShare(p, 'fire', lv)), fmt: bonus, headline: 'points', unit: 'BURN DAMAGE', newText: (a, row) => `HITS IGNITE // ${row.fmt(a)} AS BURN` },
+    { id: `${w}:burnStacks`, label: `${L} burn stacks / base dmg`, get: (p) => at(p, 'fire', (lv) => stacksPerBaseDamage(p, lv)), fmt: dec1 },
+    { id: `${w}:burnSpread`, label: `${L} fire spread / tick`, get: (p) => at(p, 'fire', () => burnSpreadChance(p)), fmt: pct },
+    { id: `${w}:chill`, label: `${L} max chill slow`, get: (p) => at(p, 'frost', (lv) => chillSlow(lv, false, p)), fmt: pct, headline: 'points', unit: 'CHILL SLOW', newText: (a, row) => `HITS CHILL // -${row.fmt(a)} SPEED` },
+    { id: `${w}:coldStacks`, label: `${L} cold stacks / base dmg`, get: (p) => at(p, 'frost', (lv) => stacksPerBaseDamage(p, lv)), fmt: dec1 },
+    { id: `${w}:freeze`, label: `${L} freeze`, get: (p) => at(p, 'frost', (lv) => freezeDuration(p, lv)), fmt: secs },
+    { id: `${w}:corrodeMax`, label: `${L} max damage taken`, get: (p) => at(p, 'corrode', (lv) => corrodeCap(p, lv)), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE`, newText: (a, row) => `HITS CORRODE // ${row.fmt(a)} DMG TAKEN` },
+    { id: `${w}:acid`, label: `${L} acid (of hit damage)`, get: (p) => at(p, 'corrode', (lv) => statusDotShare(p, 'corrode', lv)), fmt: bonus },
+    { id: `${w}:stun`, label: `${L} zap stun`, get: (p) => at(p, 'shock', (lv) => shockStun(p, lv)), fmt: secs, headline: (b, a) => `+${(a - b).toFixed(2)}s STUN`, newText: (a, row) => `HITS ZAP // ${row.fmt(a)} STUN` },
     { id: `${w}:stunLong`, label: `${L} long-stun chance`, get: (p) => at(p, 'shock', (lv) => shockLongChance(p, lv)), fmt: pct },
-    { id: `${w}:stunLongTime`, label: `${L} long stun`, get: (p) => at(p, 'shock', () => shockLongStun(p)), fmt: secs }
+    { id: `${w}:stunLongTime`, label: `${L} long stun`, get: (p) => at(p, 'shock', () => shockLongStun(p)), fmt: secs },
+    { id: `${w}:shockArc`, label: `${L} shock arcs (of hit damage)`, get: (p) => at(p, 'shock', (lv) => statusDotShare(p, 'shock', lv)), fmt: bonus }
   ];
   // Plasma Grenades show their element on the 'grenadeElement' row.
   if (w !== 'grenades') {
@@ -86,12 +90,14 @@ export const STAT_ROWS = [
   { id: 'electricDamage', label: 'ELECTRIC damage bonus', get: (p) => tagBoost(p, 'electric'), fmt: tagBonus, headline: 'points', unit: 'ELECTRIC DAMAGE' },
   { id: 'areaSize', label: 'AREA size', get: (p) => areaMult(p), fmt: pct, headline: 'points', unit: 'AREA SIZE' },
   // Global STATUS cards (they lead with their own row; each infused weapon's rows below show the effect)
-  { id: 'statusPotency', label: 'Status potency', get: (p) => statusPotency(p), fmt: tagBonus, headline: 'points', unit: 'STATUS POTENCY' },
-  { id: 'statusApplication', label: 'Extra burn / corrode stacks', get: (p) => rank(p, 'statusApplication') * W.applicationStacks, fmt: int, headline: 'count', unit: 'MAX STACKS' },
-  { id: 'statusDouble', label: 'Double-stack chance', get: (p) => doubleStackChance(p), fmt: pct },
-  { id: 'statusDuration', label: 'Status duration', get: (p) => statusDurationMult(p), fmt: tagBonus, headline: 'points', unit: 'STATUS DURATION' },
+  { id: 'statusPotency', label: 'Status stacks per hit', get: (p) => statusPotency(p), fmt: tagBonus, headline: 'points', unit: 'STATUS STACKS' },
+  { id: 'statusApplication', label: 'Fire spread chance / tick', get: (p) => burnSpreadChance(p), fmt: pct, headline: 'points', unit: 'FIRE SPREAD' },
+  { id: 'statusFreeze', label: 'Freeze threshold (of max HP)', get: (p) => freezeShare(p), fmt: pct },
+  { id: 'statusCorrodeCap', label: 'Corrode cap bonus', get: (p) => rank(p, 'statusApplication') * W.applicationCorrodeStep, fmt: bonus },
+  { id: 'statusDuration', label: 'Stacks lost per tick', get: (p) => statusDecay(p), fmt: pct, headline: (b, a) => `${Math.round(b * 100)}% → ${Math.round(a * 100)}% STACK DECAY` },
   { id: 'stunLongChance', label: 'Long-stun chance bonus', get: (p) => shockLongChance(p, 1) - W.shockLongChance(1), fmt: bonus, headline: 'points', unit: 'LONG-STUN CHANCE' },
   { id: 'stunDuration', label: 'Stun duration', get: (p) => stunDurationMult(p), fmt: tagBonus, headline: 'points', unit: 'STUN DURATION' },
+  { id: 'shockConduct', label: 'Shock conducted / tick', get: (p) => shockConductShare(p), fmt: pct },
   ...ELEMENTS.map((el) => ({ id: `${el}Damage`, label: `${ELEMENT_INFO[el].label} damage bonus`, get: (p) => elementDamageMult(p, el), fmt: tagBonus, headline: 'points', unit: `${ELEMENT_INFO[el].label} DAMAGE` })),
 
   // Autocannon (primary blaster). Each weapon's rows read its build (weapon-levels.js), so a stat card
@@ -182,6 +188,24 @@ export const STAT_ROWS = [
   { id: 'flameRear', label: 'Rear nozzle reach', get: (p) => wb(p, 'flamethrower', (b) => (b.t4 ? flameRange(p, b) * W.flameRearRange : null)), fmt: int, newText: (a) => `REAR NOZZLE // ${a} PX` },
   { id: 'flamePuddle', label: 'Napalm puddle damage / tick', get: (p) => wb(p, 'flamethrower', (b) => (b.t8 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b) : null)), fmt: dec1, newText: () => 'NAPALM PUDDLES' },
   { id: 'flameRing', label: 'Inferno Ring damage', get: (p) => wb(p, 'flamethrower', (b) => (b.t12 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b) : null)), fmt: dec1, newText: () => `INFERNO RING EVERY ${W.flameRingEvery}s` },
+  // Cryo Sprayer (FROST is built in: its status rows come from elementRows('cryospray') below; the Flamethrower's formulas)
+  { id: 'cryoDamage', label: 'Spray damage / hit', get: (p) => wb(p, 'cryospray', (b) => weaponDamage(p, 'cryo', b)), fmt: dec1, headline: 'pct', unit: 'SPRAY DAMAGE' },
+  { id: 'cryoTickRate', label: 'Spray hits / s', get: (p) => wb(p, 'cryospray', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'SPRAY RATE' },
+  { id: 'cryoRange', label: 'Spray reach', get: (p) => wb(p, 'cryospray', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'SPRAY REACH', newText: (a) => `CRYO SPRAYER // ${a} PX REACH` },
+  { id: 'cryoCone', label: 'Cone width', get: (p) => wb(p, 'cryospray', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
+  { id: 'cryoTurn', label: 'Spin speed', get: (p) => wb(p, 'cryospray', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
+  { id: 'cryoRear', label: 'Rear nozzle reach', get: (p) => wb(p, 'cryospray', (b) => (b.t4 ? flameRange(p, b) * W.flameRearRange : null)), fmt: int, newText: (a) => `REAR NOZZLE // ${a} PX` },
+  { id: 'cryoPuddle', label: 'Frost slick damage / tick', get: (p) => wb(p, 'cryospray', (b) => (b.t8 ? weaponDamage(p, 'cryo', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b) : null)), fmt: dec1, newText: () => 'FROST SLICK' },
+  { id: 'cryoRing', label: 'Blizzard Ring damage', get: (p) => wb(p, 'cryospray', (b) => (b.t12 ? weaponDamage(p, 'cryo', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b) : null)), fmt: dec1, newText: () => `BLIZZARD RING EVERY ${W.flameRingEvery}s` },
+  // Acid Sprayer (CORROSIVE is built in: its status rows come from elementRows('acidspray') below; the Flamethrower's formulas)
+  { id: 'acidDamage', label: 'Spray damage / hit', get: (p) => wb(p, 'acidspray', (b) => weaponDamage(p, 'acid', b)), fmt: dec1, headline: 'pct', unit: 'SPRAY DAMAGE' },
+  { id: 'acidTickRate', label: 'Spray hits / s', get: (p) => wb(p, 'acidspray', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'SPRAY RATE' },
+  { id: 'acidRange', label: 'Spray reach', get: (p) => wb(p, 'acidspray', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'SPRAY REACH', newText: (a) => `ACID SPRAYER // ${a} PX REACH` },
+  { id: 'acidCone', label: 'Cone width', get: (p) => wb(p, 'acidspray', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
+  { id: 'acidTurn', label: 'Spin speed', get: (p) => wb(p, 'acidspray', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
+  { id: 'acidRear', label: 'Rear nozzle reach', get: (p) => wb(p, 'acidspray', (b) => (b.t4 ? flameRange(p, b) * W.flameRearRange : null)), fmt: int, newText: (a) => `REAR NOZZLE // ${a} PX` },
+  { id: 'acidPuddle', label: 'Acid pool damage / tick', get: (p) => wb(p, 'acidspray', (b) => (b.t8 ? weaponDamage(p, 'acid', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b) : null)), fmt: dec1, newText: () => 'ACID POOL' },
+  { id: 'acidRing', label: 'Caustic Ring damage', get: (p) => wb(p, 'acidspray', (b) => (b.t12 ? weaponDamage(p, 'acid', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b) : null)), fmt: dec1, newText: () => `CAUSTIC RING EVERY ${W.flameRingEvery}s` },
   { id: 'empArcs', label: 'EMP arcs / grenade blast', get: (p) => (p.weapons.empGrenades && ownsWeapon(p, 'grenades') ? W.empArcs : null), fmt: int, newText: (a) => `GRENADE BLASTS ARC // ${a} ZAPS` },
 
   // Corrosive Gas Trail (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
@@ -189,8 +213,8 @@ export const STAT_ROWS = [
   { id: 'gasDamage', label: 'Gas damage / tick', get: (p) => wb(p, 'gas', (b) => weaponDamage(p, 'gas', b)), fmt: dec1, headline: 'pct', unit: 'GAS DAMAGE' },
   { id: 'gasTickRate', label: 'Gas ticks / s', get: (p) => wb(p, 'gas', (b) => 1 / W.gasTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'GAS TICK RATE' },
   { id: 'gasLife', label: 'Cloud linger', get: (p) => wb(p, 'gas', W.gasLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s CLOUD LINGER` },
-  { id: 'gasCorrode', label: 'Gas max damage taken', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodePerStack(p) * corrodeMaxStacks(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
-  { id: 'gasCorrodeStacks', label: 'Gas corrode max stacks', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodeMaxStacks(p, e.rank) : null; }), fmt: int },
+  { id: 'gasCorrode', label: 'Gas max damage taken', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodeCap(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
+  { id: 'gasAcid', label: 'Gas acid (of hit damage)', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? statusDotShare(p, 'corrode', e.rank) : null; }), fmt: bonus },
   { id: 'gasSeek', label: 'Clouds creep toward enemies', get: (p) => wb(p, 'gas', (b) => (b.t4 ? W.seekSpeed : null)), fmt: (v) => `${Math.round(v)} px/s`, newText: () => 'CLOUDS HUNT ENEMIES' },
   { id: 'gasPocket', label: 'Volatile pocket burst', get: (p) => wb(p, 'gas', (b) => (b.t8 ? weaponDamage(p, 'gas', b) * W.pocketShare * W.pocketEvery / W.gasTick(b) : null)), fmt: dec1, newText: (a, row) => `GAS POCKETS BURST // ${row.fmt(a)} DMG` },
   { id: 'gasShroud', label: 'Toxic shroud radius', get: (p) => wb(p, 'gas', (b) => (b.t12 ? gasCloudRadius(p, b) * W.shroudRadiusMult : null)), fmt: int, newText: (a) => `TOXIC SHROUD // ${a} RADIUS` },
@@ -228,12 +252,15 @@ export const STAT_ROWS = [
   { id: 'maxHp', label: 'Max shield', get: (p) => p.maxHp, fmt: int, headline: 'count', unit: 'MAX SHIELD' },
   { id: 'hp', label: 'Shield now', get: (p) => p.hp, fmt: int },
   { id: 'dashCooldown', label: 'Dash cooldown', get: (p) => W.dashCooldown(lv(p, 'dashNova'), TUNING.dashCooldownBase ?? 1.5), fmt: secs },
+  { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) : null), fmt: int, headline: 'count', unit: 'PX BLINK', newText: (a) => `DASH BLINKS // ${a} PX` },
   { id: 'novaRadius', label: 'Dash nova radius', get: (p) => owned(p, 'dashNova', (l) => novaRadius(p, l)), fmt: int },
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
   // Elements (status-effects.js): each infused weapon's status at its element rank
   ...ELEMENT_WEAPONS.flatMap(elementRows),
-  ...elementRows('flamethrower')
+  ...elementRows('flamethrower'),
+  ...elementRows('cryospray'),
+  ...elementRows('acidspray')
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -402,7 +429,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', shockfield: 'shockfield' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

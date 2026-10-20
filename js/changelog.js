@@ -12,6 +12,20 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.40.0',
+    date: '2026-10-20',
+    title: 'Elements Reforged',
+    notes: [
+      { type: 'new', text: 'Statuses now build in STACKS: bigger hits add more, they tick every half second and a fifth wears off each tick. Keep hitting to pile them on.' },
+      { type: 'new', text: 'FIRE burns hardest and can spread to the enemy beside it. CORROSIVE adds acid ticks on top of the extra damage taken.' },
+      { type: 'new', text: 'FROST builds cold that slows enemies, then FREEZES them solid. Frozen enemies take +25% damage.' },
+      { type: 'new', text: 'SHOCK zaps every hit with a very short stun, sometimes a long one, and arcs between enemies that touch. Pack them with a Vortex Singularity!' },
+      { type: 'new', text: 'Two new weapons: the Cryo Sprayer and the Acid Sprayer, spinning cones of frost and acid with three Breakthroughs each.' },
+      { type: 'new', text: 'Corrosive Gas Trail vents a giant cloud every time you dash. New card, Blink Drive: your dash becomes a teleport.' },
+      { type: 'balance', text: 'Status cards reworked: Potency adds stacks, Reactions (was Application) boosts spread, freezing and long stuns, Duration slows stack decay.' }
+    ]
+  },
+  {
     version: '0.39.8',
     date: '2026-10-20',
     title: 'Rocket Pods Refit',

@@ -4,6 +4,8 @@
 // is fixed: weapon-levels.js FIXED_ELEMENTS, applied by status-effects.js like any infused weapon). It
 // rewards kiting: lead a chasing pack through your own wake.
 //
+// Every dash vents one giant round cloud where the ship took off (dashCloud, called from Game.triggerDash).
+//
 // Breakthroughs: Seeking Miasma (clouds creep toward the nearest enemy), Volatile Pockets (every
 // W.pocketEvery s a pocket that swells, then bursts when an enemy comes close) and Toxic Shroud (a cloud
 // that wraps the hull and follows the ship, ticking with the trail).
@@ -64,6 +66,7 @@ export class GasTrail {
     this.shipY = 0;
     this.puffsDropped = 0;
     this.pocketsBurst = 0;
+    this.dashClouds = 0;
     for (const f of this.puffs) f.target = null;
     for (const k of this.pockets) k.target = null;
   }
@@ -141,6 +144,20 @@ export class GasTrail {
       this.hissT = HISS_EVERY;
       game.sound.playGasVent?.();
     }
+  }
+
+  // Dash: one giant round cloud at the ship (W.gasDashRadiusMult x the cloud radius, lingering
+  // W.gasDashLifeMult x longer), ticking like any other cloud.
+  dashCloud(game, p) {
+    if ((p.weapons.gas || 0) <= 0) return null;
+    const b = weaponBuild(p, 'gas');
+    const radius = gasCloudRadius(p, b) * W.gasDashRadiusMult;
+    const f = this.addPuff(p.x, p.y, radius, W.gasLife(b) * W.gasDashLifeMult);
+    f.age = W.gasGrow * 0.5; // already half-swollen: it bursts out of the hull
+    this.dashClouds = (this.dashClouds || 0) + 1;
+    game.sound?.playGasVent?.();
+    game.particles?.spawnShockwave?.(p.x, p.y, radius, GAS_HUE, 4, 0.35);
+    return f;
   }
 
   // A puff from the pool (the oldest one is recycled when it is full).

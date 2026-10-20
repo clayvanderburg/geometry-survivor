@@ -33,7 +33,8 @@ import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS
 import { WeaponEffects } from './weapon-fx.js';
 import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
-  DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
+  DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects,
+  shockCritBonus, clearStatusArcs
 } from './status-effects.js';
 import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText,
@@ -426,6 +427,8 @@ export class Game {
         grenades: 0,
         gas: 0,
         flamethrower: 0,
+        cryospray: 0,
+        acidspray: 0,
         shockfield: 0,
         siegeBattery: 0,
         empGrenades: 0,
@@ -453,6 +456,8 @@ export class Game {
     (this.grenades ||= new Grenades()).clear();
     (this.gasTrail ||= new GasTrail()).clear();
     (this.flamethrower ||= new Flamethrower()).clear();
+    (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
+    (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     this.missileSalvos = 0;
@@ -473,6 +478,7 @@ export class Game {
     this.bladeFlingTimer = this.bladeNovaTimer = undefined;
     this.bladeNovaHide = 0;
     this.statusStamp = 0;
+    clearStatusArcs();
 
     this.bullets = [];
     this.missiles = [];
@@ -1925,19 +1931,54 @@ export class Game {
       ? Math.atan2(p.vy, p.vx)
       : p.angle;
 
-    p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * 3.1;
-    p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * 3.1;
-
     this.sound.playDash();
     this.grid.applyImpulse(p.x, p.y, 46, 180, 188);
     this.grid.ripple?.(p.x, p.y, 110, 188);
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
+
+    // Corrosive Gas Trail: every dash vents one giant cloud where the ship took off (js/gas-trail.js).
+    this.gasTrail?.dashCloud(this, p);
+
+    const blinkRank = Math.min(UPGRADE_BY_ID.blink_drive.maxLevel, p.upgradeLevels?.blink_drive || 0);
+    if (blinkRank > 0) {
+      // Blink Drive: no burst of speed, the ship is simply at the far end (the nova goes off there).
+      this.blink(p, moveAngle, W.blinkDistance(blinkRank));
+    } else {
+      p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * 3.1;
+      p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * 3.1;
+    }
 
     if (p.weapons.dashNova > 0) {
       const radius = novaRadius(p, p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
       this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160, 'other', undefined, undefined, 'nova');
     }
+  }
+
+  // Blink Drive: teleport `dist` px along `angle`, inside the arena and short of any rock (the landing
+  // steps back until the hull is clear), leaving a trail of afterimages; the ship keeps cruising on.
+  blink(p, angle, dist) {
+    const pad = p.radius + 24;
+    const cx = Math.cos(angle), cy = Math.sin(angle);
+    const x0 = p.x, y0 = p.y;
+    let d = dist;
+    let x = x0, y = y0;
+    const rocks = this.asteroidManager?.getNearbyAsteroids?.(x0 + cx * dist * 0.5, y0 + cy * dist * 0.5, this.asteroidManager.cellsFor?.(dist * 0.5 + 80) ?? 3) || [];
+    for (; d > 0; d -= 16) {
+      x = Math.max(pad, Math.min(this.worldWidth - pad, x0 + cx * d));
+      y = Math.max(pad, Math.min(this.worldHeight - pad, y0 + cy * d));
+      if (!rocks.some((r) => r.hp > 0 && Math.hypot(r.x - x, r.y - y) < r.radius + p.radius)) break;
+    }
+    if (d <= 0) { x = x0; y = y0; }
+    for (let k = 1; k <= 5; k++) this.particles.spawnAfterimage(x0 + (x - x0) * (k / 6), y0 + (y - y0) * (k / 6), p.angle, p.radius, 188);
+    this.particles.spawnFlash?.(x0, y0, 30, 188, 0.18);
+    this.particles.spawnFlash?.(x, y, 36, 188, 0.2);
+    this.particles.spawnShockwave(x, y, 90, 188, 3, 0.25);
+    p.x = x;
+    p.y = y;
+    p.vx = cx * p.stats.moveSpeed;
+    p.vy = cy * p.stats.moveSpeed;
+    p.dashTimer = 0;
   }
 
   triggerSupernova() {
@@ -2023,9 +2064,10 @@ export class Game {
       e.hitFlash = Math.max(e.hitFlash || 0, 0.35);
       return;
     }
+    const raw = dmg; // status stacks follow the hit before armor, corrosion and crits
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
-    const chance = dot || !p ? 0 : critChance(p);
+    const chance = dot || !p ? 0 : Math.min(1, critChance(p) + shockCritBonus(e));
     const crit = chance > 0 && Math.random() < chance;
     if (crit) {
       dmg *= critMultiplier(p, isAfflicted(e));
@@ -2053,7 +2095,7 @@ export class Game {
       e.knockY = ny;
     }
     if (e.hp <= 0) this.killEnemy(e);
-    else if (!dot && p) applyOnHitStatuses(p, e, source);
+    else if (!dot && p) applyOnHitStatuses(p, e, source, raw);
   }
 
   // Crit feedback: a gold star flare on the hull plus a bright tick (the sound is throttled in audio.js).
@@ -4828,7 +4870,7 @@ export class Game {
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
-      if (this.flamethrower?.firing) this.flamethrower.silence(this); // no roar under menus or game over
+      for (const sp of [this.flamethrower, this.cryoSprayer, this.acidSprayer]) if (sp?.firing) sp.silence(this); // no roar under menus or game over
       // A button held through a menu must not fire a dash or nova (or re-pause) as play starts.
       this.gpDashLatch = !!gp?.dash;
       this.gpBombLatch = !!gp?.bomb;
@@ -5044,8 +5086,10 @@ export class Game {
         this.rocketTimer = W.wingRocketCooldown(b);
       }
     }
-    // Flamethrower: a cone of fire along the aim while firing (js/flamethrower.js).
+    // Flamethrower, Cryo Sprayer, Acid Sprayer: spinning cones of fire / frost / acid (js/flamethrower.js).
     this.flamethrower?.update(dt, this, shouldFire);
+    this.cryoSprayer?.update(dt, this, shouldFire);
+    this.acidSprayer?.update(dt, this, shouldFire);
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -6262,6 +6306,8 @@ export class Game {
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
+    this.cryoSprayer?.draw(ctx, this);
+    this.acidSprayer?.draw(ctx, this);
     this.grenades?.drawAir(ctx, this);
 
     const p = this.player;

@@ -13,7 +13,7 @@ const {
   ELEMENTS, ELEMENT_WEAPONS, ELEMENT_CARDS, ELEMENT_CARD_LIST, ELEMENT_MAX_RANKS, WEAPON_MAX_LEVEL, weaponElement, levelCardWeapon
 } = await import('../js/weapon-levels.js');
 const { weaponLevel } = await import('../js/loadout.js');
-const { WEAPON_SCALING: W, weaponDamage, burnStackDps, shockStun, shockLongChance } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, weaponDamage, dotPerStack, shockStun, shockLongChance, burnSpreadChance, statusDecay } = await import('../js/weapon-scaling.js');
 const { applyShock, applyOnHitStatuses, updateStatusEffects, isStunned, isAfflicted } = await import('../js/status-effects.js');
 const { EnemyManager } = await import('../js/enemies.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
@@ -168,8 +168,8 @@ test('STATUS cards are offered only with a matching element on an equipped weapo
   const offered = (opts) => eligibleUpgrades(p, opts).map((u) => u.id).filter((id) => STATUS_IDS.includes(id));
   assert.deepEqual(offered(), [], 'no element, no status cards');
   install(p, 'blaster_frost');
-  assert.deepEqual(offered(), ['status_potency', 'status_duration', 'frost_damage']);
-  assert.deepEqual(offered({ cache: true }), ['status_potency', 'status_duration', 'frost_damage'], 'caches may offer the global ones');
+  assert.deepEqual(offered(), ['status_potency', 'status_application', 'status_duration', 'frost_damage']);
+  assert.deepEqual(offered({ cache: true }), ['status_potency', 'status_application', 'status_duration', 'frost_damage'], 'caches may offer the global ones');
   acquireWeapon(p, 'lightning');
   install(p, 'lightning_shock');
   assert.deepEqual(offered(), ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'frost_damage', 'shock_damage']);
@@ -177,7 +177,7 @@ test('STATUS cards are offered only with a matching element on an equipped weapo
   install(p, 'shock_conductor', 2);
   discardWeapon(p, 'lightning');
   assert.equal(p.upgradeLevels.shock_conductor, 2);
-  assert.deepEqual(offered(), ['status_potency', 'status_duration', 'frost_damage']);
+  assert.deepEqual(offered(), ['status_potency', 'status_application', 'status_duration', 'frost_damage']);
   // Supercritical needs crit chance LV 2 and an element.
   const q = freshPlayer().p;
   install(q, 'crit_chance', 2);
@@ -200,32 +200,33 @@ test('HARDCORE rules are unaffected: no shield cards, elements and status cards 
   assert.ok(!eligibleUpgrades(hard, { cache: true }).some((u) => u.shieldCard || u.elementCard));
 });
 
-test('SHOCK: 0.3 s stun, 30% chance of 1.5 s, no refresh while stunned, 1 s immunity after', () => {
-  const p = { stats: {}, weapons: { blaster_shock: 1 } };
-  assert.equal(W.shockStun(1), 0.3);
-  assert.equal(W.shockLongChance(1), 0.3);
-  assert.equal(W.shockLongStun, 1.5);
-  assert.equal(W.stunImmunity, 1);
+test('SHOCK: a quick zap stun, 20% chance of a long one, no refresh while stunned, immunity after', () => {
+  const p = { stats: { damage: 10 }, weapons: { blaster_shock: 1 } };
+  assert.equal(W.shockStun(1), 0.12);
+  assert.equal(W.shockLongChance(1), 0.2);
+  assert.equal(W.shockLongStun, 1.2);
+  assert.equal(W.stunImmunity, 0.75);
   const e = enemy();
   const g = { enemyManager: { enemies: [e] }, particles: new Proxy({}, { get: () => () => {} }), hitEnemy() {} };
-  withRandom(() => applyOnHitStatuses(p, e, 'blaster'), 0.5); // roll above 30%: a short stun
-  assert.ok(Math.abs(e.st.stunT - 0.3) < 1e-9);
+  withRandom(() => applyOnHitStatuses(p, e, 'blaster', 10), 0.5); // roll above 20%: a zap
+  assert.ok(Math.abs(e.st.stunT - 0.12) < 1e-9);
   assert.equal(e.st.stunLong, false);
+  assert.ok(e.st.shock > 0, 'and shock stacks');
   assert.ok(isStunned(e) && isAfflicted(e));
-  withRandom(() => applyOnHitStatuses(p, e, 'blaster'), 0); // stunned: a hit neither refreshes nor upgrades it
-  assert.ok(Math.abs(e.st.stunT - 0.3) < 1e-9);
-  for (let t = 0; t < 18; t++) updateStatusEffects(g, DT);
-  assert.equal(isStunned(e), false, 'over after 0.3 s');
+  withRandom(() => applyOnHitStatuses(p, e, 'blaster', 10), 0); // stunned: a hit neither refreshes nor upgrades it
+  assert.ok(Math.abs(e.st.stunT - 0.12) < 1e-9);
+  for (let t = 0; t < 8; t++) updateStatusEffects(g, DT);
+  assert.equal(isStunned(e), false, 'over after 0.12 s');
   assert.equal(e.st.stunImmT, W.stunImmunity);
-  withRandom(() => applyOnHitStatuses(p, e, 'blaster'), 0);
+  withRandom(() => applyOnHitStatuses(p, e, 'blaster', 10), 0);
   assert.equal(isStunned(e), false, 'immune right after');
-  for (let t = 0; t < 61; t++) updateStatusEffects(g, DT);
-  withRandom(() => applyOnHitStatuses(p, e, 'blaster'), 0.1); // roll under 30%: the long stun
-  assert.equal(e.st.stunT, 1.5);
+  for (let t = 0; t < 46; t++) updateStatusEffects(g, DT);
+  withRandom(() => applyOnHitStatuses(p, e, 'blaster', 10), 0.1); // roll under 20%: the long stun
+  assert.equal(e.st.stunT, 1.2);
   assert.equal(e.st.stunLong, true);
   // Only the SHOCK weapon's own hits stun.
   const other = enemy();
-  withRandom(() => applyOnHitStatuses(p, other, 'missile'), 0);
+  withRandom(() => applyOnHitStatuses(p, other, 'missile', 10), 0);
   assert.ok(!isStunned(other));
 });
 
@@ -233,8 +234,8 @@ test('SHOCK: bosses keep 20% of a stun, lieutenants half, and both shake stuns o
   const boss = enemy({ isBoss: true });
   const lt = enemy({ isLieutenant: true });
   withRandom(() => { applyShock(boss, 1); applyShock(lt, 1); }, 0.9);
-  assert.ok(Math.abs(boss.st.stunT - 0.3 * TUNING.shockBossMult) < 1e-9);
-  assert.ok(Math.abs(lt.st.stunT - 0.3 * TUNING.shockLieutenantMult) < 1e-9);
+  assert.ok(Math.abs(boss.st.stunT - 0.12 * TUNING.shockBossMult) < 1e-9);
+  assert.ok(Math.abs(lt.st.stunT - 0.12 * TUNING.shockLieutenantMult) < 1e-9);
   assert.equal(DEFAULT_TUNING.shockBossMult, 0.2);
   assert.equal(DEFAULT_TUNING.shockLieutenantMult, 0.5);
   const g = { enemyManager: { enemies: [boss, lt] }, particles: new Proxy({}, { get: () => () => {} }), hitEnemy() {} };
@@ -247,7 +248,7 @@ test('SHOCK: bosses keep 20% of a stun, lieutenants half, and both shake stuns o
   assert.equal(immunity(lt), W.stunImmunityLieutenant);
 });
 
-test('SHOCK is never a perma-stun: uptime under constant fire stays near 40% at rank 1 and below 75% fully stacked', () => {
+test('SHOCK is never a perma-stun: uptime under constant fire stays near 30% at rank 1 and below 75% fully stacked', () => {
   const uptime = (p, rank) => {
     const e = enemy();
     const g = { enemyManager: { enemies: [e] }, particles: new Proxy({}, { get: () => () => {} }), hitEnemy() {} };
@@ -263,12 +264,12 @@ test('SHOCK is never a perma-stun: uptime under constant fire stays near 40% at 
     return stunned / ticks;
   };
   const base = uptime({ stats: {} }, 1);
-  assert.ok(base > 0.33 && base < 0.45, `rank 1 uptime ${base.toFixed(3)}`);
+  assert.ok(base > 0.22 && base < 0.38, `rank 1 uptime ${base.toFixed(3)}`);
   const maxed = { stats: { statusPotency: 5, statusApplication: 5, statusDuration: 5, shockConductor: 5 } };
   const top = uptime(maxed, ELEMENT_MAX_RANKS);
   assert.ok(top > base && top < 0.75, `fully stacked uptime ${top.toFixed(3)}`);
   assert.ok(shockLongChance(maxed, ELEMENT_MAX_RANKS) <= W.shockLongChanceMax);
-  assert.ok(shockStun(maxed, ELEMENT_MAX_RANKS) < 1.5);
+  assert.ok(shockStun(maxed, ELEMENT_MAX_RANKS) < 0.5, 'a zap stays quick');
 });
 
 test('stunned enemies stop moving, turning and attacking, then carry on', () => {
@@ -297,13 +298,13 @@ test('stunned enemies stop moving, turning and attacking, then carry on', () => 
   assert.equal(gunner.state, 'idle', 'the gunner fires its held shot');
 });
 
-test('element Amplifiers boost only their element\'s weapons (FIRE burn too); previews match', () => {
+test('element Amplifiers boost only their element\'s weapons (and their DoT ticks); previews match', () => {
   const { p } = freshPlayer();
   acquireWeapon(p, 'rockets');
   install(p, 'blaster_fire');
   const blaster = weaponDamage(p, 'blaster');
   const rocket = weaponDamage(p, 'rocket');
-  const burn = burnStackDps(p, 1);
+  const burn = dotPerStack(p, 'fire');
   const potential = weaponPotentialDps(p, 'blaster');
   const card = describeUpgrade(p, UPGRADE_BY_ID.fire_damage);
   assert.equal(card.headline, `+${Math.round(W.elementDamageStep * 100)}% FIRE DAMAGE`);
@@ -312,33 +313,31 @@ test('element Amplifiers boost only their element\'s weapons (FIRE burn too); pr
   assert.ok(Math.abs(weaponDamage(p, 'blaster') / blaster - k) < 1e-9);
   assert.ok(Math.abs(weaponDamage(p, 'helix') / weaponDamage({ ...p, weapons: { ...p.weapons, blaster_fire: 0 } }, 'helix') - k) < 1e-9, 'Pulsar Helix bolts are Autocannon bolts');
   assert.equal(weaponDamage(p, 'rocket'), rocket, 'Rocket Pods carry no FIRE');
-  assert.ok(Math.abs(burnStackDps(p, 1) / burn - k) < 1e-9);
+  assert.ok(Math.abs(dotPerStack(p, 'fire') / burn - k) < 1e-9, 'burn per stack too');
   assert.ok(Math.abs(weaponPotentialDps(p, 'blaster') / potential - k) < 1e-9);
 });
 
-test('Status Potency, Application and Duration change burn, chill, corrode and stun as their cards say', () => {
+test('Status Potency, Reactions and Duration change stacks, spread, freezing, caps, decay and stuns as their cards say', () => {
   const p = { stats: { damage: 10 }, weapons: { blaster_fire: 1, missiles_frost: 1, lightning_corrode: 1, grenades_shock: 1 } };
-  const e = enemy();
-  withRandom(() => {
-    for (const src of ['blaster', 'missile', 'lightning', 'grenade']) applyOnHitStatuses(p, e, src);
+  const hitAll = (pl, e) => withRandom(() => {
+    for (const src of ['blaster', 'missile', 'lightning', 'grenade']) applyOnHitStatuses(pl, e, src, 10);
   }, 0.99);
+  const e = enemy({ maxHp: 1000, hp: 1000 });
+  hitAll(p, e);
   const base = { ...e.st };
+  // One base damage of a rank-1 hit is W.stacksPerDamage stacks.
+  assert.ok(Math.abs(base.burn - W.stacksPerDamage) < 1e-9);
   const q = { ...p, stats: { damage: 10, statusPotency: 2, statusApplication: 2, statusDuration: 2 } };
-  const f = enemy();
-  withRandom(() => {
-    for (const src of ['blaster', 'missile', 'lightning', 'grenade']) applyOnHitStatuses(q, f, src);
-  }, 0.99);
-  assert.ok(Math.abs(f.st.burnDps / base.burnDps - (1 + 2 * W.potencyStep)) < 1e-9, 'potency: burn DPS');
-  assert.equal(f.st.burnMax, base.burnMax + 2 * W.applicationStacks, 'application: burn cap');
-  assert.equal(f.st.corrodeMax, base.corrodeMax + 2 * W.applicationStacks, 'application: corrode cap');
-  assert.ok(f.st.slow > base.slow, 'potency: deeper chill');
-  assert.ok(Math.abs(f.st.burnT / base.burnT - (1 + 2 * W.durationStep)) < 1e-9, 'duration: burn');
-  assert.ok(Math.abs(f.st.chillT / base.chillT - (1 + 2 * W.durationStep)) < 1e-9, 'duration: chill');
-  assert.ok(f.st.stunT > base.stunT, 'potency and duration: longer stuns');
-  // Application's double stacks: a low roll adds two burn stacks in one hit.
-  const d = enemy();
-  withRandom(() => applyOnHitStatuses(q, d, 'blaster'), 0.01);
-  assert.equal(d.st.burn, 2);
-  // Burn ticks are credited to the weapon that lit them.
-  assert.equal(d.st.burnStat, 'burn_blaster');
+  const f = enemy({ maxHp: 1000, hp: 1000 });
+  hitAll(q, f);
+  for (const k of ['burn', 'cold', 'corrode', 'shock']) assert.ok(Math.abs(f.st[k] / base[k] - (1 + 2 * W.potencyStep)) < 1e-9, `potency: ${k} stacks`);
+  assert.ok(f.st.coldMax < base.coldMax, 'reactions: freezes sooner');
+  assert.ok(Math.abs(f.st.corrodeCap - base.corrodeCap - 2 * W.applicationCorrodeStep) < 1e-9, 'reactions: corrode cap');
+  assert.ok(burnSpreadChance(q) > burnSpreadChance(p), 'reactions: fire spreads more');
+  assert.ok(statusDecay(q) < statusDecay(p), 'duration: stacks wear off slower');
+  assert.ok(f.st.stunT > base.stunT, 'duration: longer stuns');
+  // DoT ticks are credited to the weapon that applied the stacks.
+  assert.equal(f.st.burnStat, 'burn_blaster');
+  assert.equal(f.st.corrodeStat, 'corrode_lightning');
+  assert.equal(f.st.shockStat, 'shock_grenades');
 });

@@ -49,13 +49,15 @@ const CORE_INFO = {
   turret: { headline: 'turretMaxActive', summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.' },
   drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
-  gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship: enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
+  gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship (and a giant cloud every time you dash): enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
   flamethrower: { headline: 'flameRange', summary: 'A nozzle spins slowly round your ship spraying a cone of fire: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
+  cryospray: { headline: 'cryoRange', summary: 'A nozzle spins slowly round your ship spraying a cone of frost: everything inside slows as COLD builds, then FREEZES solid. Asteroids block the spray.' },
+  acidspray: { headline: 'acidRange', summary: 'A nozzle spins slowly round your ship spraying a cone of acid: everything inside CORRODES, taking acid ticks and more damage from every weapon. Asteroids block the spray.' },
   shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
-const ELEMENT_HEADLINE = { fire: 'burnMax', frost: 'chill', corrode: 'corrodeMax', shock: 'stun' };
+const ELEMENT_HEADLINE = { fire: 'burn', frost: 'chill', corrode: 'corrodeMax', shock: 'stun' };
 
 function weaponGroup(id) {
   const w = WEAPON_BY_ID[id];
@@ -96,25 +98,27 @@ const hasElement = (player, ...els) => {
 const statusCard = (id, name, maxLevel, headline, tags, summary, req, apply) =>
   ({ id, name, category: 'STATUS', tags, maxLevel, headline, summary, statusCard: true, req, apply });
 const elementDamageCard = (element, name) => statusCard(`${element}_damage`, name, 5, `${element}Damage`, [ELEMENT_INFO[element].status],
-  `${ELEMENT_INFO[element].label} weapons hit harder${element === 'fire' ? ', and their burn ticks too' : ''}.`,
+  `${ELEMENT_INFO[element].label} weapons hit harder${element === 'frost' ? '' : `, and their ${element === 'fire' ? 'burn' : element === 'corrode' ? 'acid' : 'shock arcs'} tick harder too`}.`,
   (player) => hasElement(player, element),
   (player) => {
     const m = player.stats.elementDamage || (player.stats.elementDamage = {});
     m[element] = (m[element] ?? 1) + W.elementDamageStep;
   });
 const addRank = (key) => (player) => { player.stats[key] = (player.stats[key] || 0) + 1; };
+// Ids are kept from before the stack rework (v0.40), so saves, locks and strategies keep working:
+// status_application is now Status Reactions.
 const STATUS_CARDS = [
   statusCard('status_potency', 'Status Potency', 5, 'statusPotency', ['burn', 'chill', 'corrode', 'shock'],
-    'Every element hits harder: more burn damage, deeper chill, more damage taken per corrode stack and longer stuns.',
+    'Every element hit applies more stacks: more burn, faster freezes, more corrosion and stronger shock arcs.',
     (player) => hasElement(player), addRank('statusPotency')),
-  statusCard('status_application', 'Status Application', 5, 'statusApplication', ['burn', 'corrode', 'shock'],
-    'Burn and corrode stack higher and hits can add two stacks at once; SHOCK rolls more long stuns.',
-    (player) => hasElement(player, 'fire', 'corrode', 'shock'), addRank('statusApplication')),
+  statusCard('status_application', 'Status Reactions', 5, 'statusApplication', ['burn', 'chill', 'corrode', 'shock'],
+    'Fire spreads more often, FROST freezes sooner, CORRODE caps higher and SHOCK rolls more long stuns.',
+    (player) => hasElement(player), addRank('statusApplication')),
   statusCard('status_duration', 'Status Duration', 5, 'statusDuration', ['burn', 'chill', 'corrode', 'shock'],
-    'Burn, chill and corrode last longer, and stuns a little longer.',
+    'Stacks wear off slower (so they build higher and tick longer), freezes last longer and stuns a little longer.',
     (player) => hasElement(player), addRank('statusDuration')),
   statusCard('shock_conductor', 'Shock Conductor', 5, 'stunLongChance', ['shock'],
-    'SHOCK weapons land long stuns more often, and every stun lasts longer.',
+    'SHOCK weapons land long stuns more often, every stun lasts longer and more shock conducts between touching enemies.',
     (player) => hasElement(player, 'shock'), addRank('shockConductor')),
   elementDamageCard('fire', 'Fire Amplifier'),
   elementDamageCard('frost', 'Frost Amplifier'),
@@ -174,6 +178,8 @@ export const UPGRADE_POOL = [
   ...weaponGroup('grenades'),
   ...weaponGroup('gas'),
   ...weaponGroup('flamethrower'),
+  ...weaponGroup('cryospray'),
+  ...weaponGroup('acidspray'),
   ...weaponGroup('shockfield'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
@@ -215,6 +221,17 @@ export const UPGRADE_POOL = [
       player.stats.moveSpeed *= 1.16;
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
+  },
+  {
+    // Blink Drive: Phase Dash turns into a teleport (Game.triggerDash -> Game.blink). More ranks blink further.
+    id: 'blink_drive',
+    name: 'Blink Drive',
+    category: 'UTILITY',
+    maxLevel: 3,
+    overcharge: false, // a blink stops getting longer at its max
+    headline: 'blinkDistance',
+    summary: 'Phase Dash becomes a BLINK: you teleport straight to the end of the dash, through enemies, gaps and bullets. More ranks blink further.',
+    apply() {} // the dash reads the card's level (upgradeLevels.blink_drive): nothing else to change
   },
   {
     // The shield on its own card (it rode on Phase Nova Thrusters before v0.33).

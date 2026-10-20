@@ -73,12 +73,17 @@ const STAT_LABELS = {
   lightning: 'Tesla Arc', emp: 'EMP Grenades', singularity: 'Vortex Core', collapse: 'Vortex Collapse', orbital: 'Orbit Blades',
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades', gas: 'Gas Trail', gas_pocket: 'Gas Pockets', gas_shroud: 'Toxic Shroud',
   burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
-  burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', corrode: 'Acid', shock: 'Shock Arcs', cryo: 'Cryo Sprayer', acid: 'Acid Sprayer',
+  corrode_gas: 'Gas Trail Acid', shock_shockfield: 'Shock Field Arcs', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
+// Status DoT ticks: '<weapon> Burn' / '<weapon> Acid' / '<weapon> Shock' unless named above.
+const DOT_LABEL = { burn: 'Burn', corrode: 'Acid', shock: 'Shock' };
+for (const w of WEAPONS) for (const dot of Object.keys(DOT_LABEL)) STAT_LABELS[`${dot}_${w.id}`] ||= `${w.hudName} ${DOT_LABEL[dot]}`;
 const STAT_GROUP = buildSourceGroups(WEAPONS);
-// Weapon credited with each stat in the LIVE / POTENTIAL compare. Burn ticks are left out: a weapon's
+// Weapon credited with each stat in the LIVE / POTENTIAL compare. Status DoT ticks are left out: a weapon's
 // potential DPS does not count its element.
-const WEAPON_OF = { ...STAT_GROUP, burn: null, ...Object.fromEntries([...ELEMENT_WEAPONS, ...Object.keys(FIXED_ELEMENTS)].map((id) => [`burn_${id}`, null])) };
+const WEAPON_OF = { ...STAT_GROUP, burn: null, corrode: null, shock: null,
+  ...Object.fromEntries([...ELEMENT_WEAPONS, ...Object.keys(FIXED_ELEMENTS)].flatMap((id) => ['burn', 'corrode', 'shock'].map((dot) => [`${dot}_${id}`, null]))) };
 
 const clampInt = (v, lo, hi, fallback = lo) => {
   const n = Math.round(Number(v));
