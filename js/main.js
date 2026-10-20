@@ -20,6 +20,7 @@ import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
+import { NaniteSwarm } from './nanites.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
 import { RiftManager } from './rifts.js';
@@ -438,6 +439,7 @@ export class Game {
         cryospray: 0,
         acidspray: 0,
         shockfield: 0,
+        nanites: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -467,6 +469,7 @@ export class Game {
     (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
+    (this.nanites ||= new NaniteSwarm()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -5323,6 +5326,7 @@ export class Game {
     this.deployables?.update(dt, this);
     this.grenades?.update(dt, this);
     this.gasTrail?.update(dt, this);
+    this.nanites?.update(dt, this);
     this.shockField?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
@@ -6675,6 +6679,7 @@ export class Game {
     this.weaponFx?.draw(ctx, this);
 
     this.gasTrail?.drawGround(ctx, this);
+    this.nanites?.drawGround(ctx, this);
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);

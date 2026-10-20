@@ -61,7 +61,8 @@ export const WEAPON_CLASS = Object.freeze({
   drones: 'auto', turret: 'auto',
   rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
   lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
-  shockfield: 'defensive', orbitals: 'defensive'
+  shockfield: 'defensive', orbitals: 'defensive',
+  nanites: 'area'
 });
 export const CLASS_TARGET = Object.freeze({
   aimed: Object.freeze({ perTarget: 1, enforced: true }),
@@ -538,6 +539,55 @@ export const WEAPON_SCALING = {
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
+  // --- Nanite Swarm (stats: damage, rate, radius, duration, cooldown) -------------------------------
+  // A DEPLOYABLE (nanites.js): every naniteCooldown s a canister flies to the densest pack within
+  // naniteRange and bursts into a swarm that drifts with that pack, eats it, grows naniteGrowPerKill per
+  // kill (up to naniteGrowMax) and disperses after naniteLife s. Every naniteTick s each enemy inside ANY
+  // swarm takes one bite (swarms never stack on one enemy) and a CORRODE stack (fixed element,
+  // weapon-levels.js FIXED_ELEMENTS). Potential counts the swarms out on average (naniteUptime: lifetime
+  // over launch interval, as a launch avoids packs a swarm already holds) each biting naniteHitShare
+  // targets per tick: a swarm only eats what it reaches, so more and longer-lived swarms are POWER
+  // (Fabricator, Endurance) and only swarm size is UTILITY.
+  naniteRadius: (b) => 58 * (1 + 0.12 * (b?.r?.radius || 0)),
+  naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)),
+  naniteTick: (b) => 0.25 / rateMult(b.r.rate),
+  naniteCooldown: (b) => 3 / rateMult(b.r.cooldown),
+  naniteUptime: (b) => W.naniteLife(b) / W.naniteCooldown(b),
+  naniteRange: 460,
+  naniteSpeed: 420,   // canister flight, px/s
+  naniteDrift: 60,    // px/s a swarm follows its pack
+  naniteGrow: 0.3,    // s to swell in
+  naniteFade: 0.6,    // s to disperse at the end
+  naniteGrowPerKill: 0.06,
+  naniteGrowMax: 1.5,
+  // Set in the card bench: a damage-built swarm realizes ~60-75% of the Autocannon's DPS at LV 1-12 (the
+  // area class), while each swarm bite lands on ~3 enemies.
+  naniteHitShare: 1.1,
+  // Transforms: Fission Bloom (a swarm buds a daughter of fissionRadiusMult size and fissionLifeMult life
+  // every fissionKills kills, up to fissionMax, that flies to the next pack: valued at fissionHitShare of
+  // a swarm), Gray Goo (kills feed the swarm: +gooLifePerKill s of life (up to gooLifeMax) and growth up
+  // to gooGrowMax: no extra attacks, so every bite hits BT_TRANSFORM_DPS harder), Nanite Plague (bitten
+  // enemies stay infected plagueWindow s; one that dies to anything bursts into a plague swarm of
+  // plagueRadiusMult size for plagueLife s, at most one per plagueEvery s and plagueMax alive: valued at
+  // plagueHitShare of a swarm).
+  fissionKills: 3,
+  fissionMax: 3,
+  fissionRadiusMult: 0.75,
+  fissionLifeMult: 0.75,
+  fissionHitShare: 0.6,
+  gooLifePerKill: 0.12,
+  gooLifeMax: 1.2,
+  gooGrowMax: 1.75,
+  plagueWindow: 3,
+  plagueRadiusMult: 0.6,
+  plagueLife: 1.4,
+  plagueEvery: 0.2,
+  plagueMax: 4,
+  plagueHitShare: 0.8,
+  naniteUnits: (b) => W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0),
+  // Damage of one bite to each enemy inside a swarm (daughters and plague swarms bite the same).
+  naniteDamageMult: (b) => lv1('nanites', 'nanites', (b0) => DPS_TARGET(1) * W.naniteTick(b0) / (W.naniteUnits(b0) * W.naniteUptime(b0))) * hitMult(b) * tfScale(b, W.naniteUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -754,7 +804,8 @@ export const POTENTIAL_DPS = {
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap) / W.fieldCooldown(b);
-  }
+  },
+  nanites: (b) => W.naniteDamageMult(b) * W.naniteUnits(b) * W.naniteUptime(b) / W.naniteTick(b)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -779,7 +830,8 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area']
+  shockfield: ['electric', 'area'],
+  nanite: ['deployable', 'area', 'corrode']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -815,7 +867,8 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield',
+  nanite: 'nanites'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -859,6 +912,7 @@ export function weaponDamage(p, weapon, b) {
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'nanite': base = d * W.naniteDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -876,6 +930,7 @@ export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grena
 export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) * areaMult(p);
 export const flameRange = (p, b = weaponBuild(p, 'flamethrower')) => W.flameRange(b) * areaMult(p);
 export const fieldRadius = (p, b = weaponBuild(p, 'shockfield')) => W.fieldRadius(b) * areaMult(p);
+export const naniteRadius = (p, b = weaponBuild(p, 'nanites')) => W.naniteRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);

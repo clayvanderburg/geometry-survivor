@@ -1985,6 +1985,61 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.7, 0.24);
   }
 
+  // Nanite Swarm canister launch: a soft pneumatic "thup" (low sine drop + a puff of noise) under a quick
+  // rising digital chirp, so a launch reads as "something small and clever just left the ship".
+  playNaniteLaunch() {
+    if (!this.claimVoice('naniteLaunch', 160, 2, 0.3)) return;
+    this.tone(190, 0, 0.12, 0.06, 'sine', 80);
+    this.tone(900, 0.03, 0.09, 0.025, 'square', 2200);
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(1400, t);
+    band.Q.value = 0.9;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.16);
+  }
+
+  // The canister bursting into a swarm: a dry fizzing crackle (high-passed noise in a few quick bursts).
+  playNaniteBurst() {
+    if (!this.claimVoice('naniteBurst', 140, 2, 0.3)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(3200, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    for (let i = 0; i < 4; i++) {
+      g.gain.linearRampToValueAtTime(0.045 - i * 0.008, t + 0.01 + i * 0.05);
+      g.gain.linearRampToValueAtTime(0.004, t + 0.04 + i * 0.05);
+    }
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    noise.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.28);
+  }
+
+  // Swarm feeding: a quiet insect-like chitter of three tiny square clicks at random high pitches
+  // (throttled by nanites.js and here, so a field of swarms never buzzes constantly).
+  playNaniteChitter() {
+    if (!this.claimVoice('naniteChitter', 300, 1, 0.12)) return;
+    for (let i = 0; i < 3; i++) this.tone(2600 + Math.random() * 1800, i * 0.035, 0.025, 0.012, 'square');
+  }
+
+  // Fission Bloom bud / Nanite Plague burst: a small glassy up-arpeggio.
+  playNaniteBloom() {
+    if (!this.claimVoice('naniteBloom', 180, 2, 0.25)) return;
+    [1320, 1760, 2349].forEach((f, i) => this.tone(f, i * 0.04, 0.1, 0.022, 'triangle'));
+  }
+
   // Sprayers: one soft looping roar per kind ('flame' Flamethrower, 'cryo' Cryo Sprayer, 'acid' Acid
   // Sprayer), faded in while the nozzles spray and out when they stop (level 0..1, called every frame;
   // only touches the graph when the target changes). Low-passed noise for the body, a quiet band of hiss

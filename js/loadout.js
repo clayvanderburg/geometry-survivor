@@ -90,6 +90,11 @@ export const WEAPONS = [
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
     color: '#9ff4ff',
     summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
+  },
+  {
+    id: 'nanites', name: 'Nanite Swarm', hudName: 'Nanite Swarm', levelId: 'nanites', levelKey: 'nanites', category: 'DEPLOYABLE', tagSources: ['nanite'],
+    color: '#c4ff7a',
+    summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
   }
 ];
 

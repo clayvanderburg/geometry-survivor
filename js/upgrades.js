@@ -53,7 +53,8 @@ const CORE_INFO = {
   flamethrower: { headline: 'flameRange', summary: 'A nozzle spins slowly round your ship spraying a cone of fire: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
   cryospray: { headline: 'cryoRange', summary: 'A nozzle spins slowly round your ship spraying a cone of frost: everything inside slows as COLD builds, then FREEZES solid. Asteroids block the spray.' },
   acidspray: { headline: 'acidRange', summary: 'A nozzle spins slowly round your ship spraying a cone of acid: everything inside CORRODES, taking acid ticks and more damage from every weapon. Asteroids block the spray.' },
-  shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' }
+  shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' },
+  nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
@@ -184,6 +185,7 @@ export const UPGRADE_POOL = [
   ...weaponGroup('cryospray'),
   ...weaponGroup('acidspray'),
   ...weaponGroup('shockfield'),
+  ...weaponGroup('nanites'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
