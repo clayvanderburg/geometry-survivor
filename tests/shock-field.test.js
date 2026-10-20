@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 // stuns through the shared SHOCK rules (immunity and boss / lieutenant resistance), STATUS card gating,
 // the three Breakthroughs, and a hard guarantee that it never touches the ship's shield.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, weaponDamage, fieldRadius, shockStun } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, weaponDamage, fieldRadius, shockStun } = await import('../js/weapon-scaling.js');
 const { statusState } = await import('../js/status-effects.js');
 const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, BREAKTHROUGH_LEVELS, BT_TRANSFORM_DPS, makeBuild, levelBuild, weaponBuild, weaponElement } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon, eligibleUpgrades, ownedElements, applyBreakthrough } = await import('../js/upgrades.js');
@@ -96,7 +96,7 @@ test('LV 1-18 numbers: radius, damage, recharge and stun each move only with the
   assert.equal(W.fieldHitShare, 1);
   assert.ok(near(W.fieldDamageMult(b1), DPS_TARGET(1) * 2.2));
   const maxed = makeBuild('shockfield', 18, { damage: 5, recharge: 4, radius: 8, stun: 4 });
-  assert.ok(near(W.fieldCooldown(maxed), 2.2 / 2.6), 'four Capacitor ranks: at most about one discharge a second');
+  assert.ok(near(W.fieldCooldown(maxed), 2.2 / (1 + 4 * RATE_STEP)), 'four Capacitor ranks: at most about one discharge a second');
   assert.ok(W.fieldCooldown(maxed) > 0.8, 'never fires constantly');
   assert.equal(W.fieldRadius(maxed), 125 + 24 * 8);
   assert.equal(W.fieldStunRank(maxed), 5);

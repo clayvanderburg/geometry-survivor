@@ -31,20 +31,25 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
-export const DAMAGE_GROWTH = 1.42; // Damage card: x1.42 damage per hit per rank (compounding; 1.5 before v0.29, 1.45 before v0.31)
-export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
+// One step for every weapon: the Autocannon's (x0.8 of the old 1.42 / 40% since v0.36.1, from live player
+// data). Every other weapon took the full 1.42 / 40% until the card-step audit, so each one outgrew the
+// Autocannon past LV 9 (Drones 63% -> 135% of it from LV 1 to 18 against targets that never die). With
+// one step every curve runs parallel to the Autocannon's, and LV1_TRIM alone sets where a weapon sits.
+export const DAMAGE_GROWTH = 1.336; // Damage card: x1.336 damage per hit per rank (compounding; 1.42 before the card-step audit, 1.5 before v0.29, 1.45 before v0.31)
+export const RATE_STEP = 0.32;    // fire rate / reload / cooldown cards: +32% attacks per second per rank (40% before the card-step audit)
 // Deliberate departures from the shared curve (README *Weapon levels*). CARD_STEP_TRIM scales a weapon's
-// Damage-card bonus and fire-rate step per rank (Autocannon 0.8: x1.336 damage and +32% fire rate per
-// rank, from live player data in v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
+// Damage-card bonus and fire-rate step per rank (empty: the shared step is the Autocannon's 0.8 trim of
+// v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
 // offensive weapons are tuned up to the Autocannon's real output (card benches, Clay's runs), since the
 // potential model over-rates splash and burst hits that overkill or miss. Rocket Pods 1.5 (under target in
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
-// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 3.6 and Sentry
+// Turret 5.9 hold the automatic class at its WEAPON_CLASS target (below) at every level, LV 1-18 (2.7 / 4.2
+// on the old card steps, which sat at 63% / 62% at LV 1 and 135% / 128% at LV 18).
+export const CARD_STEP_TRIM = Object.freeze({});
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 5.9 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
