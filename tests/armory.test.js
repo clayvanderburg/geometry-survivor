@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   META_UPGRADES, META_BY_ID, ARMORY_CATEGORIES, ARMORY_VERSION, STARTING_CORES, armoryCost, armoryBonuses, formatArmoryValue, armorySpent,
-  normalizeSave, ProgressionManager
+  normalizeSave, ProgressionManager, ARMORY_REVISIONS, armoryPower, POWER_REF
 } = await import('../js/progression.js');
 const { TUNING } = await import('../js/config.js');
 const { rerollCost, goldPerVein } = await import('../js/gold.js');
@@ -42,16 +42,22 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   assert.equal(none.damageMult, 1);
   assert.equal(none.extraBombs, 0);
   const b = armoryBonuses({ damage: 10, dashDistance: 25, dash: 25, maxHp: 5, critChance: 5, startGold: 3, bombs: 2 });
-  assert.ok(Math.abs(b.damageMult - 1.1) < 1e-9);
+  assert.ok(Math.abs(b.damageMult - 1.15) < 1e-9, '10 ranks of Plasma Overcharge: +15%');
   assert.ok(Math.abs(b.dashDistanceMult - 1.5) < 1e-9, '25 ranks of Afterburner Jets: +50% dash distance');
   assert.ok(Math.abs(b.dashCooldownMult - 0.75) < 1e-9);
-  assert.equal(b.bonusHp, 7.5);
+  assert.equal(b.bonusHp, 10);
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
-  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+10%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+15%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 1), '+1.5%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 40), '+60%');
+  assert.equal(formatArmoryValue(META_BY_ID.area, 25) , '+25%');
+  assert.equal(formatArmoryValue({ per: 0.0125, fmt: 'pct' }, 1), '+1.25%', 'two decimals when needed');
+  assert.equal(formatArmoryValue({ per: 0.0125, fmt: 'pct' }, 10), '+12.5%');
+  assert.equal(formatArmoryValue(META_BY_ID.critChance, 25), '+10% pts');
   assert.equal(formatArmoryValue(META_BY_ID.dash, 4), '-4.0%');
-  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+5');
+  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+6');
 });
 
 test('an old save is reset once (ranks + cores), keeping callsign, high scores and the Field Guide', () => {
@@ -125,11 +131,11 @@ test('every armory stat reaches the run', () => {
     moveSpeed: 10, dash: 20, dashDistance: 10, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
   const p = g.player, b = base.player;
   const near = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} vs ${e}`);
-  near(p.stats.damage, b.stats.damage * 1.1, 'damage');
+  near(p.stats.damage, b.stats.damage * 1.15, 'damage');
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance');
   near(p.stats.critDamage, b.stats.critDamage + 0.2, 'crit damage');
   near(p.stats.areaMult, 1.1, 'area');
-  near(p.maxHp, b.maxHp + 15, 'max shield');
+  near(p.maxHp, b.maxHp + 20, 'max shield');
   near(p.stats.moveSpeed, b.stats.moveSpeed * 1.08, 'move speed');
   near(p.stats.coreDropMult, b.stats.coreDropMult * 1.2, 'core gain');
   near(p.stats.xpMultiplier, b.stats.xpMultiplier * 1.1, 'xp');
@@ -229,7 +235,7 @@ test('saves from before revisions are the baseline: no refund, paid is priced on
   assert.equal(save.ranks.damage, 3);
   assert.equal(save.paid.damage, [0, 1, 2].reduce((n, r) => n + armoryCost(META_BY_ID.damage, r), 0));
   assert.deepEqual(save.refundNotes, []);
-  const bumped = normalizeSave(save, { damage: 2 });
+  const bumped = normalizeSave(save, { ...ARMORY_REVISIONS, damage: (ARMORY_REVISIONS.damage || 1) + 1 });
   assert.equal(bumped.cores, 10 + save.paid.damage, 'the first bump after baseline refunds');
 });
 
@@ -261,3 +267,34 @@ test('malformed revision, paid and note data stays safe', () => {
     assert.ok(s.refundNotes.every((n) => typeof n.id === 'string' && n.cores > 0));
   }
 });
+
+test('a full Armory is about 3x total power (offense x defense), with front-loaded ranks', async () => {
+  const { BASE_SHIELD } = await import('../js/upgrades.js');
+  // The power reference is the real ship: base shield plus one Shield Capacitor, passive regen, base crits.
+  assert.equal(META_UPGRADES.length, 18, 'existing upgrades buffed, no new ones (Clay, 2026-10-20)');
+  assert.equal(POWER_REF.shield, BASE_SHIELD + 20);
+  assert.equal(POWER_REF.regen, TUNING.shieldRegenRate);
+  assert.equal(POWER_REF.critChance, TUNING.baseCritChance ?? 0.05);
+  assert.equal(POWER_REF.critDamage, TUNING.baseCritDamage ?? 1.5);
+  assert.deepEqual(armoryPower({}), { offense: 1, defense: 1, total: 1 });
+  const full = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u.maxRank]));
+  const p = armoryPower(full);
+  assert.ok(p.total > 3 * 0.85 && p.total < 3 * 1.15, `full Armory total power ${p.total.toFixed(2)}x (target 3x ±15%)`);
+  assert.ok(p.offense > 1.5 && p.defense > 1.5, `both halves matter: offense ${p.offense.toFixed(2)}, defense ${p.defense.toFixed(2)}`);
+  // Early ranks are the cheap part of the curve; the last ranks are a long grind.
+  const half = Object.fromEntries(META_UPGRADES.map((u) => [u.id, Math.floor(u.maxRank / 2)]));
+  assert.ok(armorySpent(half) < armorySpent(full) * 0.15, 'half ranks everywhere cost under 15% of a full Armory');
+  assert.ok(armoryPower(half).total > 1.5, `half ranks: ${armoryPower(half).total.toFixed(2)}x`);
+});
+
+test('the v0.43.3 rework refunds Plasma Overcharge and Aegis Shield Matrix ranks bought before it', () => {
+  assert.ok((ARMORY_REVISIONS.damage || 1) >= 2 && (ARMORY_REVISIONS.maxHp || 1) >= 2);
+  const old = { armory: ARMORY_VERSION, cores: 0, ranks: { damage: 6, maxHp: 4, luck: 2 }, paid: { damage: 120, maxHp: 50, luck: 30 }, armoryRevs: { damage: 1, maxHp: 1, luck: 1 } };
+  const save = normalizeSave(old);
+  assert.equal(save.cores, 170);
+  assert.equal(save.ranks.damage, 0);
+  assert.equal(save.ranks.maxHp, 0);
+  assert.equal(save.ranks.luck, 2, 'unchanged upgrades keep their ranks');
+  assert.deepEqual(save.refundNotes.map((n) => n.id).sort(), ['damage', 'maxHp']);
+});
+
