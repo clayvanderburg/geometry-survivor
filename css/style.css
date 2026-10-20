@@ -2068,6 +2068,11 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   height: clamp(170px, 34vh, 330px);
 }
 
+/* Short desktop windows (1280x720): a smaller ship keeps RESTART / MAIN MENU on screen without scrolling. */
+@media (min-width: 861px) and (max-height: 800px) {
+  .pause-ship-stage { height: clamp(120px, 22vh, 170px); }
+}
+
 .ship-stage-caption {
   position: absolute;
   left: 0;
@@ -3702,9 +3707,8 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
   font-size: 14px;
   font-weight: 900;
   color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.15;
+  overflow-wrap: anywhere; /* long weapon names wrap instead of truncating */
   font-variant-numeric: tabular-nums;
 }
 .rr-section-title {
@@ -4539,7 +4543,7 @@ body.touch-mode .m-window {
   margin: 0 !important;
   border-radius: 0 !important;
   padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left)) !important;
-  background: rgba(4, 7, 18, 0.98) !important;
+  background: #040712 !important; /* opaque: the menu behind must not bleed through */
   text-align: left;
 }
 body.touch-mode .m-back { position: sticky; top: 0; z-index: 2; margin: 0 0 10px; padding: 9px 16px; font-size: 13px; }
