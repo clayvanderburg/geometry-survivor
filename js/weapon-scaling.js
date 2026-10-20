@@ -37,11 +37,15 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // Damage-card bonus and fire-rate step per rank (Autocannon 0.8: x1.336 damage and +32% fire rate per
 // rank, from live player data in v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
 // offensive weapons are tuned up to the Autocannon's real output (card benches, Clay's runs), since the
-// potential model over-rates splash and burst hits that overkill or miss. Swarm Missiles 0.75 (0.5 when
-// they were only a mid-run pickup; now an opener, with +30% fire rate on top), Rocket Pods 1.5.
+// potential model over-rates splash and burst hits that overkill or miss. Rocket Pods 1.5 (under target in
+// player data at every level). Swarm Missiles 0.5: on or over target in player data once owned.
+// STARTER_TRIM replaces LV1_TRIM when the weapon is the run-start pick (build.starter): a missile start
+// opens at 0.75 so it holds its own, while missiles taken through NEW WEAPON keep 0.5. Both fire 30% faster.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.75, rockets: 1.5 });
-const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
+export const LV1_TRIM = Object.freeze({ missiles: 0.5, rockets: 1.5 });
+export const STARTER_TRIM = Object.freeze({ missiles: 0.75 });
+// A build's trim: STARTER_TRIM for the run-start weapon, else LV1_TRIM (1 on the shared curve).
+export const trimOf = (b) => (b.starter && STARTER_TRIM[b.id]) || (LV1_TRIM[b.id] ?? 1);
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
@@ -114,7 +118,7 @@ export const WEAPON_SCALING = {
   mirvHitShare: 0.85, // three small payloads cover no more ground than one rocket's blast: each valued at this share
   rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
-  wingRocketDamageMult: (b) => lv1Trim('rockets') * lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
+  wingRocketDamageMult: (b) => trimOf(b) * lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
@@ -141,7 +145,7 @@ export const WEAPON_SCALING = {
   nukeRadiusMult: 2.2,
   nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
   missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
-  missileDamageMult: (b) => lv1Trim('missiles') * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
+  missileDamageMult: (b) => trimOf(b) * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
