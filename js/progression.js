@@ -1,6 +1,7 @@
 // Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
 import { MODE_IDS, normalizeMode } from './modes.js';
 import { normalizeHangar, newHangar } from './hangar-save.js';
+import { isShip, DEFAULT_SHIP, SOLO_ID } from './ships.js';
 
 const SAVE_KEY = 'vectra_survivor_save_v2';
 // Local highscores ("MY RUNS") kept per game mode.
@@ -223,6 +224,14 @@ function normalizePaid(sourcePaid, ranks) {
   }));
 }
 
+// A local run's Hangar tag ({ ship, solo }, each only when valid): runs flown without the Hangar have none.
+function hangarTag(entry) {
+  return {
+    ...(isShip(entry?.ship) && entry.ship !== DEFAULT_SHIP ? { ship: entry.ship } : {}),
+    ...(typeof entry?.solo === 'string' && SOLO_ID.test(entry.solo) ? { solo: entry.solo } : {})
+  };
+}
+
 export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const sourceRanks = source.ranks && typeof source.ranks === 'object' ? source.ranks : {};
@@ -238,7 +247,8 @@ export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
     wave: boundedInteger(entry.wave, 1, 1),
     kills: boundedInteger(entry.kills, 0),
     timeStr: typeof entry.timeStr === 'string' && /^\d{2,}:\d{2}$/.test(entry.timeStr) ? entry.timeStr : '00:00',
-    mode: normalizeMode(entry.mode)
+    mode: normalizeMode(entry.mode),
+    ...hangarTag(entry)
   })) : [];
   // An existing save from before ARMORY_VERSION had the old six bundled upgrades: its ranks and cores
   // are reset once (callsign, high scores, Field Guide and runs played are kept) and a notice is shown.
@@ -427,7 +437,7 @@ export class ProgressionManager {
   }
 
   // Saves a finished run on this device's board of its mode. Returns its id and its local rank in that mode.
-  recordRun({ name, score, multiplier, wave, kills, timeStr, mode }) {
+  recordRun({ name, score, multiplier, wave, kills, timeStr, mode, ship, solo }) {
     this.data.totalRuns++;
     const cleanName = this.setPilotName(name || this.data.pilotName);
     const entryId = globalThis.crypto?.randomUUID?.() || 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2);
@@ -439,7 +449,8 @@ export class ProgressionManager {
       wave,
       kills,
       timeStr,
-      mode: normalizeMode(mode)
+      mode: normalizeMode(mode),
+      ...hangarTag({ ship, solo })
     };
 
     this.data.highscores = topRunsPerMode([...this.data.highscores, entry]);

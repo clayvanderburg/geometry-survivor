@@ -21,6 +21,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
+import { SHIP_IDS, DEFAULT_SHIP, SOLO_ID } from '../../js/ships.js';
 
 export const STORE_NAME = 'leaderboard';
 export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
@@ -213,8 +214,27 @@ export function publicEntry(e) {
   return {
     id: e.id, name: e.name, score: e.score, wave: e.wave, level: e.level,
     kills: e.kills, multiplier: e.multiplier, time: e.time, date: e.date,
-    version: typeof e.version === 'string' ? e.version : null
+    version: typeof e.version === 'string' ? e.version : null,
+    ...(typeof e.ship === 'string' ? { ship: e.ship } : {}),
+    ...(typeof e.solo === 'string' ? { solo: e.solo } : {})
   };
+}
+
+// --- Hangar ship and solo weapon -------------------------------------------------------------------
+// Optional (Hangar builds only; older clients and VEXOLITH runs send none). `ship` must be a known ship id
+// (js/ships.js); `solo` the weapon id of a single-weapon run. Ships never touch the score, so the
+// plausibility checks don't change. Returns { tag } or { error }.
+export function checkHangar(body) {
+  const tag = {};
+  if (body.ship !== undefined && body.ship !== null) {
+    if (typeof body.ship !== 'string' || !SHIP_IDS.includes(body.ship)) return { error: `ship must be one of ${SHIP_IDS.join(', ')}` };
+    if (body.ship !== DEFAULT_SHIP) tag.ship = body.ship;
+  }
+  if (body.solo !== undefined && body.solo !== null) {
+    if (typeof body.solo !== 'string' || !SOLO_ID.test(body.solo)) return { error: 'solo must be a weapon id' };
+    tag.solo = body.solo;
+  }
+  return { tag };
 }
 
 // --- Game version ----------------------------------------------------------------------------------
@@ -381,6 +401,9 @@ export function createScoresHandler({
     if (error) return json(400, { error });
     const { mode, error: modeError } = checkMode(body.mode);
     if (modeError) return json(400, { error: modeError });
+    const { tag: hangarTag, error: hangarError } = checkHangar(body);
+    if (hangarError) return json(400, { error: hangarError });
+    Object.assign(run, hangarTag);
     // An unknown version is refused before the cooldown: it's a stale or dev build, not a probe.
     const version = checkVersion(body.version, versions);
     if (version.error) return json(422, { error: version.error, current: currentVersion });

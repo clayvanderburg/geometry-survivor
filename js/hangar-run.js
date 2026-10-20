@@ -6,7 +6,7 @@ import { SHIPS, shipCanSolo, DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses
 import { WEAPONS, START_WEAPON_CHOICES } from './loadout.js';
 import { quirkOnKill, quirkOnHit } from './ship-quirks.js';
 import { lockedWeapons } from './weapon-unlocks.js';
-import { masteryDamageTable, readSolo, SOLO_HAND_SIZE } from './mastery.js';
+import { masteryDamageTable, masteryTierFor, readSolo, SOLO_HAND_SIZE } from './mastery.js';
 
 // The ship this run flies: null while the flag is off (the crab, exactly as before) or in the Weapon Range;
 // else the Hangar's pick. `game.shipOverride` (balance sim --ship, tests) wins even with the flag off.
@@ -92,6 +92,25 @@ export function hangarKill(game, e) {
 export function hangarHit(game, dmg) {
   game.feats?.shieldHit(dmg);
   if (game.player?.shipId) quirkOnHit(game);
+}
+
+// The run's Hangar tag for its records: { ship } when it flew a Hangar ship other than VEXOLITH, { solo }
+// (the weapon) for a SOLO attempt or a solo run that earned a star, and with `stats` the mastery tiers held. {} without the flag, so the
+// leaderboard payload, local highscores and run stats are exactly as before.
+export function hangarRunTag(game, { stats = false } = {}) {
+  const tag = {};
+  const ship = game.player?.shipId;
+  if (ship && ship !== DEFAULT_SHIP) tag.ship = ship;
+  // A solo run counts on the board when it was a SOLO attempt or earned a star (a W3 death with one weapon
+  // isn't news).
+  const run = game.feats?.run;
+  if (run?.soloWeapon && (game.player?.solo || masteryTierFor(run) >= 1)) tag.solo = run.soloWeapon;
+  if (stats && game.feats && game.progression?.data?.hangar) {
+    if (ship) tag.ship = ship;
+    const m = game.progression.data.hangar.mastery;
+    if (Object.keys(m).length) tag.mastery = { ...m };
+  }
+  return tag;
 }
 
 // A fresh ledger for the run resetRun just built (null: flag off, or the Weapon Range).

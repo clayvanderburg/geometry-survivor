@@ -102,6 +102,13 @@ export const SHIPS = Object.freeze([
 ]);
 
 export const SHIP_IDS = Object.freeze(SHIPS.map((s) => s.id));
+// The small glyph a leaderboard row shows for a run's ship (VEXOLITH: none).
+export const SHIP_GLYPH = Object.freeze({
+  vexolith: '', mantis: '🗡', prospector: '⛏', wasp: '🐝', hermit: '🐚', pyre: '🔥', gambler: '🎲',
+  brood: '🛸', lancer: '🔱', revenant: '💀', leviathan: '🐍', sovereign: '👑'
+});
+// A run's weapon id as sent with a solo run (validated by shape only: the server doesn't bundle loadout.js).
+export const SOLO_ID = /^[a-z0-9_]{1,24}$/;
 export const SHIP_BY_ID = Object.freeze(Object.fromEntries(SHIPS.map((s) => [s.id, s])));
 export const isShip = (id) => typeof id === 'string' && Object.hasOwn(SHIP_BY_ID, id);
 export const normalizeShip = (id) => (isShip(id) ? id : DEFAULT_SHIP);
