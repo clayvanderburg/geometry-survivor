@@ -216,6 +216,9 @@ export const DEFAULT_TUNING = {
   newWeaponChanceBy5: 0.3,
   newWeaponPityOne: 2,
   newWeaponPity: 4,
+  // Weapon floor (js/weapon-floor.js): by every weaponFloorStep-th player level you carry one more weapon
+  // (2 at LV 6, 3 at 12 ... all 6 at 30); a level-up below it is a forced CHOOSE A WEAPON pick.
+  weaponFloorStep: 6,
   // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
   slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
@@ -517,6 +520,7 @@ export const TUNING_SCHEMA = [
       { key: 'newWeaponChanceBy5', label: 'NEW WEAPON Chance / Hand (5+ Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponPityOne', label: 'NEW WEAPON Guaranteed Every N Hands (1 Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
       { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands (2+ Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'weaponFloorStep', label: 'Weapon Floor: +1 Weapon Required Every N Levels', type: 'range', min: 1, max: 30, step: 1, unit: '' },
       { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },

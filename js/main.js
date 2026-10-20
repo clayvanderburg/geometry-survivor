@@ -55,6 +55,7 @@ import {
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
+import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
@@ -442,6 +443,8 @@ export class Game {
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
+      // Weapon floor on for this run (weapon-floor.js): off in the Weapon Range or a mode without it.
+      weaponFloor: modeRules(this.mode).weaponFloor !== false && !this.range?.active,
       banished: {}, // card ids banished with gold this run (never offered again)
       weapons: {
         rockets: 0,
@@ -4112,6 +4115,14 @@ export class Game {
     // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
     // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
+    // Under the weapon floor (weapon-floor.js) the level-up is a forced CHOOSE A WEAPON pick instead;
+    // a gold lock waits for the next hand.
+    if (weaponFloorDue(this.player)) {
+      this.banishMode = false;
+      this.openWeaponPick({ forced: true });
+      document.getElementById('upgrade-modal').classList.remove('hidden');
+      return;
+    }
     this.beginHand();
     this.currentChoices = rollHandAround(this.player, this.handSize(), this.handLock, rollLevelUpHand);
     this.runStats?.offered(this.currentChoices);
@@ -4574,7 +4585,8 @@ export class Game {
 
   // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
   // Gold can reroll the 3 weapons (rerollWeaponPick); the slot's reward shows under the title.
-  openWeaponPick() {
+  // `forced`: a weapon floor pick (triggerLevelUp), with the floor in the header.
+  openWeaponPick({ forced = false } = {}) {
     this.handPhase = 'weapon';
     this.pickRerolls = 0;
     this.currentChoices = rollWeaponPicks(this.player, WEAPON_PICK_SIZE);
@@ -4586,7 +4598,7 @@ export class Game {
     }
     const p = this.player;
     const slot = ownedWeapons(p).length + 1;
-    this.setUpgradeHeader(`SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+    this.setUpgradeHeader(forced ? `LV ${p.level} // ${weaponFloor(p.level)} WEAPONS REQUIRED // SLOT ${slot} OF ${weaponSlots()}` : `SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
       `Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Equip`);
     const reward = slotReward(slot);
     this.setSlotReward(reward && { ...reward, slot });

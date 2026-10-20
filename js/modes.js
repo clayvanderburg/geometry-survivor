@@ -4,7 +4,8 @@
 //
 // A mode changes a run in two ways, on top of the same simulation:
 //   flags   checked by the game through modeRules(): shield regen, shield cards in hands and caches,
-//           shield repairs (cache, shield crystal, maxed level-up) and the Void Armory's shield bonus;
+//           shield repairs (cache, shield crystal, maxed level-up), the Void Armory's shield bonus and
+//           the weapon floor (js/weapon-floor.js; a single-weapon mastery mode would turn it off);
 //   tuning  a TUNING overlay (js/config.js applyTuningOverlay) put on at run start and taken off when the
 //           run ends, so a mode never edits the NORMAL defaults. BLITZ compresses the run with it.
 // The Weapon Range always flies NORMAL.
@@ -23,6 +24,7 @@ export const MODES = Object.freeze({
     shieldCards: true,
     shieldRepairs: true,
     armoryShield: true,
+    weaponFloor: true,
     tuning: Object.freeze({})
   }),
   // The shield is your only life: it starts at base strength and never comes back.
@@ -36,6 +38,7 @@ export const MODES = Object.freeze({
     shieldCards: false,
     shieldRepairs: false,
     armoryShield: false,
+    weaponFloor: true,
     tuning: Object.freeze({})
   }),
   // A quick run that plays out in under 10 minutes: shorter waves, a cheaper XP curve, and the HP,
@@ -52,6 +55,7 @@ export const MODES = Object.freeze({
     shieldCards: true,
     shieldRepairs: true,
     armoryShield: true,
+    weaponFloor: true,
     tuning: Object.freeze({
       waveLength: 14, // 22 in NORMAL: a boss every 70 s
       // XP to the next level: 15 + 9 per level (+2 x (LV - 15)^2): about 40% cheaper, so the build comes together fast.

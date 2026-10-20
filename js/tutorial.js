@@ -22,6 +22,7 @@ export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 // with a variant per input: keyboard (mouse + keys), touch (phone / tablet) and pad (controller).
 export function tutorialSlides(tuning = TUNING) {
   const slots = tuning.weaponSlots ?? 6;
+  const floorStep = tuning.weaponFloorStep ?? 6;
   const ltWave = tuning.lieutenantFirstWave ?? 2;
   return [
     {
@@ -60,7 +61,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'levelup', title: 'LEVEL UP', media: 'levelup.webp',
       alt: 'The level-up screen with a NEW WEAPON card and an upgrade card',
       lines: [
-        `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade.`,
+        `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade. Every ${floorStep} levels you **must** add a weapon.`,
         'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards.'
       ]
     },
