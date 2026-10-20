@@ -7,7 +7,7 @@
 // player.base snapshot plus the armory multipliers that live on the player), and TOTAL is the ship now.
 // PERMANENT = RUN START vs BASE (Void Armory) and THIS RUN = TOTAL vs RUN START (cards picked this run).
 import { TUNING } from './config.js';
-import { runStartPlayer, runUpgradeLines, HIT_INVULN_BASE } from './upgrades.js';
+import { runStartPlayer, runUpgradeLines } from './upgrades.js';
 import { WEAPON_SCALING as W, blasterFireRate, baseDamage } from './weapon-scaling.js';
 import { weaponBuild, weaponElement, ELEMENT_INFO } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
@@ -45,9 +45,7 @@ export const STAT_GROUPS = [
     id: 'defense', label: 'DEFENSE', rows: [
       { id: 'maxHp', label: 'Max shield', kind: 'add', fmt: 'flat', get: (s) => s.maxHp },
       // HARDCORE has none (js/modes.js): every snapshot carries the run's mode, so it reads 0 throughout.
-      { id: 'regen', label: 'Shield regen', kind: 'add', fmt: 'hps', get: (s, t) => (modeRules(s).shieldRegen ? t.shieldRegenRate ?? 1.2 : 0) },
-      { id: 'damageTaken', label: 'Damage taken', kind: 'mult', fmt: 'pct', lower: true, get: (s) => s.damageTakenMult ?? 1 },
-      { id: 'invuln', label: 'Invulnerable after a hit', kind: 'add', fmt: 'sec', get: (s) => HIT_INVULN_BASE + (s.hitInvulnBonus || 0) }
+      { id: 'regen', label: 'Shield regen', kind: 'add', fmt: 'hps', get: (s, t) => (modeRules(s).shieldRegen ? t.shieldRegenRate ?? 1.2 : 0) }
     ]
   },
   {
@@ -56,7 +54,9 @@ export const STAT_GROUPS = [
       {
         id: 'dash', label: 'Dash cooldown', kind: 'add', fmt: 'sec', lower: true,
         get: (s, t) => W.dashCooldown(s.weapons?.dashNova || 0, t.dashCooldownBase ?? 1.5) * (s.dashCooldownMult ?? 1)
-      }
+      },
+      // Phase Dash reach (Dash Extender cards x Afterburner Jets), as a multiple of the bare dash.
+      { id: 'dashDistance', label: 'Dash distance', kind: 'mult', fmt: 'pct', get: (s) => W.dashDistanceMult(s.upgradeLevels?.dash_range || 0) * (s.dashDistanceMult ?? 1) }
     ]
   },
   {
@@ -122,8 +122,8 @@ export function statSnapshots(player, { bonuses = {}, tuning = TUNING } = {}) {
   let start;
   if (player.base) {
     // Armory multipliers outside `stats` are set at run start and never touched by cards.
-    const { damageTakenMult, hitInvulnBonus, dashCooldownMult, goldMult, rerollCostMult } = player;
-    start = bare({ damageTakenMult, hitInvulnBonus, dashCooldownMult, goldMult, rerollCostMult, stats: player.base.stats, maxHp: player.base.maxHp });
+    const { dashCooldownMult, dashDistanceMult, goldMult, rerollCostMult } = player;
+    start = bare({ dashCooldownMult, dashDistanceMult, goldMult, rerollCostMult, stats: player.base.stats, maxHp: player.base.maxHp });
     start.weapons = player.base.weapons || {};
   } else {
     start = bare(runStartPlayer(bonuses, tuning));

@@ -23,11 +23,11 @@ function freshGame(ranks = {}) {
 }
 
 test('resetRun builds the ship from runStartPlayer (TUNING + Void Armory)', () => {
-  const ranks = { damage: 4, maxHp: 3, moveSpeed: 2, bombs: 1, armor: 6 };
+  const ranks = { damage: 4, maxHp: 3, moveSpeed: 2, bombs: 1, dashDistance: 6 };
   const g = freshGame(ranks);
   const start = runStartPlayer(armoryBonuses(ranks));
   assert.deepEqual(g.player.base.stats, start.stats);
-  for (const key of ['maxHp', 'damageTakenMult', 'hitInvulnBonus', 'dashCooldownMult', 'goldMult', 'rerollCostMult']) assert.equal(g.player[key], start[key], key);
+  for (const key of ['maxHp', 'dashCooldownMult', 'dashDistanceMult', 'goldMult', 'rerollCostMult']) assert.equal(g.player[key], start[key], key);
   assert.equal(g.player.bombs, 3);
   assert.equal(runStartPlayer({}).stats.damage, TUNING.baseDamage, 'no bonuses: the bare base');
 });
@@ -45,7 +45,7 @@ test('a fresh ship with no armory ranks: BASE = TOTAL and nothing in PERMANENT o
 });
 
 test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RUN', () => {
-  const g = freshGame({ damage: 10, maxHp: 5, critChance: 5, moveSpeed: 5, armor: 10, dash: 10 });
+  const g = freshGame({ damage: 10, maxHp: 5, critChance: 5, moveSpeed: 5, dashDistance: 10, dash: 10 });
   const p = g.player;
   let r = rowsById(p);
   assert.equal(r.damage.base, String(TUNING.baseDamage));
@@ -54,8 +54,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.critChance.base, '5%');
   assert.equal(r.critChance.permanent, '+2%');
   assert.equal(r.moveSpeed.permanent, '+4%');
-  assert.equal(r.damageTaken.permanent, '−4%');
-  assert.equal(r.damageTaken.up.permanent, true, 'less damage taken is good');
+  assert.equal(r.dashDistance.permanent, '+20%');
+  assert.equal(r.dashDistance.up.permanent, true, 'a longer dash is good');
   assert.equal(r.dash.permanent, '−0.15 s');
   for (const id of ['damage', 'maxHp', 'critChance', 'moveSpeed']) assert.equal(r[id].run, '—', `${id}: no cards yet`);
 

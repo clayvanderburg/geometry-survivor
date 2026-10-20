@@ -1969,8 +1969,9 @@ export class Game {
     const p = this.player;
     if (p.dashCooldown > 0) return;
 
-    // Phase Dash Extender cards stretch the burst (and a blink), with the invulnerability to match.
-    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0));
+    // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
+    // with the invulnerability to match.
+    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
     p.dashTimer = W.dashDuration * reach;
     p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
@@ -2459,11 +2460,10 @@ export class Game {
   // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
-    dmg *= p.damageTakenMult ?? 1; // Void Armory: Ablative Plating
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = HIT_INVULN_BASE + (p.hitInvulnBonus || 0);
+    p.invuln = HIT_INVULN_BASE;
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
