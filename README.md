@@ -167,6 +167,11 @@ A small reusable cutscene system plays story beats in the real engine, with og M
 - **Sound**: each speaker's letters blip in their own voice (`SoundEngine.playDialogueBlip`); the soundtrack ducks under the dialogue (`setMusicDuck`) and the warp-in hits a sting (`playWarpSting`) as the run music comes in.
 - **Building more**: scripts are plain data (`{ do: 'say', who, text }`, `wait`, `hide`, plus stage actions like `camera`, `drill`, `tremor`, `gates`, `swarm`, `fade`, `card`, `music`, `cut`; any step with `wait: false` runs in the background). Speakers and portraits are registered by id (`registerSpeaker` / `registerPortrait` in `js/dialogue.js`), so a later level adds its cast and script without new engine code; `Game.playCutscene(id)` plays any scene in `SCENES` (`js/story.js`). `node tools/frame-capture.cjs <playwright> --scene intro --frames 40 --every 54` captures the opening.
 
+### Radio & Dr. Pixie
+
+- **Radio** (`js/radio.js`, `#radio-box`): non-pausing talking-head lines in a corner, the same portrait, name tag, typewriter and voice blips as the cutscene box, but click-through and never taking input. A line types out, holds for a read and slides away; at most one line waits behind it (a newer one replaces it). It sits bottom-left above the shield bar in play and moves to the bottom-right over the level-up / Breakthrough cards. `Game.say(speaker, text, { mood })` is the entry point. Only the browser boot switches it on (`Game.enableStoryRadio`), so tests and the balance harness stay silent.
+- **Dr. Pixie** (`js/pixie.js`): Astra R&D's cute nerd genius (pink messy hair, goggles pushed up, big round glasses, an oversized lab coat; portrait in `js/portraits.js` with four moods: neutral, eureka with sparkle eyes, smug, oops). When a **Breakthrough** pick opens she cheers the discovery with a **EUREKA** flourish (`SoundEngine.playEureka`); after the pick she reacts to the choice (specific lines for some Breakthroughs, e.g. *"Twin Barrels! Twice the barrels, twice the waivers!"*), cutting her first line short. The pick itself works the instant the screen opens. Lines (34 discovery lines, weapon-specific ones, reactions; all ≤ 60 characters, PG) come from per-run shuffle bags: no line repeats until its pool runs dry, never twice in a row.
+
 ## Tutorial (first-run slides)
 
 `js/tutorial.js` (`#tutorial-modal`) is a six-slide PILOT BRIEFING for new players: FLY & FIGHT, SURVIVE THE SWARM, MINE ASTEROIDS (gold veins change upgrade choices, green veins restore the shield, purple cores give Void Cores), LEVEL UP (NEW WEAPON / upgrades, the weapon floor, slot rewards, gold REROLL / LOCK), ELITES & BOSSES and YOU'RE READY (Void Armory, then *for in-depth info, check our handy 📖 FIELD GUIDE*, with a button that opens it). Each slide is a looping clip of the real game plus one or two short lines.
@@ -329,8 +334,10 @@ Everything lives in `js/audio.js` (`SoundEngine`). The AudioContext is created o
 - `js/tutorial.js` — First-run TUTORIAL slides (`tutorialSlides`, `TUTORIAL_REVIEWED_FOR`), seen flag and the `#tutorial-modal` controller (`TutorialUI`). Keep its slides accurate (rule at the top of this README).
 - `js/cutscene.js` — Cutscene timeline player (`Cutscene`): plain-data steps, background steps, advance / skip, `estimateDuration`, `validateScript`.
 - `js/dialogue.js` — Talking-head dialogue box (`DialogueBox`): typewriter maths, voice blips, talk frames, the speaker and portrait registries.
-- `js/portraits.js` — 72×72 pixel portraits with talk animations: the miner (art: `assets/cutscene/miner.png`, cropped from the splash), Dee's Astra dispatch screen, the Vex.
+- `js/portraits.js` — 72×72 pixel portraits with talk animations: the miner (art: `assets/cutscene/miner.png`, cropped from the splash), Dee's Astra dispatch screen, Dr. Pixie (four moods), the Vex.
 - `js/cutscene-stage.js` — Plays a script in the real engine (`CutsceneStage`): ship, camera, warp gates, spawns, the `#cutscene-layer` DOM and cutscene input.
+- `js/radio.js` — Non-pausing radio lines (`RadioBox`, `Game.say`).
+- `js/pixie.js` — Dr. Pixie's Breakthrough lines (`PixieDirector`, the line pools, `LineBag`).
 - `js/story.js` — The cast (`CAST`, `MINER_NAME`), `OPENING_SCENE`, the `SCENES` registry and the intro seen flag.
 - `assets/tutorial/` — The tutorial clips (animated WebP), captured by `tools/tutorial-media.cjs` (`npm run tutorial-media`).
 - `js/patch-notes.js` — PATCH NOTES screen (`#notes-modal`): HTML builders, NEW badge / last-seen version, expand/collapse.

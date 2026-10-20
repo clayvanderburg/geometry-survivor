@@ -4,6 +4,7 @@
 //              out to keep it PG): mouth flaps, his toothpick bobs and flicks, a glint sweeps the visor
 //              shades now and then (his "blink").
 //   dispatch — ASTRA MINING mission control, audio only: the Astra logo on a CRT and a voice waveform.
+//   pixie    — Dr. Pixie, Astra R&D's cute nerd genius, with four moods (neutral, eureka, smug, oops).
 //   vex      — the alien overseer: an inverted triangle hull-face in the alien ships' magenta and violet
 //              with a glowing core that flares as it speaks.
 // registerStoryPortraits() registers all three by id; more can be added the same way.
@@ -177,9 +178,183 @@ export function drawVex(ctx, { t = 0, talking = false, mouth = 0 } = {}) {
   }
 }
 
+// --- Dr. Pixie ----------------------------------------------------------------------------------
+// Astra's R&D genius: a cute anime-style science nerd. Messy pink hair with lab goggles pushed up, big
+// round glasses, an oversized lab coat over a mint sweater, sticky notes on the blueprint wall behind.
+// Moods: neutral, eureka (sparkle eyes, big grin, twinkles), smug (half-lidded, raised brow, smirk) and
+// oops (squeezed >< eyes, sweat drop, wobbly mouth). Talking opens the mouth in two frames.
+export const PIXIE_MOODS = Object.freeze(['neutral', 'eureka', 'smug', 'oops']);
+const P = {
+  wall: '#0b2730', grid: '#123f4a', noteY: '#ffe066', noteP: '#ff8fc8', ink: '#6b4a1a',
+  hair: '#ff6fb5', hairD: '#c2408a', hairL: '#ffb3da', skin: '#ffe0c8', skinD: '#f4b896', blush: '#ff8fb0',
+  frame: '#3b2a5a', lens: '#f4f2ff', iris: '#3a1f6b', irisL: '#7a5cff', white: '#ffffff', mouth: '#5a1830', tongue: '#ff7a9a',
+  coat: '#f2f4ff', coatD: '#b9c2e0', sweater: '#36d6c3', band: '#2b2b3f', gogF: '#4a4f68', gogL: '#ffb347', star: '#fff27a', sweat: '#8fe8ff'
+};
+const disc = (ctx, cx, cy, rx, ry, color, keep = () => true) => {
+  ctx.fillStyle = color;
+  for (let y = Math.floor(cy - ry); y <= cy + ry; y++) {
+    for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+      const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+      if (dx * dx + dy * dy <= 1 && keep(x, y)) px(ctx, x, y);
+    }
+  }
+};
+const ring = (ctx, cx, cy, r, color) => {
+  ctx.fillStyle = color;
+  for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) {
+    for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+      if (d <= r + 0.5 && d >= r - 0.9) px(ctx, x, y);
+    }
+  }
+};
+const twinkle = (ctx, x, y, size, color) => {
+  ctx.fillStyle = color;
+  px(ctx, x, y - size, 1, size * 2 + 1);
+  px(ctx, x - size, y, size * 2 + 1, 1);
+};
+
+export function drawPixie(ctx, { t = 0, talking = false, mouth = 0, mood = 'neutral' } = {}) {
+  const m = PIXIE_MOODS.includes(mood) ? mood : 'neutral';
+  // Blueprint wall and sticky notes.
+  ctx.fillStyle = P.wall;
+  px(ctx, 0, 0, S, S);
+  ctx.fillStyle = P.grid;
+  for (let k = 3; k < S; k += 8) { px(ctx, k, 0, 1, S); px(ctx, 0, k, S, 1); }
+  ctx.fillStyle = P.noteY; px(ctx, 3, 5, 9, 9);
+  ctx.fillStyle = P.ink; px(ctx, 5, 8, 5, 1); px(ctx, 5, 10, 3, 1);
+  ctx.fillStyle = P.noteP; px(ctx, 60, 9, 9, 9);
+  ctx.fillStyle = P.ink; px(ctx, 62, 12, 4, 1); px(ctx, 62, 14, 5, 1);
+
+  const bob = talking && mouth === 2 ? 1 : 0; // the head bobs a pixel on the open-mouth frame
+  // Oversized lab coat, sleeves past the frame, mint sweater in the V.
+  for (let y = 56; y < S; y++) {
+    const half = 20 + (y - 56) * 0.9;
+    ctx.fillStyle = P.coat;
+    px(ctx, 36 - half, y, half * 2, 1);
+    ctx.fillStyle = P.coatD;
+    px(ctx, 36 - half, y, 2, 1);
+    px(ctx, 36 + half - 2, y, 2, 1);
+    const v = Math.max(0, 9 - (y - 56) * 0.9);
+    ctx.fillStyle = P.sweater;
+    px(ctx, 36 - v, y, v * 2, 1);
+    ctx.fillStyle = P.coatD;
+    px(ctx, 36 - v - 1, y, 1, 1);
+    px(ctx, 36 + v, y, 1, 1);
+  }
+  ctx.fillStyle = '#4a6cff'; px(ctx, 47, 62, 3, 6); // a pen in the breast pocket
+  ctx.fillStyle = P.skin; px(ctx, 32, 51 + bob, 8, 6);
+
+  // Hair, back layer: a big messy cloud with side locks.
+  disc(ctx, 36, 33 + bob, 23, 22, P.hairD);
+  disc(ctx, 36, 32 + bob, 21, 20, P.hair);
+  for (const [x, y, h] of [[13, 40, 16], [57, 40, 16], [15, 38, 12], [55, 38, 12]]) { ctx.fillStyle = P.hair; px(ctx, x, y + bob, 3, h); }
+  // Strands sticking up: she's been in the lab all night.
+  ctx.fillStyle = P.hair;
+  for (const [x, y] of [[24, 9], [31, 7], [40, 8], [47, 10], [28, 8]]) px(ctx, x, y + bob, 2, 5);
+
+  // Face.
+  disc(ctx, 36, 41 + bob, 14, 14, P.skin);
+  ctx.fillStyle = P.skinD;
+  for (let y = 44; y <= 54; y++) {
+    const w = Math.sqrt(Math.max(0, 1 - ((y + 0.5 - 41) / 14) ** 2)) * 14;
+    px(ctx, Math.floor(36 - w), y + bob, 1, 1);
+    px(ctx, Math.ceil(36 + w) - 1, y + bob, 1, 1);
+  }
+  // Bangs: a jagged fringe over the forehead.
+  // Bangs: pointed clumps of hair over the forehead (4 px wide, longest in the middle).
+  const clumps = [5, 8, 6, 9, 4, 7, 9, 6];
+  for (let c = 0; c < clumps.length; c++) {
+    for (let k = 0; k < 4; k++) {
+      const len = clumps[c] - (k === 0 || k === 3 ? 3 : 0);
+      ctx.fillStyle = P.hair;
+      px(ctx, 21 + c * 4 + k, 24 + bob, 1, 3 + len);
+      ctx.fillStyle = P.hairD;
+      if (k === 0) px(ctx, 21 + c * 4, 24 + bob, 1, 3 + len);
+    }
+  }
+  ctx.fillStyle = P.hairL; // shine
+  px(ctx, 27, 22 + bob, 6, 1); px(ctx, 40, 21 + bob, 5, 1); px(ctx, 26, 23 + bob, 2, 1);
+  // Lab goggles pushed up on the hair.
+  ctx.fillStyle = P.band; px(ctx, 14, 17 + bob, 44, 2);
+  for (const gx of [28, 44]) {
+    disc(ctx, gx, 17 + bob, 4, 4, P.gogL);
+    ring(ctx, gx, 17 + bob, 4.5, P.gogF);
+    ctx.fillStyle = P.white; px(ctx, gx - 2, 15 + bob, 2, 1);
+  }
+
+  // Big round glasses.
+  const eyes = [[29, 40 + bob], [43, 40 + bob]];
+  for (const [ex, ey] of eyes) disc(ctx, ex, ey, 6, 6, P.lens);
+  ctx.fillStyle = P.frame; px(ctx, 35, 39 + bob, 3, 1);
+  for (const [ex, ey] of eyes) ring(ctx, ex, ey, 6.5, P.frame);
+  // Eyes by mood.
+  for (const [ex, ey] of eyes) {
+    if (m === 'eureka') {
+      const tw = (Math.floor(t * 8) % 2) ? 1 : 0;
+      ctx.fillStyle = P.star;
+      px(ctx, ex - 1, ey - 3 - tw, 2, 7 + tw * 2);
+      px(ctx, ex - 3 - tw, ey - 1, 7 + tw * 2, 2);
+      ctx.fillStyle = P.white; px(ctx, ex - 1, ey - 1, 2, 2);
+    } else if (m === 'oops') {
+      ctx.fillStyle = P.iris;
+      const dir = ex < 36 ? 1 : -1; // > <
+      for (let k = 0; k < 3; k++) { px(ctx, ex - dir * 2 + dir * k, ey - 2 + k); px(ctx, ex - dir * 2 + dir * k, ey + 2 - k); }
+    } else {
+      const blink = m !== 'smug' && (t % 3.1) > 2.95;
+      if (blink) {
+        ctx.fillStyle = P.iris; px(ctx, ex - 2, ey, 5, 1);
+      } else {
+        const top = m === 'smug' ? ey : ey - 3;
+        ctx.fillStyle = P.iris; px(ctx, ex - 2, top, 4, ey + 3 - top);
+        ctx.fillStyle = P.irisL; px(ctx, ex - 2, ey + 2, 4, 1);
+        if (m === 'smug') { ctx.fillStyle = P.frame; px(ctx, ex - 3, top - 1, 6, 1); }
+        else { ctx.fillStyle = P.white; px(ctx, ex - 2, ey - 3, 2, 2); }
+      }
+    }
+  }
+  if (m === 'smug') { ctx.fillStyle = P.hairD; px(ctx, 40, 31 + bob, 6, 1); px(ctx, 45, 30 + bob, 2, 1); } // one brow up
+  if (m === 'eureka' || m === 'oops') {
+    ctx.fillStyle = P.blush;
+    px(ctx, 23, 47 + bob, 3, 1);
+    px(ctx, 46, 47 + bob, 3, 1);
+  }
+
+  // Mouth: talk frames open it; moods shape it.
+  const my = 50 + bob;
+  if (talking && mouth > 0) {
+    const w = m === 'eureka' ? 6 : 3 + mouth;
+    ctx.fillStyle = P.mouth; px(ctx, 36 - (w >> 1), my - 1, w, 1 + mouth);
+    ctx.fillStyle = P.tongue; px(ctx, 36 - (w >> 1) + 1, my - 1 + mouth, Math.max(1, w - 2), 1);
+  } else if (m === 'eureka') {
+    ctx.fillStyle = P.mouth; px(ctx, 33, my - 1, 6, 2); px(ctx, 34, my + 1, 4, 1);
+    ctx.fillStyle = P.tongue; px(ctx, 35, my + 1, 2, 1);
+  } else if (m === 'smug') {
+    ctx.fillStyle = P.mouth; px(ctx, 35, my, 3, 1); px(ctx, 38, my - 1, 1, 1);
+  } else if (m === 'oops') {
+    ctx.fillStyle = P.mouth;
+    for (let k = 0; k < 6; k++) px(ctx, 33 + k, my + (k % 2));
+  } else {
+    ctx.fillStyle = P.mouth; px(ctx, 34, my - 1, 1, 1); px(ctx, 35, my, 3, 1); px(ctx, 38, my - 1, 1, 1);
+  }
+
+  // Extras: sparkles round her head for a Eureka, a sweat drop for an oops.
+  if (m === 'eureka') {
+    const phase = Math.floor(t * 6);
+    for (const [k, [x, y]] of [[10, 22], [62, 26], [8, 48], [64, 50]].entries()) {
+      const on = (phase + k) % 3;
+      if (on) twinkle(ctx, x, y, on, k % 2 ? P.star : P.white);
+    }
+  } else if (m === 'oops') {
+    const dy = Math.floor((t * 6) % 3);
+    ctx.fillStyle = P.sweat; px(ctx, 53, 28 + dy, 2, 3); px(ctx, 52, 30 + dy, 4, 2);
+  }
+}
+
 export function registerStoryPortraits() {
   minerImage(); // start loading now, so the first line never shows the placeholder
   registerPortrait('miner', drawMiner);
   registerPortrait('dispatch', drawDispatch);
   registerPortrait('vex', drawVex);
+  registerPortrait('pixie', drawPixie);
 }

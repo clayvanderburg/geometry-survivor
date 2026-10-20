@@ -53,6 +53,16 @@
       <div id="cutscene-fade" class="cs-fade"></div>
     </div>
 
+    <!-- Radio (js/radio.js): non-pausing talking-head lines in a corner (Dr. Pixie on Breakthroughs,
+         campaign beats). Click-through: it never takes input. -->
+    <div id="radio-box" class="dialogue-box radio-box hidden" aria-live="polite">
+      <div class="dialogue-frame"><canvas id="radio-portrait" class="dialogue-portrait" width="72" height="72"></canvas></div>
+      <div class="dialogue-body">
+        <div id="radio-name" class="dialogue-name"></div>
+        <div id="radio-text" class="dialogue-text"></div>
+      </div>
+    </div>
+
     <!-- HUD Overlay -->
     <div id="hud">
       <div class="hud-top">

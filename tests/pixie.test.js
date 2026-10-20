@@ -1,0 +1,124 @@
+// DR. PIXIE on the radio (js/pixie.js, js/radio.js, her portrait in js/portraits.js): the line pools
+// (size, length, moods, every Breakthrough covered), the per-run no-repeat shuffle, the reactions to a
+// pick, the non-pausing radio queue, and the Game wiring (Breakthrough hooks, off in headless runs).
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+globalThis.window = { addEventListener() {} };
+globalThis.localStorage = { getItem() { return null; }, setItem() {} };
+globalThis.BroadcastChannel = undefined;
+
+const {
+  PIXIE_OFFER_LINES, PIXIE_WEAPON_LINES, PIXIE_PICK_LINES, PIXIE_TRANSFORM_LINES, PIXIE_BOOST_LINES, PIXIE_MAX_CHARS,
+  LineBag, PixieDirector, fillLine
+} = await import('../js/pixie.js');
+const { RadioBox } = await import('../js/radio.js');
+const { drawPixie, PIXIE_MOODS } = await import('../js/portraits.js');
+const { TRANSFORMS } = await import('../js/weapon-levels.js');
+const { WEAPONS } = await import('../js/loadout.js');
+const { CAST } = await import('../js/story.js');
+const { Game } = await import('../js/main.js');
+
+const root = new URL('../', import.meta.url);
+const seeded = (seed = 7) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const weaponNames = WEAPONS.map((w) => w.name);
+const transformNames = Object.values(TRANSFORMS).flatMap((t) => Object.values(t).map((x) => x.name));
+
+test('30+ Eureka lines, all short and PG-sized once filled in, each with a real mood', () => {
+  assert.ok(PIXIE_OFFER_LINES.length >= 30, `${PIXIE_OFFER_LINES.length} offer lines`);
+  const all = [
+    ...PIXIE_OFFER_LINES.flatMap(([t, m]) => weaponNames.map((w) => [fillLine(t, { weapon: w }), m])),
+    ...Object.values(PIXIE_WEAPON_LINES).flat(),
+    ...Object.values(PIXIE_PICK_LINES),
+    ...PIXIE_TRANSFORM_LINES.flatMap(([t, m]) => transformNames.map((n) => [fillLine(t, { name: n }), m])),
+    ...PIXIE_BOOST_LINES
+  ];
+  for (const [text, mood] of all) {
+    assert.ok(text.length <= PIXIE_MAX_CHARS, `too long (${text.length}): ${text}`);
+    assert.ok(PIXIE_MOODS.includes(mood), `${text}: mood ${mood}`);
+    assert.doesNotMatch(text, /\{\w+\}/, `unfilled: ${text}`);
+  }
+  assert.equal(new Set(PIXIE_OFFER_LINES.map(([t]) => t)).size, PIXIE_OFFER_LINES.length, 'no duplicate lines');
+  for (const key of Object.keys(PIXIE_PICK_LINES)) {
+    const [w, id] = key.split(':');
+    assert.ok(Object.values(TRANSFORMS[w] || {}).some((t) => t.id === id), `${key} is a real Breakthrough`);
+  }
+  for (const w of Object.keys(PIXIE_WEAPON_LINES)) assert.ok(TRANSFORMS[w], `${w} is a weapon with Breakthroughs`);
+  assert.ok(CAST.pixie && CAST.pixie.portrait === 'pixie');
+});
+
+test('the shuffle bag: every line once before any repeat, never the same line twice in a row', () => {
+  const lines = ['a', 'b', 'c', 'd', 'e'];
+  for (let seed = 1; seed < 40; seed++) {
+    const bag = new LineBag(lines, seeded(seed));
+    const draws = Array.from({ length: 50 }, () => bag.next());
+    for (let k = 0; k < 50; k += 5) assert.equal(new Set(draws.slice(k, k + 5)).size, 5, 'each pass covers the pool');
+    for (let k = 1; k < 50; k++) assert.notEqual(draws[k], draws[k - 1], `seed ${seed}: repeat at ${k}`);
+  }
+});
+
+test('Pixie cheers the offer (with the Eureka flourish) and reacts to the pick, cutting her own line short', () => {
+  const said = [];
+  let eurekas = 0;
+  const pixie = new PixieDirector({ radio: { say: (l) => said.push(l) }, sound: { playEureka: () => eurekas++ }, rng: seeded(3) });
+  const offer = pixie.offer('turret', 'Sentry Turret');
+  assert.equal(offer.who, 'pixie');
+  said[0].onStart();
+  assert.equal(eurekas, 1);
+  const level = Number(Object.keys(TRANSFORMS.turret).find((l) => TRANSFORMS.turret[l].id === 'twin'));
+  assert.equal(pixie.picked({ weaponId: 'turret', level, kind: 'transform' }).text, PIXIE_PICK_LINES['turret:twin'][0]);
+  assert.equal(said[1].cut, true, 'the reaction hurries the Eureka line along');
+  const boost = pixie.picked({ weaponId: 'turret', level, kind: 'boost' }).text;
+  assert.ok(PIXIE_BOOST_LINES.some(([t]) => t === boost));
+  const generic = pixie.picked({ weaponId: 'gas', level: 6, kind: 'transform' }).text;
+  assert.match(generic, new RegExp(TRANSFORMS.gas[6].name));
+  // A whole run of offers never repeats a line back to back.
+  for (let i = 0, last = null; i < 80; i++) {
+    const t = pixie.offer('blaster', 'Autocannon').text;
+    assert.notEqual(t, last);
+    last = t;
+  }
+});
+
+test('the radio never blocks: one line on air, at most one waiting (newest wins), lines leave by themselves', () => {
+  const shown = [];
+  const box = {
+    typing: false, idleTime: 0, root: null,
+    show(l) { shown.push(l.text); this.typing = true; this.t = 0; },
+    update(dt) { this.t += dt; if (this.t > 0.3) this.typing = false; this.idleTime = this.typing ? 0 : this.t - 0.3; },
+    advance() { this.typing = false; this.t = 0.3; },
+    hide() { shown.push('(hidden)'); }
+  };
+  const radio = new RadioBox({ box });
+  radio.say({ who: 'pixie', text: 'one' });
+  radio.say({ who: 'pixie', text: 'two' });
+  radio.say({ who: 'pixie', text: 'three', cut: true });
+  assert.equal(box.typing, false, 'cut types the line on air out at once');
+  for (let i = 0; i < 60 * 8; i++) radio.update(1 / 60);
+  assert.deepEqual(shown, ['one', 'three', '(hidden)']);
+  assert.equal(radio.onAir, false);
+  radio.say({ who: 'pixie', text: 'four' });
+  radio.clear();
+  assert.equal(radio.onAir, false);
+});
+
+test('her portrait draws every mood and talk frame', () => {
+  let fills = 0;
+  const ctx = { fillStyle: '', fillRect() { fills++; } };
+  for (const mood of PIXIE_MOODS) for (const mouth of [0, 1, 2]) drawPixie(ctx, { t: 0.5, mood, mouth, talking: mouth > 0 });
+  assert.ok(fills > 1000);
+});
+
+test('Game: the Breakthrough pick and choice call Pixie; the radio is off unless the browser boot turns it on', () => {
+  const g = Object.assign(Object.create(Game.prototype), { radioOn: false, radio: { say: () => true } });
+  assert.equal(g.say('pixie', 'hi'), false, 'headless runs stay silent');
+  g.radioOn = true;
+  assert.equal(g.say('pixie', 'hi'), true);
+  const main = readFileSync(new URL('js/main.js', root), 'utf8');
+  assert.match(main, /openNextBreakthrough\(\) \{[\s\S]*?this\.pixie\?\.offer\(id, name\)/);
+  assert.match(main, /applyBreakthrough\(p, upg\.weaponId, upg\.level, upg\.kind\);\s*this\.pixie\?\.picked\(upg\)/);
+  assert.match(main, /\.showSplash\(\)\.enableStoryRadio\(\)/);
+  const html = readFileSync(new URL('index.html', root), 'utf8');
+  for (const id of ['radio-box', 'radio-portrait', 'radio-name', 'radio-text']) assert.match(html, new RegExp(`id="${id}"`));
+});

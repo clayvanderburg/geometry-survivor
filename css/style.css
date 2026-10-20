@@ -4998,12 +4998,14 @@ body.touch-mode .cs-skip-key { display: none; }
   bottom: max(14px, env(safe-area-inset-bottom));
   width: min(920px, calc(100% - 32px)); z-index: 2;
   display: flex; gap: 14px; align-items: stretch;
-  padding: 10px; background: rgba(4, 6, 16, 0.94);
+  padding: 10px; background: rgba(4, 6, 16, 0.94); font-family: Consolas, 'Courier New', monospace;
   border: 3px solid #eef6ff; outline: 3px solid #000; box-shadow: 0 0 0 6px var(--speaker), 0 0 28px color-mix(in srgb, var(--speaker) 45%, transparent);
   image-rendering: pixelated;
-  animation: dialogue-in 0.18s steps(3);
 }
+.dialogue-box.dialogue-pop { animation: dialogue-in 0.18s steps(3); }
+.dialogue-box.dialogue-pop .dialogue-frame { animation: portrait-pop 0.28s cubic-bezier(0.3, 1.8, 0.5, 1); }
 @keyframes dialogue-in { from { transform: translateX(-50%) scaleY(0.2); } to { transform: translateX(-50%); } }
+@keyframes portrait-pop { from { transform: scale(0.6) rotate(-6deg); } to { transform: none; } }
 .dialogue-frame { flex: none; padding: 3px; background: #000; border: 3px solid var(--speaker); line-height: 0; }
 .dialogue-portrait { width: 144px; height: 144px; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 .dialogue-body { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 6px 18px 2px; }
@@ -5016,7 +5018,34 @@ body.touch-mode .cs-skip-key { display: none; }
 .dialogue-box.dialogue-ready .dialogue-next { opacity: 1; animation: dialogue-next 0.6s steps(2) infinite; }
 @keyframes dialogue-next { 50% { transform: translateY(4px); } }
 
+/* Radio: the same box, small, bottom-left, click-through, above menus (the Breakthrough pick). */
+.radio-box {
+  left: max(14px, env(safe-area-inset-left)); transform: none; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px); /* above the shield bar */
+  width: min(470px, calc(100% - 28px)); z-index: 35; pointer-events: none; padding: 6px; gap: 10px;
+  box-shadow: 0 0 0 4px var(--speaker), 0 0 22px color-mix(in srgb, var(--speaker) 45%, transparent);
+}
+.radio-box.dialogue-pop { animation: radio-in 0.3s cubic-bezier(0.25, 1.6, 0.5, 1); }
+.radio-box.radio-out { animation: radio-out 0.25s ease-in forwards; }
+@keyframes radio-in { from { transform: translateX(-115%); } to { transform: none; } }
+@keyframes radio-out { to { transform: translateX(-115%); opacity: 0; } }
+.radio-box .dialogue-portrait { width: 96px; height: 96px; }
+.radio-box .dialogue-name { font-size: 12px; }
+.radio-box .dialogue-text { font-size: 17px; }
+.radio-box .dialogue-body { padding-bottom: 4px; gap: 5px; }
+body.cutscene-on .radio-box { display: none; }
+/* Over the level-up / Breakthrough cards: the free bottom-right corner, sliding in from the right. */
+body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+body:has(#upgrade-modal:not(.hidden)) .radio-box.dialogue-pop { animation-name: radio-in-right; }
+body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: radio-out-right; }
+@keyframes radio-in-right { from { transform: translateX(115%); } to { transform: none; } }
+@keyframes radio-out-right { to { transform: translateX(115%); opacity: 0; } }
+
 @media (max-width: 700px), (max-height: 520px) {
+  .radio-box { width: min(310px, calc(100% - 28px)); padding: 4px; gap: 7px; box-shadow: 0 0 0 3px var(--speaker); }
+  .radio-box .dialogue-frame { padding: 1px; border-width: 2px; }
+  .radio-box .dialogue-portrait { width: 44px; height: 44px; }
+  .radio-box .dialogue-name { font-size: 9px; padding: 1px 6px; }
+  .radio-box .dialogue-text { font-size: 12px; line-height: 1.3; }
   .dialogue-portrait { width: 88px; height: 88px; }
   .dialogue-text { font-size: 16px; }
   .dialogue-name { font-size: 12px; }

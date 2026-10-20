@@ -64,7 +64,9 @@ import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
 import { SplashScreen } from './splash.js';
 import { CutsceneStage } from './cutscene-stage.js';
-import { SCENES, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
+import { RadioBox } from './radio.js';
+import { PixieDirector } from './pixie.js';
+import { SCENES, registerStoryCast, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -343,6 +345,11 @@ export class Game {
     this.cutscene = new CutsceneStage(this);
     this.introOnLaunch = false;
     this.introSeen = readIntroSeen(defaultIntroStorage());
+    // Radio (js/radio.js): non-pausing talking-head lines (Game.say); Dr. Pixie (js/pixie.js) cheers every
+    // Breakthrough on it. Off until the browser boot switches it on (enableStoryRadio).
+    this.radio = new RadioBox({ sound: this.sound });
+    this.radioOn = false;
+    this.pixie = new PixieDirector({ sound: this.sound });
     this.renderVersionTags();
     // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
     this.range = new WeaponRange(this);
@@ -372,6 +379,8 @@ export class Game {
   // `startWeapon`: the weapon picked after LAUNCH (START_WEAPON_CHOICES); none = the default kit.
   resetRun(mode = DEFAULT_MODE, startWeapon = null) {
     this.resetInput();
+    this.radio?.clear();
+    this.pixie?.resetRun();
     this.mode = normalizeMode(mode);
     applyTuningOverlay(modeRules(this.mode).tuning);
     const bonuses = modeBonuses(this.progression.getBonuses(), this.mode);
@@ -4662,6 +4671,7 @@ export class Game {
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
+      this.pixie?.offer(id, name); // Dr. Pixie's EUREKA on the radio (never blocks the pick)
       const modal = document.getElementById('upgrade-modal');
       modal.classList.remove('hidden');
       for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
@@ -4711,6 +4721,7 @@ export class Game {
     }
     if (upg.isBreakthrough) {
       applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      this.pixie?.picked(upg);
       this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
       burst(this, 'pick', p.x, p.y, { hue: hueOf(upg.color, 172), scale: 1.3 });
@@ -5136,6 +5147,7 @@ export class Game {
     if (this.tutorialOpen && !TUTORIAL_STATES.includes(this.state)) this.closeTutorial();
     const gp = this.pollGamepad();
     if (this.deathSeq) {
+      if (this.radio?.onAir) this.radio.clear();
       const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
       this.deathSeq.update(dt, this.deathFx());
       // The tape stops when the headline lands: the last seconds of play plus the blast.
@@ -5156,6 +5168,9 @@ export class Game {
       this.gpBombLatch = !!gp?.bomb;
       return;
     }
+    // The radio plays on over play, level-ups and caches; it's off air everywhere else.
+    if (['PLAYING', 'UPGRADE', 'CHEST', 'VICTORY'].includes(this.state)) this.radio?.update(dt);
+    else if (this.radio?.onAir && this.state !== 'PAUSED') this.radio.clear();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
@@ -6172,6 +6187,20 @@ export class Game {
 
   // The browser boot switches this on: the first LAUNCH on a device plays the opening before the
   // tutorial. Headless tests, tools and the balance harness leave it off.
+  // The browser boot switches the radio on (Dr. Pixie's Breakthrough lines, Game.say); headless tests,
+  // tools and the balance harness stay silent.
+  enableStoryRadio() {
+    registerStoryCast();
+    this.radioOn = true;
+    this.pixie.radio = this.radio;
+    return this;
+  }
+
+  // A non-pausing radio line: say('pixie', 'EUREKA!', { mood: 'eureka' }). False when the radio is off.
+  say(who, text, opts = {}) {
+    return this.radioOn ? this.radio.say({ who, text, ...opts }) : false;
+  }
+
   enableFirstLaunchIntro() {
     this.introOnLaunch = true;
     return this;
@@ -7043,5 +7072,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableFirstLaunchIntro().enableStartPick().showSplash());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableFirstLaunchIntro().enableStartPick().showSplash().enableStoryRadio());
 }
