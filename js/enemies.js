@@ -9,9 +9,10 @@ import {
 import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph, drawEliteRift } from './lieutenants.js';
 import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
-import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
+import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerSpear, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bossRam, drawBossRam } from './boss-ram.js';
+import { BossTelegraphs } from './boss-telegraphs.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -165,6 +166,10 @@ export class EnemyManager {
     this.discarded = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
+    // Telegraphed boss area attacks (js/boss-telegraphs.js): timed and drawn here, hits resolved by the game.
+    this.bossTelegraphs = new BossTelegraphs();
+    // The game's SoundEngine (null in unit tests and Field Guide previews): bosses play their cues on it.
+    this.sound = null;
     // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
     this.terrain = null;
     // Camera rect in world space ({ x, y, w, h }), set by Game each tick; off-screen catch-up uses it.
@@ -179,7 +184,7 @@ export class EnemyManager {
     this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
     // moveX/moveY: the direction to steer toward the ship (dirX/dirY bent round blocking rock).
-    this.aiEnv = { player: null, dirX: 0, dirY: 0, moveX: 0, moveY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, width: 0, height: 0 };
+    this.aiEnv = { player: null, dirX: 0, dirY: 0, moveX: 0, moveY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, sound: null, width: 0, height: 0 };
   }
 
   clear() {
@@ -192,6 +197,7 @@ export class EnemyManager {
     this.doomed = [];
     this.discarded = [];
     this.enemyBullets.clear();
+    this.bossTelegraphs.clear();
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -514,6 +520,7 @@ export class EnemyManager {
     env.particles = particles;
     env.width = width;
     env.height = height;
+    env.sound = this.sound;
     const tick = this.tick++;
     const steer = this.steer;
 
@@ -571,8 +578,8 @@ export class EnemyManager {
         } else if (isBossKind(e.type)) {
           bossDef(e.type).update(e, this, env);
           bossRam(e, bossDef(e.type).ram, env); // the shared telegraphed charge (js/boss-ram.js)
-        } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
-          // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
+        } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerSpear(e, env) || steerCircler(e, env))) {
+          // Brood Queen escorts: riding her ring, flying in her spear, or circling the ship before they dive (bosses.js).
         } else if (e.type === 'swarmer') {
           // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
           let sepX = 0, sepY = 0;
@@ -756,6 +763,7 @@ export class EnemyManager {
         e.dead = true;
       }
     }
+    this.bossTelegraphs.update(dt, env);
   }
 
   // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
@@ -966,7 +974,8 @@ export class EnemyManager {
       }
     }
 
-    // Hostile plasma orbs ride above the hulls so they are never hidden by a crowd.
+    // Boss attack telegraphs, then hostile plasma orbs, ride above the hulls so a crowd never hides them.
+    this.bossTelegraphs.draw(ctx, camX, camY, viewW, viewH);
     this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);
 
     ctx.restore();
