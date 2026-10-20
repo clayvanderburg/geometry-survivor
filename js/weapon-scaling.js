@@ -237,6 +237,15 @@ export const WEAPON_SCALING = {
   // Blink Drive: the dash becomes a teleport of blinkDistance(lv) px along the move direction (the aim
   // when parked), landing short of any rock in the way.
   blinkDistance: (lv) => 220 + 60 * (Math.max(1, lv) - 1),
+  // Phase Dash: a burst of dashSpeedMult x move speed (px/tick) for dashDuration s. Dash Extender cards
+  // stretch the burst (and a blink) by dashDistanceStep per rank; the dash's invulnerability stretches with it.
+  dashDuration: 0.22,
+  dashSpeedMult: 3.1,
+  dashInvuln: 0.32,
+  dashDistanceStep: 0.2,
+  dashDistanceMult: (lv) => 1 + W.dashDistanceStep * Math.max(0, lv || 0),
+  // Distance (px) a burst dash covers: the speed is held for the whole burst.
+  dashDistance: (moveSpeed, lv) => W.dashDuration * W.dashDistanceMult(lv) * 60 * moveSpeed * W.dashSpeedMult,
 
   // --- Proximity Mines (stats: damage, capacity, rate, radius, fuse) ------------------------------
   // Dropped behind the ship on a timer while a slot is free; they arm after TUNING.mineArmTime, burst

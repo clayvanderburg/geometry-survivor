@@ -223,6 +223,17 @@ export const UPGRADE_POOL = [
     }
   },
   {
+    // Dash Extender: a longer Phase Dash (or Blink Drive teleport). Game.triggerDash reads the card level.
+    id: 'dash_range',
+    name: 'Phase Dash Extender',
+    category: 'UTILITY',
+    maxLevel: 5,
+    overcharge: false, // stops at its max: past that a dash would cross half the screen
+    headline: 'dashDistance',
+    summary: 'Phase Dash carries you further (and Blink Drive teleports further), and you stay untouchable for the whole dash.',
+    apply() {} // the dash reads the card's level (upgradeLevels.dash_range): nothing else to change
+  },
+  {
     // Blink Drive: Phase Dash turns into a teleport (Game.triggerDash -> Game.blink). More ranks blink further.
     id: 'blink_drive',
     name: 'Blink Drive',

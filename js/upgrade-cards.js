@@ -36,6 +36,7 @@ const rank = (p, key) => p.stats?.[key] || 0;
 const lv = (p, key) => p.weapons[key] || 0;
 const owned = (p, key, fn) => (lv(p, key) > 0 ? fn(lv(p, key)) : null);
 const blinkRank = (p) => p.upgradeLevels?.blink_drive || 0;
+const dashRank = (p) => Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0);
 const sec1 = (v) => `${v.toFixed(1)}s`;
 // A weapon's rows show only while it is equipped (any weapon, Autocannon included, can be discarded);
 // `fn` gets the weapon's build (level, stat ranks, Breakthroughs).
@@ -255,7 +256,8 @@ export const STAT_ROWS = [
   { id: 'maxHp', label: 'Max shield', get: (p) => p.maxHp, fmt: int, headline: 'count', unit: 'MAX SHIELD' },
   { id: 'hp', label: 'Shield now', get: (p) => p.hp, fmt: int },
   { id: 'dashCooldown', label: 'Dash cooldown', get: (p) => W.dashCooldown(lv(p, 'dashNova'), TUNING.dashCooldownBase ?? 1.5), fmt: secs },
-  { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) : null), fmt: int, headline: 'count', unit: 'PX BLINK', newText: (a) => `DASH BLINKS // ${a} PX` },
+  { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p))), fmt: int, headline: 'count', unit: 'PX DASH' },
+  { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) : null), fmt: int, headline: 'count', unit: 'PX BLINK', newText: (a) => `DASH BLINKS // ${a} PX` },
   { id: 'novaRadius', label: 'Dash nova radius', get: (p) => owned(p, 'dashNova', (l) => novaRadius(p, l)), fmt: int },
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 

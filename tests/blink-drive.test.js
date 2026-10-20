@@ -89,3 +89,35 @@ test('the gas cloud stays where the ship took off; the dash nova goes off where 
   assert.ok(Math.abs(cloud.radius - gasCloudRadius(p) * W.gasDashRadiusMult) < 1e-6);
   assert.ok(near.hp < near.maxHp, 'the nova hit the enemy at the landing point');
 });
+
+test('Phase Dash Extender: 5 ranks, +20% dash distance each (blinks too), invulnerable for the whole dash', () => {
+  const u = UPGRADE_BY_ID.dash_range;
+  assert.equal(u.category, 'UTILITY');
+  assert.equal(u.maxLevel, 5);
+  assert.equal(canOvercharge(u), false);
+  const travel = (ranks) => {
+    const { g, p } = freshGame();
+    if (ranks) applyUpgradeLevels(p, { ...u, levelJump: ranks });
+    p.vx = 1; p.vy = 0;
+    g.triggerDash();
+    const invuln = p.invuln;
+    const x0 = 2000;
+    while (p.dashTimer > 0) g.update(1 / 60);
+    return { dist: p.x - x0, invuln, timer: W.dashDuration * W.dashDistanceMult(ranks) };
+  };
+  const base = travel(0);
+  const far = travel(5);
+  assert.ok(far.dist > base.dist * 1.8, `rank 5 dashes ~2x as far (${base.dist.toFixed(0)} -> ${far.dist.toFixed(0)} px)`);
+  assert.ok(far.invuln >= far.timer, 'untouchable for the whole dash');
+  // The card previews the dash distance; with Blink Drive it stretches the blink instead.
+  const { p } = freshGame();
+  const card = describeUpgrade(p, { ...u, levelJump: 1 });
+  const before = W.dashDistance(p.stats.moveSpeed, 0), after = W.dashDistance(p.stats.moveSpeed, 1);
+  assert.equal(card.headline, `+${Math.round(after - before)} PX DASH`);
+  const q = freshGame();
+  install(q.p);
+  applyUpgradeLevels(q.p, { ...u, levelJump: 2 });
+  q.p.vx = 3;
+  q.g.triggerDash();
+  assert.ok(Math.abs(q.p.x - (2000 + W.blinkDistance(1) * W.dashDistanceMult(2))) < 1e-6, 'a longer blink');
+});

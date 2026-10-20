@@ -1954,10 +1954,12 @@ export class Game {
     const p = this.player;
     if (p.dashCooldown > 0) return;
 
-    p.dashTimer = 0.22;
+    // Phase Dash Extender cards stretch the burst (and a blink), with the invulnerability to match.
+    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0));
+    p.dashTimer = W.dashDuration * reach;
     p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
-    p.invuln = Math.max(p.invuln, 0.32);
+    p.invuln = Math.max(p.invuln, W.dashInvuln + W.dashDuration * (reach - 1));
 
     const moveAngle = (Math.abs(p.vx) + Math.abs(p.vy) > 0.2)
       ? Math.atan2(p.vy, p.vx)
@@ -1974,10 +1976,10 @@ export class Game {
     const blinkRank = Math.min(UPGRADE_BY_ID.blink_drive.maxLevel, p.upgradeLevels?.blink_drive || 0);
     if (blinkRank > 0) {
       // Blink Drive: no burst of speed, the ship is simply at the far end (the nova goes off there).
-      this.blink(p, moveAngle, W.blinkDistance(blinkRank));
+      this.blink(p, moveAngle, W.blinkDistance(blinkRank) * reach);
     } else {
-      p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * 3.1;
-      p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * 3.1;
+      p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * W.dashSpeedMult;
+      p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * W.dashSpeedMult;
     }
 
     if (p.weapons.dashNova > 0) {
