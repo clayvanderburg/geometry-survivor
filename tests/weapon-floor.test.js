@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { MODES } = await import('../js/modes.js');
-const { acquireWeapon, discardWeapon, xpToNextLevel } = await import('../js/upgrades.js');
+const { acquireWeapon, discardWeapon, xpToNextLevel, UPGRADE_POOL } = await import('../js/upgrades.js');
 const { WEAPONS, ownedWeapons } = await import('../js/loadout.js');
 const { weaponFloor, weaponFloorDue, WEAPON_FLOOR_STEP } = await import('../js/weapon-floor.js');
 
@@ -32,6 +32,14 @@ function freshGame(level, weapons = [], gold = 0) {
   g.player.level = level;
   for (const id of weapons) acquireWeapon(g.player, id);
   return g;
+}
+
+// Seeded Math.random (an LCG) so a test always rolls the same cards.
+function withSeed(seed, fn) {
+  const saved = Math.random;
+  let x = (seed * 7919) >>> 0;
+  Math.random = () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
+  try { return fn(); } finally { Math.random = saved; }
 }
 
 const levelUp = (g) => withTuning(noNewWeapon, () => g.triggerLevelUp());
@@ -119,24 +127,35 @@ test('a discard can drop the ship under the floor, which forces a pick at the ne
   assert.ok(isForced(g));
 });
 
-test('supply caches never force a weapon: only the next level-up does', () => {
+test('supply caches never force a weapon: only the next level-up does', () => withSeed(104, () => {
   const g = freshGame(18, ['rockets']);
   g.openRelicChest({ guaranteedSuper: true });
   assert.equal(g.state, 'CHEST');
   assert.equal(ownedWeapons(g.player).length, 2, 'the cache added no weapon');
   g.closeChestModal();
-  assert.equal(g.state, 'PLAYING', 'no pick on closing the cache');
+  // A cache card can take a weapon to LV 6 and open its Breakthrough (seed 104 does): never a weapon pick.
+  while (g.state === 'UPGRADE') {
+    assert.equal(g.handPhase, 'breakthrough', 'no weapon pick on closing the cache');
+    g.selectUpgrade(0);
+  }
+  assert.equal(g.state, 'PLAYING');
+  assert.equal(ownedWeapons(g.player).length, 2);
   levelUp(g);
   assert.ok(isForced(g));
-});
+}));
 
-test('a gold lock waits through a forced pick and comes back in the next hand', () => {
+test('a gold lock waits through a forced pick and comes back in the next hand', () => withSeed(47, () => {
   const g = freshGame(5, [], 1000);
+  // No element cards: taking one sets the weapon's element and rightly drops a locked element card of the
+  // same weapon (the old unseeded test hit that ~0.5% of the time).
+  g.player.banished = Object.fromEntries(UPGRADE_POOL.filter((u) => u.elementCard).map((u) => [u.id, true]));
   levelUp(g);
   assert.equal(g.handPhase, 'hand');
   assert.ok(g.toggleCardLock(0));
   const locked = g.currentChoices[0];
-  g.selectUpgrade(1); // pass the locked card over: it carries to the next hand
+  const passAt = 1;
+  g.selectUpgrade(passAt); // pass the locked card over: it carries to the next hand
+  while (g.state === 'UPGRADE') g.selectUpgrade(0); // a Breakthrough, if that pick reached LV 6
   g.player.level = 6;
   levelUp(g);
   assert.ok(isForced(g));
@@ -145,7 +164,7 @@ test('a gold lock waits through a forced pick and comes back in the next hand', 
   levelUp(g);
   assert.equal(g.handPhase, 'hand');
   assert.ok(g.currentChoices.some((c) => c.id === locked.id), 'the locked card is back');
-});
+}));
 
 test('flag off: the run flies without a floor (Weapon Range; a future mastery mode)', () => {
   const g = freshGame(18);
