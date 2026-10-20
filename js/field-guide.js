@@ -192,8 +192,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
-    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${bossGrindText()}`,
-    tip: 'Only the head counts. When it starts to coil, dash out through the gap where head meets tail before the ring closes, and step off the red lane before it strikes.'
+    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant horned serpent: a crowned head and ${OURO.segments} spined plates that block every shot. It hunts you down, and when it gets within ${OURO.strikeRange} px it rattles, rears up behind a red strike lane with its jaws open, and strikes down it. Every ${secs(OURO.shedEvery)} it sheds its tail as a small serpent. At ${pct(OURO.coilAt)} HP it molts and goes for THE NOOSE: it coils round you in a tightening ring (a red noose marks it, green chevrons mark the gap between head and tail), then constricts, every other plate spitting venom inward, and strikes.${bossGrindText()}`,
+    tip: 'Only the head counts. Step off the red lane when it rattles. When the noose appears, fly out through the green chevrons before it closes.'
   },
   {
     id: 'wing_commander', name: BOSS_DEFS.wing_commander.name, group: 'boss', boss: true, unlockWave: bossWave('wing_commander'),
@@ -202,8 +202,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
-    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${ramText('hive_carrier')}${bossGrindText()}`,
-    tip: 'Take the bays out one at a time while dodging the drones; area damage hits several. Once the core is exposed, circle wide through the gaps in the spiral.'
+    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge armored mothership with ${HIVE.bays} launch bays. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Every ${secs(HIVE.shellEvery)} it flies a BOMBING RUN: its lights flash red, then each standing bay lobs a shell at a red target circle on and around where you are heading; they burst when the circles fill. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs, launches gunner pods every ${secs(HIVE.podEvery)} and walks a carpet of ${HIVE.carpetShells} shells along your path every ${secs(HIVE.carpetEvery)}.${ramText('hive_carrier')}${bossGrindText()}`,
+    tip: 'Change direction when the lights flash red: the shells land where you were heading. Fewer bays means fewer shells, so take them out one at a time. Once the core is exposed, turn off the carpet line and circle wide through the spiral.'
   },
   {
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
@@ -212,8 +212,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
-    what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${ramText('architect')}${bossGrindText()}`,
-    tip: 'Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early, and the blast takes the rest of the ring.'
+    what: () => `${BOSS_DEFS.architect.epithet}. A big drafting triangle that keeps about ${ARCH.range} px away and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. Every ${secs(ARCH.printEvery)} it draws a BLUEPRINT: ${ARCH.printLines} dashed yellow lines crossing where you are going, which print into laser walls ${secs(ARCH.printFuse)} later. At ${pct(ARCH.rageAt)} HP the lattice opens: blueprints come as ${ARCH.ragePrintLines}-line stars every ${secs(ARCH.ragePrintEvery)}, and it drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in. When it dies, every gate it built goes up with it.${ramText('architect')}${bossGrindText()}`,
+    tip: 'Get off the dashed lines before they print, away from where they cross. Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early.'
   },
   {
     id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
@@ -222,8 +222,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'conductor', name: BOSS_DEFS.conductor.name, group: 'boss', boss: true, unlockWave: bossWave('conductor'),
-    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that hangs back and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: linked hulls take less damage and move faster, and while ${COND.shieldLinks} or more links hold, the Conductor is untouchable. Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor. At ${pct(COND.rageAt)} HP it plays the crescendo: every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${ramText('conductor')}${bossGrindText()}`,
-    tip: 'Follow the beams: thin its choir below four links and its shield drops. Take out the Repulsors first, then burst it while the choir regroups.'
+    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that keeps its distance and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: each linked hull is ringed and joined to it by a beam, takes less damage and moves faster. Its SHIELD: ${COND.shieldLinks} pips above it light up, one per link; while all ${COND.shieldLinks} are lit it is untouchable. Kill its linked hulls and the shield breaks (SHIELD DOWN). Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor to relink. Its DOWNBEAT: it plants, its baton ticks three times, then a shock ring with ${COND.ringGaps} gaps rolls out from it. At ${pct(COND.rageAt)} HP it plays the CRESCENDO: double rings at a faster tempo, and every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${ramText('conductor')}${bossGrindText()}`,
+    tip: () => `Watch the pips: kill the ringed hulls until fewer than ${COND.shieldLinks} are lit, then burst it while the choir regroups. On the third tick, line up with a gap in the ring (or dash through it).`
   },
   {
     id: 'eclipse_twins', name: BOSS_DEFS.eclipse_twins.name, group: 'boss', boss: true, unlockWave: bossWave('eclipse_twins'),
@@ -232,8 +232,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'prism', name: BOSS_DEFS.prism.name, group: 'boss', boss: true, unlockWave: bossWave('prism'),
-    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a spinning prism that cycles through every color and fights with the campaign's moves, one phase per third of its HP. SWARM: a ring of shard swarmers that peel off to dive or circle you. LATTICE: closing cages of laser gates. SINGULARITY: a gravity well that exhales rings of ${PRISM.orbRing} orbs while a lighthouse beam sweeps round it.${ramText('prism', ' in the first two phases')} Past wave ${CAMPAIGN_WAVES} the run goes on, and bosses come in pairs.${bossGrindText()}`,
-    tip: 'Phase one: sweep the ring with area damage. Phase two: break each cage early through a beam. Phase three: stay outside the beam\'s reach and circle with it, slipping through the orb rings.'
+    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a huge crystal prism that cycles through every color, with three phases, one per third of its HP. Each opens with a refraction (it shrugs off shots for ${secs(PRISM.shiftTime)}). I REFRACTION: it plants and fans three colored beams at you (dashed lines first, then they fire). II DISPERSION: ${PRISM.spokes} beams spin round it like spokes while it throws ${PRISM.orbFan}-orb fans. III SUPERNOVA: white-hot and faster, it pulls you in like a gravity well, ${PRISM.novaSpokes} spokes spin faster, and every ${secs(PRISM.novaEvery)} it charges a NOVA: a ${PRISM.novaR} px ring fills round it, then blasts and throws a ring of ${PRISM.novaRing} orbs.${ramText('prism', ' in the first two phases')} Beat it to win the campaign; past wave ${CAMPAIGN_WAVES} the run goes on, and bosses come in pairs.${bossGrindText()}`,
+    tip: 'Phase I: step out of the fan before it fires. Phase II: circle the same way the spokes turn. Phase III: when the ring appears round it, get out before it fills, then slip through the orb ring.'
   }
 ];
 
