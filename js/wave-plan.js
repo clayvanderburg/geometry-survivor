@@ -21,7 +21,7 @@ export const UNLOCK_WAVE = {
   gunner: 20, carrier: 20, drone: 20,
   blackhole: 25, hulk: 25,
   shielder: 30, gate: 30,
-  mitosis: 35,
+  mitosis: 35, hatchery: 35, hatchling: 35,
   conduit: 40, repulsor: 40,
   lancer: 45
 };
@@ -111,11 +111,11 @@ export const WAVE_THEMES = [
   { name: 'PHALANX', bias: { shielder: 3 } },
   { name: 'FORTRESS', bias: { gate: 2, shielder: 2, hulk: 1.3 } },
   { name: 'SIEGE LINE', bias: { shielder: 2, gunner: 1.6, hulk: 1.3 } },
-  { name: 'MITOSIS', bias: { mitosis: 2, splitter: 1.4 } },
+  { name: 'MITOSIS', bias: { mitosis: 2, hatchery: 1.5, splitter: 1.4 } },
   { name: 'OUTBREAK', bias: { mitosis: 3, splitter: 1.5 } },
   { name: 'CHAOS THEORY', even: true },
-  { name: 'CONTAGION', bias: { mitosis: 2, mayfly: 2 } },
-  { name: 'PLAGUE SHIP', bias: { mitosis: 2, carrier: 1.6 } },
+  { name: 'BROOD WAR', bias: { hatchery: 3, mayfly: 1.5 } },
+  { name: 'PLAGUE SHIP', bias: { mitosis: 2, carrier: 1.6, hatchery: 1.4 } },
   { name: 'THE NETWORK', bias: { conduit: 2, repulsor: 1.6 } },
   { name: 'SIGNAL BOOST', bias: { conduit: 2.5, repulsor: 2 } },
   { name: 'GAUNTLET', bias: { serpent: 2, kestrel: 2, gate: 2 } },

@@ -12,6 +12,7 @@ import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, CON
 import { LANCE } from './lancers.js';
 import { RAM } from './boss-ram.js';
 import { BORER } from './borers.js';
+import { HATCHERY, HATCHLING } from './hatcheries.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
@@ -110,6 +111,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Keep moving in curves and let them overshoot, or sweep them as they bunch up behind you.'
   },
   {
+    id: 'hatchling', name: 'HATCHLING', group: 'swarm', unlockWave: unlockWaveOf('hatchling'),
+    what: () => `A small scarlet dart bred by a hatchery. It circles you about ${HATCHLING.orbit} px out, then brakes and flares a dashed tick at you for ${secs(HATCHLING.cue)} and dives straight through where you are. It never steers mid-dive and pops if it connects (under half a normal hit). It withers when its hatchery dies.`,
+    tip: 'When one flares, sidestep: the dive cannot turn. Better still, kill the hatchery and the whole brood dies.'
+  },
+  {
     id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: unlockWaveOf('blackhole'),
     what: () => `A crimson singularity. Inside its ${TUNING.blackholePullRadius ?? 200} px dashed rim it drags enemies, sparks, Geoms and your shots into orbit and tugs your ship. It collapses in a 175 px burst that damages nearby hostiles when it dies.`,
     tip: () => `The tug is ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust at the rim, rising to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} from ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the way in. It never matches your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
@@ -178,6 +184,11 @@ export const HOSTILE_ENTRIES = [
     id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),
     what: () => `A bronze drill-nose that tunnels straight through asteroids toward you. Close in, it aims a dashed lane for ${secs(BORER.aim)} (red for the last ${secs(BORER.lockAt)}), then bore-charges down it, shattering any rock in the way. While its drill is in rock it spits the gravel back at you: ${BORER.gravelShots} slow shards every ${secs(BORER.gravelEvery)}. Debuts with the Wing Commander.`,
     tip: 'Rock is no cover from it: keep it in open space, sidestep the red lane and punish it while it vents after a charge.'
+  },
+  {
+    id: 'hatchery', name: 'HATCHERY', group: 'archetype', unlockWave: unlockWaveOf('hatchery'),
+    what: () => `A slow scarlet hive ringed with egg pods. It creeps to about ${HATCHERY.hold} px from you and sits there, breeding: every ${secs(HATCHERY.hatchEvery)} a ring closes in on it for ${secs(HATCHERY.incubate)} while ${HATCHERY.hatch} pods swell, then they burst into hatchlings. Up to ${HATCHERY.maxBrood} of its brood at once and ${HATCHERY.broodTotal} in its life (the pods show what is left). Kill it and its whole brood withers with it. Off-screen, a HIVE arrow points to it once it has hatched. Debuts with the Progenitor.`,
+    tip: 'It is the priority target: dive through the brood and burn the hive down, and they all pop at once. Every second you leave it is more hatchlings.'
   },
   {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,

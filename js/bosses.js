@@ -792,7 +792,7 @@ function spawnPiece(m, root, gen, x, y, vx, vy, hp) {
 
 const progenitor = {
   ram: { range: 300, cooldown: 7, windup: 0.9, speed: 8 }, // every piece, each on its own clock
-  name: 'PROGENITOR', epithet: 'IT IS ALL OF THEM', tier: 'minor', hue: 95, debut: ['mitosis'],
+  name: 'PROGENITOR', epithet: 'IT IS ALL OF THEM', tier: 'minor', hue: 95, debut: ['mitosis', 'hatchery'],
   stats: () => ({ speed: PROG.gens[0].speed, radius: PROG.gens[0].radius, sides: 9, vRot: 0.01 }),
   onArrive(e) {
     e.root = e;

@@ -193,7 +193,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer', SPAWN_BORER: 'borer'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer', SPAWN_BORER: 'borer', SPAWN_HATCHERY: 'hatchery'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -2868,9 +2868,9 @@ export class Game {
         const c = packMemberPoint(this, pt, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90);
         em.queueSpawn('mitosis', c.x, c.y, this.getWaveScale('mitosis'), this.placedSpawn(c));
       }
-    } else if (pack === 'carrier') {
-      // The roster's drones are launched by the carriers over time, not spawned with them.
-      spread('carrier', count('carrier'));
+    } else if (pack === 'carrier' || pack === 'hatchery') {
+      // The roster's drones / hatchlings are launched or bred over time, not spawned with their mothership.
+      spread(pack, count(pack));
     } else if (pack === 'kestrel') {
       // One V on a strafing run that starts lined up on the ship.
       const p2 = this.spawnPoint(80);
@@ -6417,6 +6417,7 @@ export class Game {
     for (let i = 0; i < enemies.length; i++) {
       if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
       else if (enemies[i].isLieutenant) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#dfe6ff', 'LT');
+      else if (enemies[i].type === 'hatchery' && enemies[i].born > 0) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ff6a5a', 'HIVE');
     }
     const rift = this.rifts?.active;
     if (rift && rift.phase !== 'seal') this.drawEdgeArrow(ctx, rift.x, rift.y, '#e07bff', 'RIFT');
