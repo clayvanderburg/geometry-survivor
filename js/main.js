@@ -85,6 +85,7 @@ import {
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
+import { playPreset, semis } from './sfx-layers.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
@@ -4671,6 +4672,7 @@ export class Game {
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
       burst(this, 'unlock', p.x, p.y, { hue: hueOf(RARITY.weapon.color), scale: 0.8 });
+      playPreset(this.sound, 'shimmer');
       this.closeUpgradeModal();
       return;
     }
@@ -4680,6 +4682,7 @@ export class Game {
     const color = RARITY[rarityFor(upg, jump)].color;
     this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
     burst(this, 'pick', p.x, p.y, { hue: hueOf(color, 205), scale: 0.8 + 0.12 * Math.min(5, jump) });
+    playPreset(this.sound, 'pickSnap', { pitch: semis(2 * (Math.min(5, jump) - 1)) }); // rarer = higher
     this.closeUpgradeModal();
   }
 
