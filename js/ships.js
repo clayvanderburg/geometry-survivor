@@ -6,7 +6,7 @@
 // Ship-only keys:
 //   shieldRegenMult   passive shield regen (main.js)            weaponSlots   slots instead of TUNING's 6
 //   handSize          fixed level-up hand size (LANCER)         handSizeMin   hands never smaller (GAMBLER)
-//   noShieldRegen     no passive regen in any mode (REVENANT)
+//   hardcoreShield    HARDCORE's shield rules in every mode: no regen, shield cards or repairs (REVENANT)
 // `look`: the silhouette (ship-renderer.js drawCrabShip): carapace width/length, wing span/sweep, claw sizes
 // [port, starboard] and decorations. VEXOLITH has none: the crab exactly as before. Visual only: every
 // ship keeps the crab's collision radius and shield hull.
@@ -82,7 +82,7 @@ export const SHIPS = Object.freeze([
   {
     id: 'revenant', name: 'REVENANT', tier: 'late', color: '#ff5a5a', kit: ['blaster'],
     blurb: 'A skeletal outline with cracked, glowing seams.',
-    bonuses: { damageMult: 1.4, noShieldRegen: true },
+    bonuses: { damageMult: 1.4, hardcoreShield: true },
     look: { carapace: { w: 0.92, l: 1.0 }, wings: { span: 1.0, sweep: 1.15 }, claws: [1.05, 1.05], extras: ['seams'] },
     quirk: 'No shield regen, repairs or shield cards in any mode. Each boss you kill gives +8% damage for the run.'
   },
@@ -141,7 +141,7 @@ const CHIP = {
   statusDurationMult: ['STATUS TIME', null], luckBonus: ['LUCK', (v) => `+${Math.round(v * 100)}%`],
   startGold: ['START GOLD', (v) => `+${v}`], rerollCostMult: ['REROLL COST', null], magnetMult: ['PICKUP', null],
   xpMult: ['XP', null], deployableBonus: ['DEPLOYABLES', (v) => `+${v}`], handSize: ['HAND', (v) => `${v} cards`],
-  handSizeMin: ['HAND', (v) => `${v}+ cards`], noShieldRegen: ['REGEN', () => 'NONE']
+  handSizeMin: ['HAND', (v) => `${v}+ cards`], hardcoreShield: ['SHIELD', () => 'NO REPAIRS']
 };
 const LOWER_IS_BETTER = new Set(['dashCooldownMult', 'rerollCostMult']);
 
