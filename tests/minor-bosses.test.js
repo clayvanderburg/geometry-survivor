@@ -18,6 +18,11 @@ const silent = new Proxy({}, { get: () => () => {} });
 const resetTuning = () => Object.assign(TUNING, DEFAULT_TUNING);
 const MINORS = ['brood_queen', 'wing_commander', 'event_horizon', 'progenitor', 'eclipse_twins'];
 
+function seeded(seed = 7) {
+  let s = seed;
+  return () => ((s = (s * 16807) % 2147483647) / 2147483647);
+}
+
 const step = (m, player, ticks = 1) => {
   for (let i = 0; i < ticks; i++) m.update(1 / 60, player, [], silent, silent, 4200, 4200);
 };
@@ -94,7 +99,8 @@ test('the minor bosses are big next to late-wave hulls, and their hazards are ne
   assert.ok(contact * 0.6 < 100, 'well under a fresh ship before the wave ramp');
 });
 
-test('Brood Queen: the swarm spear lines her brood up on a locked lane, then hurls it; eggs from half HP', () => {
+test('Brood Queen: the swarm spear lines her brood up on a locked lane, then hurls it; eggs from half HP', (t) => {
+  t.mock.method(Math, 'random', seeded(11)); // deterministic AI timers and spawns
   resetTuning();
   const m = spawnBoss('brood_queen', 5);
   const player = { x: 2350, y: 2000, radius: 15 };
@@ -107,8 +113,10 @@ test('Brood Queen: the swarm spear lines her brood up on a locked lane, then hur
   assert.ok(until(m, player, () => q.state !== 'spear'));
   const flying = m.enemies.filter(o => o.spearFlyT > 0);
   assert.equal(flying.length, slotted.length, 'the whole line flies');
-  const a = Math.atan2(flying[0].vy, flying[0].vx);
-  assert.ok(Math.abs(a - q.spearAngle) < 0.01, 'down the locked lane');
+  for (const o of flying) {
+    const a = Math.atan2(o.vy, o.vx);
+    assert.ok(Math.abs(Math.sin(a - q.spearAngle)) < 0.01 && Math.cos(a - q.spearAngle) > 0, 'down the locked lane');
+  }
   step(m, player, 90);
   assert.equal(m.enemies.filter(o => o.spearFlyT > 0).length, 0, 'then they rejoin the flock');
   assert.ok(m.enemies.every(o => o.type !== 'swarmer' || !(o.burstSpeed > 0) || o.anchor), 'no swarmer keeps the spear speed');
@@ -125,7 +133,8 @@ test('Brood Queen: the swarm spear lines her brood up on a locked lane, then hur
   assert.ok(swarmers() >= before + 1, 'eggs hatch');
 });
 
-test('Wing Commander: an airstrike lane through the ship; crossfire is two crossing lanes', () => {
+test('Wing Commander: an airstrike lane through the ship; crossfire is two crossing lanes', (t) => {
+  t.mock.method(Math, 'random', seeded(11)); // deterministic AI timers and spawns
   resetTuning();
   const m = spawnBoss('wing_commander', 15, { x: 1800, y: 2000 });
   const player = { x: 2400, y: 2000, radius: 15 };
@@ -149,7 +158,8 @@ test('Wing Commander: an airstrike lane through the ship; crossfire is two cross
   assert.ok(d > 0.9, 'the two lanes cross near right angles');
 });
 
-test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a double ripple', () => {
+test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a double ripple', (t) => {
+  t.mock.method(Math, 'random', seeded(11)); // deterministic AI timers and spawns
   resetTuning();
   const m = spawnBoss('event_horizon', 25);
   const player = { x: 2500, y: 2000, radius: 15 };
@@ -177,7 +187,8 @@ test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a
   assert.equal(waves().length, 2, 'a double ripple');
 });
 
-test('Progenitor: a cell stops and marks pseudopod spokes, one on the ship; every piece lashes', () => {
+test('Progenitor: a cell stops and marks pseudopod spokes, one on the ship; every piece lashes', (t) => {
+  t.mock.method(Math, 'random', seeded(11)); // deterministic AI timers and spawns
   resetTuning();
   const m = spawnBoss('progenitor', 35);
   const player = { x: 2400, y: 2000, radius: 15 };
@@ -189,12 +200,15 @@ test('Progenitor: a cell stops and marks pseudopod spokes, one on the ship; ever
   assert.equal(lanes.length, PROG.gens[0].spokes);
   const aim = Math.atan2(player.y - p.y, player.x - p.x);
   assert.ok(lanes.some(l => Math.abs(Math.sin(Math.atan2(l.y2 - l.y, l.x2 - l.x) - aim)) < 0.1), 'one spoke on the ship');
+  step(m, player, 8); // it skids to a stop
   const x = p.x;
+  const y = p.y;
   step(m, player, 20);
-  assert.ok(Math.abs(p.x - x) < 6, 'rooted while it lashes');
+  assert.ok(Math.hypot(p.x - x, p.y - y) < 2, 'rooted while it lashes');
 });
 
-test('Eclipse Twins: the eclipse jumps onto the ship, marks the nova disc and fires its orbs; half HP tightens the ring', () => {
+test('Eclipse Twins: the eclipse jumps onto the ship, marks the nova disc and fires its orbs; half HP tightens the ring', (t) => {
+  t.mock.method(Math, 'random', seeded(11)); // deterministic AI timers and spawns
   resetTuning();
   const m = spawnBoss('eclipse_twins', 45);
   const player = { x: 2300, y: 2000, radius: 15 };

@@ -877,8 +877,8 @@ const progenitor = {
     if (e.lashHold > 0) {
       // Rooted while its pseudopods are out: it quivers in place until they whip.
       e.lashHold -= dt;
-      e.vx *= 0.8;
-      e.vy *= 0.8;
+      e.vx *= 0.6;
+      e.vy *= 0.6;
       return;
     }
     e.lashT = (e.lashT ?? PROG.lashFirst) - dt;
