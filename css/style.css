@@ -4896,3 +4896,15 @@ body.touch-mode .start-pick-title { font-size: 18px; }
 }
 .scope-global .upg-scope { background: #dfe8f5; color: #0b1020; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8px; padding: 0 6px; letter-spacing: 1px; bottom: -8px; left: 8px; }
+
+/* REDUCE EFFECTS (pause → settings, js/juice.js): settle every decorative CSS animation and transition
+   at its end state. Defaults on when the OS asks for reduced motion. */
+body.reduce-effects *,
+body.reduce-effects *::before,
+body.reduce-effects *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+}
