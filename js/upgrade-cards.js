@@ -250,6 +250,16 @@ export const STAT_ROWS = [
   { id: 'fieldLash', label: 'Arc Lash arcs / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t4 ? W.lashArcs : null)), fmt: int, newText: (a) => `DISCHARGES LASH // ${a} ARCS` },
   { id: 'fieldDashRefund', label: 'Dash recharge / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t8 ? W.dashRefund : null)), fmt: secs, newText: (a, row) => `DISCHARGES REPULSE // -${row.fmt(a)} DASH` },
   { id: 'fieldClap', label: 'Thunderclap radius', get: (p) => wb(p, 'shockfield', (b) => (b.t12 ? fieldRadius(p, b) * W.overchargeRadiusMult : null)), fmt: int, newText: (a, row) => `THUNDERCLAP // ${row.fmt(a)} RADIUS` },
+  // Claw Harpoon (aimed; mining and the yank are utility)
+  { id: 'harpoonDamage', label: 'Claw hit damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b)), fmt: dec1, headline: 'pct', unit: 'CLAW DAMAGE' },
+  { id: 'harpoonRate', label: 'Throws / s', get: (p) => wb(p, 'harpoon', (b) => 1 / W.harpoonCooldown(b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'THROW RATE' },
+  { id: 'harpoonRange', label: 'Tether reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'count', unit: 'TETHER REACH', newText: (a) => `CLAW HARPOON // ${a} PX REACH` },
+  { id: 'harpoonHook', label: 'Yanks hulls up to', get: (p) => wb(p, 'harpoon', W.harpoonHookSize), fmt: (v) => `${Math.round(v)} px`, headline: (b, a) => `+${Math.round(a - b)} PX HOOK SIZE` },
+  { id: 'harpoonCrush', label: 'Crush damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b) * W.harpoonCrushShare), fmt: dec1 },
+  { id: 'harpoonDrill', label: 'Rock drilled / throw', get: (p) => wb(p, 'harpoon', (b) => W.harpoonDrill(b) * (p.stats.miningSpeed || 75) / (TUNING.miningSpeed || 75)), fmt: int, headline: 'pct', unit: 'ROCK DRILLED' },
+  { id: 'harpoonSlam', label: 'Seismic Slam damage', get: (p) => wb(p, 'harpoon', (b) => (b.t4 ? weaponDamage(p, 'harpoon', b) * W.slamShare : null)), fmt: dec1, newText: (a, row) => `SEISMIC SLAM // ${row.fmt(a)} DMG` },
+  { id: 'harpoonSpin', label: 'Drill Spin damage / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t8 ? weaponDamage(p, 'harpoon', b) * W.spinShare : null)), fmt: dec1, newText: (a, row) => `DRILL SPIN // ${row.fmt(a)} DMG` },
+  { id: 'harpoonChain', label: 'Chain leaps / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t12 ? W.chainLeaps : null)), fmt: int, newText: (a) => `CHAIN HARPOON // ${a} LEAPS` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -475,7 +485,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', harpoon: 'harpoon' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

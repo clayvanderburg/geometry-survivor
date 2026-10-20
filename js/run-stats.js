@@ -32,7 +32,11 @@ export const SUB_SOURCES = Object.freeze({
   shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
   meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
-  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  harpooncrush: 'harpoon',  // Claw Harpoon: a reeled-in catch crushed in the other claw
+  harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
+  harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
+  harpoonchain: 'harpoon'   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
 });
 
 // Damage that is not a loadout weapon's.

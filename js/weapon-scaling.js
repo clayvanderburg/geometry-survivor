@@ -43,8 +43,8 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
 // Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, harpoon: 2.9 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -61,7 +61,8 @@ export const WEAPON_CLASS = Object.freeze({
   drones: 'auto', turret: 'auto',
   rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
   lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
-  shockfield: 'defensive', orbitals: 'defensive'
+  shockfield: 'defensive', orbitals: 'defensive',
+  harpoon: 'aimed' // Claw Harpoon: its mining and yank are utility, not DPS
 });
 export const CLASS_TARGET = Object.freeze({
   aimed: Object.freeze({ perTarget: 1, enforced: true }),
@@ -538,6 +539,50 @@ export const WEAPON_SCALING = {
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
+  // --- Claw Harpoon (stats: damage, rate, range, grapple, drill) -----------------------------------
+  // Fires one drill claw on a tether along the turret aim while firing (js/claw-harpoon.js). The claw
+  // flies out to harpoonRange, piercing every enemy on its line once (each one behind takes
+  // TUNING.pierceFalloff of the last, like Autocannon bolts) and drilling through rock: it breaks rock
+  // worth harpoonDrill rock HP per throw (x the ship's drill speed) and bites to a stop in the first rock
+  // it can't break (bedrock always stops it). The first small enemy it hits (hull radius up to
+  // harpoonHookSize, never a boss or lieutenant) is hooked and reeled back into your other claw, which
+  // crushes it for harpoonCrushShare of a hit. One throw per harpoonCooldown: out, reel back, ready.
+  // Potential counts the throw hit plus the crush on one target.
+  harpoonCooldown: (b) => 0.45 / (1 + rateStep('harpoon') * (b.r.rate || 0)),
+  harpoonRange: (b) => 330 + 40 * (b?.r?.range || 0),
+  harpoonHookSize: (b) => 17 + 5 * (b?.r?.grapple || 0),
+  harpoonDrill: (b) => 130 * (1 + 0.6 * (b?.r?.drill || 0)),
+  harpoonTipRadius: 9,
+  harpoonPierceKeep: 0.7, // damage kept past each enemy that survives the hit; a kill costs the claw no momentum
+  harpoonCrushShare: 0.5,
+  // Share of a throw's cycle spent flying out and reeling back (the rest is the claw back in its socket).
+  // A faster winch (Rate cards) flies and reels faster; the reach (Range cards) never changes the cycle.
+  harpoonOutShare: 0.36,
+  harpoonBackShare: 0.36,
+  // Transforms: Seismic Slam (every reel-in snaps your claws shut in a slamRadius blast at the nose worth
+  // slamShare of a hit, valued at slamHitShare), Drill Spin (the claw spins in place at the end of each
+  // throw for spinShare of the cycle, grinding everything round its tip spinTicks times for spinShare of
+  // a hit in total, valued at spinHitShare; it drills rock there too), Chain Harpoon (from the end of
+  // each throw the claw leaps on to up to chainLeaps more enemies within chainRange of the tip, piercing
+  // each for chainShare of a hit, valued at chainHitShare, hooking one if it has no catch yet).
+  slamShare: 0.45,
+  slamRadius: 85,
+  slamHitShare: 1.2, // the claws snap shut on whatever is pressing on your nose: a small pack
+  spinShare: 0.6,
+  spinTicks: 6,
+  spinTime: 0.2, // share of the cycle the claw spins (taken from its idle time in the socket)
+  spinRadius: 58,
+  spinHitShare: 1.1,
+  chainLeaps: 3,
+  chainShare: 0.4,
+  chainRange: 220,
+  chainTime: 0.04, // share of the cycle each leap takes
+  chainHitShare: 0.75, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
+  harpoonUnits: (b) => 1 + W.harpoonCrushShare + (b.t4 ? W.slamShare * W.slamHitShare : 0)
+    + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0),
+  // Damage of one throw hit on the first enemy on its line.
+  harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -754,7 +799,8 @@ export const POTENTIAL_DPS = {
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap) / W.fieldCooldown(b);
-  }
+  },
+  harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -779,7 +825,8 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area']
+  shockfield: ['electric', 'area'],
+  harpoon: ['projectile', 'kinetic']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -815,7 +862,8 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield',
+  harpoon: 'harpoon'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -859,6 +907,7 @@ export function weaponDamage(p, weapon, b) {
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'harpoon': base = d * W.harpoonDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));

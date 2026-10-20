@@ -22,6 +22,7 @@ import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
+import { ClawHarpoon } from './claw-harpoon.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
@@ -438,6 +439,7 @@ export class Game {
         cryospray: 0,
         acidspray: 0,
         shockfield: 0,
+        harpoon: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -467,6 +469,7 @@ export class Game {
     (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
+    (this.clawHarpoon ||= new ClawHarpoon()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -5287,6 +5290,7 @@ export class Game {
     this.flamethrower?.update(dt, this, shouldFire);
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
+    this.clawHarpoon?.update(dt, this, shouldFire); // js/claw-harpoon.js
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -6685,6 +6689,7 @@ export class Game {
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
     this.acidSprayer?.draw(ctx, this);
+    if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 

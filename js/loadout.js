@@ -90,6 +90,11 @@ export const WEAPONS = [
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
     color: '#9ff4ff',
     summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
+  },
+  {
+    id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
+    color: '#ffcc00',
+    summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
   }
 ];
 
