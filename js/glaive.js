@@ -23,6 +23,7 @@ const KNOCK = 1.4;
 const SPIN = 22;                  // rad/s of the drawn spin
 const FADE = 0.18;                // s a spent disc takes to vanish
 const SOUND_HITS_PER_TICK = 2;
+const POP = 0.13;                // s of the squash-and-flash pop after every bounce
 const DRAW_SCALE = 1.35;         // drawn a little larger than the hit circle so it reads in a crowd
 
 // Anything alive, hittable and worth chasing (no Vortex portals, no invulnerable hulls).
@@ -30,7 +31,7 @@ const targetable = (e) => !e.dead && !e.invulnerable && e.type !== 'blackhole';
 
 function makeDisc() {
   return {
-    active: false, x: 0, y: 0, vx: 0, vy: 0, speed: 0, launch: 0, life: 0, fade: 0,
+    active: false, x: 0, y: 0, vx: 0, vy: 0, speed: 0, launch: 0, life: 0, fade: 0, pop: 0,
     left: 0, hits: 0, twin: false, target: null, last: null, recall: false, recallLeft: 0,
     recalled: [], spin: 0, tx: new Float32Array(TRAIL), ty: new Float32Array(TRAIL), trail: 0
   };
@@ -139,6 +140,7 @@ export class GlaiveDiscs {
       d.recallLeft = 0;
       d.recalled.length = 0;
       d.spin = Math.random() * Math.PI * 2;
+      d.pop = 0;
       d.trail = 0;
     }
     this.throws++;
@@ -147,6 +149,7 @@ export class GlaiveDiscs {
   }
 
   step(d, dt, game, b) {
+    if (d.pop > 0) d.pop = Math.max(0, d.pop - dt);
     d.spin += SPIN * dt * (d.recall ? 1.4 : 1);
     // Trail: newest sample first.
     for (let k = TRAIL - 1; k > 0; k--) {
@@ -232,8 +235,10 @@ export class GlaiveDiscs {
         d.vy -= 2 * dot * ny;
       }
       this.bounceSpeed(d, b);
-      game.particles.spawnDirectionalSparks(d.x - nx * W.glaiveRadius, d.y - ny * W.glaiveRadius, Math.atan2(ny, nx), 0.9, 4, GLAIVE_HUE + 20, 6);
-      if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(0, true);
+      d.pop = POP;
+      game.particles.spawnDirectionalSparks(d.x - nx * W.glaiveRadius, d.y - ny * W.glaiveRadius, Math.atan2(ny, nx), 0.9, 6, GLAIVE_HUE + 20, 7);
+      game.particles.spawnFlash?.(d.x - nx * W.glaiveRadius, d.y - ny * W.glaiveRadius, 10, GLAIVE_HUE + 30, 0.07);
+      if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(0, 'rock');
       return;
     }
   }
@@ -292,14 +297,17 @@ export class GlaiveDiscs {
     const plated = e.deflect || (e.shieldArc && shieldBlocks(e, e.x + nx * (e.shieldRadius || e.radius), e.y + ny * (e.shieldRadius || e.radius), d.vx, d.vy));
     if (plated) {
       e.hitFlash = Math.max(e.hitFlash || 0, 0.35);
-      game.particles.spawnDirectionalSparks(d.x, d.y, Math.atan2(ny, nx), 0.8, 4, 50, 6);
+      game.particles.spawnDirectionalSparks(d.x, d.y, Math.atan2(ny, nx), 0.8, 6, 50, 7);
+      if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(0, 'plate');
     } else {
       const dmg = this.hitDamage(d, game, b);
       d.hits++;
       game.hitEnemy(e, dmg, 'glaive', (d.vx / d.speed) * KNOCK, (d.vy / d.speed) * KNOCK, 1, 'glaive');
-      game.particles.spawnDirectionalSparks(d.x, d.y, Math.atan2(d.vy, d.vx), 0.7, 3, GLAIVE_HUE + 15, 7);
-      if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(d.hits, false);
+      game.particles.spawnDirectionalSparks(d.x, d.y, Math.atan2(d.vy, d.vx), 0.7, 5, GLAIVE_HUE + 15, 8);
+      game.particles.spawnShockwave(e.x, e.y, e.radius + 14, GLAIVE_HUE + Math.min(30, d.hits * 4), 2, 0.12);
+      if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(d.hits, 'enemy');
     }
+    d.pop = POP;
     // Fission Discs: the first hit splits the disc; both twins carry the ricochets it had left.
     let twin = null;
     if (b.t4 && !d.twin && !plated) {
@@ -311,7 +319,10 @@ export class GlaiveDiscs {
         twin.tx.fill(d.x);
         twin.ty.fill(d.y);
       }
-      game.particles.spawnFlash?.(d.x, d.y, 16, GLAIVE_HUE + 30, 0.1);
+      if (twin) twin.pop = POP;
+      game.particles.spawnFlash?.(d.x, d.y, 22, GLAIVE_HUE + 30, 0.12);
+      game.particles.spawnShockwave(d.x, d.y, 30, GLAIVE_HUE + 35, 2.5, 0.16);
+      game.sound.playGlaiveSplit?.();
     }
     this.ricochet(d, e, nx, ny, game, b, null);
     if (twin) this.ricochet(twin, e, nx, ny, game, b, d.target);
@@ -382,7 +393,9 @@ export class GlaiveDiscs {
       const home = (p.radius || 15) + W.glaiveRadius;
       if ((d.x - p.x) ** 2 + (d.y - p.y) ** 2 <= home * home || d.life > 2.5) {
         this.free(d);
-        game.particles.spawnFlash?.(p.x, p.y, 12, GLAIVE_HUE, 0.08);
+        game.particles.spawnFlash?.(p.x, p.y, 14, GLAIVE_HUE, 0.08);
+        game.particles.spawnShockwave(p.x, p.y, (p.radius || 15) + 16, GLAIVE_HUE + 20, 2, 0.14, true);
+        game.sound.playGlaiveCatch?.();
         return;
       }
       if (d.recallLeft <= 0) continue;
@@ -395,8 +408,9 @@ export class GlaiveDiscs {
         d.recallLeft--;
         const dmg = weaponDamage(p, 'glaive', b) * W.recallShare;
         game.hitEnemy(e, dmg, 'glaive', (d.vx / d.speed) * KNOCK, (d.vy / d.speed) * KNOCK, 0.8, 'glaive_recall');
-        game.particles.spawnDirectionalSparks(e.x, e.y, Math.atan2(d.vy, d.vx), 0.6, 3, GLAIVE_HUE + 30, 6);
-        if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(2, false);
+        d.pop = POP;
+        game.particles.spawnDirectionalSparks(e.x, e.y, Math.atan2(d.vy, d.vx), 0.6, 5, GLAIVE_HUE + 30, 7);
+        if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(3, 'enemy');
         if (d.recallLeft <= 0) break;
       }
     }
@@ -409,7 +423,7 @@ export class GlaiveDiscs {
     if (this.count === 0) return;
     const x0 = game.camX - 40, y0 = game.camY - 40;
     const x1 = game.camX + game.width + 40, y1 = game.camY + game.height + 40;
-    const r = W.glaiveRadius * DRAW_SCALE;
+    const r0 = W.glaiveRadius * DRAW_SCALE;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
@@ -426,11 +440,16 @@ export class GlaiveDiscs {
     for (const d of this.discs) {
       if (!d.active || d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
       const alpha = d.fade > 0 ? Math.max(0, d.fade / FADE) : 1;
+      // Juice: pops 35% bigger and white-hot on every bounce (ease-out), and scales in over its first 0.08 s.
+      const pop = d.pop / POP;
+      const kick = pop * pop;
+      const grow = d.recall || d.life >= 0.08 ? 1 : 0.55 + 0.45 * (d.life / 0.08);
+      const r = r0 * grow * (1 + 0.35 * kick);
       const heat = Math.min(1, d.hits / 8);
       const hue = d.recall ? GLAIVE_HUE + 22 : GLAIVE_HUE + heat * 24;
-      const light = 54 + heat * 22;
+      const light = Math.min(92, 54 + heat * 22 + kick * 30);
       // Glow.
-      ctx.fillStyle = `hsla(${hue}, 100%, ${light}%, ${0.22 * alpha})`;
+      ctx.fillStyle = `hsla(${hue}, 100%, ${light}%, ${(0.22 + 0.25 * kick) * alpha})`;
       ctx.beginPath();
       ctx.arc(d.x, d.y, r * 1.9, 0, Math.PI * 2);
       ctx.fill();
