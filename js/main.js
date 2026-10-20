@@ -1969,8 +1969,9 @@ export class Game {
     const p = this.player;
     if (p.dashCooldown > 0) return;
 
-    // Phase Dash Extender cards stretch the burst (and a blink), with the invulnerability to match.
-    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0));
+    // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
+    // with the invulnerability to match.
+    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
     p.dashTimer = W.dashDuration * reach;
     p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
@@ -2130,6 +2131,11 @@ export class Game {
     e.hp -= dmg;
     e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
+    if (kx || ky) e.hitAng = Math.atan2(ky, kx); // the hull squashes along the shot (enemies.js draw)
+    // A hit that takes a real bite (a quarter of max HP or more) pops a hot ring on the hull.
+    if (!dot && dmg >= (e.maxHp || Infinity) * 0.25 && e.hp - dmg > 0) {
+      this.particles.spawnShockwave(e.x, e.y, e.radius * 2, crit ? 48 : e.hue, 2, 0.14);
+    }
     this.damageNumbers?.add(e, dmg, source, crit);
     if ((kx || ky) && !e.isBoss) {
       const k = (TUNING.knockbackMult ?? 1.0) * (e.knockMult ?? 1) * 100 / (e.radius * e.radius);
@@ -2189,6 +2195,9 @@ export class Game {
     if (fx.hitStop > 0) this.requestHitStop(fx.hitStop);
 
     this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, intensity);
+    // White-hot core flash: the hull bursts from the inside (small for swarm fodder, so a cleared
+    // swarm doesn't wash the screen out).
+    this.particles.spawnFlash(e.x, e.y, e.radius * (tier === 0 ? 1.6 : 2.4 + tier * 0.4), e.hue, tier === 0 ? 0.08 : 0.14);
     const sparkCount = fromBomb ? 18 : Math.floor(26 * intensity);
     this.particles.spawnExplosionSparks(e.x, e.y, sparkCount, e.hue, 2.5, 14 * Math.sqrt(intensity), 2.3);
     this.particles.spawnShockwave(e.x, e.y, 48 * intensity, e.hue, 3 * intensity, 0.34);
@@ -2197,7 +2206,12 @@ export class Game {
 
     // Heavier hulls stack extra layers; supernova mass-kills skip them (except elites/bosses).
     if (!fromBomb || tier >= 3) {
-      if (tier >= 1) this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+      if (tier >= 1) {
+        this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+        // A wide, thin snap ring and slow embers that drift and fade after the blast.
+        this.particles.spawnShockwave(e.x, e.y, e.radius * 3.2, e.hue, 1.4, 0.12);
+        this.particles.spawnExplosionSparks(e.x, e.y, 4 + 3 * tier, e.hue, 0.4, 2.6, 3);
+      }
       if (tier >= 2) {
         this.particles.spawnPolygonShatter(e.x, e.y, e.radius * 0.55, e.sides, -e.rotation, e.hue, intensity * 0.55);
         this.particles.spawnExplosionSparks(e.x, e.y, 6 * tier, 48, 1.5, 6, 3.2);
@@ -2292,6 +2306,8 @@ export class Game {
           life: 0.45,
           source: 'other',
           stat: 'shrapnel',
+          kind: 'shard',
+          spin: Math.random() * Math.PI * 2,
           knock: KNOCKBACK.shrapnel
         });
       }
@@ -2444,11 +2460,10 @@ export class Game {
   // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
-    dmg *= p.damageTakenMult ?? 1; // Void Armory: Ablative Plating
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = HIT_INVULN_BASE + (p.hitInvulnBonus || 0);
+    p.invuln = HIT_INVULN_BASE;
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -3069,6 +3084,11 @@ export class Game {
         const travel = Math.atan2(b.vy, b.vx);
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
+        if (b.kind === 'shard') {
+          // A Volatile Shatter shard striking home: a white-gold glint and a burst of glass splinters.
+          this.particles.spawnCritFlare?.(hx, hy, 7, 0.12);
+          this.particles.spawnDirectionalSparks(hx, hy, travel, 0.7, 2, 52, 8);
+        }
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
@@ -6061,6 +6081,36 @@ export class Game {
     }
   }
 
+  // Volatile Shatter shard: a small spinning pale-gold sliver of glass with a faint wake, so the chain
+  // reaction reads apart from ordinary bolts without drowning the screen at high levels.
+  drawShard(ctx, b) {
+    const spin = (b.spin += 0.35);
+    const len = 5.5, wid = 2 + 1.2 * Math.abs(Math.sin(spin));
+    const a = Math.atan2(b.vy, b.vx);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'hsla(48, 100%, 62%, 0.3)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(b.x - b.vx * 1.8, b.y - b.vy * 1.8);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(a);
+    ctx.fillStyle = 'hsla(48, 100%, 86%, 0.8)';
+    ctx.strokeStyle = 'hsla(46, 100%, 62%, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(len, 0);
+    ctx.lineTo(0, -wid);
+    ctx.lineTo(-len * 0.6, 0);
+    ctx.lineTo(0, wid);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
   // Rocket Pod rocket: a crimson finned body (not the amber of Swarm Missiles or the cyan Autocannon),
   // a white-hot engine core inside a red flame, and a fading grey smoke streak behind it.
@@ -6535,6 +6585,10 @@ export class Game {
         this.drawWingRocket(ctx, b);
         continue;
       }
+      if (b.kind === 'shard') {
+        this.drawShard(ctx, b);
+        continue;
+      }
       const tailX = b.x - b.vx * 1.4;
       const tailY = b.y - b.vy * 1.4;
 
@@ -6566,6 +6620,7 @@ export class Game {
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
     this.acidSprayer?.draw(ctx, this);
+    this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 
     const p = this.player;

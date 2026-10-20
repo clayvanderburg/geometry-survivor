@@ -571,3 +571,18 @@ test('card fairness odds: the exact draw chances match what rollUpgrades actuall
   const lockId = [...odds.keys()][0];
   assert.equal(cardInclusionOdds(p, 2, lockId).has(lockId), false);
 });
+
+test('Volatile Shatter: 4 shards at LV 1, +3 per level, and a burst flies as glinting shards', () => {
+  assert.deepEqual([1, 2, 3, 8].map(W.shrapnelShards), [4, 7, 10, 25]);
+  const g = freshGame();
+  g.player.weapons.shrapnel = 3;
+  g.bullets.length = 0;
+  const e = g.enemyManager.enemies[0] ?? null;
+  const victim = e || { x: g.player.x + 200, y: g.player.y, radius: 10, hp: 0, maxHp: 10, type: 'swarmer', hue: 300, sides: 4, rotation: 0, score: 1, trail: [] };
+  if (!e) g.enemyManager.enemies.push(victim);
+  victim.hp = 0;
+  withRandom(() => g.killEnemy(victim), () => 0); // the burst chance always rolls in
+  const shards = g.bullets.filter((b) => b.stat === 'shrapnel');
+  assert.equal(shards.length, 10);
+  assert.ok(shards.every((b) => b.kind === 'shard'), 'drawn as shards, not plain bolts');
+});

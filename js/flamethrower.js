@@ -264,7 +264,7 @@ export class Flamethrower {
     const radius = W.flameBurstRadius * areaMult(p);
     const damage = weaponDamage(p, k.source, b) / W.flameDamageMult(b) * W.flameBurstDamageMult(b);
     if (delay > 0 && game.weaponFx?.schedule) {
-      game.weaponFx.schedule({ x, y, fromX, fromY, delay, radius, damage, hue: k.hue, source: k.source, style: 'pop', kind: k.burst, knock: 1, size: 7 });
+      game.weaponFx.schedule({ x, y, fromX, fromY, delay, radius, damage, hue: k.hue, source: k.source, style: k.burst === 'fireball' ? 'fireball' : 'pop', kind: k.burst, knock: 1, size: 7 });
     } else {
       game.particles?.spawnShockwave?.(x, y, radius, k.hue, 4, 0.3);
       game.particles?.spawnExplosionSparks?.(x, y, 12, k.hue, 1, 4, 3);

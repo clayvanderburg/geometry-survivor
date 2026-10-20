@@ -766,7 +766,7 @@ export function acquireWeapon(player, id) {
   return true;
 }
 
-// Seconds of invulnerability after a shield hit, before the Void Armory's Phase Buffer.
+// Seconds of invulnerability after a shield hit.
 export const HIT_INVULN_BASE = 0.4; // 0.65 before v0.32: ramming through whole packs cost only a hit or two a second
 
 // The ship at run start, before any card: TUNING's base values with the Void Armory bonuses
@@ -781,11 +781,10 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
     hp: maxHp,
     maxHp,
     bombs: 2 + (bonuses.extraBombs || 0),
-    // Void Armory multipliers that live outside `stats` (damage taken, post-hit invulnerability, dash
-    // cooldown, gold per vein, reroll cost).
-    damageTakenMult: bonuses.damageTakenMult ?? 1,
-    hitInvulnBonus: bonuses.hitInvulnBonus || 0,
+    // Void Armory multipliers that live outside `stats` (dash cooldown and distance, gold per vein,
+    // reroll cost).
     dashCooldownMult: bonuses.dashCooldownMult ?? 1,
+    dashDistanceMult: bonuses.dashDistanceMult ?? 1,
     goldMult: bonuses.goldMult ?? 1,
     rerollCostMult: bonuses.rerollCostMult ?? 1,
     stats: {
