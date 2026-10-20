@@ -48,19 +48,19 @@ test('the forward pair fires straight along the aim, side by side', () => {
 // Where a rocket crosses the aim line (y = 1000 here): the x of that crossing.
 const crossing = (r) => r.x - (r.y - 1000) * (r.vx / r.vy);
 
-test('Rocket Pods launch from both flank pods and converge on the turret aim line', () => {
+test('Rocket Pods launch from both wingtip pods and converge on the turret aim line', () => {
   const g = game(); // turret aims +x, hull heads +y
   g.fireWingRockets();
   assert.equal(g.bullets.length, 2);
   for (const r of g.bullets) {
     assert.equal(r.source, 'rocket');
     assert.ok(Math.abs(Math.hypot(r.vx, r.vy) - W.wingRocketSpeed) < 1e-9 && r.vx > 0, 'flies out along the turret aim');
-    assert.ok(Math.abs(crossing(r) - 1320) < 1e-6, 'meets the aim line 320 px out with nobody ahead');
+    assert.ok(Math.abs(crossing(r) - 1480) < 1e-6, 'meets the aim line 480 px out with nobody ahead');
     assert.equal(r.damage, 10 * W.wingRocketDamageMult(levelBuild('rockets', 1)));
     assert.equal(r.blastDamage, r.damage * W.wingRocketBlastShare);
   }
   const xs = g.bullets.map((r) => r.x - 1000).sort((a, b) => a - b);
-  assert.ok(Math.abs(xs[0] + 15 * 1.12) < 1e-9 && Math.abs(xs[1] - 15 * 1.12) < 1e-9, 'one from each flank pod');
+  assert.ok(Math.abs(xs[0] + 15 * 1.7) < 1e-9 && Math.abs(xs[1] - 15 * 1.7) < 1e-9, 'one from each wingtip pod');
 });
 
 test('a lone enemy dead ahead is hit by both Rocket Pods instead of being straddled', () => {
@@ -71,5 +71,5 @@ test('a lone enemy dead ahead is hit by both Rocket Pods instead of being stradd
   const off = game();
   off.enemyManager.enemies.push({ x: 1000, y: 1180, radius: 10 }); // 90 degrees off the aim: ignored
   off.fireWingRockets();
-  for (const r of off.bullets) assert.ok(Math.abs(crossing(r) - 1320) < 1e-6);
+  for (const r of off.bullets) assert.ok(Math.abs(crossing(r) - 1480) < 1e-6);
 });

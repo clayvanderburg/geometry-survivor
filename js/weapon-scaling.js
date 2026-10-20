@@ -90,11 +90,11 @@ export const WEAPON_SCALING = {
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 1 / rateMult(b.r.reload),
+  wingRocketCooldown: (b) => 0.65 / rateMult(b.r.reload), // 1 s before v0.39.8 (same DPS: each rocket hits a little softer)
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
-  wingRocketSpeed: 8.5,
-  wingRocketLife: 1.6,
+  wingRocketSpeed: 11, // 8.5 before v0.39.8
+  wingRocketLife: 1.3, // same reach as before (1.6 s at 8.5)
   // Transforms: Tandem Warheads (a second blast after tandemDelay), Napalm Trail (a burning pool worth
   // napalmShare of the hit, ticking every napalmTick for napalmLife), MIRV (splits into 3 homing
   // mini-rockets after mirvTime; a rocket that hits before splitting carries all three payloads).

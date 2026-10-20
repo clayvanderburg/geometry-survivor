@@ -306,9 +306,9 @@ test('pause-menu discard goes through a confirm step', () => {
   assert.ok(!g.player.loadout.includes('missiles'));
 });
 
-test('Rocket Pods fire about once a second at LV 1; their cards add rockets and shorten the reload', () => {
+test('Rocket Pods fire a volley about every 0.65 s at LV 1; their cards add rockets and shorten the reload', () => {
   const lv1 = levelBuild('rockets', 1);
-  assert.equal(W.wingRocketCooldown(lv1), 1);
+  assert.equal(W.wingRocketCooldown(lv1), 0.65);
   assert.equal(W.wingRocketCount(lv1), 2);
   assert.ok(W.wingRocketCount(makeBuild('rockets', 4, { count: 3 })) === 5, 'more rockets per Tubes rank');
   assert.ok(W.wingRocketBlastRadius(makeBuild('rockets', 4, { radius: 3 })) > W.wingRocketBlastRadius(lv1), 'bigger blasts');
@@ -322,7 +322,7 @@ test('Rocket Pods fire about once a second at LV 1; their cards add rockets and 
   const fire = g.fireWingRockets.bind(g);
   g.fireWingRockets = (b) => { volleys++; return fire(b); };
   for (let i = 0; i < 600; i++) g.update(1 / 60); // 10 s of auto-fire
-  assert.ok(volleys >= 9 && volleys <= 11, `${volleys} volleys in 10 s`);
+  assert.ok(volleys >= 14 && volleys <= 17, `${volleys} volleys in 10 s`);
   applyUpgradeLevels(g.player, { ...UPGRADE_BY_ID.rockets_count, levelJump: 3 });
   g.bullets = [];
   g.fireWingRockets(weaponBuild(g.player, 'rockets'));
