@@ -4997,3 +4997,4 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8
 .hangar-solo-btn:disabled { opacity: 0.5; cursor: default; }
 .hangar-mastery { color: #ffcc00; font-weight: 800; letter-spacing: 1px; }
 .hangar-solo-chip { position: absolute; top: 132px; left: 22px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255, 204, 0, 0.6); background: rgba(20, 14, 2, 0.75); font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: #ffcc00; pointer-events: none; }
+.hs-ship { margin-right: 5px; font-size: 0.95em; }

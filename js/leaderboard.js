@@ -12,6 +12,7 @@
 import { sanitizeCallsign, formatRunTime, ALL_TIME } from './leaderboard-rules.js';
 import { GAME_VERSION, compareVersions, isVersionString, versionLabel } from './version.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, normalizeMode } from './modes.js';
+import { isShip, DEFAULT_SHIP, SOLO_ID, SHIP_GLYPH, SHIP_BY_ID } from './ships.js';
 
 export const SCORES_ENDPOINT = '/api/scores';
 export const BOARD_TABS = ['global', 'local'];
@@ -78,8 +79,10 @@ function cleanEntries(list) {
 // The game-side run report. The callsign is folded into the server's alphabet first so the submit
 // can't fail on a name the title screen happily accepted. `version` is the game version the run was
 // flown on; the server files the run on that version's board (and the all-time board) of its `mode`.
-export function buildRunPayload({ name, score, wave, level, kills, multiplier, time, version = GAME_VERSION, mode = DEFAULT_MODE }) {
+export function buildRunPayload({ name, score, wave, level, kills, multiplier, time, version = GAME_VERSION, mode = DEFAULT_MODE, ship, solo }) {
   const int = (v, min) => Math.max(min, Math.floor(Number(v) || 0));
+  // Hangar fields (flag on only): the ship when it isn't VEXOLITH, the weapon of a solo run.
+  const hangar = { ...(isShip(ship) && ship !== DEFAULT_SHIP ? { ship } : {}), ...(typeof solo === 'string' && SOLO_ID.test(solo) ? { solo } : {}) };
   return {
     name: sanitizeCallsign(name) || FALLBACK_NAME,
     score: int(score, 0),
@@ -89,7 +92,8 @@ export function buildRunPayload({ name, score, wave, level, kills, multiplier, t
     multiplier: Math.max(1, Math.round((Number(multiplier) || 1) * 10) / 10),
     time: Math.max(0, Math.round((Number(time) || 0) * 100) / 100),
     version,
-    mode: normalizeMode(mode)
+    mode: normalizeMode(mode),
+    ...hangar
   };
 }
 
@@ -286,6 +290,15 @@ export function normalizeTab(tab) {
   return BOARD_TABS.includes(tab) ? tab : 'global';
 }
 
+// A row's Hangar marks: the ship's glyph and a ★ for a solo run ('' for a VEXOLITH run that wasn't solo,
+// every run before the Hangar, and every run while its flag is off).
+export function hangarMark(entry) {
+  const glyph = isShip(entry?.ship) ? SHIP_GLYPH[entry.ship] : '';
+  const solo = typeof entry?.solo === 'string' && SOLO_ID.test(entry.solo) ? '★' : '';
+  if (!glyph && !solo) return {};
+  return { mark: glyph + solo, title: [glyph ? SHIP_BY_ID[entry.ship].name : '', solo ? `SOLO ${entry.solo.toUpperCase()}` : ''].filter(Boolean).join(' · ') };
+}
+
 function localRows(local, newLocalId) {
   return (Array.isArray(local) ? local : []).map((entry, idx) => ({
     key: entry.id || 'local-' + idx,
@@ -293,6 +306,7 @@ function localRows(local, newLocalId) {
     name: entry.name,
     meta: `W${entry.wave} · x${Number(entry.multiplier).toFixed(1)} · ${entry.timeStr}`,
     score: Number(entry.score) || 0,
+    ...hangarMark(entry),
     mine: false,
     isNew: !!newLocalId && entry.id === newLocalId
   }));
@@ -338,6 +352,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
       meta: allTime ? `W${entry.wave}` : stats,
       version: allTime ? versionLabel(entry.version) : '',
       score: Number(entry.score) || 0,
+      ...hangarMark(entry),
       date: allTime ? [date, stats].filter(Boolean).join(' · ') : date,
       mine,
       isNew: !!newGlobalId && entry.id === newGlobalId
@@ -476,7 +491,14 @@ export function renderBoardView(listEl, noteEl, view) {
       return span;
     };
     cell('hs-rank', `#${row.rank}`);
-    cell('hs-name', row.name + (row.isNew ? ' ★ NEW' : row.mine ? ' ◆' : ''));
+    const name = cell('hs-name', row.name + (row.isNew ? ' ★ NEW' : row.mine ? ' ◆' : ''));
+    if (row.mark) {
+      const mark = doc.createElement('span');
+      mark.className = 'hs-ship';
+      mark.textContent = row.mark;
+      if (row.title) mark.title = row.title;
+      name.prepend(mark);
+    }
     const meta = cell('hs-meta', row.meta);
     if (row.version) {
       const tag = doc.createElement('span');

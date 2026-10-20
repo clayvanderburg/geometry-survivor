@@ -16,9 +16,11 @@
 //   armory      { upgrade id: rank } Void Armory ranks held during the run (ranks above 0 only)
 //   armorySpent cores spent on those ranks (js/progression.js armorySpent)
 // Runs from older clients carry no armory fields: their Armory tier is 'unknown'.
+//   ship / solo / mastery  Hangar builds only: the ship flown, the weapon of a solo run, mastery tiers held
 import { KNOWN_VERSIONS } from './changelog.js';
 import { normalizeMode } from './modes.js';
 import { META_UPGRADES } from './progression.js';
+import { isShip, SOLO_ID } from './ships.js';
 
 export const STATS_SCHEMA = 1;
 
@@ -145,6 +147,16 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
       if (rank > 0) run.armory[id] = rank;
     }
     run.armorySpent = int(body.armorySpent, L.MAX_COUNT);
+  }
+  // Hangar builds: the ship, the solo weapon and the mastery tiers held (js/mastery.js), when sent.
+  if (isShip(body.ship)) run.ship = body.ship;
+  if (typeof body.solo === 'string' && SOLO_ID.test(body.solo)) run.solo = body.solo;
+  if (isObj(body.mastery)) {
+    run.mastery = {};
+    for (const [id, v] of entries(body.mastery, L.MAX_ARMORY, SOLO_ID)) {
+      const tier = int(v, 4);
+      if (tier > 0) run.mastery[id] = tier;
+    }
   }
   return { run };
 }

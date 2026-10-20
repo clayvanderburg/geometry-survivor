@@ -70,7 +70,7 @@ import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
 import { mountHangar } from './hangar-ui.js';
-import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields, runKit, startChoices, hangarKill, hangarHit, lockFields } from './hangar-run.js';
+import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields, runKit, startChoices, hangarKill, hangarHit, lockFields, hangarRunTag } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -1478,12 +1478,13 @@ export class Game {
     if (!this.runStats) return null;
     this.syncRunStats();
     const p = this.player;
-    return this.runStats.finish({
+    const summary = this.runStats.finish({
       time: this.elapsedTime, wave: this.wave, level: p?.level ?? 1, score: this.score, kills: this.kills,
       died: !(p?.hp > 0), gold: { earned: this.goldEarned, spent: this.goldSpent },
       loadout: ownedWeapons(p || {}).map((id) => ({ id, lv: statsWeaponLevel(p, id) })),
       armory: this.progression ? { ranks: this.progression.data.ranks, spent: this.progression.armorySpent() } : null
     });
+    return summary && Object.assign(summary, hangarRunTag(this, { stats: true })); // Hangar ship, solo, mastery
   }
 
   // Fire-and-forget like the leaderboard: opted-out, dev-tuner and very short runs are not sent.
@@ -4823,7 +4824,8 @@ export class Game {
       wave: this.wave,
       kills: this.kills,
       timeStr,
-      mode: this.mode
+      mode: this.mode,
+      ...hangarRunTag(this) // Hangar ship and solo weapon (nothing while the flag is off)
     });
     this.lastRunHighlightId = result.entryId;
     // The board panel shows the races of the mode just flown.
@@ -4836,7 +4838,8 @@ export class Game {
       kills: this.kills,
       multiplier: this.multiplier,
       time: this.elapsedTime,
-      mode: this.mode
+      mode: this.mode,
+      ...hangarRunTag(this)
     });
     this.lastRunSummary = this.finishRunStats();
     if (this.lastRunSummary) this.submitRunStats(this.lastRunSummary);
