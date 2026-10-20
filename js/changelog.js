@@ -12,12 +12,18 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.43.4',
+    version: '0.44.0',
     date: '2026-10-20',
-    title: 'Shatter Trim',
+    title: 'Big Guns, Bigger Bosses',
     notes: [
-      { type: 'balance', text: 'Volatile Shatter shards deal 0.3x damage (was 0.75x). Same shard count: 4 at LV 1, up to 25 at LV 8.' },
-      { type: 'balance', text: 'Volatile Shatter burst chance now climbs evenly to 100% at LV 8 (it hit 100% at LV 5), so chain reactions build up gradually.' }
+      { type: 'new', text: 'Five new weapons: Rail Lance (a piercing line), Glaive Discs (ricochets), Nanite Swarm (corrosive swarms), Claw Harpoon (a tethered drill-claw that mines) and Quake Mortar.' },
+      { type: 'new', text: 'All 10 bosses reworked: bigger, faster, new looks and sounds, and a telegraphed signature attack that escalates in later phases. Red lanes and marked zones: get out.' },
+      { type: 'new', text: 'Wave 50 is a FINAL STAND: no timer, the Prism brings one last surge, then spawns stop. Destroy it and clear the field for SECTOR CLEAR and VICTORY.' },
+      { type: 'new', text: 'New enemy: the HATCHERY (wave 35) breeds diving HATCHLINGS until you kill it, and its brood dies with it. Plus a new opening cutscene (replay it from 🎬 INTRO).' },
+      { type: 'balance', text: 'Score rewards progress: every wave survived pays 1,000 × the wave number squared, and winning the campaign pays 100,000,000.' },
+      { type: 'balance', text: 'Weapon floor: by LV 6 / 12 / 18 / 24 / 30 you need 2 / 3 / 4 / 5 / 6 weapons. Below that, a level-up is a CHOOSE A WEAPON pick (gold can reroll it).' },
+      { type: 'balance', text: 'Sentry Turret works like DRG: Survivor: hold 2 charges, stand still to drop them, one reloads every 6 s. Bolts pierce, with new cards. Volatile Shatter shards deal 0.3x damage.' },
+      { type: 'new', text: 'Juicier feel: cards deal in and snap, pickups sparkle, dashes streak, shields crackle. New REDUCE EFFECTS setting turns off shake and calms flashes and particles.' }
     ]
   },
   {
