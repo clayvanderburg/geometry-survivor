@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, chillSlow,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius, naniteRadius,
   shockStun, shockLongStun, shockLongChance, statusPotency, statusDecay, statusDotShare, stacksPerBaseDamage, burnSpreadChance,
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -269,6 +269,18 @@ export const STAT_ROWS = [
   { id: 'glaiveFission', label: 'Twins per disc', get: (p) => wb(p, 'glaive', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'DISCS SPLIT ON THEIR FIRST HIT' },
   { id: 'glaiveMomentum', label: 'Ricochet damage growth', get: (p) => wb(p, 'glaive', (b) => (b.t8 ? W.momentumGrowth - 1 : null)), fmt: pct, newText: (a, row) => `EVERY RICOCHET +${row.fmt(a)} DAMAGE` },
   { id: 'glaiveRecall', label: 'Return-trip hits', get: (p) => wb(p, 'glaive', (b) => (b.t12 ? W.recallHits : null)), fmt: int, newText: (a) => `DISCS RETURN // ${a} HITS ON THE WAY` },
+  // Nanite Swarm (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
+  { id: 'naniteRadius', label: 'Swarm radius', get: (p) => wb(p, 'nanites', (b) => naniteRadius(p, b)), fmt: int, headline: 'count', unit: 'SWARM RADIUS', newText: (a) => `NANITE SWARM // ${a} RADIUS` },
+  { id: 'naniteDamage', label: 'Bite damage', get: (p) => wb(p, 'nanites', (b) => weaponDamage(p, 'nanite', b)), fmt: dec1, headline: 'pct', unit: 'BITE DAMAGE' },
+  { id: 'naniteTickRate', label: 'Bites / s', get: (p) => wb(p, 'nanites', (b) => 1 / W.naniteTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'BITE RATE' },
+  { id: 'naniteLife', label: 'Swarm lifetime', get: (p) => wb(p, 'nanites', W.naniteLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s SWARM LIFETIME` },
+  { id: 'naniteCooldown', label: 'Swarm launch', get: (p) => wb(p, 'nanites', W.naniteCooldown), fmt: secs, headline: 'pct', unit: 'LAUNCH RATE' },
+  { id: 'naniteCorrode', label: 'Swarm max damage taken', get: (p) => wb(p, 'nanites', () => { const e = weaponElement(p, 'nanites'); return e ? corrodeCap(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
+  { id: 'naniteAcid', label: 'Swarm acid (of bite damage)', get: (p) => wb(p, 'nanites', () => { const e = weaponElement(p, 'nanites'); return e ? statusDotShare(p, 'corrode', e.rank) : null; }), fmt: bonus },
+  { id: 'naniteFission', label: 'Daughter swarms / swarm', get: (p) => wb(p, 'nanites', (b) => (b.t4 ? W.fissionMax : null)), fmt: int, newText: () => `SWARMS BUD EVERY ${W.fissionKills} KILLS` },
+  { id: 'naniteGoo', label: 'Swarm life / kill', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooLifePerKill : null)), fmt: secs, newText: (a, row) => `GRAY GOO // +${row.fmt(a)} PER KILL` },
+  { id: 'naniteGooGrow', label: 'Swarm max growth', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooGrowMax : W.naniteGrowMax)), fmt: mult },
+  { id: 'nanitePlague', label: 'Plague swarm radius', get: (p) => wb(p, 'nanites', (b) => (b.t12 ? naniteRadius(p, b) * W.plagueRadiusMult : null)), fmt: int, newText: () => 'BITTEN ENEMIES CARRY THE PLAGUE' },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -494,7 +506,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive', nanites: 'nanite' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

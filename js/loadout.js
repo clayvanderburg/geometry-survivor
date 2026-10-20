@@ -100,6 +100,11 @@ export const WEAPONS = [
     id: 'glaive', name: 'Glaive Discs', hudName: 'Glaive Discs', levelId: 'glaive', levelKey: 'glaive', category: 'AUTONOMOUS', tagSources: ['glaive'],
     color: '#ff8a3d',
     summary: 'Spinning discs flung at the nearest enemies. Each one ricochets from enemy to enemy, and off rocks, losing a little speed every bounce.'
+  },
+  {
+    id: 'nanites', name: 'Nanite Swarm', hudName: 'Nanite Swarm', levelId: 'nanites', levelKey: 'nanites', category: 'DEPLOYABLE', tagSources: ['nanite'],
+    color: '#c4ff7a',
+    summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
   }
 ];
 

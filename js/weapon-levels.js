@@ -152,6 +152,13 @@ export const STAT_CARDS = {
     card('glaive', 'glaive_chain', 'chain', 'Glaive Ricochet', 'glaiveBounces', 'Glaive Discs: each disc ricochets to one more enemy. Only ricochets.', cap(6)),
     card('glaive', 'glaive_rate', 'rate', 'Glaive Launcher', 'glaiveCooldown', 'Glaive Discs: throws more often. Only throw rate.', cap(8)),
     card('glaive', 'glaive_speed', 'speed', 'Glaive Spin', 'glaiveSpeed', 'Glaive Discs: faster discs. Only disc speed.', cap(6))
+  ],
+  nanites: [
+    card('nanites', 'nanites_damage', 'damage', 'Nanite Swarm Acid Enzymes', 'naniteDamage', 'Nanite Swarm: a hungrier strain. Only damage per bite.'),
+    card('nanites', 'nanites_rate', 'rate', 'Nanite Swarm Hunger', 'naniteTickRate', 'Nanite Swarm: the nanites bite more often. Only bite rate.', cap(8)),
+    card('nanites', 'nanites_radius', 'radius', 'Nanite Swarm Cloud Size', 'naniteRadius', 'Nanite Swarm: wider swarms. Only swarm size.', cap(8)),
+    card('nanites', 'nanites_duration', 'duration', 'Nanite Swarm Endurance', 'naniteLife', 'Nanite Swarm: each swarm holds together longer before it disperses. Only lifetime.', cap(8)),
+    card('nanites', 'nanites_launch', 'cooldown', 'Nanite Swarm Fabricator', 'naniteCooldown', 'Nanite Swarm: a fresh swarm launches sooner. Only launch rate.', cap(6))
   ]
 };
 
@@ -202,7 +209,7 @@ const ELEMENT_EFFECT_TEXT = {
 export const ELEMENT_WEAPON_LABEL = {
   blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades',
   // Built-in elements (FIXED_ELEMENTS): no element cards, but the same status rows.
-  flamethrower: 'Flamethrower', cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer', gas: 'Gas Trail'
+  flamethrower: 'Flamethrower', cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer', gas: 'Gas Trail', nanites: 'Nanite Swarm'
 };
 // player.weapons / upgradeLevels key of a weapon's element card.
 export const elementKey = (weapon, element) => `${weapon}_${element}`;
@@ -230,7 +237,8 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // The Cryo Sprayer (FROST) and Acid Sprayer (CORROSIVE) rank theirs like the Flamethrower, from Deep Freeze / Etching Agent.
 // The Tesla Arc is lightning, so it is always SHOCK (Clay, v0.43.1; it took Stun Arcs and the other element
 // cards before): its rank follows its level like the Gas Trail's, so it needs no extra card.
-export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock', lightning: 'shock' };
+// The Nanite Swarm is always CORROSIVE (it eats hulls): its rank follows its level like the Gas Trail's.
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock', lightning: 'shock', nanites: 'corrode' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
 // Sprayer element rank from a build: 1 + its element stat ranks (burn / chill / acid; one per sprayer).
 export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || b?.r?.chill || b?.r?.acid || 0));
@@ -289,7 +297,8 @@ export const WEAPON_BADGE = {
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
   grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
   raillance: 'RAIL LANCE',
-  glaive: 'GLAIVE DISCS'
+  glaive: 'GLAIVE DISCS',
+  nanites: 'NANITE SWARM'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -379,6 +388,11 @@ export const TRANSFORMS = {
     6: tf('fission', 'Fission Discs', 'A Glaive Disc splits in two on its first hit. Both twins ricochet on through the pack with every bounce the disc had left.'),
     12: tf('momentum', 'Momentum Edge', 'Glaive Discs feed on impact: every bounce speeds them up instead of slowing them, and every ricochet hits harder than the last.'),
     18: tf('recall', 'Boomerang Recall', 'Spent Glaive Discs no longer fade: they swing back to your ship, slicing through the enemies on the way home.')
+  },
+  nanites: {
+    6: tf('fission', 'Fission Bloom', 'Every few kills a Nanite Swarm buds off a daughter swarm that flies to the next pack and eats it too.'),
+    12: tf('goo', 'Gray Goo', 'Nanite Swarms feed on what they kill: every kill keeps the swarm alive longer and lets it swell far past its usual size.'),
+    18: tf('plague', 'Nanite Plague', 'Enemies a Nanite Swarm bites carry the plague: when one dies to anything, a small swarm bursts from the wreck and keeps eating.')
   }
 };
 

@@ -50,7 +50,7 @@ test('weapons built for damage stay equal: every Damage rank is the same x DAMAG
 });
 
 test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon (times its CARD_STEP_TRIM)', () => {
-  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge', raillance: 'rate', glaive: 'rate' };
+  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge', raillance: 'rate', glaive: 'rate', nanites: 'rate' };
   for (const [id, stat] of Object.entries(RATE)) {
     for (let r = 1; r <= 6; r++) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { [stat]: r }));
@@ -85,7 +85,8 @@ test('every stat formula reads only its own rank', () => {
     flamethrower: { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, burn: W.flameBurnRank, damage: W.flameDamageMult },
     shockfield: { recharge: W.fieldCooldown, radius: W.fieldRadius, stun: W.fieldStunRank, damage: W.fieldDamageMult },
     raillance: { rate: W.railCycle, count: W.railLances, width: W.railWidth, pierce: W.railKeep, damage: W.railDamageMult },
-    glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult }
+    glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult },
+    nanites: { rate: W.naniteTick, radius: W.naniteRadius, duration: W.naniteLife, cooldown: W.naniteCooldown, damage: W.naniteDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
     const base = levelBuild(id, 1);
@@ -121,7 +122,8 @@ test('damage per hit never drops as Damage ranks go up', () => {
     rockets: W.wingRocketDamageMult, missiles: W.missileDamageMult, lightning: W.lightningDamageMult, singularity: W.singularityDamageMult,
     orbitals: W.orbitalDamageMult, mines: W.mineDamageMult, turret: W.turretDamageMult, drones: W.droneDamageMult,
     grenades: W.grenadeDamageMult, gas: W.gasDamageMult, flamethrower: W.flameDamageMult, shockfield: W.fieldDamageMult,
-    raillance: W.railDamageMult, glaive: W.glaiveDamageMult
+    raillance: W.railDamageMult, glaive: W.glaiveDamageMult,
+    nanites: W.naniteDamageMult
   };
   for (const [id, f] of Object.entries(perHit)) {
     for (let r = 1; r < WEAPON_MAX_LEVEL; r++) assert.ok(f(makeBuild(id, 1 + r, { damage: r })) > f(makeBuild(id, r, { damage: r - 1 })), `${id} rank ${r}`);

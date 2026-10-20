@@ -19,7 +19,7 @@ export const SUB_SOURCES = Object.freeze({
   burn: 'blaster',        // burn ticks from before v0.34 (only Autocannon could burn)
   // Status DoT ticks (FIRE burn, CORROSIVE acid, SHOCK while touching), credited to the weapon whose
   // hits applied the stacks (status-effects.js): burn_<weapon>, corrode_<weapon>, shock_<weapon>.
-  ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray']
+  ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray', 'nanites']
     .flatMap((id) => ['burn', 'corrode', 'shock'].map((dot) => [`${dot}_${id}`, id]))),
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
@@ -35,7 +35,9 @@ export const SUB_SOURCES = Object.freeze({
   thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
   ionwake: 'raillance',      // Ion Wake ticks (Rail Lance Breakthrough)
   overload: 'raillance',      // Overload Shot beams (Rail Lance Breakthrough)
-  glaive_recall: 'glaive'   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
+  glaive_recall: 'glaive',   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
+  nanite_fission: 'nanites', // Nanite Swarm: Fission Bloom daughter swarms
+  nanite_plague: 'nanites'   // Nanite Swarm: Nanite Plague swarms
 });
 
 // Damage that is not a loadout weapon's.
