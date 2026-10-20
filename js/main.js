@@ -45,7 +45,7 @@ import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText,
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
-import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
+import { playerHandSize, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
@@ -69,7 +69,7 @@ import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
-import { newRunLedger, commitFeats, hangarTunerRow } from './hangar-run.js';
+import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -344,7 +344,8 @@ export class Game {
     this.resetInput();
     this.mode = normalizeMode(mode);
     applyTuningOverlay(modeRules(this.mode).tuning);
-    const bonuses = modeBonuses(this.progression.getBonuses(), this.mode);
+    this.shipId = runShip(this); // Hangar ship (null while the flag is off: the crab as always)
+    const bonuses = runBonuses(modeBonuses(this.progression.getBonuses(), this.mode), this.shipId);
 
     this.score = 0;
     this.runTainted = false;
@@ -408,6 +409,7 @@ export class Game {
       // Shield, bombs, Void Armory multipliers and stats: TUNING plus the armory (upgrades.js runStartPlayer).
       ...runStartPlayer(bonuses),
       mode: this.mode, // card pools read the mode's rules off the player (upgrades.js eligibleUpgrades)
+      ...(this.shipId ? { shipId: this.shipId } : {}),
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -4087,7 +4089,7 @@ export class Game {
 
   // Cards in a level-up hand: 2 with one weapon, 3 with two or three, 4 from four (slot-rewards.js).
   handSize() {
-    return handSizeFor(ownedWeapons(this.player).length);
+    return playerHandSize(this.player, ownedWeapons(this.player).length);
   }
 
   // --- Gold: rerolls and card locks on the level-up hand (rules and costs in js/gold.js) -----------
@@ -4130,7 +4132,7 @@ export class Game {
     const wrap = doc.createElement('div');
     wrap.id = 'slot-tip';
     wrap.className = 'slot-tip';
-    wrap.innerHTML = slotTipHtml(slotTip(weaponSlots()));
+    wrap.innerHTML = slotTipHtml(slotTip(weaponSlots(this.player)));
     wrap.querySelector?.('[data-slot-tip-ok]')?.addEventListener('click', () => this.closeSlotTip());
     modal.appendChild(wrap);
     this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
@@ -4541,7 +4543,7 @@ export class Game {
     }
     const p = this.player;
     const slot = ownedWeapons(p).length + 1;
-    this.setUpgradeHeader(`SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+    this.setUpgradeHeader(`SLOT ${slot} OF ${weaponSlots(p)} // NEW WEAPON`, 'CHOOSE A WEAPON',
       `Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Equip`);
     const reward = slotReward(slot);
     this.setSlotReward(reward && { ...reward, slot });
@@ -4668,7 +4670,7 @@ export class Game {
     if (!panel || !this.player) return;
     const p = this.player;
     const owned = ownedWeapons(p);
-    const slots = weaponSlots();
+    const slots = weaponSlots(p);
     const count = document.getElementById('pause-loadout-count');
     if (count) count.textContent = `${owned.length} / ${slots} SLOTS`;
     const chips = (id) => weaponTags(id).filter((t) => TAG_INFO[t])
@@ -5162,8 +5164,8 @@ export class Game {
     if (p.shieldFlash > 0) p.shieldFlash = Math.max(0, p.shieldFlash - dt * 2.4);
     if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
 
-    if (p.hp < p.maxHp && modeRules(this).shieldRegen) {
-      p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2));
+    if (p.hp < p.maxHp && modeRules(this).shieldRegen && !p.noShieldRegen) {
+      p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2) * (p.shieldRegenMult ?? 1));
     }
 
     // 1. Player Movement (enemy black holes tug the ship, capped so it can always escape)

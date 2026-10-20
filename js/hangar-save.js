@@ -13,8 +13,9 @@
 //   mastery   { weaponId: 0..4 } mastery tier per weapon
 //   veteran   the save had runs before the Hangar existed: the newly locked weapons stay unlocked for it
 import { MODE_IDS } from './modes.js';
+import { DEFAULT_SHIP } from './ships.js';
 
-export const DEFAULT_SHIP = 'vexolith';
+export { DEFAULT_SHIP };
 // Lifetime counters (small integers). Only NORMAL and HARDCORE runs add to them (BLITZ has its own feats).
 export const CAREER_COUNTERS = Object.freeze([
   'kills', 'bossKills', 'rocksMined', 'dashes', 'shieldDamage', 'afflicted', 'frozen', 'goldSpent', 'runs', 'campaigns'

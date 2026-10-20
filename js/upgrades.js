@@ -702,7 +702,7 @@ export function newWeaponCard(player) {
     levelJump: 1,
     maxLevel: 1,
     slotsUsed: ownedWeapons(player).length,
-    slots: weaponSlots()
+    slots: weaponSlots(player)
   };
 }
 
@@ -780,6 +780,9 @@ export const HIT_INVULN_BASE = 0.4; // 0.65 before v0.32: ramming through whole 
 // Shield a run starts with, before Void Armory bonuses (100 before v0.29, 90 before v0.31, 85 before v0.32: harder passes).
 export const BASE_SHIELD = 75;
 
+const SHIP_KEYS = ['shieldRegenMult', 'noShieldRegen', 'weaponSlots', 'handSize', 'handSizeMin', 'primaryDamageMult', 'statusDurationMult', 'deployableBonus'];
+const shipKeys = (bonuses) => Object.fromEntries(SHIP_KEYS.filter((k) => bonuses[k] !== undefined).map((k) => [k, bonuses[k]]));
+
 export function runStartPlayer(bonuses = {}, t = TUNING) {
   const maxHp = BASE_SHIELD + (bonuses.bonusHp || 0);
   return {
@@ -792,6 +795,8 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
     dashDistanceMult: bonuses.dashDistanceMult ?? 1,
     goldMult: bonuses.goldMult ?? 1,
     rerollCostMult: bonuses.rerollCostMult ?? 1,
+    // Hangar ship keys (js/ships.js), only present when the ship sets them, so the crab's player is unchanged.
+    ...shipKeys(bonuses),
     stats: {
       moveSpeed: t.moveSpeed * (bonuses.moveSpeedMult ?? 1),
       fireRate: t.fireRate,

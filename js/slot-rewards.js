@@ -17,6 +17,13 @@ export const DAMAGE_SLOTS = [3, 5];
 export const BREAKTHROUGH_SLOT = 6;
 
 export const handSizeFor = (owned) => HAND_SIZES[Math.max(1, Math.min(HAND_SIZES.length, Math.floor(owned) || 1)) - 1];
+// A player's hand size: by weapons equipped, unless the ship fixes it (Hangar: LANCER's `handSize`) or
+// sets a floor (MAGPIE's `handSizeMin`). Players without those fields get handSizeFor(owned).
+export function playerHandSize(p, owned) {
+  if (p?.handSize > 0) return Math.round(p.handSize);
+  const size = handSizeFor(owned);
+  return p?.handSizeMin > 0 ? Math.max(size, Math.round(p.handSizeMin)) : size;
+}
 export const slotDamageBonus = (tuning = TUNING) => Math.max(0, tuning.slotDamageBonus ?? 0.05);
 
 // Damage multiplier for `owned` weapons equipped: +slotDamageBonus at each DAMAGE_SLOTS count reached.
