@@ -18,6 +18,7 @@
 - Keep vivid cyan/magenta/green/purple/gold outlines; lower contrast in background so threats read clearly.
 - Distinctive silhouettes for enemies, lieutenants and bosses.
 - Sharper projectile impacts, selective screen shake/hit-stop, ship banking/recoil and thruster trails.
+  - **Implemented (`js/ship-renderer.js`):** thruster plume that stretches with throttle and flares on dashes, a fading engine wake, wings that bank into turns, and turret recoil on every blaster shot (visual only, `updateShipAnimation`).
 - Animate drilling sparks, fractures and debris; protect readability amid visual spectacle.
 - HUD and upgrade cards: headline benefit enlarged (e.g. **+2 PROJECTILES**), clear summary and optional detailed explanation, **before → after** numerical stats.
 - **Rarity = rolled level jump (decided):** +1 common (white/gray), +2 uncommon (green), +3 rare (blue), +4 epic (purple), +5 legendary (gold). Evolutions/synergies are their own magenta tier. Odds are tunable (`doubleLevelChance` … `pentaLevelChance`) and scale with Luck.

@@ -1,6 +1,6 @@
 import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
-import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
+import { drawPlayerShield, drawCrabShip, shieldTouches, updateShipAnimation, kickShipRecoil, drawShipWake } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
@@ -3227,6 +3227,7 @@ export class Game {
     }
 
     this.sound.playLaser();
+    kickShipRecoil(p);
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
   }
@@ -5026,6 +5027,7 @@ export class Game {
     // Spin the Twin Rotary Claw Drills
     const rpm = this.asteroidManager.isDrilling ? 34 : 11;
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
+    updateShipAnimation(p, dt);
 
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
@@ -6267,6 +6269,7 @@ export class Game {
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
       this.drawGravityTethers(ctx, p);
+      drawShipWake(ctx, p, TUNING);
       this.drawPlayerShield(ctx, p, beatPulse);
 
       if (p.weapons.orbitals > 0) this.drawOrbitBlades(ctx, p);
