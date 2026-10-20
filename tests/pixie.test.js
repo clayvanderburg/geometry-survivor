@@ -66,8 +66,8 @@ test('Pixie cheers the offer (with the Eureka flourish) and reacts to the pick, 
   assert.equal(offer.who, 'pixie');
   said[0].onStart();
   assert.equal(eurekas, 1);
-  const level = Number(Object.keys(TRANSFORMS.turret).find((l) => TRANSFORMS.turret[l].id === 'twin'));
-  assert.equal(pixie.picked({ weaponId: 'turret', level, kind: 'transform' }).text, PIXIE_PICK_LINES['turret:twin'][0]);
+  const level = Number(Object.keys(TRANSFORMS.turret).find((l) => TRANSFORMS.turret[l].id === 'capacity'));
+  assert.equal(pixie.picked({ weaponId: 'turret', level, kind: 'transform' }).text, PIXIE_PICK_LINES['turret:capacity'][0]);
   assert.equal(said[1].cut, true, 'the reaction hurries the Eureka line along');
   const boost = pixie.picked({ weaponId: 'turret', level, kind: 'boost' }).text;
   assert.ok(PIXIE_BOOST_LINES.some(([t]) => t === boost));

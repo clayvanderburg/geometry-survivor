@@ -7,6 +7,7 @@
 // shuffle bag, so no line repeats until the pool runs dry, and never twice in a row. A line is
 // [text, mood]; {weapon} and {name} fill in the weapon and the Breakthrough's name.
 import { TRANSFORMS, BOOST_NAME } from './weapon-levels.js';
+import { isReduceEffects } from './juice.js';
 
 export const PIXIE_MAX_CHARS = 60;
 
@@ -64,12 +65,17 @@ export const PIXIE_WEAPON_LINES = Object.freeze({
   flamethrower: [['Hot take: MORE FIRE.', 'smug']],
   cryospray: [['Chill out. No really, it\'s a freeze ray now.', 'smug']],
   acidspray: [['Acid! Wear gloves. Maybe two pairs.', 'oops']],
-  shockfield: [['Your shield zaps things now. It LIKES it.', 'eureka']]
+  shockfield: [['Your shield zaps things now. It LIKES it.', 'eureka']],
+  raillance: [['The Rail Lance goes through ROCK now. Oops?', 'oops']],
+  glaive: [['Frisbees of DOOM. Patent pending!', 'smug']],
+  nanites: [['The nanites ate my lunch. Promising!', 'eureka']],
+  harpoon: [['Your claw has a leash now. Good claw!', 'eureka']],
+  quake: [['Quake Mortar! I felt that in my coffee.', 'smug']]
 });
 
 // After the pick: Breakthrough-specific reactions ("weapon:transform id").
 export const PIXIE_PICK_LINES = Object.freeze({
-  'turret:twin': ['Twin Barrels! Twice the barrels, twice the waivers!', 'eureka'],
+  'turret:capacity': ['Extra Capacity! More turrets, more waivers!', 'eureka'],
   'missiles:nuke': ['A tactical nuke! For SCIENCE. Mostly science.', 'oops'],
   'singularity:twin': ['TWO black holes? I\'ll update the insurance.', 'oops'],
   'blaster:ricochet': ['Ricochet Rounds! Geometry is on OUR side now!', 'smug'],
@@ -169,7 +175,7 @@ export class PixieDirector {
 
   offer(weaponId, weaponName) {
     const line = this.offerLine(weaponId, weaponName);
-    this.radio?.say({ ...line, onStart: () => this.sound?.playEureka?.() });
+    this.radio?.say({ ...line, onStart: () => { if (!isReduceEffects()) this.sound?.playEureka?.(); } }); // REDUCE EFFECTS skips the chime
     return line;
   }
 
