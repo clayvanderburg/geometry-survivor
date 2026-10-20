@@ -90,7 +90,12 @@ const FIELDS = {
   time: { min: 1, max: 6 * 3600, int: false } // seconds survived
 };
 
-// Plausibility envelope. Fitted to the headless balance sim (tools/balance-sim.mjs --god --skill expert
+// Plausibility envelope. Re-checked for the 50-wave campaign, ENDLESS and the progress bonuses (2026-10-20):
+// 30-minute god-mode expert sim runs into ENDLESS (W66-72, 17-30k kills, 273-305M, the FINAL STAND holding
+// wave 50 for minutes) and the live board's best (W48, 28.2k kills, 1.13B in 1055 s) all sit 60x+ under the
+// score bound, under 30 kills/s and far under the level bound, so the coefficients stay; what changed is
+// the wave check (wave 50+ may lag the clock) and the flat bonuses added to the score bound (maxScoreFor).
+// Originally fitted to the headless balance sim (tools/balance-sim.mjs --god --skill expert
 // --meta 8, 15-minute cap): the best run reached wave 41, level 78, 19.8k kills and 2.05 billion points
 // in 894 s (score/t^2.5 ~ 86, score/kills^2 ~ 5.2, ~23 kills/s, ~5 levels/min), then widened 3-10x.
 // Waves tick every 22 s of play (main.js), or every waveLength seconds of the run's mode overlay (BLITZ:

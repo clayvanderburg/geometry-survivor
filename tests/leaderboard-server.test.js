@@ -665,3 +665,26 @@ test('stats: preview runs go to the stats-preview store', async () => {
   await handler(new Request('https://game.example/api/stats/summary'), { deploy: { context: 'production' } });
   assert.deepEqual(opened, ['stats-preview', 'stats']);
 });
+
+test('plausibility refit: long 50-wave + ENDLESS runs with the progress bonuses are admitted', async () => {
+  const { waveBonusTotal, VICTORY_BONUS } = await import('../js/score-bonus.js');
+  const runs = [
+    // 30-minute god-mode expert sim runs (balance-sim --god --skill expert --meta 8 --max-minutes 30), wave 50's
+    // FINAL STAND won and continued into ENDLESS. The first sat on wave 50 long enough to trail the clock by
+    // 16 waves, which the old wave check rejected.
+    { time: 1795, wave: 66, level: 40, kills: 16_851, multiplier: 900, score: 273_386_586 },
+    { time: 1793, wave: 72, level: 45, kills: 27_475, multiplier: 900, score: 300_918_701 },
+    { time: 1794, wave: 71, level: 50, kills: 29_976, multiplier: 900, score: 305_137_465 },
+    // The live board's best (0.34.0, W48), and the W59 campaign win with its new bonuses.
+    { time: 1055.2, wave: 48, level: 61, kills: 28_238, multiplier: 219, score: 1_133_414_078 },
+    { time: 1277.2, wave: 59, level: 55, kills: 15_853, multiplier: 49.8, score: 107_966_306 + waveBonusTotal(58) + VICTORY_BONUS },
+    // A slow win on few kills: the bonuses alone exceed what the kill bound allows for its combat.
+    { time: 1300, wave: 50, level: 40, kills: 1200, multiplier: 30, score: 2_000_000 + waveBonusTotal(50) + VICTORY_BONUS },
+    // A two-hour ENDLESS marathon at the sim's late kill rate.
+    { time: 7200, wave: 200, level: 200, kills: 120_000, multiplier: 5000, score: 1e10 }
+  ];
+  for (const r of runs) assert.equal(checkPlausibility(r), null, JSON.stringify(r));
+  // The bonuses are only allowed where the wave earns them.
+  assert.match(checkPlausibility({ time: 700, wave: 32, level: 40, kills: 1200, multiplier: 30, score: 2_000_000 + VICTORY_BONUS }), /score too high/);
+  assert.ok(maxScoreFor(1300, 1200, 50) - maxScoreFor(1300, 1200, 49) >= VICTORY_BONUS, 'wave 50+ carries the VICTORY bonus');
+});
