@@ -13,6 +13,7 @@ import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerSpear, steer
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bossRam, drawBossRam } from './boss-ram.js';
 import { BossTelegraphs } from './boss-telegraphs.js';
+import { tickBossHazards, drawBossHazards } from './boss-hazards.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -198,6 +199,7 @@ export class EnemyManager {
     this.discarded = [];
     this.enemyBullets.clear();
     this.bossTelegraphs.clear();
+    if (this.bossHazards) this.bossHazards.length = 0;
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -764,6 +766,7 @@ export class EnemyManager {
       }
     }
     this.bossTelegraphs.update(dt, env);
+    tickBossHazards(this, dt, player, particles, grid); // major bosses' telegraphed blasts, lines and rings
   }
 
   // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
@@ -974,6 +977,7 @@ export class EnemyManager {
       }
     }
 
+    drawBossHazards(ctx, this, camX, camY, viewW, viewH);
     // Boss attack telegraphs, then hostile plasma orbs, ride above the hulls so a crowd never hides them.
     this.bossTelegraphs.draw(ctx, camX, camY, viewW, viewH);
     this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);

@@ -274,6 +274,7 @@ const SCENES = {
       if (q && s.t > 12.6) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   kestrel: {
@@ -337,6 +338,7 @@ const SCENES = {
       if (q && s.t > 12.8) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   event_horizon: {
@@ -390,6 +392,7 @@ const SCENES = {
       if (q && s.t > 12) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   mitosis: {
@@ -447,6 +450,7 @@ const SCENES = {
       for (const f of s.manager.enemies) if (f.type === 'repulsor') s.repel(f);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   lancer: {
@@ -496,7 +500,7 @@ const SCENES = {
     noContactKill: true
   },
   prism: {
-    w: 900, loop: 15,
+    w: 900, loop: 17,
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('prism', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -508,9 +512,10 @@ const SCENES = {
       const q = s.find('prism');
       if (q && s.t > 5 && q.phase === 0) q.hp = q.maxHp * 0.6;
       if (q && s.t > 9 && q.phase === 1) q.hp = q.maxHp * 0.3;
-      if (q && s.t > 14.2) s.kill(q);
+      if (q && s.t > 15.6) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   }
 };

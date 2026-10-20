@@ -9,6 +9,8 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
+import { applyBossHazards } from './boss-hazards.js';
+import { playBossCue } from './boss-sfx-major.js';
 import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
@@ -5483,6 +5485,7 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
+    if (applyBossHazards(this, playBossCue)) return; // boss blasts, lines and rings that hit the ship; boss sound cues
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
