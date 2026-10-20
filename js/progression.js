@@ -150,7 +150,7 @@ export function normalizeGuide(value) {
 // Armory upgrades that were removed: a save still holding ranks in one gets every core it spent on them
 // back once (the ranks then drop out of the save). Chronos Capacitor boosted only the Autocannon, while
 // every other weapon is built in the run, so it went in v0.27.3. Ablative Plating (damage taken) and Phase
-// Buffer (post-hit invulnerability) made way for Afterburner Jets (dash distance) in v0.42.4; they were
+// Buffer (post-hit invulnerability) made way for Afterburner Jets (dash distance) in v0.42.5; they were
 // priced on the ARMORY_TOP_COST curve, so their refund is too.
 export const RETIRED_UPGRADES = Object.freeze({
   fireRate: { baseCost: 12, growth: 1.13, maxRank: 30 },

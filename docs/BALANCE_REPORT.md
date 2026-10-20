@@ -238,4 +238,4 @@ Survival for the average bot is about where it was (median 2:42–5:03 by strate
 
 Total ~68k cores. Rough time to complete at ~700 cores/hour (rising to ~1,200/hour with Deep-Core Extractor maxed): 25% in ~8 h, 50% in ~25 h, 100% in ~70–95 h. Early ranks cost 8–22 cores, so a first run buys something.
 
-Later changes: Chronos Capacitor was retired in v0.27.3; Ablative Plating and Phase Buffer were retired in v0.42.4 for **Afterburner Jets** (+2% dash distance per rank, 25 ranks, first rank 15 cores). Retired ranks are refunded in full (`RETIRED_UPGRADES` in `js/progression.js`).
+Later changes: Chronos Capacitor was retired in v0.27.3; Ablative Plating and Phase Buffer were retired in v0.42.5 for **Afterburner Jets** (+2% dash distance per rank, 25 ranks, first rank 15 cores). Retired ranks are refunded in full (`RETIRED_UPGRADES` in `js/progression.js`).

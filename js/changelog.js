@@ -12,12 +12,23 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.42.4',
+    version: '0.42.5',
     date: '2026-10-20',
     title: 'Afterburner Jets',
     notes: [
       { type: 'new', text: 'New Void Armory upgrade, Afterburner Jets: +2% dash distance per rank (up to +50%). It stacks with Phase Dash Extender cards and stretches Blink Drive teleports too.' },
       { type: 'balance', text: 'Ablative Plating and Phase Buffer leave the Void Armory. Every Void Core you spent on them is refunded.' }
+    ]
+  },
+  {
+    version: '0.42.4',
+    date: '2026-10-20',
+    title: 'Shatter & Sparks',
+    notes: [
+      { type: 'balance', text: 'Volatile Shatter: each level now adds 3 shards per burst instead of 1 (4 at LV 1, up to 25 at LV 8).' },
+      { type: 'new', text: 'Volatile Shatter shards are now spinning gold glass slivers that glint when they strike, so you can see the chain reaction.' },
+      { type: 'fix', text: 'Flamethrower Fireballs are visible again: a blazing ball arcs out over the flames and bursts in a real fireball.' },
+      { type: 'new', text: 'Punchier combat: hulls squash when hit, big hits pop a ring, and kills burst with a hot core flash and drifting embers.' }
     ]
   },
   {
