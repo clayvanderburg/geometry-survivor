@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.3',
+    date: '2026-10-20',
+    title: 'Matched Nozzles',
+    notes: [
+      { type: 'fix', text: 'Twin Nozzle\'s second Flamethrower stream is now the same size as the first.' },
+      { type: 'balance', text: 'Flamethrower reaches a little further (280 px, was 254), and Wide Nozzle cards widen the cone much less (about +2 degrees each side, was +5).' }
+    ]
+  },
+  {
     version: '0.39.2',
     date: '2026-10-19',
     title: 'Spinning Flamethrower',
