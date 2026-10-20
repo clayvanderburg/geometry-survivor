@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.4',
+    date: '2026-10-20',
+    title: 'Shatter Trim',
+    notes: [
+      { type: 'balance', text: 'Volatile Shatter shards deal 0.3x damage (was 0.75x). Same shard count: 4 at LV 1, up to 25 at LV 8.' },
+      { type: 'balance', text: 'Volatile Shatter burst chance now climbs evenly to 100% at LV 8 (it hit 100% at LV 5), so chain reactions build up gradually.' }
+    ]
+  },
+  {
     version: '0.43.3',
     date: '2026-10-20',
     title: 'Stronger Armory',
