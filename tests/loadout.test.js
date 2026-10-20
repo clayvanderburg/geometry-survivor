@@ -270,10 +270,16 @@ test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer,
   assert.equal(p.weapons.pulsarHelix, 0);
   assert.ok(!eligibleUpgrades(p).some((u) => ['multishot', 'firerate', 'pierce', 'blaster_fire', 'tag_kinetic'].includes(u.id)));
   // No Autocannon: the blaster stops firing, rocket pods keep going.
+  // Watched every tick: a volley can hit rock and be gone again before the window ends.
   g.player.invuln = 1e9;
-  for (let i = 0; i < 120; i++) g.update(1 / 60);
-  assert.ok(!g.bullets.some((b) => !b.source), 'no blaster bolts');
-  assert.ok(g.bullets.some((b) => b.source === 'rocket'), 'rockets still fire');
+  let blasterBolts = false, rockets = false;
+  for (let i = 0; i < 120; i++) {
+    g.update(1 / 60);
+    blasterBolts ||= g.bullets.some((b) => !b.source);
+    rockets ||= g.bullets.some((b) => b.source === 'rocket');
+  }
+  assert.ok(!blasterBolts, 'no blaster bolts');
+  assert.ok(rockets, 'rockets still fire');
 });
 
 test('a discard keeps live tuner changes to base stats (the run-start snapshot follows the tuner)', () => {
