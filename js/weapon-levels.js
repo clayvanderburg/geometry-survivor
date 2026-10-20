@@ -138,6 +138,13 @@ export const STAT_CARDS = {
     card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
     card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
     card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
+  ],
+  raillance: [
+    card('raillance', 'raillance_damage', 'damage', 'Rail Lance Slug Mass', 'railDamage', 'Rail Lance: a heavier slug. Only damage per lance.'),
+    card('raillance', 'raillance_rate', 'rate', 'Rail Lance Capacitor Bank', 'railCycle', 'Rail Lance: charges faster, so it fires more often. Only charge time.', cap(6)),
+    card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', cap(3)),
+    card('raillance', 'raillance_width', 'width', 'Rail Lance Flux Lens', 'railWidth', 'Rail Lance: a wider line that clips more enemies. Only its width.', cap(6)),
+    card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', cap(5))
   ]
 };
 
@@ -273,7 +280,8 @@ export function elementsOf(p, weapons = [...ELEMENT_WEAPONS, ...Object.keys(FIXE
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
+  raillance: 'RAIL LANCE'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -353,6 +361,11 @@ export const TRANSFORMS = {
     6: tf('lash', 'Arc Lash', 'Every Electric Shield Field discharge also lashes arcs out at the 3 nearest enemies beyond the field, stunning them too.'),
     12: tf('repulse', 'Repulsor Surge', 'Electric Shield Field discharges hurl enemies back and hit harder, and each one that lands recharges your Phase Dash faster.'),
     18: tf('overcharge', 'Thunderclap Overcharge', 'The Electric Shield Field banks charge with every discharge. When a big pack or a boss closes in, it releases it all in a wide thunderclap.')
+  },
+  raillance: {
+    6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, and every lance hits harder.'),
+    12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever stands on it or walks through.'),
+    18: tf('overload', 'Overload Shot', 'Every third Rail Lance shot is an Overload: a beam three times as wide that hits twice as hard.')
   }
 };
 
