@@ -20,6 +20,14 @@ test('simulated runs are deterministic per seed and leave Math.random and TUNING
   assert.ok(a.kills > 0 && a.dealt.blaster > 0, 'the bot pilot fights with the real blaster');
 });
 
+test('the default pilot anticipates: it leads enemy motion by its reaction latency', () => {
+  const lead = h.simulateRun({ strategy: quick, seed: 'lead', maxSeconds: 25 });
+  const same = h.simulateRun({ strategy: quick, seed: 'lead', maxSeconds: 25, anticipate: true });
+  const late = h.simulateRun({ strategy: quick, seed: 'lead', maxSeconds: 25, anticipate: false });
+  assert.deepEqual(lead, same, 'anticipation is the default');
+  assert.notDeepEqual(lead.dealt, late.dealt, 'the pre-calibration pilot (--no-anticipate) flies differently');
+});
+
 test('the bot pilot is mortal: a brutal tuning ends the run with a recorded killer', () => {
   const r = h.simulateRun({ strategy: quick, seed: 'mortal', maxSeconds: 240, tuning: { enemyHpMult: 3, enemySpeedMult: 2 } });
   assert.equal(r.died, true);
