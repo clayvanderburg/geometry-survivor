@@ -90,6 +90,11 @@ export const WEAPONS = [
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
     color: '#9ff4ff',
     summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
+  },
+  {
+    id: 'quake', name: 'Quake Mortar', hudName: 'Quake Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
+    color: '#ff8a5c',
+    summary: 'Lobs heavy shells at the densest packs. Each one lands as an expanding shockwave ring that hits everything it rolls over, knocks it back and cracks rocks.'
   }
 ];
 

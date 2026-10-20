@@ -1024,6 +1024,21 @@ export class AsteroidManager {
     return false;
   }
 
+  // A Quake Mortar ring or fissure from (fx, fy) hits a rock for `dmg` mining damage: the same hp drain,
+  // cracks, chips and flash as the drill, from the face toward the quake. Returns true when it broke the
+  // rock (the caller removes it and runs the shatter path; it counts as mined). Bedrock never cracks.
+  quakeRock(rock, fx, fy, dmg, particles) {
+    if (rock.unbreakable || rock.hp <= 0) return false;
+    const d = Math.hypot(fx - rock.x, fy - rock.y) || 1;
+    const cx = rock.x + ((fx - rock.x) / d) * rock.radius * 0.8;
+    const cy = rock.y + ((fy - rock.y) / d) * rock.radius * 0.8;
+    rock.hp -= dmg;
+    rock.hitFlash = 1;
+    this.free(rock);
+    grindFx(rock, cx, cy, rock.oreType && rock.oreType !== 'rock' ? rock.hue : 32, particles);
+    return rock.hp <= 0;
+  }
+
   // Rocks in view: solid rock, then the freed chunks on it, then bedrock over both (a bedrock core
   // wrapped in an asteroid shows from the start). Overlapping nodes merge into one solid shape by
   // drawing in passes: every rim, then every body over them (hiding each rim inside the shape, so only

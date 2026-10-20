@@ -42,9 +42,11 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
-// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
+// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below). Quake Mortar 0.33: its rings
+// roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
+// shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -61,7 +63,8 @@ export const WEAPON_CLASS = Object.freeze({
   drones: 'auto', turret: 'auto',
   rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
   lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
-  shockfield: 'defensive', orbitals: 'defensive'
+  shockfield: 'defensive', orbitals: 'defensive',
+  quake: 'area'
 });
 export const CLASS_TARGET = Object.freeze({
   aimed: Object.freeze({ perTarget: 1, enforced: true }),
@@ -538,6 +541,50 @@ export const WEAPON_SCALING = {
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
+  // --- Quake Mortar (stats: damage, count, rate, radius, bore) --------------------------------------
+  // Autonomous: every volley interval the mortar lobs `count` heavy shells at the densest packs within
+  // quakeRange (quake-mortar.js). Each shell flies quakeFlight s, then lands as a shockwave ring that rolls
+  // out to quakeRadius over quakeRingTime s: every enemy the front passes takes one hit (full at the
+  // impact, quakeEdgeFalloff less at the rim) and is shoved outward, and every rock it passes takes
+  // quakeRockDamage of mining damage (the ring cracks rocks, and breaks them: they count as mined).
+  // Bore Charge is the rock damage only (UTILITY). A ring is valued at one hit per target.
+  quakeShells: (b) => 2 + b.r.count,
+  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
+  quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
+  quakeRockDamage: (b) => 25 * (1 + 0.5 * (b?.r?.bore || 0)), // x the ship's mining speed / 75: a plain rock (~85 HP) takes 4 rings, 1 with 6 Bore ranks
+  quakeRange: 480,
+  quakeFlight: 0.85,
+  quakeRingTime: 0.5,
+  quakeEdgeFalloff: 0.3,
+  quakeKnock: 3.2,
+  // Transforms: Skipping Shells (a landed shell skips on to the next pack skipBounces times, each skip a
+  // quake skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Fault Lines (every
+  // main impact tears faultCount fissures faultLengthMult x the ring radius long that erupt faultDelay s
+  // later for faultShare, valued at faultHitShare), Epicenter (every epicenterEvery-th volley the hull
+  // itself slams a ring of epicenterRadiusMult x the radius for epicenterShare of a whole volley, valued
+  // at epicenterHitShare: it lands on whatever is crowding the ship).
+  skipBounces: 2,
+  skipShare: 0.5,
+  skipRadiusFrac: 0.65,
+  skipRange: 280,
+  skipFlight: 0.4,
+  skipHitShare: 0.3, // smaller rings landing after the main ring thinned the pack: card bench (realized ~ the boost)
+  faultCount: 3,
+  faultShare: 0.5,
+  faultLengthMult: 1.9,
+  faultWidth: 24,
+  faultDelay: 0.35,
+  faultHitShare: 0.15, // a thin line catches few enemies the ring missed: card bench (realized ~ the boost)
+  epicenterEvery: 3,
+  epicenterShare: 0.8,
+  epicenterRadiusMult: 2,
+  epicenterKnockMult: 2.2,
+  epicenterHitShare: 1.7, // a ship-sized ring lands on the whole crowd closing in: card bench (realized ~ the boost)
+  quakeUnits: (b) => 1 + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
+    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0),
+  // Damage of one quake ring (main impact) to each enemy it passes.
+  quakeDamageMult: (b) => lv1Trim('quake') * lv1('quake', 'quake', (b0) => DPS_TARGET(1) * W.quakeCooldown(b0) / (W.quakeShells(b0) * W.quakeUnits(b0))) * hitMult(b) * tfScale(b, W.quakeUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -754,7 +801,9 @@ export const POTENTIAL_DPS = {
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap) / W.fieldCooldown(b);
-  }
+  },
+  // One volley: every shell's ring, skips and fault lines, plus its share of the Epicenter slam.
+  quake: (b) => W.quakeShells(b) * W.quakeDamageMult(b) * W.quakeUnits(b) / W.quakeCooldown(b)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -779,7 +828,8 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area']
+  shockfield: ['electric', 'area'],
+  quake: ['explosive', 'area']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -815,7 +865,8 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield',
+  quake: 'quake'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -859,6 +910,7 @@ export function weaponDamage(p, weapon, b) {
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'quake': base = d * W.quakeDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -876,6 +928,7 @@ export const grenadeBlastRadius = (p, b = weaponBuild(p, 'grenades')) => W.grena
 export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) * areaMult(p);
 export const flameRange = (p, b = weaponBuild(p, 'flamethrower')) => W.flameRange(b) * areaMult(p);
 export const fieldRadius = (p, b = weaponBuild(p, 'shockfield')) => W.fieldRadius(b) * areaMult(p);
+export const quakeRadius = (p, b = weaponBuild(p, 'quake')) => W.quakeRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);

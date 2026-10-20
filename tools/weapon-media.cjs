@@ -46,6 +46,7 @@ const TWEAKS = {
   // ring of armed mines in shot; a second in, the targets are released and charge through them.
   mines: { orbit: 170, fixedCam: true, zoom: 1.4, warmup: 360, frames: 60, release: 15, dummies: { count: 10 } },
   lightning: { frames: 60 }, // strikes are spaced out: a longer loop catches more of them
+  quake: { frames: 60 }, // a volley every ~2.6 s: a longer loop catches two of them
   // The blade ring orbits outside the default close ring: 32 targets spread the close ring onto the blades' path.
   orbitals: { dummies: { count: 32 } }
 };

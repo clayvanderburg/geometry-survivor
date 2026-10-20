@@ -32,7 +32,10 @@ export const SUB_SOURCES = Object.freeze({
   shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
   meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
-  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  quake_skip: 'quake',       // Quake Mortar: Skipping Shells rings
+  quake_fault: 'quake',      // Quake Mortar: Fault Lines eruptions
+  quake_epicenter: 'quake'   // Quake Mortar: Epicenter slams
 });
 
 // Damage that is not a loadout weapon's.
