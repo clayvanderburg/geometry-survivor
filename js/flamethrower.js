@@ -47,6 +47,7 @@ export class Flamethrower {
     this.time = 0;
     this.scorches = 0;
     this.rings = 0;
+    this.swivel = null; // the spinning nozzle's heading (radians); null until the weapon is first owned
     for (const n of this.nozzles) n.on = false;
   }
 
@@ -58,7 +59,9 @@ export class Flamethrower {
   update(dt, game, wantFire) {
     const p = game.player;
     const owned = (p.weapons.flamethrower || 0) > 0;
-    const firing = owned && !!wantFire;
+    if (owned) this.swing(p, weaponBuild(p, 'flamethrower'), dt);
+    // No aiming at all: the nozzle spins round the ship and sprays the whole time it's equipped.
+    const firing = owned;
     if (!firing && this.count === 0 && this.heat === 0) {
       if (this.firing) this.silence(game);
       return;
@@ -117,6 +120,12 @@ export class Flamethrower {
     game.sound?.setFlameRoar?.(0);
   }
 
+  // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate.
+  swing(p, b, dt) {
+    if (this.swivel === null) this.swivel = p.angle;
+    this.swivel = wrap(this.swivel + W.flameTurnRate(b) * dt);
+  }
+
   // Place the nozzles on the turret and clip each ray of their cones at the first rock face.
   aim(game, p, b) {
     const range = flameRange(p, b);
@@ -126,7 +135,7 @@ export class Flamethrower {
       const nz = this.nozzles[k];
       nz.on = k === 0 || b.t4;
       if (!nz.on) continue;
-      nz.angle = p.angle + (k === 0 ? 0 : Math.PI);
+      nz.angle = (this.swivel ?? p.angle) + (k === 0 ? 0 : Math.PI);
       nz.half = half;
       nz.range = k === 0 ? range : range * W.flameRearRange;
       const muzzle = (p.radius || 15) * 0.95;

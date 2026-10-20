@@ -178,6 +178,7 @@ export const STAT_ROWS = [
   { id: 'flameTickRate', label: 'Scorches / s', get: (p) => wb(p, 'flamethrower', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'FLAME SCORCH RATE' },
   { id: 'flameRange', label: 'Flame reach', get: (p) => wb(p, 'flamethrower', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'FLAME REACH', newText: (a) => `FLAMETHROWER // ${a} PX REACH` },
   { id: 'flameCone', label: 'Cone width', get: (p) => wb(p, 'flamethrower', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
+  { id: 'flameTurn', label: 'Spin speed', get: (p) => wb(p, 'flamethrower', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
   { id: 'flameRear', label: 'Rear nozzle reach', get: (p) => wb(p, 'flamethrower', (b) => (b.t4 ? flameRange(p, b) * W.flameRearRange : null)), fmt: int, newText: (a) => `REAR NOZZLE // ${a} PX` },
   { id: 'flamePuddle', label: 'Napalm puddle damage / tick', get: (p) => wb(p, 'flamethrower', (b) => (b.t8 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b) : null)), fmt: dec1, newText: () => 'NAPALM PUDDLES' },
   { id: 'flameRing', label: 'Inferno Ring damage', get: (p) => wb(p, 'flamethrower', (b) => (b.t12 ? weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b) : null)), fmt: dec1, newText: () => `INFERNO RING EVERY ${W.flameRingEvery}s` },

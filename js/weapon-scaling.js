@@ -397,11 +397,14 @@ export const WEAPON_SCALING = {
   // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
   flameTickRate: (b) => 8 * rateMult(b.r.rate),
   flameRange: (b) => 254 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1
-  flameConeHalf: (b) => 0.3 + 0.09 * (b?.r?.cone || 0), // radians either side of the aim (~17 deg at LV 1); +0.045 per rank before v0.39.1
+  flameConeHalf: (b) => 0.55 + 0.09 * (b?.r?.cone || 0), // radians either side of the nozzle (~63 deg wide at LV 1; 0.3 before it spun)
   flameBurnRank,
+  // The nozzle never aims: it spins round the ship at this many radians per second (one turn every
+  // ~5 s at LV 1), +35% per Spin Rotor rank.
+  flameTurnRate: (b) => 1.2 * (1 + 0.35 * (b?.r?.turn || 0)),
   flameEdgeFalloff: 0.35,
-  flameBurnShare: 0.35, // its burn stacks tick at 35% of the usual FIRE DPS (burnStackDps)
-  flameHitShare: 2.2,
+  flameBurnShare: 1, // its burn stacks tick at the usual FIRE DPS (35% while it aimed: a spinning cone re-lights a pack far less often)
+  flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Transforms: Twin Nozzle (a rear nozzle at flameRearRange of the reach, scorching like the front one,
   // valued at flameRearHitShare: fewer enemies sit behind you), Napalm Puddles (a burning puddle at the
   // flames' tip every flamePuddleEvery s, worth flamePuddleShare of the stream's one-target DPS per

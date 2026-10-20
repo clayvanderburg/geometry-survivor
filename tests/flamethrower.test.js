@@ -41,7 +41,8 @@ function flamePlayer({ cards = [], bt = {} } = {}) {
 }
 
 // A minimal game around a Flamethrower: hits are recorded (and apply statuses like Game.hitEnemy).
-function rig(p, enemies, rocks = []) {
+// The nozzle is held on the ship's heading (no spin) unless `spin` is set, so geometry tests can aim it.
+function rig(p, enemies, rocks = [], { spin = false } = {}) {
   const hits = [];
   const roar = [];
   const blasts = [];
@@ -53,13 +54,15 @@ function rig(p, enemies, rocks = []) {
     hitEnemy(e, dmg, source) { hits.push({ e, dmg, source }); applyOnHitStatuses(p, e, source); },
     damageEnemiesInRadius(x, y, radius, dmg, hue, source, knock) { blasts.push({ x, y, radius, dmg, source, knock }); }
   };
-  return { game, hits, roar, blasts, ft: new Flamethrower() };
+  const ft = new Flamethrower();
+  if (!spin) ft.swing = function (pl) { if (this.swivel === null) this.swivel = pl.angle; };
+  return { game, hits, roar, blasts, ft };
 }
 const enemy = (p, dx, dy, r = 10) => ({ type: 'swarmer', x: p.x + dx, y: p.y + dy, radius: r, hp: 1e6, maxHp: 1e6 });
 const run = (r, seconds, firing = true) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, firing); };
 const hitSet = (r) => new Set(r.hits.map((x) => x.e));
 
-test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and five single-stat cards', () => {
+test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and six single-stat cards', () => {
   const w = WEAPON_BY_ID.flamethrower;
   assert.equal(w.name, 'Flamethrower');
   assert.equal(w.category, 'PRIMARY');
@@ -71,15 +74,15 @@ test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN t
   const groups = buildSourceGroups(WEAPONS);
   assert.equal(groups.flame, 'flamethrower');
   assert.equal(groups.burn_flamethrower, 'flamethrower', 'its burn ticks are credited to it');
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'burn']);
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false]);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'turn', 'burn']);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, false]);
   for (const c of STAT_CARDS.flamethrower) assert.match(c.summary, /^Flamethrower:/);
   assert.equal(ELEMENT_CARDS.flamethrower, undefined, 'no element cards: FIRE is built in');
   assert.deepEqual(BREAKTHROUGH_LEVELS.map((m) => TRANSFORMS.flamethrower[m].name), ['Twin Nozzle', 'Napalm Puddles', 'Inferno Ring']);
 });
 
 test('every flame formula reads only its own rank; LV 1 numbers', () => {
-  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, burn: W.flameBurnRank, damage: W.flameDamageMult };
+  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, turn: W.flameTurnRate, burn: W.flameBurnRank, damage: W.flameDamageMult };
   const base = levelBuild('flamethrower', 1);
   for (const card of STAT_CARDS.flamethrower) {
     const b = makeBuild('flamethrower', 5, { [card.stat]: 3 });
@@ -90,7 +93,7 @@ test('every flame formula reads only its own rank; LV 1 numbers', () => {
   }
   assert.equal(W.flameTickRate(base), 8);
   assert.equal(W.flameRange(base), 254);
-  assert.equal(W.flameConeHalf(base), 0.3);
+  assert.equal(W.flameConeHalf(base), 0.55);
   assert.equal(W.flameBurnRank(base), 1);
   assert.equal(W.flameBurnRank(makeBuild('flamethrower', 18, { burn: 4 }, { 6: 'boost', 12: 'boost' })), ELEMENT_MAX_RANKS, 'burn rank caps at 5');
 });
@@ -162,13 +165,13 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
   assert.match(t.headline, /\+22% DPS/);
 });
 
-test('the cone: hits what is in front within reach and width, harder up close, only while firing, and roars', () => {
+test('the cone: hits what is in front within reach and width, harder up close, always on while equipped, and roars', () => {
   const p = flamePlayer();
   const close = enemy(p, 60, 0), tip = enemy(p, 245, 0), edge = enemy(p, Math.cos(0.28) * 120, Math.sin(0.28) * 120);
-  const beyond = enemy(p, 300, 0), behind = enemy(p, -80, 0), side = enemy(p, 0, 100), wide = enemy(p, Math.cos(0.6) * 120, Math.sin(0.6) * 120);
+  const beyond = enemy(p, 300, 0), behind = enemy(p, -80, 0), side = enemy(p, 0, 100), wide = enemy(p, Math.cos(0.9) * 120, Math.sin(0.9) * 120);
   const r = rig(p, [close, tip, edge, beyond, behind, side, wide]);
-  run(r, 1, false);
-  assert.equal(r.hits.length, 0, 'no flames without firing');
+  run(r, 1, false); // no aiming or trigger: it sprays whenever it is equipped
+  r.hits.length = 0;
   run(r, 1);
   const hit = hitSet(r);
   for (const [name, e] of Object.entries({ close, tip, edge })) assert.ok(hit.has(e), `${name} burns`);
@@ -182,8 +185,9 @@ test('the cone: hits what is in front within reach and width, harder up close, o
   assert.ok(near(per(close), weaponDamage(p, 'flame') * (1 - W.flameEdgeFalloff * ((close.x - nz.x - close.radius) / nz.range)), 1e-6));
   assert.ok(close.st.burn > 0 && close.st.burnStat === 'burn_flamethrower', 'scorched enemies burn, credited to the Flamethrower');
   assert.deepEqual(r.roar, [1]);
-  r.ft.update(1 / 60, r.game, false);
-  assert.deepEqual(r.roar, [1, 0], 'the roar fades when the spray stops');
+  p.weapons.flamethrower = 0;
+  r.ft.update(1 / 60, r.game, true);
+  assert.deepEqual(r.roar, [1, 0], 'the roar fades when the weapon is gone');
 });
 
 test('Nozzle Pressure and Wide Nozzle reach further and wider', () => {
@@ -309,4 +313,26 @@ test('drawing costs a fixed handful of fills however many flames are in the air'
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'fill' ? () => { fills++; } : k === 'stroke' ? () => { strokes++; } : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
   r.ft.draw(ctx, { camX: 0, camY: 0, width: 4200, height: 4200 });
   assert.ok(fills <= 5 && strokes === 0, `${fills} fills, ${strokes} strokes`);
+});
+
+test('the nozzle ignores the aim and spins slowly round the ship, faster with Spin Rotor', () => {
+  const spun = (cards) => {
+    const p = flamePlayer({ cards });
+    const r = rig(p, [], [], { spin: true });
+    run(r, 1 / 60);
+    const a0 = r.ft.swivel;
+    p.angle = Math.PI / 2; // the aim moves: the nozzle doesn't care
+    run(r, 0.5);
+    return ((r.ft.swivel - a0) + Math.PI * 4) % (Math.PI * 2);
+  };
+  const lv1 = W.flameTurnRate(levelBuild('flamethrower', 1));
+  assert.ok(lv1 > 0.8 && lv1 < 1.6, `a slow spin (${lv1.toFixed(2)} rad/s, a turn every ${(2 * Math.PI / lv1).toFixed(1)} s)`);
+  assert.ok(Math.abs(spun([]) - lv1 * 0.5) < 0.03, 'turns at a steady rate whatever the aim');
+  assert.ok(Math.abs(spun([['flamethrower_turn', 6]]) - W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) * 0.5) < 0.05, 'Spin Rotor spins it faster');
+  assert.ok(W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) > lv1 * 2.5);
+  const p = flamePlayer();
+  const r = rig(p, [], [], { spin: true });
+  run(r, 0.5, false);
+  assert.ok(r.ft.nozzles[0].on, 'it sprays without the trigger');
+  assert.ok(Math.abs(r.ft.nozzles[0].angle - r.ft.swivel) < 1e-9, 'the cone points where the nozzle has spun to');
 });
