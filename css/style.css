@@ -3072,36 +3072,29 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 
 .guide-toast-out { opacity: 0; }
 
-/* First boss of a run: "don't forget your bombs", with an arrow to the Supernova counter (js/main.js updateNovaCallout) */
+/* First boss of a run: "TRY A SUPERNOVA BOMB! (E)" on one line (js/main.js updateNovaCallout). Desktop: centred
+   just above the dock's shield bar (left / top set by JS; `translate` lifts it onto that point and leaves
+   `transform` free for the pop-in). Touch: the top-right corner, with an arrow down to the NOVA button. */
 .nova-callout {
   position: absolute;
-  right: max(22px, env(safe-area-inset-right));
-  top: 168px;
-  width: min(1080px, calc(100vw - 44px));
-  padding: 24px 40px 28px;
+  translate: -50% -100%;
+  transform-origin: bottom center;
+  padding: 6px 22px;
+  white-space: nowrap;
   text-align: center;
-  background: radial-gradient(ellipse at center, rgba(255, 204, 0, 0.1), rgba(255, 204, 0, 0.04) 60%, transparent 80%);
+  background: radial-gradient(ellipse at center, rgba(255, 204, 0, 0.16), rgba(255, 204, 0, 0.05) 60%, transparent 80%);
   animation: novaCalloutIn 0.55s cubic-bezier(0.2, 1.3, 0.4, 1);
   transition: opacity 0.4s ease-in;
 }
 
 .nova-callout-title {
-  font-size: clamp(30px, min(5.6vw, 6.2vh), 68px);
+  font-size: clamp(18px, min(2.2vw, 3.2vh), 28px);
   font-weight: 900;
-  letter-spacing: 6px;
+  letter-spacing: 4px;
   line-height: 1.15;
   color: #fff;
-  text-shadow: 0 0 16px var(--gold), 0 0 36px rgba(255, 204, 0, 0.65);
+  text-shadow: 0 0 12px var(--gold), 0 0 28px rgba(255, 204, 0, 0.65);
   animation: novaCalloutPulse 0.7s ease-in-out infinite alternate;
-}
-
-.nova-callout-sub {
-  margin-top: 12px;
-  font-size: clamp(15px, min(2.2vw, 2.4vh), 26px);
-  font-weight: 800;
-  letter-spacing: 3px;
-  color: var(--gold);
-  text-shadow: 0 0 10px rgba(255, 204, 0, 0.7);
 }
 
 .nova-callout-arrow {
@@ -3137,17 +3130,12 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 #nova-indicator.nova-callout-target { box-shadow: none; animation: none; }
 #nova-indicator.nova-callout-target .dock-gauge { opacity: 1; animation: novaTargetPulse 0.5s ease-in-out infinite alternate; }
 
-/* Short (phone landscape) screens: a narrower banner, clear of the ship in the middle. */
-@media (max-height: 500px) {
-  .nova-callout { top: 184px; width: 42vw; padding: 8px 12px 10px; }
-  .nova-callout-title { font-size: 17px; letter-spacing: 2px; }
-  .nova-callout-sub { font-size: 9px; letter-spacing: 1px; }
-}
+/* Desktop: no arrow, the glowing SUPERNOVA gauge sits right beside the banner. */
+body:not(.touch-mode) .nova-callout-arrow { display: none; }
 
-/* Touch screens: a small banner tucked into the top-right corner, clear of the ship and the boss bar. */
-body.touch-mode .nova-callout { top: 70px; right: max(12px, env(safe-area-inset-right)); width: 44vw; padding: 8px 12px 10px; }
-body.touch-mode .nova-callout-title { font-size: 17px; letter-spacing: 2px; }
-body.touch-mode .nova-callout-sub { font-size: 9px; letter-spacing: 1px; }
+/* Touch screens: tucked into the top-right corner, clear of the ship and the boss bar. */
+body.touch-mode .nova-callout { top: 70px; right: max(12px, env(safe-area-inset-right)); translate: none; transform-origin: top right; padding: 6px 12px; }
+body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 
 @keyframes novaCalloutIn {
   0% { opacity: 0; transform: scale(1.4); }
@@ -4403,8 +4391,8 @@ body:not(.touch-mode) .hp-bar-outer::after {
   .dock-ability.ready .dock-gauge { animation: none; }
 }
 
-/* The Field Guide toast (bottom left) rides above the dock's line. */
-body:not(.touch-mode) .guide-toast { bottom: 96px; }
+/* The Field Guide toast (bottom left) rides above the dock and the one-line bomb reminder over it. */
+body:not(.touch-mode) .guide-toast { bottom: 140px; }
 
 /* The hotkey toggles stay in the top-right column. */
 body:not(.touch-mode) .quick-toggles { order: -1; }

@@ -255,7 +255,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.deepEqual(p.loadout, ['blaster']);
 });
 
-test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite Rounds and Pulsar Helix', () => {
+test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite Rounds and Pulsar Helix', () => withRandom(() => {
   const g = freshGame();
   const p = g.player;
   fill(p, ['rockets']);
@@ -269,18 +269,18 @@ test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer,
   assert.equal(p.stats.fireRate, base.fireRate);
   assert.equal(p.weapons.pulsarHelix, 0);
   assert.ok(!eligibleUpgrades(p).some((u) => ['multishot', 'firerate', 'pierce', 'blaster_fire', 'tag_kinetic'].includes(u.id)));
-  // No Autocannon: the blaster stops firing, rocket pods keep going.
-  // Watched every tick: a volley can hit rock and be gone again before the window ends.
+  // No Autocannon: the blaster stops firing, rocket pods keep going. Check every frame, not just the
+  // last: rockets die on their first hit, so with enemies nearby none may be in flight at the end.
   g.player.invuln = 1e9;
-  let blasterBolts = false, rockets = false;
+  let bolts = false, rockets = false;
   for (let i = 0; i < 120; i++) {
     g.update(1 / 60);
-    blasterBolts ||= g.bullets.some((b) => !b.source);
+    bolts ||= g.bullets.some((b) => !b.source);
     rockets ||= g.bullets.some((b) => b.source === 'rocket');
   }
-  assert.ok(!blasterBolts, 'no blaster bolts');
+  assert.ok(!bolts, 'no blaster bolts');
   assert.ok(rockets, 'rockets still fire');
-});
+}, lcg()));
 
 test('a discard keeps live tuner changes to base stats (the run-start snapshot follows the tuner)', () => {
   const g = freshGame();

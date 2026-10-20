@@ -2570,9 +2570,9 @@ export class Game {
     }
   }
 
-  // The first-boss bomb reminder: a big banner plus a dashed arrow curving from it to the bomb counter
-  // (the NOVA button on touch), which glows while the arrow points at it. It waits for the boss title
-  // card to clear, and on desktop sits just under the boss health bars (touch: the top-right corner, CSS).
+  // The first-boss bomb reminder: one line, "TRY A SUPERNOVA BOMB! (E)", while the SUPERNOVA gauge glows. It
+  // waits for the boss title card to clear. Desktop: just above the dock's shield bar (no arrow, the gauge is
+  // right beside it). Touch: the top-right corner (CSS), with a dashed arrow curving down to the NOVA button.
   novaCalloutShowing() {
     return this.novaCalloutTimer > 0 && !(this.bossCardTimer > 0);
   }
@@ -2588,26 +2588,28 @@ export class Game {
     const fading = this.novaCalloutTimer < 0.45;
     el.classList[fading ? 'add' : 'remove']('nova-callout-out');
     arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
-    const how = this.gpActive ? 'PRESS B' : this.touchMode ? 'TAP NOVA' : 'PRESS E';
-    const n = this.player?.bombs ?? 0;
-    const sub = `${how} · YOU HAVE ${n} · EACH ONE TEARS 40% OFF A BOSS`;
-    const subEl = document.getElementById('nova-callout-sub');
-    if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+    const key = this.gpActive ? 'B' : this.touchMode ? 'TAP NOVA' : 'E';
+    const text = `TRY A SUPERNOVA BOMB! (${key})`;
+    const titleEl = document.getElementById('nova-callout-title');
+    if (titleEl && titleEl.textContent !== text) titleEl.textContent = text;
 
     const hud = document.getElementById('hud')?.getBoundingClientRect?.();
-    const bars = document.getElementById('boss-hud')?.getBoundingClientRect?.();
-    let top = '';
-    if (!this.touchMode && hud) {
-      // The SUPERNOVA gauge sits in the bottom dock, so the banner only has to clear the boss bars up top.
-      const below = Math.max(168, bars?.height > 0 ? bars.bottom - hud.top + 14 : 0);
-      top = `${Math.round(below)}px`;
+    const shield = document.getElementById('shield-group')?.getBoundingClientRect?.();
+    const dock = document.getElementById('ability-dock')?.getBoundingClientRect?.();
+    let left = '', top = '';
+    if (!this.touchMode && hud && shield?.width > 0 && dock?.height > 0) {
+      // Centred over the shield bar, its bottom edge just above the dock, kept on screen.
+      const half = (el.getBoundingClientRect?.()?.width || 0) / 2;
+      const cx = Math.max(half + 12, Math.min(hud.width - half - 12, shield.left + shield.width / 2 - hud.left));
+      left = `${Math.round(cx)}px`;
+      top = `${Math.round(dock.top - hud.top - 6)}px`;
     }
+    if (el.style && el.style.left !== left) el.style.left = left;
     if (el.style && el.style.top !== top) el.style.top = top;
+    if (!this.touchMode) return;
 
     // Arrow: leaves the banner edge nearest the target and curves into the target's facing side.
-    const target = this.touchMode
-      ? document.getElementById('touch-nova')
-      : document.querySelector?.('#nova-indicator .dock-gauge') || document.getElementById('nova-indicator');
+    const target = document.getElementById('touch-nova');
     const t = target?.getBoundingClientRect?.();
     const c = el.getBoundingClientRect?.();
     const box = arrow.getBoundingClientRect?.();

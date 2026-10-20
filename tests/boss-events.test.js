@@ -327,7 +327,7 @@ test('the first boss of a run shows the Supernova bomb reminder once, pointing a
   g.updateNovaCallout();
   assert.ok(!hidden('nova-callout') && !hidden('nova-callout-arrow'), 'banner and arrow are on screen');
   assert.ok(document.getElementById('nova-indicator').classList.contains('nova-callout-target'), 'the bomb counter glows');
-  assert.equal(document.getElementById('nova-callout-sub').textContent, 'PRESS E · YOU HAVE 2 · EACH ONE TEARS 40% OFF A BOSS');
+  assert.equal(document.getElementById('nova-callout-title').textContent, 'TRY A SUPERNOVA BOMB! (E)');
 
   tick(g, 5 * 60 + 2);
   g.updateNovaCallout();
