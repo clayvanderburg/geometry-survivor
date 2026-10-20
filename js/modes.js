@@ -53,7 +53,7 @@ export const MODES = Object.freeze({
     shieldRepairs: true,
     armoryShield: true,
     tuning: Object.freeze({
-      waveLength: 14, // 22 in NORMAL: a boss every 42 s
+      waveLength: 14, // 22 in NORMAL: a boss every 56 s
       // XP to the next level: 15 + 9 per level (+2 x (LV - 15)^2): about 40% cheaper, so the build comes together fast.
       xpCurveBase: 15,
       xpCurveStep: 9,

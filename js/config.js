@@ -462,7 +462,7 @@ export const TUNING_SCHEMA = [
   {
     group: '📈 Difficulty Ramp',
     items: [
-      { key: 'waveLength', label: 'Wave Length (bosses every 3 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
+      { key: 'waveLength', label: 'Wave Length (bosses every 4 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
       { key: 'waveHpStart', label: 'Enemy HP: Wave 1 Scale (tougher hulls)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
       { key: 'waveHpStartLight', label: 'Enemy HP: Wave 1 Scale (light swarm: swarmers, pinwheels, weavers, fragments)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
       { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },

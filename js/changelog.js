@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.0',
+    date: '2026-10-20',
+    title: 'Bosses Every 4th Wave',
+    notes: [
+      { type: 'balance', text: 'Bosses are spread out: a minor boss every 4th wave and a major boss every 8th (was every 3rd and 6th). The campaign now runs 40 waves; past wave 40 bosses come in pairs.' },
+      { type: 'balance', text: 'New enemies still arrive with each boss, now on waves 4, 8, 12 ... 36: mayflies 4, bruisers and serpents 8, blinkers and kestrels 12, gunners and carriers 16, and so on.' },
+      { type: 'new', text: 'Ten new wave themes fill the extra waves: SHATTERPOINT, HORNET NEST, UNDERTOW, DOGFIGHT, FIRING SQUAD, COLLAPSE, FORTRESS, CONTAGION, FEEDBACK LOOP and DEAD OF NIGHT.' }
+    ]
+  },
+  {
     version: '0.42.1',
     date: '2026-10-20',
     title: 'Tighter Sprays',

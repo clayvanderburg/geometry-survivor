@@ -46,7 +46,7 @@ function bossGame() {
       playBossWarning() { calls.warnings++; }, playBossArrival() { calls.arrivals++; }, playBossDefeat() { calls.defeats++; },
       setMusicState(state) { calls.music.push(state); }, playExplosion() {}, playGeomPickup() {}
     },
-    state: 'PLAYING', pendingBossSpawns: [], wave: 2, waveTimer: 0, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
+    state: 'PLAYING', pendingBossSpawns: [], wave: 3, waveTimer: 0, elapsedTime: 0, sessionCores: 0, multiplier: 1, spawnCooldown: 99,
     camX: 0, camY: 0, worldWidth: 4200, worldHeight: 4200, width: 1280, height: 720,
     keys: {}, mouse: { x: 640, y: 360, down: false }, autoFire: false, autoAim: false,
     bullets: [], missiles: [], singularities: [], chests: [], geoms: [],
@@ -65,14 +65,14 @@ test('a scheduled boss telegraphs for the full warning time before it materializ
   const { g, calls } = bossGame();
   g.waveTimer = TUNING.waveLength;
   tick(g);
-  assert.equal(g.wave, 3);
+  assert.equal(g.wave, 4);
   assert.deepEqual(g.pendingBossSpawns, [], 'admission happens on the scheduling tick when a slot is free');
   assert.equal(bossWarnings(g).length, 1);
   assert.equal(liveBosses(g).length, 0);
   assert.equal(calls.warnings, 1);
   assert.equal(g.getBossStage(), 1);
   const warning = g.getBossHudModel().warning;
-  assert.equal(warning.name, 'BROOD QUEEN', 'wave 3 is the Brood Queen (js/wave-plan.js)');
+  assert.equal(warning.name, 'BROOD QUEEN', 'wave 4 is the Brood Queen (js/wave-plan.js)');
   assert.equal(warning.epithet, 'MOTHER OF THE SWARM');
   assert.ok(Math.abs(warning.eta - (TUNING.bossWarningTime - 1 / 60)) < 1e-9);
 
@@ -255,11 +255,11 @@ test('a full bomb stock is not advertised as a bomb reward', () => {
   assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES');
 });
 
-test('boss epithets climb with each three-wave encounter', () => {
-  assert.equal(bossEpithet(3), 'WAVE 3 WARDEN');
-  assert.equal(bossEpithet(6), 'WAVE 6 SENTINEL');
-  assert.equal(bossEpithet(9), 'WAVE 9 TYRANT');
-  assert.equal(bossEpithet(15), 'WAVE 15 ANNIHILATOR');
+test('boss epithets climb with each four-wave encounter', () => {
+  assert.equal(bossEpithet(4), 'WAVE 4 WARDEN');
+  assert.equal(bossEpithet(8), 'WAVE 8 SENTINEL');
+  assert.equal(bossEpithet(12), 'WAVE 12 TYRANT');
+  assert.equal(bossEpithet(20), 'WAVE 20 ANNIHILATOR');
   assert.equal(bossEpithet(42), 'WAVE 42 ANNIHILATOR');
 });
 
