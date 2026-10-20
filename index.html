@@ -35,6 +35,24 @@
       <button id="touch-nova" class="touch-btn touch-nova" tabindex="-1">NOVA<span id="touch-nova-count" class="touch-nova-count">2</span></button>
     </div>
 
+    <!-- Cutscenes (js/cutscene-stage.js): letterbox, title card, the talking-head dialogue box (js/dialogue.js)
+         and SKIP, over the live game world. Click / tap / Space / A moves a line on, Esc / Start skips. -->
+    <div id="cutscene-layer" class="cutscene-layer hidden">
+      <div class="cs-bar cs-bar-top"></div>
+      <div class="cs-bar cs-bar-bottom"></div>
+      <div id="cutscene-card" class="cs-card hidden"><div class="cs-card-title"></div><div class="cs-card-sub"></div></div>
+      <button id="btn-cutscene-skip" class="neon-btn cs-skip" type="button">SKIP ⏭<span class="cs-skip-key"> [ESC]</span></button>
+      <div id="dialogue-box" class="dialogue-box hidden" aria-live="polite">
+        <div class="dialogue-frame"><canvas id="dialogue-portrait" class="dialogue-portrait" width="72" height="72"></canvas></div>
+        <div class="dialogue-body">
+          <div id="dialogue-name" class="dialogue-name"></div>
+          <div id="dialogue-text" class="dialogue-text"></div>
+          <div class="dialogue-next" aria-hidden="true">▼</div>
+        </div>
+      </div>
+      <div id="cutscene-fade" class="cs-fade"></div>
+    </div>
+
     <!-- HUD Overlay -->
     <div id="hud">
       <div class="hud-top">
@@ -438,6 +456,7 @@
           <div class="hub-header-side">
             <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
             <button id="btn-title-tutorial" class="neon-btn tutorial-open-btn guide-hub-btn" title="A quick look at how to play">🎓 TUTORIAL</button>
+            <button id="btn-title-intro" class="neon-btn intro-open-btn guide-hub-btn" title="Replay the opening cutscene">🎬 INTRO</button>
             <div class="wallet-pill">
               <span class="wallet-icon">❖</span>
               <div>
@@ -507,6 +526,7 @@
           <button class="neon-btn m-btn" data-m-open="armory">❖ ARMORY</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-guide">📖 FIELD GUIDE</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-tutorial">🎓 TUTORIAL</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-title-intro">🎬 INTRO</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-weapon-range">🎯 RANGE</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-notes">📜 NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
           <p class="m-fs-tip hidden">iPhone can't go full screen from the browser: tap Share <b>⎋</b>, then <b>Add to Home Screen</b>, and launch VEXOLITH from your home screen.</p>

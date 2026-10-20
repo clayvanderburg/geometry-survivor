@@ -126,6 +126,7 @@ async function capture(browser, clip, tmp) {
     try {
       localStorage.setItem('vexolith_weapon_range', range);
       localStorage.setItem('vexolith_tutorial_seen', '1');
+      localStorage.setItem('vexolith_intro_seen', '1');
       localStorage.setItem('vexolith_slot_tip_seen', '1');
     } catch {}
   }, JSON.stringify(range));
