@@ -403,7 +403,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
 // The NEW WEAPON card: opens a pick of 1 of 3 unequipped weapons for a free slot.
 export function describeNewWeapon(player) {
   const used = ownedWeapons(player).length;
-  const slots = weaponSlots();
+  const slots = weaponSlots(player);
   const reward = used + 1 <= slots ? slotReward(used + 1) : null;
   return {
     id: 'new_weapon',

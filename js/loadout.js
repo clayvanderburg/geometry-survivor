@@ -135,7 +135,8 @@ export function weaponTags(id) {
   return tags;
 }
 
-export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 6));
+// Weapon slots: the ship's own count when it has one (Hangar ships: LANCER 3, SOVEREIGN 7), else TUNING's 6.
+export const weaponSlots = (p = null) => Math.max(1, Math.round(p?.weaponSlots ?? TUNING.weaponSlots ?? 6));
 
 // Owned weapons in slot order. Players built before loadouts existed (old test fixtures) own the blaster
 // plus every weapon with a level, so their behaviour is unchanged.
@@ -145,7 +146,7 @@ export function ownedWeapons(p) {
 }
 
 export const ownsWeapon = (p, id) => ownedWeapons(p).includes(id);
-export const freeSlots = (p) => Math.max(0, weaponSlots() - ownedWeapons(p).length);
+export const freeSlots = (p) => Math.max(0, weaponSlots(p) - ownedWeapons(p).length);
 export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id)).map((w) => w.id);
 
 // Weapon level shown on slots, HUD and cards: LV 1 for equipping it plus every rank of its stat cards

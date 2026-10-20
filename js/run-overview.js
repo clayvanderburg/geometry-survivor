@@ -229,7 +229,7 @@ export function runInfo(game) {
     ['SHIELD', `${Math.ceil(p.hp || 0)} / ${p.maxHp || 0}`, `${p.bombs ?? 0} Supernova bomb${p.bombs === 1 ? '' : 's'}`],
     ['GOLD', `◆ ${game.gold ?? 0}`, `${game.goldEarned || 0} mined · ${game.goldSpent || 0} spent`],
     ['VOID CORES', `❖ +${game.sessionCores || 0}`, `${game.progression?.data?.cores ?? 0} banked`],
-    ['MODE', modeRules(game).label, `${versionLabel(GAME_VERSION)} · ${game.runTainted ? 'dev-tuned run' : `${ownedWeapons(p).length} / ${weaponSlots()} slots`}`]
+    ['MODE', modeRules(game).label, `${versionLabel(GAME_VERSION)} · ${game.runTainted ? 'dev-tuned run' : `${ownedWeapons(p).length} / ${weaponSlots(p)} slots`}`]
   ];
 }
 
@@ -268,7 +268,7 @@ export function damageHtml(runStats) {
 export function weaponChipsHtml(p, charges = null) {
   const owned = ownedWeapons(p);
   const chips = [];
-  for (let i = 0; i < Math.max(weaponSlots(), owned.length); i++) {
+  for (let i = 0; i < Math.max(weaponSlots(p), owned.length); i++) {
     const w = WEAPON_BY_ID[owned[i]];
     if (!w) {
       chips.push('<span class="weapon-slot-chip empty" title="Free weapon slot">+</span>');

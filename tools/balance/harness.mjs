@@ -33,7 +33,9 @@ const { weaponSlots } = await import('../../js/loadout.js');
 const { canOfferNewWeapon } = await import('../../js/upgrades.js');
 const { rerollCost } = await import('../../js/gold.js');
 
-export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, MODES, W as WEAPON_SCALING };
+const { SHIP_IDS } = await import('../../js/ships.js');
+
+export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, MODES, W as WEAPON_SCALING, SHIP_IDS };
 
 const DT = 1 / 60;
 const silent = new Proxy({}, { get: () => () => {} });
@@ -587,9 +589,10 @@ export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true, kite = 1 }) {
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true, kite = 1, ship = null }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank, mode });
+    if (ship) game.shipOverride = ship; // a Hangar ship's stat profile (js/ships.js)
     const metrics = createMetrics();
     installInstrumentation(game, metrics);
     const shatter = game.onRockShattered;

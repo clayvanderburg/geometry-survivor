@@ -10,9 +10,10 @@
 //   npm run balance -- --no-bench --stats-out sim-stats.json   # same summary format as /api/stats/summary
 //
 //   npm run balance -- --mode blitz         # fly a game mode (js/modes.js): normal, hardcore or blitz
+//   npm run balance -- --ship mantis        # fly a Hangar ship's stats (js/ships.js)
 //
 // Flags: --runs N  --seed S  --strategies a,b  --focus  --weapon-focus  --max-minutes M  --workers N  --meta RANK
-//        --skill expert|average|novice  --no-anticipate  --kite K  --mode M  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
+//        --skill expert|average|novice  --no-anticipate  --kite K  --mode M  --ship ID  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { writeFileSync } from 'node:fs';
@@ -49,6 +50,7 @@ function parseArgs(argv) {
     else if (a === '--no-anticipate') opts.anticipate = false;
     else if (a === '--kite') opts.kite = number(0.5);
     else if (a === '--mode') opts.mode = next();
+    else if (a === '--ship') opts.ship = next();
     else if (a === '--god') opts.god = true;
     else if (a === '--tune') {
       const spec = next();
@@ -401,6 +403,7 @@ async function main() {
   const { buildStrategies } = await import('./balance/strategies.mjs');
   for (const k of Object.keys(opts.tune)) if (!(k in h.DEFAULT_TUNING)) throw new Error(`--tune: unknown tuning key ${k}`);
   if (!(opts.mode in h.MODES)) throw new Error(`--mode must be ${Object.keys(h.MODES).join('|')}`);
+  if (opts.ship && !h.SHIP_IDS.includes(opts.ship)) throw new Error(`--ship must be ${h.SHIP_IDS.join('|')}`);
   opts.waveLength = h.MODES[opts.mode].tuning.waveLength ?? h.DEFAULT_TUNING.waveLength;
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
@@ -411,7 +414,7 @@ async function main() {
   const jobs = [];
   for (const s of strategies) {
     for (let i = 0; i < opts.runs; i++) {
-      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill, anticipate: opts.anticipate, kite: opts.kite, god: opts.god, mode: opts.mode } });
+      jobs.push({ kind: 'run', args: { strategy: s, seed: `${opts.seed}:${s.name}:${i}`, maxSeconds: opts.maxMinutes * 60, metaRank: opts.meta, tuning: opts.tune, weapons: opts.weapons, skill: opts.skill, anticipate: opts.anticipate, kite: opts.kite, god: opts.god, mode: opts.mode, ship: opts.ship } });
     }
   }
   // Long runs first so the pool drains evenly.
@@ -460,6 +463,7 @@ function readHelp() {
   --kite K          scale the pilot's threat radius (default 1; 1.4 keeps packs further away, closer to
                     how skilled players open a run with a weak weapon)
   --mode M          game mode (js/modes.js): normal (default), hardcore or blitz
+  --ship ID         fly a Hangar ship's stat profile (js/ships.js; works with the Hangar flag off)
   --god             keep the ship alive (measures XP / level pacing over a full-length run)
   --tune k=v        override a DEFAULT_TUNING value (repeatable) for A/B comparisons
   --weapon k=expr   override a weapon-scaling entry: a number or an arrow fn, e.g. "orbitalRadius=lv => 80 + lv * 8"
