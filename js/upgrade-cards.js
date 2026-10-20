@@ -284,7 +284,8 @@ export const STAT_ROWS = [
   ...ELEMENT_WEAPONS.flatMap(elementRows),
   ...elementRows('flamethrower'),
   ...elementRows('cryospray'),
-  ...elementRows('acidspray')
+  ...elementRows('acidspray'),
+  ...elementRows('lightning') // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -324,6 +325,25 @@ function headlineText(row, before, after) {
   return `${row.label.toUpperCase()} ${row.fmt(before)} → ${row.fmt(after)}`;
 }
 
+// Cards that do several separate things name all of them in the big headline, so a glance isn't mistaken
+// for the whole card (one stat up front, e.g. "+15% FIRE SPREAD", hid the other three reactions). Each gets
+// the changed rows by id; the rows under the headline still give every number.
+const pctUp = (r) => `+${Math.round((r.a / r.b - 1) * 100)}%`;
+const BUNDLE_HEADLINES = {
+  status_application: () => 'ALL 4 STATUS REACTIONS STRONGER',
+  status_duration: () => 'STACKS, FREEZES & STUNS LAST LONGER',
+  shock_conductor: () => 'MORE & LONGER STUNS · MORE ARCING',
+  magnet: (r) => [
+    r.magnetRadius && `${pctUp(r.magnetRadius)} PICKUP`,
+    r.xpMultiplier && `${pctUp(r.xpMultiplier)} XP`,
+    r.bombs && `+${r.bombs.a - r.bombs.b} BOMB`
+  ].filter(Boolean).join(' · '),
+  thrusters: (r) => [
+    r.moveSpeed && `${pctUp(r.moveSpeed)} SPEED`,
+    r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
+  ].filter(Boolean).join(' · ')
+};
+
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
 // Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond maxRows.
 // Rows whose displayed value differs between two readRows() snapshots.
@@ -353,7 +373,8 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const changed = diffRows(before, after);
 
   const lead = changed.find((r) => r.id === upg.headline) || changed[0];
-  const headline = lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase();
+  const bundle = changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
+  const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
 
   return {

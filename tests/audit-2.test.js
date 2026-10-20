@@ -43,9 +43,14 @@ test('rocks leave a passable gap at the arena wall', () => {
   const m = new AsteroidManager(4200, 4200);
   for (let n = 0; n < 50; n++) {
     m.generateSector(2100, 2100);
+    const wall = m.asteroids.filter((r) => r.slab?.border);
     for (const rock of m.asteroids) {
+      if (rock.unbreakable) continue; // the bedrock wall itself
       assert.ok(rock.x - rock.radius >= 59.99 && rock.x + rock.radius <= 4140.01);
       assert.ok(rock.y - rock.radius >= 59.99 && rock.y + rock.radius <= 4140.01);
+      // A ship (30 px across) fits between mineable rock and the wall's collision.
+      const near = wall.filter((w) => Math.abs(w.x - rock.x) < 200 && Math.abs(w.y - rock.y) < 200);
+      for (const w of near) assert.ok(Math.hypot(w.x - rock.x, w.y - rock.y) - w.radius - rock.radius > 32, 'gap to the bedrock wall');
     }
   }
 });

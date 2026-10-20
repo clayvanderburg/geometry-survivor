@@ -31,8 +31,9 @@ export function spawnSerpent(m, type, x, y, waveScale, count, { angle = 0, extra
 
 // Body segments trailing from (x, y) opposite `angle`, chained onto `leader` (a live enemy or an
 // attach object still waiting to materialize). `boss`: the boss type a body belongs to (bigger
-// payout, and run stats count its plates as that boss), or false.
-export function spawnBody(m, leader, x, y, count, waveScale, { angle = 0, extra = {}, gap = SERPENT.gap, radius = SERPENT.bodyRadius, tail = SERPENT.tailRadius, hue = null, boss = false, headRadius = SERPENT.headRadius } = {}) {
+// payout, and run stats count its plates as that boss), or false. `path`: optional points to lay the
+// plates on instead of a straight line (e.g. a coil from coilPath).
+export function spawnBody(m, leader, x, y, count, waveScale, { angle = 0, extra = {}, gap = SERPENT.gap, radius = SERPENT.bodyRadius, tail = SERPENT.tailRadius, hue = null, boss = false, headRadius = SERPENT.headRadius, path = null } = {}) {
   const back = angle + Math.PI;
   const first = gap + Math.max(0, headRadius - radius) * 0.6; // room for a bigger head
   // Segments share the head's warm-up but never its spawn guard: they must not be relocated apart.
@@ -44,11 +45,30 @@ export function spawnBody(m, leader, x, y, count, waveScale, { angle = 0, extra 
     const d = first + gap * k;
     const seg = { leader, gap: k === 0 ? first : gap, segIndex: k + 1, bodyRadius: r, bossBody: boss, aimAngle: angle };
     if (hue !== null) seg.bodyHue = hue;
-    if (!m.queueSpawn('serpent', x + Math.cos(back) * d, y + Math.sin(back) * d, waveScale, { ...segExtra, attach: seg })) break;
+    const at = path?.[k] ?? { x: x + Math.cos(back) * d, y: y + Math.sin(back) * d };
+    if (!m.queueSpawn('serpent', at.x, at.y, waveScale, { ...segExtra, attach: seg })) break;
     segs.push(seg);
     leader = seg;
   }
   return segs;
+}
+
+// Points for `count` plates coiled round (x, y): an outward spiral, one `gap` of body between plates and
+// `spacing` between turns, starting `first` from the head and winding `dir` (±1) from `angle`.
+export function coilPath(x, y, count, { first, gap, spacing, angle = 0, dir = 1 }) {
+  const b = spacing / (Math.PI * 2); // r = r0 + b·θ
+  const pts = [];
+  let theta = 0;
+  let r = first;
+  for (let k = 0; k < count; k++) {
+    if (k > 0) {
+      theta += gap / Math.hypot(r, b);
+      r = first + b * theta;
+    }
+    const a = angle + dir * theta;
+    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+  }
+  return pts;
 }
 
 // The live enemy an attach object (or enemy) stands for, or null while it is still materializing.

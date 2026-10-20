@@ -374,12 +374,12 @@ test('one lieutenant per non-boss wave, after the delay, behind any pending boss
   assert.equal(sp.maxTimer, TUNING.eliteEntranceTime);
   assert.ok(sp.maxTimer > LIEUTENANT_WARMUP, 'slower than the old off-screen materialize');
 
-  game.wave = 3;
+  game.wave = 5;
   game.updateLieutenantSchedule();
-  assert.equal(lieutenantsQueued(), 1, 'boss waves (every 3rd) get no lieutenant');
+  assert.equal(lieutenantsQueued(), 1, 'boss waves (every 5th) get no lieutenant');
 
-  game.wave = 4;
-  game.pendingBossSpawns = [{ wave: 3, waveScale: 1 }];
+  game.wave = 6;
+  game.pendingBossSpawns = [{ wave: 5, waveScale: 1 }];
   game.updateLieutenantSchedule();
   assert.equal(lieutenantsQueued(), 1, 'a boss still waiting for a slot keeps priority');
   game.pendingBossSpawns = [];
@@ -388,7 +388,7 @@ test('one lieutenant per non-boss wave, after the delay, behind any pending boss
   assert.equal(game.lieutenantWave, 2, 'a full cap defers the lieutenant instead of skipping the wave');
   manager.maxEnemies = 200;
   game.updateLieutenantSchedule();
-  assert.equal(game.lieutenantWave, 4);
+  assert.equal(game.lieutenantWave, 6);
   assert.equal(lieutenantsQueued(), 2);
 });
 
@@ -475,7 +475,7 @@ test('first spawn of each new archetype shows one intel card; sandbox buttons sp
 
   // A newcomer pack refused by the enemy cap is not announced (it stays unseen for the next pack).
   game.ltCardTimer = 0;
-  game.wave = 9;
+  game.wave = 15;
   for (const pack of WAVE_PACKS) TUNING[pack.weightKey] = 0;
   TUNING.spawnWeightBlinker = 1;
   const cap = manager.maxEnemies;

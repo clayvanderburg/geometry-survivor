@@ -259,7 +259,7 @@ test('reload and fire-rate cards change only their own stat', () => {
   const p = makePlayer();
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
   const m = describeUpgrade(p, byId('missiles_reload'));
-  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.03s' }]);
+  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.11s', after: '0.79s' }]);
   p.upgradeLevels.turret = 1; p.weapons.turret = 1;
   const t = describeUpgrade(p, byId('turret_rate'));
   assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
@@ -286,7 +286,7 @@ test('the HUD lists each weapon once (slot chip, real level) and nothing else; u
   g.updateHUD();
   const bar = elements.get('active-weapons-bar').innerHTML;
   assert.match(bar, /Autocannon LV 6</);
-  assert.match(bar, /Tesla Arc LV 3</);
+  assert.match(bar, /Tesla Arc LV 3 <span class="weapon-el"[^>]*>SHOCK</, 'the Tesla Arc is always SHOCK');
   assert.match(bar, /Grenades LV 3 <span class="weapon-el"[^>]*>FIRE</, 'an infused weapon shows its element');
   assert.ok(!bar.includes('Status Potency') && !bar.includes('Thermite'), 'no upgrade row on the HUD');
 
@@ -319,4 +319,26 @@ test('every offered card maps to a scope, and the level-up card shows it', () =>
   assert.equal(cardScope({ id: 'crit_chance' }), 'global');
   assert.equal(cardScope({ id: 'tag_area', category: 'SPECIALIST' }), 'global');
   assert.equal(cardScope({ id: 'status_potency', statusCard: true }), 'global');
+});
+
+test('cards that do several separate things name all of them in the headline, not just the first stat', () => {
+  const p = makePlayer();
+  applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'blaster_fire')); // an element, so status cards apply
+  const headline = (id) => describeUpgrade(p, UPGRADE_POOL.find((u) => u.id === id)).headline;
+  assert.equal(headline('status_application'), 'ALL 4 STATUS REACTIONS STRONGER');
+  assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
+  assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
+  assert.equal(headline('magnet'), '+44% PICKUP · +15% XP · +1 BOMB');
+  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH + SHOCKWAVE');
+  applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
+  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH, BIGGER SHOCKWAVE');
+  assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
+});
+
+test('Geom Attractor Field maxes at 2x XP and half its old pickup radius (6.1x base)', () => {
+  const p = makePlayer();
+  const card = UPGRADE_POOL.find((u) => u.id === 'magnet');
+  for (let i = 0; i < card.maxLevel; i++) applyUpgradeLevels(p, card);
+  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
+  assert.ok(Math.abs(p.stats.magnetRadius / TUNING.magnetRadius - Math.pow(1.65, 5) / 2) < 1e-9, 'LV 5 = half the old 12.2x radius');
 });
