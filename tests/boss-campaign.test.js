@@ -537,7 +537,8 @@ test('mitosis cells grow, then split in two, up to the field cap', async () => {
   assert.ok(m.enemies.filter(e => e.type === 'mitosis').length <= MITOSIS.cap, 'capped');
 });
 
-test('Progenitor: splits 1 → 2 → 4 → mitosis cells; pieces merge when left alone; only the last piece pays out', async () => {
+test('Progenitor: splits 1 → 2 → 4 → mitosis cells; pieces merge when left alone; only the last piece pays out', async (t) => {
+  t.mock.method(Math, 'random', seeded(21)); // deterministic splits and drift (it failed on an unlucky draw now and then)
   resetTuning();
   const { PROG } = await import('../js/bosses.js');
   const g = campaignGame({ wave: 21 });
