@@ -14,15 +14,20 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Level-up cards show their scope**: utility cards and global cards get a subtle outline/indicator in the level-up window. |
 | 2026-10-20 | Breakthroughs are our overclocks; no separate overclock system. |
 | 2026-10-20 | Adaptive/layered music is **parked**: the soundtrack is Suno tracks, not stems. |
+| 2026-10-20 | **Progression safety:** we may take things away before launch, but **Void Cores are the main progression and are always refunded** when an Armory upgrade is removed or reworked. Show an early-access warning so players don't over-invest. |
+| 2026-10-20 | **Hangar / weapon locks / mastery are one big later update**, designed in full (its own discussion with Clay) before anything ships, so we don't take things away again after launch. `docs/HANGAR_DESIGN.md` is a draft. When weapons get locked, the first unlocks are easy. |
+| 2026-10-20 | **Weapon balance target:** offensive weapons (Autocannon, Rocket Pods, Swarm Missiles, …) sit at about the same DPS. Close-range defensive weapons (Shock Field, Orbit Blades) may sit a bit lower: they are the last line of defense. Buff the others up to the Autocannon rather than nerfing it. |
+| 2026-10-20 | **The balance sim under-rates Rocket Pods and Swarm Missiles** (Clay has long runs with them). Treat sim numbers as relative until the bot is calibrated against real play. |
+| 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 
 ## Priorities (in order)
 
-1. **50-wave campaign** — Enemies & Bosses conversation, [PR #119](https://github.com/clayvanderburg/geometry-survivor/pull/119) (rework from every-4th to every-5th wave).
-2. **Fresh balance report** on the current version (the Oct 17 report predates v0.34–v0.42). Feeds targets to the Weapons and Enemies conversations.
-3. **Hangar + weapon unlocks/mastery** — design doc first (`docs/HANGAR_DESIGN.md`), Clay approves, then build in small PRs.
-4. **Victory screen** — starts after the 50-wave campaign merges.
-5. **Card scope indicator** (utility / global outline) — small UI.
-6. Later: wormholes/black-hole portals, burrower & mini-spawner enemies, sector travel.
+1. **Merge the 50-wave campaign** ([PR #119](https://github.com/clayvanderburg/geometry-survivor/pull/119), includes the victory screen), then **rifts & bedrock** ([PR #130](https://github.com/clayvanderburg/geometry-survivor/pull/130), re-bumped to the next version). Clay reviews both.
+2. **Difficulty curve** after Clay playtests #119: contact damage, the wave-HP curve, faster bosses (most are the slowest things on the field). Enemies & Bosses lane.
+3. **Weapons pass:** Swarm Missiles +30% base fire rate, Rocket Pods up to Autocannon level, Orbit Blades +50% orbit radius / +30% spin, then the other weapons per the balance report. Weapons lane.
+4. **Balance sim calibration:** find why the bot under-rates missiles/rockets; check it against real player data.
+5. **Progression safety:** early-access warning and Void Core refunds for reworked Armory upgrades.
+6. **Hangar** (big update, own discussion), then burrower & mini-spawner enemies, sector travel.
 
 ## Lanes (who owns what)
 
@@ -42,6 +47,6 @@ Stay in your lane. If you must touch another lane's files, keep it minimal and s
 1. **One gameplay PR merges at a time.** Before merging, merge the latest `master` into your branch and re-run `npm test`.
 2. **Bump the version at merge time, not when you start.** If `js/version.js` / `js/changelog.js` conflict, keep master's entries and put yours on top with the next number.
 3. **Keep `js/main.js` changes small.** It is 6,800 lines and every lane touches it; put new features in their own module and wire them in with a few lines.
-4. **Balance hold:** until the new balance report lands, weapon/enemy *number tuning* waits (bug fixes are fine). After that, tuning PRs cite the report.
+4. **Balance:** tuning PRs cite `docs/BALANCE_REPORT.md` or Clay's playtest notes, and follow the Decisions above where they differ from the report.
 5. Small, low-risk UI/docs fixes still merge right away once `npm test` passes (see `CLAUDE.md`). Anything gameplay-affecting waits for Clay.
 6. When a design decision is made, add it to the Decisions table above in the same PR.
