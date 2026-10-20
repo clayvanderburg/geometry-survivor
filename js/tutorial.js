@@ -45,7 +45,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The ship kiting a crowd of enemies',
       lines: [
         'Your **SHIELD** is your life. Hits drain it and it slowly recharges.',
-        'Enemies come in **waves** that keep getting tougher. Packs **block** your ship: don\'t ram them, **DASH** through.'
+        'Enemies come in **waves** that keep getting tougher. Keep moving and don\'t get boxed in.'
       ]
     },
     {

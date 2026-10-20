@@ -27,7 +27,7 @@ const RAMP_KEYS = [
   'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'packLateFrom', 'swarmPackLatePerWave', 'blinkerPackLatePerWave', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
   'mayflyPackPerWave', 'mayflyPackMax', 'hpBudget', 'hpBudgetMin', 'hpBudgetMax',
   'bossHpMult', 'campaignBossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth',
-  'damageRampLateFrom', 'damageRampLatePerWave', 'damageRampLateSmooth', 'contactDamage', 'bossContactDamage', 'contactKnockback', 'contactBlock', 'xpPerWave'
+  'damageRampLateFrom', 'damageRampLatePerWave', 'damageRampLateSmooth', 'contactDamage', 'bossContactDamage', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {

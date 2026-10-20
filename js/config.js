@@ -278,10 +278,6 @@ export const DEFAULT_TUNING = {
   // Contact hits (js/enemies.js contactDamageAt): base damage per hull hit, before the ramp.
   contactDamage: 23, // 18 before v0.43.2 (a skilled pilot could charge through packs)
   bossContactDamage: 48, // 38 before v0.43.2
-  // Body-blocking (js/archetypes.js blockShip): a contact hit knocks the ship back this many px/tick,
-  // and while invulnerable each hull it leans into soaks this share of the speed carried into it.
-  contactKnockback: 5,
-  contactBlock: 0.6,
   xpPerWave: 0,
 
   // 14. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
@@ -572,8 +568,6 @@ export const TUNING_SCHEMA = [
       { key: 'damageRampLateSmooth', label: 'Contact/Orb Damage: Late Ramp Ease-In', type: 'range', min: 0, max: 30, step: 1, unit: 'waves' },
       { key: 'contactDamage', label: 'Contact Damage per Hull Hit (before the ramp)', type: 'range', min: 1, max: 80, step: 1, unit: '' },
       { key: 'bossContactDamage', label: 'Boss Contact Damage per Hit (before the ramp)', type: 'range', min: 1, max: 150, step: 1, unit: '' },
-      { key: 'contactKnockback', label: 'Body-Block: Ship Knockback on a Contact Hit', type: 'range', min: 0, max: 15, step: 0.5, unit: 'px/tick' },
-      { key: 'contactBlock', label: 'Body-Block: Speed Soaked per Hull While Invulnerable', type: 'range', min: 0, max: 1, step: 0.05, unit: 'x' },
       { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
     ]
   },

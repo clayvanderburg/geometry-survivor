@@ -368,7 +368,7 @@ export const MECHANIC_ENTRIES = [
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
       'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
-      `Contact damage is ${Math.round((TUNING.contactDamage ?? 18) * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round((TUNING.bossContactDamage ?? 38) * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base, steepening again after wave ${TUNING.damageRampLateFrom ?? 30} (plasma orbs too). A hit knocks you back off the hull: packs block the ship, so dash through them. A hit gives 0.4 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
+      `Contact damage is ${Math.round((TUNING.contactDamage ?? 18) * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round((TUNING.bossContactDamage ?? 38) * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base, steepening again after wave ${TUNING.damageRampLateFrom ?? 30} (plasma orbs too). A hit gives 0.4 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
   {

@@ -1,15 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// v0.43.2 difficulty curve: the shared boss RAM (js/boss-ram.js) and body-blocking (archetypes.js blockShip).
+// v0.43.2 difficulty curve: the shared boss RAM (js/boss-ram.js).
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const { RAM, bossRam } = await import('../js/boss-ram.js');
 const { BOSS_DEFS } = await import('../js/bosses.js');
-const { blockShip } = await import('../js/archetypes.js');
-const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 
 const env = (player, dt = 1 / 60) => ({ dt, player });
 
@@ -53,28 +51,4 @@ test('a ram waits out emergence and a vetoing phase', () => {
   assert.equal(bossRam(prism, BOSS_DEFS.prism.ram, env(ship)), false, 'no ram during the lighthouse phase');
   prism.phase = 0;
   assert.equal(bossRam(prism, BOSS_DEFS.prism.ram, env(ship)), true);
-});
-
-test('body-blocking: a hit knocks the ship back and hulls soak speed carried into them; a dash goes through', () => {
-  Object.assign(TUNING, DEFAULT_TUNING, { contactKnockback: 5, contactBlock: 0.6 });
-  try {
-    const hull = { x: 20, y: 0, radius: 10 };
-    const p = { x: 0, y: 0, vx: 5, vy: 0, dashTimer: 0 };
-    blockShip(p, hull, true);
-    assert.ok(Math.abs(p.vx - (5 - 5 * 0.6 - 5)) < 1e-9, 'soaked and knocked back');
-    const q = { x: 0, y: 0, vx: 5, vy: 0, dashTimer: 0 };
-    blockShip(q, hull);
-    assert.ok(Math.abs(q.vx - 2) < 1e-9, 'no knockback without a hit');
-    const moving = { x: 0, y: 0, vx: -5, vy: 0, dashTimer: 0 };
-    blockShip(moving, hull);
-    assert.equal(moving.vx, -5, 'flying away is never slowed');
-    const dashing = { x: 0, y: 0, vx: 15, vy: 0, dashTimer: 0.2 };
-    blockShip(dashing, hull, true);
-    assert.equal(dashing.vx, 15, 'a dash cuts through');
-    const boss = { x: 0, y: 0, vx: 5, vy: 0, dashTimer: 0 };
-    blockShip(boss, { ...hull, isBoss: true });
-    assert.ok(Math.abs(boss.vx) < 1e-9, 'a boss soaks all of it');
-  } finally {
-    Object.assign(TUNING, DEFAULT_TUNING);
-  }
 });

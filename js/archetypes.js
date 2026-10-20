@@ -119,30 +119,6 @@ export function shieldBlocks(e, hx, hy, vx, vy) {
   return Math.abs(wrapAngle(Math.atan2(oy, ox) - e.shieldAngle)) <= e.shieldArc;
 }
 
-// Body-blocking: a hull pressed against the ship pushes back, so a pack can't be plowed through.
-// A contact hit (`hit`) knocks the ship back at contactKnockback px/tick (bosses ×1.6); while the
-// post-hit invulnerability lasts, every hull the ship leans into soaks contactBlock of the speed it
-// carries into it (bosses twice that). A dash still cuts straight through.
-export function blockShip(p, e, hit = false) {
-  if (p.dashTimer > 0) return;
-  const dx = p.x - e.x;
-  const dy = p.y - e.y;
-  const d = Math.hypot(dx, dy) || 1;
-  const nx = dx / d;
-  const ny = dy / d;
-  const inward = -(p.vx * nx + p.vy * ny);
-  const block = Math.min(1, (TUNING.contactBlock ?? 0) * (e.isBoss ? 2 : 1));
-  if (inward > 0 && block > 0) {
-    p.vx += nx * inward * block;
-    p.vy += ny * inward * block;
-  }
-  const kick = hit ? (TUNING.contactKnockback ?? 0) * (e.isBoss ? 1.6 : 1) : 0;
-  if (kick > 0) {
-    p.vx += nx * kick;
-    p.vy += ny * kick;
-  }
-}
-
 // A sturdy hull (Bruiser, Lieutenant) survives ramming the ship: it bounces off instead of popping.
 export function bounceFromShip(e, px, py) {
   const dx = e.x - px;

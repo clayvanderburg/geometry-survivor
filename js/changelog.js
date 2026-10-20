@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-20',
     title: 'No Free Rides',
     notes: [
-      { type: 'balance', text: 'Contact hits deal about 27% more damage, and a hit knocks you back off the hull. Packs block your ship now: dash through them instead of ramming.' },
+      { type: 'balance', text: 'Contact hits deal about 27% more damage (bosses too): charging through a pack costs a lot more shield.' },
       { type: 'balance', text: 'The campaign gets much tougher late: enemy damage climbs faster from wave 30, and swarmer and blinker packs grow bigger from wave 25.' },
       { type: 'balance', text: 'Bosses move about 1.5x faster, and most now RAM: a red lane marks the charge. Sidestep it or dash through. Their HP is unchanged.' }
     ]
