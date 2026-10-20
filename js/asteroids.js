@@ -93,6 +93,34 @@ function toLocal(a, wx, wy) {
   return { x: dx * look.cos + dy * look.sin, y: -dx * look.sin + dy * look.cos };
 }
 
+// Independent drill claws: a rock within CLAW_FRONT_ARC of the hull heading (and in reach) pulls both
+// claws onto it; otherwise the port claw takes the nearest rock on the left and the starboard claw the
+// nearest on the right, each swinging up to CLAW_SWING_MAX off the heading. Returns the target angle
+// of each claw: [port, starboard] (the hull heading when it has nothing to bite).
+export const CLAW_FRONT_ARC = 0.42; // rad either side of dead ahead (~24 deg)
+export const CLAW_SWING_MAX = 2.6;  // rad each claw swings out to its own side (~150 deg)
+export function clawTargets(p, rocks, reach) {
+  const hull = p.hullAngle ?? p.angle ?? 0;
+  let front = null, frontD = Infinity;
+  const side = [null, null], sideD = [Infinity, Infinity], sideA = [hull, hull];
+  for (let i = 0; i < rocks.length; i++) {
+    const rock = rocks[i];
+    if (rock.hp <= 0) continue;
+    const dx = rock.x - p.x, dy = rock.y - p.y;
+    const d = Math.hypot(dx, dy) - rock.radius;
+    if (d > reach) continue;
+    const a = Math.atan2(dy, dx);
+    const rel = Math.atan2(Math.sin(a - hull), Math.cos(a - hull));
+    if (Math.abs(rel) <= CLAW_FRONT_ARC) {
+      if (d < frontD) { frontD = d; front = a; }
+    } else if (Math.abs(rel) <= CLAW_SWING_MAX) {
+      const k = rel < 0 ? 0 : 1;
+      if (d < sideD[k]) { sideD[k] = d; side[k] = rock; sideA[k] = a; }
+    }
+  }
+  return front !== null ? [front, front] : sideA;
+}
+
 // Damage stages that knock a chunk off a rock while it is ground down (fractions of max HP left).
 const CHIP_STAGES = [0.66, 0.33];
 
@@ -302,6 +330,12 @@ export class AsteroidManager {
     return result;
   }
 
+  // Where each drill claw should point this tick (clawTargets over the rocks in claw reach).
+  clawAims(player) {
+    const reach = player.radius * 1.75 + (player.stats?.miningRange || 43);
+    return clawTargets(player, this.getNearbyAsteroids(player.x, player.y, Math.max(2, this.cellsFor(reach))), reach);
+  }
+
   // Dedicated Crab-Claw Rotary Drilling & Obstacle Physics (Weapons do NOT mine rocks; only your Claws do!)
   update(dt, player, enemies, bullets, onRockShattered, particles) {
     this.isDrilling = false;
@@ -319,40 +353,53 @@ export class AsteroidManager {
     // Claw tips sit ~1.73 hull radii from the centre; upgraded reach can exceed the old fixed ±2 cells.
     const nearbyPlayerRocks = this.getNearbyAsteroids(player.x, player.y, Math.max(2, this.cellsFor(drillReach + player.radius * 1.75)));
 
-    // Calculate the world positions of the Crab Ship's Left & Right Front Drill Claws
+    // World positions of the two drill claws. Each arm swings on its own heading (player.clawAngles:
+    // [port claw, starboard claw], see clawTargets), else both follow the shared drillAngle.
+    // "Left"/"right" here are the claws at local +y / -y of their heading (starboard / port).
     const clawHeading = player.drillAngle !== undefined ? player.drillAngle : player.angle;
-    const fwdX = Math.cos(clawHeading);
-    const fwdY = Math.sin(clawHeading);
-    const sideX = -fwdY;
-    const sideY = fwdX;
-
     const clawForwardOffset = player.radius * 1.45;
     const clawSpreadOffset = player.radius * 0.95;
-
-    const leftClawX = player.x + fwdX * clawForwardOffset + sideX * clawSpreadOffset;
-    const leftClawY = player.y + fwdY * clawForwardOffset + sideY * clawSpreadOffset;
-    const rightClawX = player.x + fwdX * clawForwardOffset - sideX * clawSpreadOffset;
-    const rightClawY = player.y + fwdY * clawForwardOffset - sideY * clawSpreadOffset;
+    const clawPos = (heading, side) => {
+      const fx = Math.cos(heading), fy = Math.sin(heading);
+      return [player.x + fx * clawForwardOffset - fy * clawSpreadOffset * side, player.y + fy * clawForwardOffset + fx * clawSpreadOffset * side];
+    };
+    const [leftClawX, leftClawY] = clawPos(player.clawAngles?.[1] ?? clawHeading, 1);
+    const [rightClawX, rightClawY] = clawPos(player.clawAngles?.[0] ?? clawHeading, -1);
 
     let destroyedAny = false;
 
-    // 1. Check Crab Drill-Claws & Hull Engagement with Asteroids
+    // 1. Check Crab Drill-Claws & Hull Engagement with Asteroids. First who touches what: when the
+    // claws grind two different rocks (and share none), each runs at half the twin-claw torque, so
+    // two rocks at once mine the same total as both claws on one.
+    const touches = [];
+    let anyLeft = false, anyRight = false, shared = false;
     for (let i = 0; i < nearbyPlayerRocks.length; i++) {
       const rock = nearbyPlayerRocks[i];
       if (rock.hp <= 0) continue;
-
       const distLeft = Math.hypot(rock.x - leftClawX, rock.y - leftClawY) - rock.radius;
       const distRight = Math.hypot(rock.x - rightClawX, rock.y - rightClawY) - rock.radius;
       const distCenter = Math.hypot(rock.x - player.x, rock.y - player.y) - rock.radius;
+      const l = distLeft <= drillReach, r = distRight <= drillReach;
+      anyLeft ||= l;
+      anyRight ||= r;
+      shared ||= l && r;
+      touches.push({ rock, distLeft, distRight, distCenter, l, r });
+    }
+    const twinTorque = TUNING.dualClawBonus ?? 1.25;
+    const split = anyLeft && anyRight && !shared;
+    player.clawDrilling = [anyRight, anyLeft];
+
+    for (let i = 0; i < touches.length; i++) {
+      const { rock, distLeft, distRight, distCenter, l, r } = touches[i];
 
       // If within the Crab Ship's front Drill-Claws (or touching hull), grind the rock!
-      if (distLeft <= drillReach || distRight <= drillReach || distCenter <= player.radius + 14) {
+      if (l || r || distCenter <= player.radius + 14) {
         this.isDrilling = true;
         this.drillingRocks.push(rock);
 
-        // Both claws engaging same rock deals bonus twin-drill torque!
-        const dualBonus = (distLeft <= drillReach && distRight <= drillReach) ? (TUNING.dualClawBonus ?? 1.25) : 1.0;
-        rock.hp -= miningDps * dualBonus * dt;
+        // Both claws engaging same rock deals bonus twin-drill torque; split claws share it.
+        const torque = l && r ? twinTorque : (l || r) && split ? twinTorque / 2 : 1.0;
+        rock.hp -= miningDps * torque * dt;
         rock.hitFlash = 0.85;
         {
           // Contact point: the rock face toward the nearer claw.
@@ -374,7 +421,7 @@ export class AsteroidManager {
           particles.spawnDirectionalSparks(
             sparkX,
             sparkY,
-            clawHeading + Math.PI + (Math.random() - 0.5) * 0.8,
+            ((distLeft < distRight ? player.clawAngles?.[1] : player.clawAngles?.[0]) ?? clawHeading) + Math.PI + (Math.random() - 0.5) * 0.8,
             1.3,
             2,
             rock.oreType !== 'rock' ? rock.hue : 42,
