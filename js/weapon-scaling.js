@@ -548,7 +548,7 @@ export const WEAPON_SCALING = {
   // over launch interval, as a launch avoids packs a swarm already holds) each biting naniteHitShare
   // targets per tick: a swarm only eats what it reaches, so more and longer-lived swarms are POWER
   // (Fabricator, Endurance) and only swarm size is UTILITY.
-  naniteRadius: (b) => 58 * (1 + 0.12 * (b?.r?.radius || 0)),
+  naniteRadius: (b) => 66 * (1 + 0.12 * (b?.r?.radius || 0)),
   naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)),
   naniteTick: (b) => 0.25 / rateMult(b.r.rate),
   naniteCooldown: (b) => 3 / rateMult(b.r.cooldown),
@@ -558,11 +558,12 @@ export const WEAPON_SCALING = {
   naniteDrift: 60,    // px/s a swarm follows its pack
   naniteGrow: 0.3,    // s to swell in
   naniteFade: 0.6,    // s to disperse at the end
-  naniteGrowPerKill: 0.06,
-  naniteGrowMax: 1.5,
-  // Set in the card bench: a damage-built swarm realizes ~60-75% of the Autocannon's DPS at LV 1-12 (the
-  // area class), while each swarm bite lands on ~3 enemies.
-  naniteHitShare: 1.1,
+  naniteGrowPerKill: 0.04,
+  naniteGrowMax: 1.25,
+  // Set in the card bench against level-appropriate HP (LV 1 / 6 / 12 / 18 at waves 3 / 10 / 20 / 30): a
+  // damage-built swarm deals about as much in total as the Autocannon (~90-115%, the area class), while each
+  // swarm bite lands on ~3 enemies (so ~30% of it per target).
+  naniteHitShare: 0.85,
   // Transforms: Fission Bloom (a swarm buds a daughter of fissionRadiusMult size and fissionLifeMult life
   // every fissionKills kills, up to fissionMax, that flies to the next pack: valued at fissionHitShare of
   // a swarm), Gray Goo (kills feed the swarm: +gooLifePerKill s of life (up to gooLifeMax) and growth up
@@ -577,12 +578,12 @@ export const WEAPON_SCALING = {
   fissionHitShare: 0.6,
   gooLifePerKill: 0.12,
   gooLifeMax: 1.2,
-  gooGrowMax: 1.75,
+  gooGrowMax: 1.55,
   plagueWindow: 3,
   plagueRadiusMult: 0.6,
-  plagueLife: 1.4,
+  plagueLife: 1.8,
   plagueEvery: 0.2,
-  plagueMax: 4,
+  plagueMax: 5,
   plagueHitShare: 0.8,
   naniteUnits: (b) => W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0),
   // Damage of one bite to each enemy inside a swarm (daughters and plague swarms bite the same).

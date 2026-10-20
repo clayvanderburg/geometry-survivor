@@ -50,7 +50,7 @@ test('every nanite formula reads only its own rank; LV 1 numbers', () => {
       else assert.equal(f(b), f(base), `${card.id} must not change ${stat}`);
     }
   }
-  assert.equal(W.naniteRadius(base), 58);
+  assert.equal(W.naniteRadius(base), 66);
   assert.equal(W.naniteLife(base), 4);
   assert.equal(W.naniteTick(base), 0.25);
   assert.equal(W.naniteCooldown(base), 3);
@@ -249,7 +249,7 @@ test('Fission Bloom: a main swarm buds daughters every few kills that fly to the
   const d = n.swarms.slice(0, n.count).find((x) => x.kind === SWARM_FISSION);
   assert.ok(d, 'a daughter landed');
   assert.ok(d.x < p.x, 'on the other pack');
-  assert.ok(near(d.radius, s.radius * W.fissionRadiusMult, 0.1));
+  assert.ok(near(d.radius, naniteRadius(p) * W.fissionRadiusMult), "daughters are fissionRadiusMult of a fresh swarm");
   assert.ok(by.nanite_fission > 0, 'daughters bite as nanite_fission');
   // No Breakthrough: no buds.
   const plain = freshPlayer();
