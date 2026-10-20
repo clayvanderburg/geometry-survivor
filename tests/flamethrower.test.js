@@ -262,6 +262,14 @@ test('Inferno Ring: every few seconds a ring of fire rolls out round the ship an
 });
 
 test('live fight: the Flamethrower fires in the full game loop with every transform; the puff pool stays bounded', () => {
+  // Seeded: spawns, steering and sparks are random, and an unlucky draw used to fail this now and then.
+  const realRandom = Math.random;
+  let seed = 424242;
+  Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  try { liveFight(); } finally { Math.random = realRandom; }
+});
+
+function liveFight() {
   const g = h.createHeadlessGame();
   g.resetRun();
   g.state = 'PLAYING';
@@ -304,7 +312,7 @@ test('live fight: the Flamethrower fires in the full game loop with every transf
   g.sound = { ...silent, setFlameRoar: (v) => { roar = v; } };
   g.update(1 / 60);
   assert.equal(roar, 0, 'the roar stops under the pause menu');
-});
+}
 
 test('drawing costs a fixed handful of fills however many flames are in the air', () => {
   const p = flamePlayer({ bt: { 6: 'transform' }, cards: [['flamethrower_cone', 8]] });

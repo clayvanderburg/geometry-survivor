@@ -101,6 +101,8 @@ export const SOUNDTRACK = Object.freeze({
 });
 const MUSIC_XFADE = 4; // seconds of overlap between playlist tracks
 const MUSIC_SWITCH_FADE = 1.6; // seconds of overlap when the scene changes (menu <-> run, boss in/out)
+const MUSIC_GIVE_UP = 6; // failures in a row, before any track ever played, that switch to the procedural score
+const SAMPLE_RETRIES = 5; // re-downloads of a sound effect file that failed (2 s, 4 s, 8 s...)
 // Beat pulse while streaming: the low band (bins up to ~170 Hz at fftSize 1024) against its running average.
 const PULSE_LOW_BINS = 4;
 
@@ -194,6 +196,7 @@ export class SoundEngine {
     // Samples
     this.samples = new Map();
     this.sampleFailures = new Set();
+    this.sampleTries = {};
     this.sampleLoadStarted = false;
 
     this.geomPitchStep = 0;
@@ -274,6 +277,7 @@ export class SoundEngine {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {});
       if (!this.isPlayingMusic) this.startMusic();
+      this.resumeBlockedMusic();
       this.loadSamples();
       return;
     }
@@ -401,8 +405,15 @@ export class SoundEngine {
       if (this.sampleRequested.has(name)) continue;
       this.sampleRequested.add(name);
       this.fetchBuffer(`${SFX_BASE}${SFX_FILE[name] ?? name}.mp3`)
-        .then(buffer => { if (this.ctx === ctx) this.samples.set(name, buffer); })
-        .catch(() => { this.sampleFailures.add(name); });
+        .then(buffer => { if (this.ctx === ctx) { this.samples.set(name, buffer); this.sampleFailures.delete(name); } })
+        .catch(() => {
+          // A failed download used to leave that sound procedural for the whole session. Retry with a
+          // growing delay (and on the next gesture, which calls loadSamples again).
+          this.sampleFailures.add(name);
+          this.sampleRequested.delete(name);
+          const tries = (this.sampleTries[name] = (this.sampleTries[name] || 0) + 1);
+          if (tries <= SAMPLE_RETRIES && this.ctx === ctx) setTimeout(() => { if (this.ctx === ctx) this.loadSamples([name]); }, 2000 * 2 ** (tries - 1));
+        });
     }
   }
 
@@ -1026,8 +1037,12 @@ export class SoundEngine {
           src.connect(gain);
           gain.connect(this.musicFilter);
           if (this.musicAnalyser) gain.connect(this.musicAnalyser);
-          el.addEventListener('error', () => this.onTrackError());
-          return { el, src, gain, token: 0 };
+          const deck = { el, src, gain, token: 0 };
+          el.addEventListener('error', () => this.onTrackError(deck, el.error));
+          // A track that actually plays proves streaming works: from then on errors are retried, never
+          // swapped for the procedural score.
+          el.addEventListener('playing', () => { this.everStreamed = true; this.trackFailures = 0; this.playBlocked = false; });
+          return deck;
         });
       }
     } catch (_e) {
@@ -1095,7 +1110,7 @@ export class SoundEngine {
     if (resume) this.resumeAt = null;
     try { deck.el.currentTime = resume; } catch (_e) {}
     const playing = deck.el.play();
-    if (playing && typeof playing.catch === 'function') playing.catch(() => this.onTrackError());
+    if (playing && typeof playing.catch === 'function') playing.catch((err) => this.onTrackError(deck, err));
     deck.gain.gain.cancelScheduledValues(t);
     deck.gain.gain.setValueAtTime(deck.gain.gain.value, t);
     deck.gain.gain.linearRampToValueAtTime(1, t + fade);
@@ -1116,12 +1131,45 @@ export class SoundEngine {
     return Math.max(0, Math.min(1, this.filePulse));
   }
 
-  // A track that cannot load or play: give up on files for this session and run the procedural score.
-  onTrackError() {
-    if (!this.fileMode) return;
-    this.stopMusic();
-    this.soundtrack = { menu: null, run: [], boss: null };
-    this.startMusic();
+  // A track that failed to load or play. Harmless rejections are ignored: AbortError (a newer play()/pause()
+  // or a src change replaced this play) and NotAllowedError (autoplay blocked until a gesture: init()
+  // retries). Real failures (network, decode) are retried with a growing delay, moving on in the playlist
+  // when a track keeps failing. Only if no track has ever played (the files are missing) does the game
+  // switch to the procedural score, which used to happen on the first hiccup and stuck for the session.
+  onTrackError(deck, err) {
+    if (!this.fileMode || !this.decks) return;
+    if (deck && deck !== this.decks[this.deckIndex]) return; // the deck fading out: nothing to fix
+    if (deck && !deck.el.getAttribute?.('src')) return;      // an emptied deck (retry reset) reports nothing real
+    if (err?.name === 'AbortError') return;
+    if (err?.name === 'NotAllowedError') { this.playBlocked = true; return; }
+    this.trackFailures = (this.trackFailures || 0) + 1;
+    if (!this.everStreamed && this.trackFailures >= MUSIC_GIVE_UP) {
+      this.stopMusic();
+      this.soundtrack = { menu: null, run: [], boss: null };
+      this.startMusic();
+      return;
+    }
+    if (this.trackFailures % 2 === 0 && !this.wantedTrack().loop) this.playIndex++; // skip a track that keeps failing
+    clearTimeout(this.trackRetry);
+    this.trackRetry = setTimeout(() => this.retryTrack(), Math.min(15000, 1000 * 2 ** Math.min(4, this.trackFailures - 1)));
+  }
+
+  // Reload the wanted track on a fresh deck slot (onTrackError's retry).
+  retryTrack() {
+    if (!this.fileMode || !this.decks) return;
+    const deck = this.decks[this.deckIndex];
+    try { deck.el.removeAttribute('src'); deck.el.load(); } catch (_e) {}
+    this.deckSrc[this.deckIndex] = null;
+    this.updateFileMusic();
+  }
+
+  // A gesture after autoplay was blocked: start the playing deck again.
+  resumeBlockedMusic() {
+    if (!this.playBlocked || !this.fileMode || !this.decks) return;
+    this.playBlocked = false;
+    const deck = this.decks[this.deckIndex];
+    const playing = deck.el.play?.();
+    if (playing && typeof playing.catch === 'function') playing.catch((err) => this.onTrackError(deck, err));
   }
 
   // =====================================================================

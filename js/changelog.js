@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.6',
+    date: '2026-10-20',
+    title: 'Sound Stays Put',
+    notes: [
+      { type: 'fix', text: 'One hiccup loading a music track no longer swaps the soundtrack for the old built-in synth music for the rest of the session. It retries and keeps your music.' },
+      { type: 'fix', text: 'Sound effects that fail to load are fetched again instead of falling back to the old sounds.' }
+    ]
+  },
+  {
     version: '0.39.5',
     date: '2026-10-20',
     title: 'Cleaner Boss Cards',
