@@ -2,7 +2,7 @@
 
 **Owner:** the Director session (works with Clay). **Read this before starting any work.** It says what we're
 building next, which conversation owns which files, and how changes get merged without stepping on each other.
-Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds decisions and priorities.
+Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds decisions and priorities. Design drafts for discussion: [HANGAR_DESIGN.md](HANGAR_DESIGN.md) (ships, feats, mastery) and [SECTORS_DESIGN.md](SECTORS_DESIGN.md) (sectors, portals, story campaign).
 
 ## Decisions (source of truth)
 
