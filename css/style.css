@@ -3079,7 +3079,7 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   position: absolute;
   translate: -50% -100%;
   transform-origin: bottom center;
-  padding: 6px 22px;
+  padding: 10px 30px;
   white-space: nowrap;
   text-align: center;
   background: radial-gradient(ellipse at center, rgba(255, 204, 0, 0.16), rgba(255, 204, 0, 0.05) 60%, transparent 80%);
@@ -3088,12 +3088,12 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 }
 
 .nova-callout-title {
-  font-size: clamp(18px, min(2.2vw, 3.2vh), 28px);
+  font-size: clamp(36px, min(4.4vw, 6.4vh), 56px);
   font-weight: 900;
-  letter-spacing: 4px;
+  letter-spacing: 6px;
   line-height: 1.15;
   color: #fff;
-  text-shadow: 0 0 12px var(--gold), 0 0 28px rgba(255, 204, 0, 0.65);
+  text-shadow: 0 0 16px var(--gold), 0 0 40px rgba(255, 204, 0, 0.65);
   animation: novaCalloutPulse 0.7s ease-in-out infinite alternate;
 }
 
@@ -4392,7 +4392,7 @@ body:not(.touch-mode) .hp-bar-outer::after {
 }
 
 /* The Field Guide toast (bottom left) rides above the dock and the one-line bomb reminder over it. */
-body:not(.touch-mode) .guide-toast { bottom: 140px; }
+body:not(.touch-mode) .guide-toast { bottom: 190px; }
 
 /* The hotkey toggles stay in the top-right column. */
 body:not(.touch-mode) .quick-toggles { order: -1; }
