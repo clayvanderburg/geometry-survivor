@@ -51,3 +51,16 @@ Stay in your lane. If you must touch another lane's files, keep it minimal and s
 4. **Balance:** tuning PRs cite `docs/BALANCE_REPORT.md` or Clay's playtest notes, and follow the Decisions above where they differ from the report.
 5. Small, low-risk UI/docs fixes still merge right away once `npm test` passes (see `CLAUDE.md`). Anything gameplay-affecting waits for Clay.
 6. When a design decision is made, add it to the Decisions table above in the same PR.
+
+## To check (open items, not yet scheduled)
+
+Things found in playtesting or data that need a look. Move an item to Priorities when it's scheduled, or to Decisions when Clay decides it.
+
+- **Leaderboard: preview builds post to the live board.** Deploy previews share the production Blobs stores, so unreleased versions (e.g. a v0.43.0 preview run) show on the public all-time board. Option: previews write to a separate test board.
+- **Leaderboard plausibility envelope** was fitted to the old 30-wave sim (≈ wave 41 max, widened 3–10×). Re-check it after the difficulty retune so long 50-wave / Endless runs aren't rejected.
+- **Scoring rewards no-hit play over progress:** a W59 campaign win scored 108M, less than a W33 run (121M), because score = kills × a multiplier that drops 25% per hit (and the Attractor retune slows its growth). Proposed: a victory bonus plus a per-wave survival bonus.
+- **Wave 50 ending:** today the win triggers when the wave-50 boss dies, mid-wave, with spawns continuing. Proposed "Final Stand": wave 50 has no timer, the boss arrives with a last surge, spawns stop, clear the field → SECTOR CLEAR → VICTORY (stragglers drawn in after ~30–45 s).
+- **Tesla Arc LV 18 spike:** ~1.7k DPS at LV 15 → ~14k at LV 18 in real play; 49% of all damage on v0.43.0. Watch after the fixed-SHOCK change (PR #138); if it stays dominant, trim its LV 18 Breakthrough, not the base weapon.
+- **Supernova share:** 20–31% of all damage in real runs. Decide whether bombs should be that strong.
+- **Run stats don't record the Armory** (being added by the Balance lane), so real-data balance can't yet split by Armory tier.
+- **Run report UI:** the TOP WEAPON tile truncates long names ("Supernova …").
