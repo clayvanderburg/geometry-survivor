@@ -5642,11 +5642,14 @@ export class Game {
 
   // --- Tutorial ------------------------------------------------------------------------------------
 
-  // The browser boot shows the splash on every load; the title waits behind it.
+  // The browser boot shows the splash on every load; the title waits behind it. The page paints it
+  // visible before this runs (no title flash), so hide it again if it doesn't open.
   showSplash() {
     if (this.state === 'TITLE' && this.splash?.show()) {
       this.splashOpen = true;
       this.resetInput();
+    } else {
+      globalThis.document?.getElementById('splash-screen')?.classList.add('hidden');
     }
     return this;
   }
