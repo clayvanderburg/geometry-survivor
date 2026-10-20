@@ -130,7 +130,9 @@ function installInstrumentation(game, metrics) {
 
   game.hitEnemy = function (e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const before = Math.max(0, e.hp);
-    const src = attribute(source);
+    let src = attribute(source);
+    // Shared 'other' hits (splash, shards, Breakthrough effects) still name their stat: use it.
+    if (src === 'other' && stat && stat !== 'other') src = stat;
     if (e.firstHitAt === undefined) e.firstHitAt = game.elapsedTime;
     e.hitsTaken = (e.hitsTaken || 0) + 1;
     hitDepth++;
