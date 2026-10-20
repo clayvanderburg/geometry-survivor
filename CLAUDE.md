@@ -2,6 +2,8 @@
 
 **Start with [docs/ROADMAP.md](docs/ROADMAP.md)**: current priorities, decisions, which conversation owns which files, and the merge rules that keep parallel conversations from colliding (one gameplay PR at a time, bump the version at merge time).
 
+**Core design principle: SATISFYING.** Every sound and animation should feel satisfying: punchy feedback, juicy impacts, rewarding pickups and level-ups, smooth easing, crisp audio with weight and pitch variety. If it feels flat, it isn't done. Readability and frame rate still come first.
+
 Read the rules in [README.md](README.md) (*Versions & patch notes*) before merging. In short:
 
 - **Gameplay changes** bump `GAME_VERSION` in `js/version.js` and add a matching `CHANGELOG` entry in `js/changelog.js` (`tests/changelog.test.js` checks it).
