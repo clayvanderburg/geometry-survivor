@@ -8,6 +8,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 
 | Date | Decision |
 |---|---|
+| 2026-10-20 | **Breakthrough pools (DRG: Survivor overclocks as the model).** Each weapon gets a *pool* of several mechanic-changing TRANSFORMS and several flat boosts (damage, speed+damage, size+damage, …). At each milestone (LV 6/12/18) you're offered a random subset, so LV 6 isn't always the same choice. Balance the offset between flat and transform options the way DRG: Survivor balances its overclock choices. Queued for the overnight swarm. |
 | 2026-10-20 | **Core design principle: everything in sound and animation is SATISFYING.** Punchy feedback, juicy impacts, rewarding pickups and level-ups, smooth easing, weighty audio with pitch variety. If it feels flat, it isn't done; readability and frame rate come first. |
 | 2026-10-20 | **The campaign is 50 waves** with a boss every 5th wave (10 bosses). Beating wave 50 shows a **victory screen** offering *Continue for high score* (keep playing in Endless; the score keeps counting) or *End run* (finish the run here, as a win). |
 | 2026-10-20 | **Hangar of specialist ships** (Vampire Survivors-style heroes): each ship has its own stat boosts and/or starting kit, unlocked by feats. |
