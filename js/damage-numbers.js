@@ -23,6 +23,7 @@ export const DAMAGE_SOURCE_COLORS = {
   cryo: '#a8f0ff',        // Cryo Sprayer hits, frost slicks and the Blizzard Ring
   acid: '#b6ff5a',        // Acid Sprayer hits, acid pools and the Caustic Ring
   shockfield: '#bff9ff',  // Electric Shield Field discharges, arcs and thunderclaps
+  glaive: '#ffa45c',      // Glaive Disc hits and Boomerang Recall slices
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   corrode: '#9dff4a',     // CORROSIVE acid ticks (damage over time)
   shock: '#f4ff52',       // SHOCK ticks while touching another enemy (damage over time)

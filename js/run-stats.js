@@ -32,7 +32,8 @@ export const SUB_SOURCES = Object.freeze({
   shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
   meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
-  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  glaive_recall: 'glaive'   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
 });
 
 // Damage that is not a loadout weapon's.

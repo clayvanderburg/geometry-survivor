@@ -41,10 +41,10 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
-// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7, Sentry
+// Turret 4.2 and Glaive Discs 2.9 bring the automatic class to its WEAPON_CLASS target (below).
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, glaive: 2.9 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -58,7 +58,7 @@ const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 // measurement of real enemies hit per blast / pass, so the tests record where those weapons sit instead.
 export const WEAPON_CLASS = Object.freeze({
   blaster: 'aimed',
-  drones: 'auto', turret: 'auto',
+  drones: 'auto', turret: 'auto', glaive: 'auto',
   rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
   lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
   shockfield: 'defensive', orbitals: 'defensive'
@@ -538,6 +538,52 @@ export const WEAPON_SCALING = {
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
+  // --- Glaive Discs (stats: damage, count, chain, rate, speed) ------------------------------------
+  // An autonomous kinetic weapon (js/glaive.js). Every throw interval the ship flings glaiveCount spinning
+  // discs at the nearest enemies in glaiveThrowRange. A disc that hits ricochets to the nearest enemy it
+  // has not just hit within glaiveRicochetRange (or swings back onto the same one when it is alone), up to
+  // glaiveBounces ricochets, so one disc lands 1 + glaiveBounces hits. Rocks and the shields of plated
+  // hulls bounce it too. Every bounce (enemy, rock or shield) sheds glaiveSpeedLoss of its speed; a disc
+  // that slows under glaiveMinSpeedShare of its launch speed, or outlives glaiveLife, fades out.
+  // Potential counts every ricochet as a full hit on one target (a disc only ricochets when it finds
+  // one), so realized damage sits on the potential when enemies are about; the automatic class trim
+  // (LV1_TRIM) is set from the card bench like the Drones' and Turret's.
+  glaiveCount: (b) => 2 + (b.r.count || 0),
+  glaiveBounces: (b) => 4 + (b.r.chain || 0),
+  glaiveCooldown: (b) => 1.2 / rateMult(b.r.rate),
+  glaiveSpeed: (b) => 560 * (1 + 0.12 * (b?.r?.speed || 0)), // px/s at launch
+  glaiveSpeedLoss: 0.07,        // share of its speed a disc sheds per bounce
+  glaiveMinSpeedShare: 0.4,     // ... and it fades once under this share of its launch speed
+  glaiveLife: 3,                // s
+  glaiveThrowRange: 520,
+  glaiveRicochetRange: 300,
+  glaiveRadius: 11,
+  glaiveTurn: 9,                // rad/s the disc can steer toward its next ricochet target
+  // Transforms: Fission Discs (a disc's first hit splits it into two twins that each carry the remaining
+  // ricochets for fissionShare of the hit), Momentum Edge (bounces speed a disc up instead of slowing it
+  // and every ricochet hits momentumGrowth x harder than the last, compounding), Boomerang Recall (a spent
+  // disc swings back to the ship, slicing up to recallHits enemies on the way for recallShare each,
+  // valued at recallHitShare: the way back only crosses enemies that sit on it).
+  fissionShare: 0.6,
+  momentumGrowth: 1.1,
+  momentumSpeedGain: 0.06,
+  momentumMaxSpeed: 1.6,        // x launch speed
+  recallHits: 4,
+  recallShare: 0.7,
+  recallHitShare: 0.5,
+  recallSpeed: 1.25,            // x launch speed on the way home
+  // Hits one disc lands, in units of one plain hit.
+  glaiveDiscUnits: (b) => {
+    const n = W.glaiveBounces(b);
+    let units = 1;
+    for (let k = 1; k <= n; k++) units += (b.t4 ? 2 * W.fissionShare : 1) * (b.t8 ? W.momentumGrowth ** k : 1);
+    if (b.t12) units += W.recallHits * W.recallShare * W.recallHitShare * (b.t4 ? 2 : 1);
+    return units;
+  },
+  glaiveUnits: (b) => W.glaiveCount(b) * W.glaiveDiscUnits(b) / W.glaiveCooldown(b),
+  // Damage of a plain disc hit (the first; ricochets scale it by their transform factors).
+  glaiveDamageMult: (b) => lv1Trim('glaive') * lv1('glaive', 'glaive', (b0) => DPS_TARGET(1) / W.glaiveUnits(b0)) * hitMult(b) * tfScale(b, W.glaiveUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -754,7 +800,8 @@ export const POTENTIAL_DPS = {
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap) / W.fieldCooldown(b);
-  }
+  },
+  glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -779,7 +826,8 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area']
+  shockfield: ['electric', 'area'],
+  glaive: ['projectile', 'kinetic']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -815,7 +863,7 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield', glaive: 'glaive'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -859,6 +907,7 @@ export function weaponDamage(p, weapon, b) {
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'glaive': base = d * W.glaiveDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));

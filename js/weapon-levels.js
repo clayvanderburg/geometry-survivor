@@ -136,6 +136,13 @@ export const STAT_CARDS = {
     card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
     card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
     card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
+  ],
+  glaive: [
+    card('glaive', 'glaive_damage', 'damage', 'Glaive Edge', 'glaiveDamage', 'Glaive Discs: keener edges. Only damage per hit.'),
+    card('glaive', 'glaive_count', 'count', 'Glaive Disc Count', 'glaiveCount', 'Glaive Discs: one more disc per throw.', cap(4)),
+    card('glaive', 'glaive_chain', 'chain', 'Glaive Ricochet', 'glaiveBounces', 'Glaive Discs: each disc ricochets to one more enemy. Only ricochets.', cap(6)),
+    card('glaive', 'glaive_rate', 'rate', 'Glaive Launcher', 'glaiveCooldown', 'Glaive Discs: throws more often. Only throw rate.', cap(8)),
+    card('glaive', 'glaive_speed', 'speed', 'Glaive Spin', 'glaiveSpeed', 'Glaive Discs: faster discs. Only disc speed.', cap(6))
   ]
 };
 
@@ -265,7 +272,8 @@ export function elementsOf(p, weapons = [...ELEMENT_WEAPONS, ...Object.keys(FIXE
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
+  glaive: 'GLAIVE DISCS'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -345,6 +353,11 @@ export const TRANSFORMS = {
     6: tf('lash', 'Arc Lash', 'Every Electric Shield Field discharge also lashes arcs out at the 3 nearest enemies beyond the field, stunning them too.'),
     12: tf('repulse', 'Repulsor Surge', 'Electric Shield Field discharges hurl enemies back and hit harder, and each one that lands recharges your Phase Dash faster.'),
     18: tf('overcharge', 'Thunderclap Overcharge', 'The Electric Shield Field banks charge with every discharge. When a big pack or a boss closes in, it releases it all in a wide thunderclap.')
+  },
+  glaive: {
+    6: tf('fission', 'Fission Discs', 'A Glaive Disc splits in two on its first hit. Both twins ricochet on through the pack with every bounce the disc had left.'),
+    12: tf('momentum', 'Momentum Edge', 'Glaive Discs feed on impact: every bounce speeds them up instead of slowing them, and every ricochet hits harder than the last.'),
+    18: tf('recall', 'Boomerang Recall', 'Spent Glaive Discs no longer fade: they swing back to your ship, slicing through the enemies on the way home.')
   }
 };
 
