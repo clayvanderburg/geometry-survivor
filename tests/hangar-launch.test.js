@@ -117,3 +117,11 @@ test('results strip: this run\'s unlocks and the closest feat still to do', () =
   assert.match(html, /EXTERMINATOR — MANTIS JOINS THE HANGAR/);
   assert.match(html, /DEEP CORE: 10 ROCKS TO GO → PROSPECTOR/);
 });
+
+test('tuner UNLOCK ALL grants every ship (preview helper)', async () => {
+  const { unlockAllShips } = await import('../js/hangar-run.js');
+  const { SHIPS } = await import('../js/ships.js');
+  const g = h.createHeadlessGame();
+  unlockAllShips(g.progression);
+  assert.equal(g.progression.data.hangar.ships.length, SHIPS.length);
+});
