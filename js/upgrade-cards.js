@@ -17,8 +17,26 @@ import { slotReward } from './slot-rewards.js';
 import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
-  weaponBuild, levelBuild, levelCardWeapon, weaponElement, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
+  weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
 } from './weapon-levels.js';
+
+// What a card affects, shown as a subtle outline + label (css .scope-utility / .scope-global):
+//   'weapon'  one weapon's damage output: weapon POWER stat cards, element cards, equip / pick cards,
+//             Breakthroughs and evolutions. The default look, no marker.
+//   'utility' adds no DPS: weapon UTILITY stats (size, radius, pull, reach, pierce... weapon-levels.js
+//             POWER_STATS lists the rest) and ship utility (magnet, luck, mining, thrusters, dash, shield).
+//   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives.
+export const CARD_SCOPES = ['weapon', 'utility', 'global'];
+const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
+const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage']);
+export function cardScope(upg) {
+  const stat = STAT_CARD_BY_ID[upg.id];
+  if (stat) return POWER_STATS.has(stat.stat) ? 'weapon' : 'utility';
+  if (UTILITY_CARD_IDS.has(upg.id)) return 'utility';
+  if (GLOBAL_CARD_IDS.has(upg.id) || upg.statusCard || upg.category === 'SPECIALIST') return 'global';
+  return 'weapon';
+}
+const SCOPE_LABEL = { utility: 'UTILITY', global: 'GLOBAL' };
 
 const MAX_ROWS = 6;
 // Jackpot caches with more than 3 rewards wrap to two rows of cards; fewer rows keep them on one screen.
@@ -342,6 +360,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     id: upg.id,
     name: upg.name,
     category: upg.category,
+    scope: cardScope(upg),
     tags: (upg.tags || []).filter((t) => TAG_INFO[t]),
     summary: upg.summary || '',
     isSynergy: !!upg.isSynergy,
@@ -517,9 +536,9 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
   // A Breakthrough's TRANSFORM card shows it in action (the generic boost has nothing new to show).
   const clip = d.isBreakthrough && d.kind === 'transform' ? clipHTML(breakthroughClip(d.weaponId, d.level), `${d.name} in action`) : '';
   return {
-    className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}`,
+    className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}${SCOPE_LABEL[d.scope] ? ` scope-${d.scope}` : ''}`,
     html: `
-      ${ribbon}
+      ${ribbon}${SCOPE_LABEL[d.scope] ? `<span class="upg-scope">${SCOPE_LABEL[d.scope]}</span>` : ''}
       <div>
         <div class="upg-top">
           <span class="upg-key">${keyLabel}</span>
