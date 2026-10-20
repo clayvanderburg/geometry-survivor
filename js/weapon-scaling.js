@@ -232,7 +232,7 @@ export const WEAPON_SCALING = {
   // --- Volatile Shatter (passive, no slot) --------------------------------------------------------
   // On-kill shards at a flat 0.75x base damage. Not on the DPS curve (it needs kills), like the dash nova.
   shrapnelChance: (lv) => Math.min(1, 0.45 + lv * 0.12),
-  shrapnelShards: (lv) => 3 + lv,
+  shrapnelShards: (lv) => 1 + 3 * lv, // 4 at LV 1, +3 per level (25 at LV 8)
   shrapnelDamageMult: 0.75,
 
   // Phase Nova Thrusters

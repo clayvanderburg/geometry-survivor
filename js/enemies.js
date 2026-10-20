@@ -838,6 +838,15 @@ export class EnemyManager {
 
       ctx.save();
       ctx.translate(e.x, e.y);
+      // Hit squash: the hull flattens along the shot and kicks back a pixel or two, then springs back
+      // as the hit flash fades (bosses and big hulls barely give).
+      if (e.hitFlash > 0 && e.hitAng !== undefined) {
+        const s = e.hitFlash * Math.min(1, 26 / Math.max(10, e.radius));
+        ctx.rotate(e.hitAng);
+        ctx.translate(s * 2.2, 0);
+        ctx.scale(1 - 0.24 * s, 1 + 0.14 * s);
+        ctx.rotate(-e.hitAng);
+      }
       ctx.rotate(e.rotation);
 
       // Outer soft glow pass + inner crisp vector pass
