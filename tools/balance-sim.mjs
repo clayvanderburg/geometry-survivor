@@ -11,7 +11,7 @@
 //
 //   npm run balance -- --mode blitz         # fly a game mode (js/modes.js): normal, hardcore or blitz
 //
-// Flags: --runs N  --seed S  --strategies a,b  --focus  --max-minutes M  --workers N  --meta RANK
+// Flags: --runs N  --seed S  --strategies a,b  --focus  --weapon-focus  --max-minutes M  --workers N  --meta RANK
 //        --skill expert|average|novice  --mode M  --god  --tune key=value  --weapon key=expr  --bench-seeds N  --no-bench  --bench-only  --json PATH  --stats-out PATH  --help
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
@@ -19,9 +19,10 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { aggregateRuns } from '../js/stats-aggregate.js';
 import { GAME_VERSION } from '../js/version.js';
+import { bossTier } from '../js/wave-plan.js';
 
 function parseArgs(argv) {
-  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', mode: 'normal', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null, statsOut: null };
+  const opts = { runs: 3, seed: 'vexolith', strategies: null, focus: false, weaponFocus: false, maxMinutes: 15, workers: Math.max(1, Math.min(8, availableParallelism())), meta: 0, skill: 'average', mode: 'normal', god: false, tune: {}, weapons: {}, bench: true, benchSeeds: 2, benchOnly: false, json: null, statsOut: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -40,6 +41,7 @@ function parseArgs(argv) {
     else if (a === '--seed') opts.seed = next();
     else if (a === '--strategies') opts.strategies = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (a === '--focus') opts.focus = true;
+    else if (a === '--weapon-focus') opts.weaponFocus = true;
     else if (a === '--max-minutes') opts.maxMinutes = number(0.5);
     else if (a === '--workers') opts.workers = int(1);
     else if (a === '--meta') opts.meta = int(0);
@@ -228,6 +230,27 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
         Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' ') || '—', weaponLevels.toFixed(1)];
     })));
 
+    // Breakthroughs (R&D picks at weapon LV 6 / 12 / 18): how often, when, and transform vs boost.
+    const bts = runs.flatMap(r => (r.breakthroughs || []).map(b => ({ ...b, run: r })));
+    if (bts.length) {
+      out.push('\n## Breakthroughs (per strategy: taken per run, transform share, median time of the first)');
+      out.push(table(['strategy', 'per run', 'runs with one', 'transform share', 'first at'], strategies.map(s => {
+        const rs = byStrat.get(s.name);
+        const mine = rs.flatMap(r => r.breakthroughs || []);
+        const firsts = rs.filter(r => r.breakthroughs?.length).map(r => r.breakthroughs[0].time);
+        return [s.name, (mine.length / rs.length).toFixed(1), `${firsts.length}/${rs.length}`, mine.length ? pct(mine.filter(b => b.kind === 'transform').length / mine.length) : '—', firsts.length ? mmss(median(firsts)) : '—'];
+      })));
+      // Per weapon and milestone, pooled: how much longer runs lasted after taking each kind.
+      const keys = [...new Set(bts.map(b => `${b.weapon}|${b.level}`))].sort();
+      out.push('\n## Breakthroughs by weapon (pooled; time survived after the pick, median, by kind)');
+      out.push(table(['weapon', 'LV', 'taken', 'transform', 'boost', 'after transform', 'after boost'], keys.map(k => {
+        const [weapon, level] = k.split('|');
+        const list = bts.filter(b => b.weapon === weapon && String(b.level) === level);
+        const after = kind => { const l = list.filter(b => b.kind === kind).map(b => b.run.time - b.time); return l.length ? mmss(median(l)) : '—'; };
+        return [weapon, level, list.length, list.filter(b => b.kind === 'transform').length, list.filter(b => b.kind === 'boost').length, after('transform'), after('boost')];
+      })));
+    }
+
     // Upgrade exhaustion: when the slots fill, when hands first run short, and when level-ups find
     // nothing left (the ALL SYSTEMS MAXED full-shield-repair fallback).
     const stamp = (rs, key) => {
@@ -251,9 +274,9 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const diedHere = runs.filter(r => r.died && r.wave === w).length;
       const rowsW = alive.map(r => r.perWave.find(p => p.wave === w)).filter(Boolean);
       const finished = rowsW.filter(p => p.hpEnd !== null);
-      rows.push([w, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
+      rows.push([`${w}${bossTier(w) ? ` ★${bossTier(w)}` : ''}`, `${alive.length}/${runs.length}`, diedHere, mean(rowsW.map(p => p.taken)).toFixed(0), mean(rowsW.map(p => p.kills)).toFixed(0), mean(rowsW.map(p => p.enemiesAvg)).toFixed(0), finished.length ? pct(mean(finished.map(p => p.hpEnd))) : '—', finished.length ? mean(finished.map(p => p.levelEnd)).toFixed(1) : '—']);
     }
-    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, bosses every 3rd)`);
+    out.push(`\n## Difficulty curve per wave (all strategies pooled; waves are ${opts.tune.waveLength ?? opts.waveLength ?? 22} s, ★ = boss wave)`);
     out.push(table(['wave', 'runs alive', 'deaths', 'HP lost', 'kills', 'enemies on field', 'shield at end', 'level at end'], rows));
 
     // Time-to-kill per enemy type per wave bucket.
@@ -360,7 +383,7 @@ async function main() {
   if (!(opts.skill in h.PILOT_SKILLS) && !(Number(opts.skill) >= 1)) throw new Error(`--skill must be ${Object.keys(h.PILOT_SKILLS).join('|')} or a tick count >= 1`);
   h.parseWeaponOverrides(opts.weapons); // validate before spawning workers
 
-  const strategies = opts.benchOnly ? [] : buildStrategies(h.UPGRADE_POOL, { focus: opts.focus, only: opts.strategies });
+  const strategies = opts.benchOnly ? [] : buildStrategies(h.UPGRADE_POOL, { focus: opts.focus, weaponFocus: opts.weaponFocus, only: opts.strategies });
   if (opts.strategies && strategies.length === 0) throw new Error('No matching strategies');
   const classes = h.classifyUpgrades();
   const jobs = [];
@@ -404,6 +427,8 @@ function readHelp() {
   --seed S          base seed; each run uses "S:strategy:index" (default vexolith)
   --strategies a,b  only these strategies (names, or focus:<upgradeId>)
   --focus           add a focus:<id> strategy for every non-evolution upgrade
+  --weapon-focus    add a weapon:<id> strategy per slot weapon (its level-ups first; the run-start
+                    pick when it is one) and a start:<id> random build per run-start choice
   --max-minutes M   game-time cap per run (default 15)
   --workers N       worker threads (default: CPU count, max 8)
   --meta R          give every Void Armory upgrade rank R (capped at its max)

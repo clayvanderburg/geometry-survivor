@@ -298,13 +298,14 @@ export function createMetrics() {
     maxedAt: null,    // { time, level } of the first such level-up
     thinHandAt: null, // { time, level } of the first hand with fewer than 3 cards
     slotsFullAt: null, // { time, level } when every weapon slot was filled
+    breakthroughs: [], // { weapon, level, kind, time } for every Breakthrough taken
     damage(src, eff, raw) {
       m.dealt[src] = (m.dealt[src] || 0) + eff;
       m.dealtRaw[src] = (m.dealtRaw[src] || 0) + raw;
     },
     kill(e, src, game) {
       m.kills[src] = (m.kills[src] || 0) + 1;
-      const type = e.isBoss ? 'boss' : e.type;
+      const type = e.isBoss ? `boss:${e.type}` : e.type;
       m.killsByType[type] = (m.killsByType[type] || 0) + 1;
       // Time-to-kill measures weapons: enemies swept by a Supernova or rammed before any weapon hit
       // them would otherwise count as zero-second "one-hit" kills and drag the medians down.
@@ -322,7 +323,7 @@ export function createMetrics() {
       waveRow(game.wave).kills++;
     },
     hurt(e, eff, raw, game) {
-      const type = e.isBoss ? 'boss' : e.type;
+      const type = e.isBoss ? `boss:${e.type}` : e.type;
       const t = m.taken[type] || (m.taken[type] = { dmg: 0, hits: 0 });
       t.dmg += eff;
       t.hits++;
@@ -496,6 +497,7 @@ export function botControls(game, pilot, state) {
 // Highest priority wins; a priority list entry may be an upgrade id, "synergy" (any evolution) or
 // "new_weapon" (the NEW WEAPON card). Cards outside the list are scored randomly below every listed
 // card. After NEW WEAPON, the weapon pick follows `strategy.weapons` (loadout.js ids), else random.
+// Breakthrough screens (transform vs boost) follow `strategy.breakthrough`, else a coin flip.
 export function pickCard(choices, strategy) {
   let best = 0, bestScore = -Infinity;
   const prio = strategy.priorities || [];
@@ -505,6 +507,10 @@ export function pickCard(choices, strategy) {
     if (c.isWeaponPick) {
       const idx = wants.indexOf(c.weaponId);
       score = idx === -1 ? Math.random() : 100 - idx;
+    } else if (c.isBreakthrough) {
+
+      // `breakthrough: 'transform' | 'boost'` fixes the choice; otherwise a coin flip.
+      score = strategy.breakthrough ? (c.kind === strategy.breakthrough ? 1 : 0) : Math.random();
     } else {
       let idx = prio.indexOf(c.id);
       if (idx === -1 && c.isSynergy) idx = prio.indexOf('synergy');
@@ -542,9 +548,16 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       dash: controls.dash, bomb: controls.bomb, pressed: () => false, buttons: [], active: false
     });
 
-    game.resetRun(game.selectedMode);
+    // `startWeapon`: the run-start pick (START_WEAPON_CHOICES); none = the default kit (Autocannon).
+    game.resetRun(game.selectedMode, strategy.startWeapon ?? null);
     game.state = 'PLAYING';
     game.spawnWavePack();
+    const select = game.selectUpgrade;
+    game.selectUpgrade = function (index) {
+      const c = this.currentChoices[index];
+      if (c?.isBreakthrough) metrics.breakthroughs.push({ weapon: c.weaponId, level: c.level, kind: c.kind, time: this.elapsedTime });
+      return select.call(this, index);
+    };
     // God mode: hits still land (knockback, multiplier loss) but never take the last point of shield.
     if (god) game.damagePlayer = function (dmg, shake, by) { return Game.prototype.damagePlayer.call(this, Math.min(dmg, this.player.hp - 1), shake, by); };
 
@@ -630,6 +643,8 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       maxedAt: metrics.maxedAt,
       thinHandAt: metrics.thinHandAt,
       slotsFullAt: metrics.slotsFullAt,
+      breakthroughs: metrics.breakthroughs,
+      startWeapon: strategy.startWeapon ?? null,
       enemiesAt,
       dealt: metrics.dealt,
       dealtRaw: metrics.dealtRaw,
