@@ -15,7 +15,7 @@ import { loadoutDamageMult } from './slot-rewards.js';
 // rank, compounding; fire rate / reload / cooldown: +RATE_STEP attacks per second; count: one more
 // projectile), so a weapon built for damage matches every other weapon built for damage. UTILITY ranks
 // (size, radius, pull, reach, lifetime, spin, pierce) add no potential DPS: they are the trade-off.
-// Potential = every attack lands on a target (each missile, arc jump, mine, bolt, singularity core tick
+// Potential = every attack lands on a target (each missile, arc chain (later jumps at lightningJumpShare), mine, bolt, singularity core tick
 // + collapse, each orbit-blade pass over an enemy on the ring, and each extra attack a transform adds:
 // flak, bomblets, napalm, orbs, strikes...); splash on extra targets is not counted. Transform attacks
 // that land unlike a main hit are valued at a share measured in the Weapon Range (the *HitShare
@@ -145,6 +145,11 @@ export const WEAPON_SCALING = {
   lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
   lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
   lightningChains: (b) => (b.t4 ? 2 : 1),
+  // Potential counts the first jump of a chain as a full hit and every later jump at lightningJumpShare:
+  // like a blast's splash, the extra jumps land on whatever pack is near, so a chain is valued close to
+  // one target (it was every jump at full value before v0.42.2, which left each jump hitting far too soft).
+  lightningJumpShare: 0.15,
+  lightningJumpUnits: (b) => 1 + W.lightningJumpShare * (W.lightningJumps(b) - 1),
   // Transforms: Forked Chains (2 chains), Ball Lightning (an orb dropped on the nearest enemy, worth
   // orbShare of the jumps that landed, orbZaps zaps over orbLife), Thunderstrike (each chain ends in a strike worth
   // strikeShare of that chain's jumps that landed, valued at strikeHitShare).
@@ -157,7 +162,7 @@ export const WEAPON_SCALING = {
   strikeRadius: 55,
   strikeFalloff: 0.8, // hits hard at the struck enemy, fading to 20% at the rim
   strikeHitShare: 2, // a strike on a pack catches its neighbours too (a lone chain cannot): valued at this share
-  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumps(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
+  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
   lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
@@ -671,7 +676,7 @@ export const POTENTIAL_DPS = {
     return avg / W.missileCooldown(b);
   },
   lightning: (b) => {
-    const chains = W.lightningChains(b) * W.lightningJumps(b) * W.lightningDamageMult(b);
+    const chains = W.lightningChains(b) * W.lightningJumpUnits(b) * W.lightningDamageMult(b); // later jumps at lightningJumpShare
     const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;
     const orb = b.t8 ? W.orbShare * chains : 0;
     return (chains + strikes + orb) / W.lightningCooldown(b);
