@@ -69,6 +69,7 @@ import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
+import { newRunLedger, commitFeats, hangarTunerRow } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -451,6 +452,7 @@ export class Game {
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
     this.syncRunStats();
+    this.feats = newRunLedger(this); // Hangar feats (null while the flag is off)
     this.discardPending = null;
     this.discardBlocked = null;
     this.weaponBarHtml = null;
@@ -995,6 +997,11 @@ export class Game {
     if (closeTunerBtn) closeTunerBtn.addEventListener('click', () => this.toggleTunerDrawer());
   }
 
+  // Dev tuner or sandbox touched this run (it stays off the boards, feats and stats).
+  runIsTainted() {
+    return this.runTainted || isTuningModified();
+  }
+
   toggleTunerDrawer() {
     const drawer = document.getElementById('tuner-drawer');
     if (!drawer) return;
@@ -1067,6 +1074,7 @@ export class Game {
       });
     }
 
+    hangarTunerRow(document, body, this.progression);
     document.querySelectorAll('[data-sbx]').forEach((btn) => {
       btn.addEventListener('click', () => {
         sendSandboxCommand(btn.getAttribute('data-sbx'));
@@ -1910,7 +1918,7 @@ export class Game {
   // shield vein (an instant heal, not a pickup) or sets off the Tectonic Claw Bore blast.
   onRockShattered(rock) {
     const byElite = rock.brokenBy === 'elite';
-    if (!byElite) this.rocksMined++;
+    if (!byElite) { this.rocksMined++; this.feats?.rockMined(); }
     this.sound.playExplosion(0.95);
     this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.9, rock.sides, rock.rotation, rock.hue, 0.9);
     // The glowing core breaks up too: smaller inner shards in the crack colour, and a flash.
@@ -1996,6 +2004,7 @@ export class Game {
   triggerDash() {
     const p = this.player;
     if (p.dashCooldown > 0 || this.rifts?.holdsShip()) return;
+    this.feats?.dash();
 
     // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
     // with the invulnerability to match.
@@ -2288,6 +2297,7 @@ export class Game {
     // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
     const ranged = !!this.range?.active;
     if (ranged) this.range.onKill(e);
+    else this.feats?.kill(e, this.player);
     // A split boss (Progenitor) pays out only when its last piece dies; read that before the death burst
     // queues the next generation.
     const bossPay = e.isBoss && bossDef(e.type)?.isFinalPiece?.(e, this.enemyManager) !== false;
@@ -2489,6 +2499,7 @@ export class Game {
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
+    this.feats?.shieldHit(Math.min(dmg, Math.max(0, p.hp)));
     p.shieldFlash = 1;
     p.hp -= dmg;
     p.invuln = HIT_INVULN_BASE;
@@ -2714,6 +2725,7 @@ export class Game {
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
     if (isCampaignWin(this, e)) this.victoryTimer = VICTORY_DELAY; // the final boss: VICTORY follows (js/victory.js)
+    commitFeats(this);
   }
 
   showVictory() { showVictory(this); }
@@ -4145,10 +4157,12 @@ export class Game {
 
   // Spend gold (never below 0); flashes the counters either way.
   spendGold(amount) {
+    const held = this.gold;
     if (!trySpend(this, amount)) {
       this.flashGold('short');
       return false;
     }
+    this.feats?.goldSpent(amount, held);
     this.goldSpent += amount;
     this.flashGold('spend');
     this.updateHUD();
@@ -4765,6 +4779,7 @@ export class Game {
       this.range.exit();
       return;
     }
+    commitFeats(this, true);
     this.state = 'GAMEOVER';
     this.updateLowShieldVignette();
     // The run is over: the mode's TUNING overlay comes off (this.mode still names the run for the results).
@@ -5112,6 +5127,7 @@ export class Game {
       this.waveTimer = 0;
       this.wave++;
       this.coresDroppedThisWave = 0;
+      commitFeats(this);
       this.sessionCores += 1;
       this.progression.addCores(1);
       const tier = bossTier(this.wave);
