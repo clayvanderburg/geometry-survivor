@@ -356,7 +356,7 @@ function freeSlots(e, m, n) {
 }
 
 const wingCommander = {
-  name: 'WING COMMANDER', epithet: 'ACE OF THE KESTREL FLIGHT', tier: 'minor', hue: 30, debut: ['kestrel', 'blinker'],
+  name: 'WING COMMANDER', epithet: 'ACE OF THE KESTREL FLIGHT', tier: 'minor', hue: 30, debut: ['kestrel', 'blinker', 'borer'],
   stats: () => ({ speed: WING.speed, radius: 30, sides: 3, vRot: 0 }),
   onArrive(e, m) {
     e.state = 'turn';

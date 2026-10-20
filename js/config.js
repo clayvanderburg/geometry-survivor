@@ -141,6 +141,7 @@ export const DEFAULT_TUNING = {
   spawnWeightConduit: 7,
   spawnWeightRepulsor: 7,
   spawnWeightLancer: 9,
+  spawnWeightBorer: 10,
   enemyBulletSpeed: 4.2,
   enemyBulletDamage: 12,
   lieutenantHpShare: 0.4,
@@ -161,6 +162,8 @@ export const DEFAULT_TUNING = {
   eliteMiningMult: 1.0,
   bossMiningMult: 4, // bosses grind at this many times the elite rate: they bust right through rock
   serpentMiningMult: 2, // serpent heads mine too (their bodies glide over rock)
+  borerMiningMult: 3, // a borer's drill vs the elite base; boreMiningMult mid-charge (js/borers.js)
+  boreMiningMult: 30,
   bossPortalBlast: 280, // px: rock within this radius of a boss's portal is blown up as it arrives
 
   // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
@@ -387,21 +390,22 @@ export const TUNING_SCHEMA = [
       { key: 'spawnWeightSwarm', label: 'Pack Weight: Boid Swarm', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSkirmish', label: 'Pack Weight: Pinwheels + Weavers', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSplitter', label: 'Pack Weight: Splitters', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightMayfly', label: 'Pack Weight: Mayfly Cloud (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightSerpent', label: 'Pack Weight: Serpents (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 9+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightKestrel', label: 'Pack Weight: Kestrel Wings (wave 9+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 12+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightCarrier', label: 'Pack Weight: Carriers (wave 12+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightHulk', label: 'Pack Weight: Hulk (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 18+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightGate', label: 'Pack Weight: Laser Gates (wave 18+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightMitosis', label: 'Pack Weight: Mitosis Colony (wave 21+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 24+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightRepulsor', label: 'Pack Weight: Repulsor + Escort (wave 24+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightLancer', label: 'Pack Weight: Lancers (wave 27+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightMayfly', label: 'Pack Weight: Mayfly Cloud (wave 5+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 10+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSerpent', label: 'Pack Weight: Serpents (wave 10+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightKestrel', label: 'Pack Weight: Kestrel Wings (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 20+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightCarrier', label: 'Pack Weight: Carriers (wave 20+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex (wave 25+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightHulk', label: 'Pack Weight: Hulk (wave 25+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 30+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGate', label: 'Pack Weight: Laser Gates (wave 30+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightMitosis', label: 'Pack Weight: Mitosis Colony (wave 35+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 40+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightRepulsor', label: 'Pack Weight: Repulsor + Escort (wave 40+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightLancer', label: 'Pack Weight: Lancers (wave 45+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBorer', label: 'Pack Weight: Borers (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
       { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
       { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
@@ -417,6 +421,8 @@ export const TUNING_SCHEMA = [
       { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' },
       { key: 'bossMiningMult', label: 'Boss Mining Speed (x Elite Rate)', type: 'range', min: 1, max: 12, step: 0.5, unit: 'x' },
       { key: 'serpentMiningMult', label: 'Serpent Head Mining Speed (x Elite Rate)', type: 'range', min: 0, max: 6, step: 0.25, unit: 'x' },
+      { key: 'borerMiningMult', label: 'Borer Drill (× elite mining)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'boreMiningMult', label: 'Borer Bore-Charge Drill (× elite mining)', type: 'range', min: 0, max: 60, step: 1, unit: 'x' },
       { key: 'bossPortalBlast', label: 'Boss Portal Blasts Rock Within', type: 'range', min: 0, max: 600, step: 10, unit: 'px' }
     ]
   },

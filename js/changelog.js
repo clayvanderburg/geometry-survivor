@@ -21,7 +21,8 @@ export const CHANGELOG = Object.freeze([
       { type: 'balance', text: 'New enemies still arrive with each boss, now on waves 5, 10, 15 ... 45: mayflies 5, bruisers and serpents 10, blinkers and kestrels 15, gunners and carriers 20, and so on.' },
       { type: 'new', text: 'Twenty new wave themes fill the longer campaign, from PINCER and LOCUST STORM to SIEGE LINE, PLAGUE SHIP and THE GLARE.' },
       { type: 'new', text: 'No more outrunning bosses: one left far behind tears a rift open near you and warps back into the fight.' },
-      { type: 'new', text: 'The OUROBOROS now arrives coiled up round its head, then unwinds and comes for you.' }
+      { type: 'new', text: 'The OUROBOROS now arrives coiled up round its head, then unwinds and comes for you.' },
+      { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels straight through asteroids, bore-charges down a marked lane and spits gravel at you while it digs. Rock is no cover from it.' }
     ]
   },
   {

@@ -10,6 +10,7 @@ import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserCha
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
 import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
+import { BORER } from './borers.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
@@ -164,6 +165,11 @@ export const HOSTILE_ENTRIES = [
     id: 'lancer', name: 'LANCER', group: 'archetype', unlockWave: unlockWaveOf('lancer'),
     what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a dashed line at you for ${secs(LANCE.aimTime)}. The line locks (turns red) for the last ${secs(LANCE.lockAt)}, then it fires a ${LANCE.length} px beam that sweeps ${Math.round(LANCE.sweep * 180 / Math.PI)}° to one side over ${secs(LANCE.fireTime)}. Debuts with the Eclipse Twins.`,
     tip: 'When the line turns red, step sideways off it, against the sweep if you can guess it. Punish it while it is planted.'
+  },
+  {
+    id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),
+    what: () => `A bronze drill-nose that tunnels straight through asteroids toward you. Close in, it aims a dashed lane for ${secs(BORER.aim)} (red for the last ${secs(BORER.lockAt)}), then bore-charges down it, shattering any rock in the way. While its drill is in rock it spits the gravel back at you: ${BORER.gravelShots} slow shards every ${secs(BORER.gravelEvery)}. Debuts with the Wing Commander.`,
+    tip: 'Rock is no cover from it: keep it in open space, sidestep the red lane and punish it while it vents after a charge.'
   },
   {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,

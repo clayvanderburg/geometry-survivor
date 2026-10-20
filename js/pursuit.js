@@ -31,8 +31,8 @@ export function eliteMiningDps(tuning = TUNING) {
   return Math.max(0, (tuning.miningSpeed ?? 75) * (tuning.eliteMiningMult ?? 1));
 }
 
-// Rock-miners: elites, plus serpent heads (their bodies glide over rock behind them).
-export const minesRock = (e) => isElite(e) || (e?.type === 'serpent' && !e.leader);
+// Rock-miners: elites, plus serpent heads (their bodies glide over rock behind them) and borers.
+export const minesRock = (e) => isElite(e) || (e?.type === 'serpent' && !e.leader) || e?.type === 'borer';
 
 // This enemy's drill DPS: the elite base, × bossMiningMult for bosses (they bust right through) and
 // × serpentMiningMult for serpent heads.
@@ -40,6 +40,8 @@ export function miningDpsFor(e, tuning = TUNING) {
   const base = eliteMiningDps(tuning);
   if (!(base > 0) || !minesRock(e)) return 0;
   if (e.isBoss) return base * (tuning.bossMiningMult ?? 4);
+  // A borer's drill: borerMiningMult, and boreMiningMult mid-charge (rock in its lane shatters).
+  if (e.type === 'borer') return base * (e.state === 'bore' ? (tuning.boreMiningMult ?? 30) : (tuning.borerMiningMult ?? 3));
   if (!e.isLieutenant) return base * (tuning.serpentMiningMult ?? 2);
   return base;
 }

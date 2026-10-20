@@ -285,3 +285,53 @@ test('Field Guide lieutenant and boss entries give their mining speed', () => {
   assert.doesNotMatch(text('brood_queen'), /busts/);
   resetTuning();
 });
+
+test('borers tunnel through rock: a borer drill grinds, its bore charge shatters rock, and it spits gravel while digging', async () => {
+  resetTuning();
+  const { BORER, boreLength } = await import('../js/borers.js');
+  const m = new EnemyManager();
+  m.queueSpawn('borer', 1000, 1000, 1, { instant: true });
+  m.update(DT, farShip(), [], silent, silent, 4200, 4200);
+  m.update(DT, farShip(), [], silent, silent, 4200, 4200);
+  const b = m.enemies.find(e => e.type === 'borer');
+  assert.ok(b && !isElite(b) && plowsThroughRock(b), 'a non-elite that plows through rock');
+  const hunt = (await import('../js/pursuit.js')).miningDpsFor(b);
+  assert.ok(Math.abs(hunt - eliteMiningDps() * TUNING.borerMiningMult) < 1e-9);
+  b.state = 'bore';
+  assert.ok(Math.abs((await import('../js/pursuit.js')).miningDpsFor(b) - eliteMiningDps() * TUNING.boreMiningMult) < 1e-9);
+  b.state = 'hunt';
+
+  // Its drill in a rock: the asteroid manager flags it, and gravel flies at the ship.
+  const ship = farShip(1600, 1000);
+  const rock = rockAt(1300, 1000, 40);
+  const am = field([rock]);
+  pressTicks(am, b, rock, ship, 2);
+  assert.ok(b.grindT > 0, 'grinding is flagged on the hull');
+  const before = m.enemyBullets.count ?? m.enemyBullets.active?.length ?? 0;
+  for (let t = 0; t < Math.ceil(BORER.gravelEvery * 60) + 2; t++) {
+    pressTicks(am, b, rock, ship, 1);
+    m.update(DT, ship, [], silent, silent, 4200, 4200);
+  }
+  const shots = [...(m.enemyBullets.items || m.enemyBullets.bullets || m.enemyBullets.active || [])].filter(s => s.from === 'borer' && s.life > 0);
+  assert.ok(shots.length >= BORER.gravelShots, `it spits ${BORER.gravelShots} gravel shards (${shots.length})`);
+  assert.ok(before >= 0);
+
+  // A bore charge through a field of rock smashes what is in its lane.
+  const lane = [rockAt(1100, 2000, 30, 120), rockAt(1200, 2000, 30, 120)]; // plain rock HP: (22 + r × 1.05) × rockHpMult
+  const am2 = field(lane);
+  const m2 = new EnemyManager();
+  m2.queueSpawn('borer', 1000, 2000, 1, { instant: true });
+  const target = farShip(1000 + boreLength({ speedScale: 1 }) + 300, 2000);
+  m2.update(DT, target, [], silent, silent, 4200, 4200);
+  m2.update(DT, target, [], silent, silent, 4200, 4200);
+  const c = m2.enemies.find(e => e.type === 'borer');
+  Object.assign(c, { state: 'aim', aiTimer: 0.01, aimAngle: 0 });
+  let shattered = 0;
+  for (let t = 0; t < Math.ceil((BORER.bore + 0.1) * 60); t++) {
+    m2.update(DT, target, [], silent, silent, 4200, 4200);
+    am2.update(DT, target, m2.enemies, [], () => shattered++, silent);
+  }
+  assert.equal(shattered, 2, 'both rocks in the lane shattered');
+  assert.ok(c.x > 1250, `it bored on through (x ${c.x.toFixed(0)})`);
+  resetTuning();
+});
