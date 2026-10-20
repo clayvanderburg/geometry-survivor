@@ -133,6 +133,16 @@ const CUES = {
     [293.66, 369.99, 440, 587.33].forEach((f) => tone(s, { type: 'sawtooth', f0: f, dur: 1.3, vol: 0.04, out: o }));
     noise(s, { type: 'bandpass', f0: 3000, f1: 400, q: 0.8, dur: 1, vol: 0.1, out: o });
   },
+  // Shells and the Prism's nova going off.
+  shell_boom: (s, o) => {
+    tone(s, { type: 'sine', f0: 120, f1: 38, dur: 0.35, vol: 0.22, out: o });
+    noise(s, { type: 'lowpass', f0: 1400, f1: 160, dur: 0.3, vol: 0.14, out: o });
+  },
+  nova_blast: (s, o) => {
+    tone(s, { type: 'sine', f0: 140, f1: 28, dur: 1.1, vol: 0.32, out: o });
+    noise(s, { type: 'bandpass', f0: 4000, f1: 300, q: 0.7, dur: 0.9, vol: 0.16, out: o });
+    [880, 1318.51, 1760].forEach((f, k) => tone(s, { type: 'triangle', f0: f, f1: f * 0.5, at: k * 0.04, dur: 0.7, vol: 0.03, out: o }));
+  },
   // Shared: a phase-change roar and the major-boss death blast (a long rumble with a falling shimmer).
   phase_roar: (s, o) => {
     tone(s, { type: 'sawtooth', f0: 82, f1: 41, dur: 0.9, vol: 0.12, attack: 0.05, out: o });

@@ -104,7 +104,7 @@ export function tickBossHazards(m, dt, player, particles, grid) {
         if (h.fuse <= 0) {
           h.done = true;
           h.flash = 0.3;
-          if (h.cue) cue(m, h.cue, h);
+          if (h.cue) cue(m, h.cue, h, h.r > 150 ? { shake: 10 } : { shake: 3 });
           if (player && Math.hypot(player.x - h.x, player.y - h.y) < h.r + pr) hit(m, h);
           particles?.spawnShockwave?.(h.x, h.y, h.r * 1.35, h.hue, 4, 0.32);
           particles?.spawnExplosionSparks?.(h.x, h.y, 10, h.hue, 3, 10, 2.2);
@@ -313,7 +313,15 @@ export function applyBossHazards(game, playCue = null) {
   const m = game.enemyManager;
   const cues = m?.bossCues;
   if (cues?.length) {
-    if (playCue) for (const c of cues) playCue(game, c);
+    for (const c of cues) {
+      if (playCue) playCue(game, c);
+      // Weight: phase changes and deaths shake the screen and hold a beat (hit-stop), scaled down with
+      // distance from the ship.
+      const p = game.player;
+      const near = p && Number.isFinite(c.x) ? Math.max(0, 1 - Math.hypot(c.x - p.x, c.y - p.y) / 1400) : 1;
+      if (c.shake && near > 0) game.addShake?.(c.shake * near);
+      if (c.hitStop && near > 0.3) game.requestHitStop?.(c.hitStop);
+    }
     cues.length = 0;
   }
   const hits = m?.bossHazardHits;

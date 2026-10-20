@@ -245,3 +245,11 @@ test('sizes and speeds in the constants match the defs', () => {
   assert.equal(BOSS_DEFS.prism.stats().radius, PRISM.radius);
   assert.equal(BOSS_DEFS.architect.stats().radius, ARCH.radius);
 });
+
+test('every sound cue the major bosses queue has a sound', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../js/bosses-major.js', import.meta.url), 'utf8');
+  const used = new Set([...src.matchAll(/cue(?:\(m, |: )'([a-z_]+)'/g)].map(x => x[1]));
+  assert.ok(used.size >= 15, `${used.size} cues`);
+  for (const name of used) assert.ok(BOSS_CUES.includes(name), name);
+});

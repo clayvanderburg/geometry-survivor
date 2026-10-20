@@ -33,12 +33,12 @@ function phaseShift(e, m, env, label, hue = e.hue, sound = 'phase_roar') {
   env.particles?.spawnExplosionSparks?.(e.x, e.y, 36, hue, 3, 16, 2.4);
   env.grid?.applyImpulse?.(e.x, e.y, 95, 460, hue);
   addLabel(m, e.x, e.y - e.radius * 2.4, label, hue, 2.2, e);
-  cue(m, sound, e);
+  cue(m, sound, e, { shake: 14, hitStop: 3 });
 }
 
 // Major death: a chain of blasts across the hull, then one huge ring (on top of Game.onBossDefeated).
 function majorDeath(e, m, hues, { blasts = 6, dur = 0.9, final = 900 } = {}) {
-  cue(m, 'major_death', e);
+  cue(m, 'major_death', e, { shake: 18 });
   for (let k = 0; k < blasts; k++) {
     const a = k * 2.4;
     const d = k ? e.radius * (0.5 + (k % 3) * 0.45) : 0;
@@ -425,7 +425,7 @@ function bombingRun(e, m, env, bays) {
     const d = HIVE.shellSpread[0] + Math.random() * (HIVE.shellSpread[1] - HIVE.shellSpread[0]);
     shots.push({ x: tx + Math.cos(a) * d, y: ty + Math.sin(a) * d });
   }
-  shots.forEach((s, k) => addBlast(m, { x: s.x, y: s.y, r: HIVE.shellR, fuse: HIVE.shellFuse + k * 0.08, hue: 120, from: e.type }));
+  shots.forEach((s, k) => addBlast(m, { x: s.x, y: s.y, r: HIVE.shellR, fuse: HIVE.shellFuse + k * 0.08, hue: 120, from: e.type, cue: 'shell_boom' }));
   e.salvo = shots.map((s, k) => ({ x: s.x, y: s.y, from: bays[k - 1] || e }));
   e.salvoShowT = 0.6;
   cue(m, 'hive_launch', e);
@@ -441,7 +441,7 @@ function carpetBomb(e, m, env) {
   uy /= len;
   for (let k = 0; k < HIVE.carpetShells; k++) {
     const d = (k - 1.5) * HIVE.carpetStep;
-    addBlast(m, { x: player.x + ux * d, y: player.y + uy * d, r: HIVE.shellR * 0.9, fuse: HIVE.carpetFuse + k * HIVE.carpetStagger, hue: 95, from: e.type });
+    addBlast(m, { x: player.x + ux * d, y: player.y + uy * d, r: HIVE.shellR * 0.9, fuse: HIVE.carpetFuse + k * HIVE.carpetStagger, hue: 95, from: e.type, cue: 'shell_boom' });
   }
   cue(m, 'hive_launch', e);
 }
@@ -1221,7 +1221,7 @@ const prism = {
         e.novaT = PRISM.novaEvery;
         e.castT = PRISM.novaFuse;
         e.novaAt = { x: e.x, y: e.y };
-        addBlast(m, { x: e.x, y: e.y, r: PRISM.novaR, fuse: PRISM.novaFuse, hue: 48, from: e.type });
+        addBlast(m, { x: e.x, y: e.y, r: PRISM.novaR, fuse: PRISM.novaFuse, hue: 48, from: e.type, cue: 'nova_blast' });
         cue(m, 'prism_charge', e);
       }
       if (e.novaAt && e.castT <= 0) {
