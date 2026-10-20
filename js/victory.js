@@ -1,6 +1,6 @@
 // Campaign VICTORY: beating the final boss (wave CAMPAIGN_WAVES, js/wave-plan.js) pauses the run on a gold
-// VICTORY screen (#victory-modal) with two ways on: CONTINUE INTO ENDLESS (the run goes on; past wave 50
-// bosses come in pairs) or GO FOR HIGH SCORE! (end the run now and bank the score; the results read
+// VICTORY screen (#victory-modal) with two ways on: CONTINUE FOR HIGH SCORE (ENDLESS: the run goes on and
+// the score keeps counting; past wave 50 bosses come in pairs) or END RUN (finish here; the results read
 // VICTORY). A pilot who won and later falls in ENDLESS keeps the win: their results read CAMPAIGN WON.
 // Game wires these in with a few lines (state 'VICTORY', game.victoryTimer, game.campaignWon).
 import { CAMPAIGN_WAVES, FINAL_BOSS } from './wave-plan.js';
@@ -62,14 +62,14 @@ function closeVictory(game) {
   game.state = 'PLAYING';
 }
 
-// CONTINUE INTO ENDLESS: the run goes on from where it stood.
+// CONTINUE FOR HIGH SCORE (ENDLESS): the run goes on from where it stood.
 export function continueEndless(game) {
   if (game.state !== 'VICTORY') return;
   closeVictory(game);
   game.showBanner?.('∞ ENDLESS // BOSSES NOW COME IN PAIRS // HOW FAR CAN YOU GO?');
 }
 
-// GO FOR HIGH SCORE!: the run ends here and posts like any other, under a VICTORY results screen.
+// END RUN: the run ends here and posts like any other, under a VICTORY results screen.
 export function endVictoriousRun(game) {
   if (game.state !== 'VICTORY') return;
   closeVictory(game);
