@@ -1,5 +1,6 @@
 // Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
 import { MODE_IDS, normalizeMode } from './modes.js';
+import { normalizeHangar, newHangar } from './hangar-save.js';
 
 const SAVE_KEY = 'vectra_survivor_save_v2';
 // Local highscores ("MY RUNS") kept per game mode.
@@ -278,7 +279,9 @@ export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
     devWipe: DEV_WIPE.id, // the wipe check has run for this save (see DEV_WIPE)
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
-    highscores: keptScores.length ? topRunsPerMode(keptScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
+    highscores: keptScores.length ? topRunsPerMode(keptScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' })),
+    // Hangar data (js/hangar-save.js) exists only once the Hangar flag created it; a save without it gets none.
+    ...(source.hangar !== undefined ? { hangar: normalizeHangar(source.hangar) } : {})
   };
 }
 
@@ -385,6 +388,16 @@ export class ProgressionManager {
 
   getBonuses() {
     return armoryBonuses(this.data.ranks);
+  }
+
+  // The Hangar's save data, created on first use (only while the Hangar flag is on: js/hangar-flag.js).
+  // Seeded from this save (runs played, best waves; a save with runs is a veteran).
+  hangar() {
+    if (!this.data.hangar) {
+      this.data.hangar = newHangar(this.data);
+      this.save();
+    }
+    return this.data.hangar;
   }
 
   isGuideUnlocked(id) {
