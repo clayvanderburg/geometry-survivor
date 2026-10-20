@@ -1249,7 +1249,7 @@ export class AsteroidManager {
         const o = a.lastGrindX != null ? toLocal(a, a.lastGrindX, a.lastGrindY) : { x: 0, y: 0 };
         cracks = rockCracks(a, o.x, o.y);
       }
-      const hue = isRich ? a.hue : 34;
+      const hue = a.hue; // cracks glow in the rock's own colour (plain rock: blue)
       const open = Math.min(1, dmg * 1.15);
       ctx.beginPath();
       for (let i = 0; i < cracks.segs.length; i++) {
