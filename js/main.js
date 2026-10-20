@@ -85,7 +85,7 @@ import {
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
-import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity } from './juice.js';
+import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -167,6 +167,16 @@ const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks
 export function bossEpithet(wave) {
   const rank = BOSS_RANKS[Math.max(0, Math.min(BOSS_RANKS.length - 1, Math.floor(wave / BOSS_EVERY) - 1))];
   return `WAVE ${wave} ${rank}`;
+}
+
+// Choice cards deal in one after another (css: card-deal); rare and better ones get a shimmer sweep.
+function dealInCard(card, idx, className, doc = globalThis.document) {
+  card.style?.setProperty?.('--deal-i', idx);
+  if (/rarity-(common|uncommon)\b/.test(className) || !doc?.createElement) return;
+  const shimmer = doc.createElement('span');
+  shimmer.className = 'card-shimmer';
+  shimmer.setAttribute?.('aria-hidden', 'true');
+  card.appendChild(shimmer);
 }
 
 const setHidden = (el, hidden) => {
@@ -4068,6 +4078,7 @@ export class Game {
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
     this.sound.playLevelUp();
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 145, 5, 0.5);
+    burst(this, 'levelUp', this.player.x, this.player.y);
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
     this.grid.ripple?.(this.player.x, this.player.y, 220, 145);
 
@@ -4459,6 +4470,7 @@ export class Game {
       const card = document.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
+      dealInCard(card, idx, view.className);
       card.addEventListener('click', () => {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.selectUpgrade(idx);
@@ -4601,6 +4613,7 @@ export class Game {
       for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
       this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
       this.particles.spawnShockwave(p.x, p.y, 260, 280, 5, 0.5);
+      burst(this, 'unlock', p.x, p.y, { hue: 172 });
       if (this.sound.playBreakthrough) this.sound.playBreakthrough();
       else this.sound.playLevelUp();
       return true;
@@ -4646,6 +4659,7 @@ export class Game {
       applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
       this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
+      burst(this, 'pick', p.x, p.y, { hue: hueOf(upg.color, 172), scale: 1.3 });
       this.closeUpgradeModal();
       return;
     }
@@ -4654,13 +4668,16 @@ export class Game {
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
+      burst(this, 'unlock', p.x, p.y, { hue: hueOf(RARITY.weapon.color), scale: 0.8 });
       this.closeUpgradeModal();
       return;
     }
 
     const jump = this.applyUpgrade(upg);
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
+    const color = RARITY[rarityFor(upg, jump)].color;
+    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
+    burst(this, 'pick', p.x, p.y, { hue: hueOf(color, 205), scale: 0.8 + 0.12 * Math.min(5, jump) });
     this.closeUpgradeModal();
   }
 
@@ -5604,7 +5621,16 @@ export class Game {
 
     const xpPct = Math.min(100, (p.xp / p.xpToNext) * 100);
     document.getElementById('xp-bar-fill').style.width = `${xpPct}%`;
-    document.getElementById('level-display').textContent = `LVL ${p.level}`;
+    const levelEl = document.getElementById('level-display');
+    levelEl.textContent = `LVL ${p.level}`;
+    // A new level pops the HUD readout (skipped with REDUCE EFFECTS).
+    if (this.hudLevelShown !== p.level) {
+      if (this.hudLevelShown !== undefined && !isReduceEffects()) {
+        levelEl.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(1.45)', color: '#8dffb9', textShadow: '0 0 14px #2dff8a' }, { transform: 'scale(1)' }],
+          { duration: 520, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
+      }
+      this.hudLevelShown = p.level;
+    }
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
     document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
@@ -5959,6 +5985,7 @@ export class Game {
       const card = doc.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
+      dealInCard(card, idx, view.className);
       card.addEventListener('click', () => {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.chooseStartWeapon(id);
