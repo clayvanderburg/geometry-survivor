@@ -2,7 +2,7 @@
 // entry point is a no-op unless the Hangar flag is on (js/hangar-flag.js): game.feats is null then.
 import { hangarEnabled, setHangarEnabled } from './hangar-flag.js';
 import { FeatLedger, FEATS } from './feats.js';
-import { DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses } from './ships.js';
+import { DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook } from './ships.js';
 
 // The ship this run flies: null while the flag is off (the crab, exactly as before) or in the Weapon Range;
 // else the Hangar's pick. `game.shipOverride` (balance sim --ship, tests) wins even with the flag off.
@@ -15,6 +15,13 @@ export function runShip(game) {
 // The run's start bonuses: the mode's Void Armory bonuses, plus the ship's (js/ships.js) when there is one.
 export function runBonuses(armory, shipId) {
   return shipId ? shipRunBonuses(armory, shipId) : armory;
+}
+
+// The player fields a ship adds: its id and silhouette (ship-renderer.js). Nothing for no ship.
+export function shipFields(shipId) {
+  if (!shipId) return {};
+  const look = shipLook(shipId);
+  return look ? { shipId, look } : { shipId };
 }
 
 // A fresh ledger for the run resetRun just built (null: flag off, or the Weapon Range).

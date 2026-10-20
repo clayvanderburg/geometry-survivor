@@ -69,7 +69,8 @@ import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
-import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses } from './hangar-run.js';
+import { mountHangar } from './hangar-ui.js';
+import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -324,6 +325,7 @@ export class Game {
     this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
+    this.hangarUI = mountHangar(this); // Hangar screen + unlock toasts (null while the flag is off)
     this.syncModeUI();
     this.renderHubUI();
     this.refreshGlobalBoard();
@@ -409,7 +411,7 @@ export class Game {
       // Shield, bombs, Void Armory multipliers and stats: TUNING plus the armory (upgrades.js runStartPlayer).
       ...runStartPlayer(bonuses),
       mode: this.mode, // card pools read the mode's rules off the player (upgrades.js eligibleUpgrades)
-      ...(this.shipId ? { shipId: this.shipId } : {}),
+      ...shipFields(this.shipId), // Hangar ship id and silhouette (none for the crab)
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
@@ -693,6 +695,10 @@ export class Game {
       }
       if (this.startPickOpen) {
         this.handleStartPickKey(e, onControl);
+        return;
+      }
+      if (this.hangarUI?.isOpen) {
+        this.hangarUI.handleKey(e, onControl);
         return;
       }
       if (this.guideOpen) {
@@ -4956,6 +4962,10 @@ export class Game {
       this.updateStartPickController(gp, dt);
       return;
     }
+    if (this.hangarUI?.isOpen) {
+      this.hangarUI.updateController(gp, dt);
+      return;
+    }
     if (this.guideOpen) {
       this.updateGuideController(gp, dt);
       return;
@@ -6881,6 +6891,7 @@ export class Game {
       this.closeMobileWindows();
     }
     this.overview?.frame(now);
+    this.hangarUI?.update(this.frameSeconds);
     if (this.state === 'TITLE') this.titleShip?.frame(now);
     requestAnimationFrame((t) => this.loop(t));
   }

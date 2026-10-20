@@ -35,7 +35,8 @@ export function previewShip(player, t, tuning = {}) {
       angle: heading + Math.sin(t * 0.9) * 0.7, // the turret sweeps independently of the hull
       // Drill threads spin at the game's idle / drilling rpm (11 / 34).
       drillSpin: t * 11 + bitten * 23,
-      stats: { drillScale }
+      stats: { drillScale },
+      ...(player?.look ? { look: player.look } : {}) // a Hangar ship's silhouette (js/ships.js)
     }
   };
 }
