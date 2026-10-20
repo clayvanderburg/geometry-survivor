@@ -1801,8 +1801,9 @@ export class SoundEngine {
     dur = Math.max(0.05, Math.min(1.5, dur));
     if (!this.claimVoice('railcharge', 60, 1, dur)) return;
     const t = this.ctx.currentTime;
-    const base = overload ? 110 : 220;
-    const peak = overload ? 1300 : 2200;
+    const vary = 0.96 + Math.random() * 0.08; // a little pitch variety shot to shot
+    const base = (overload ? 110 : 220) * vary;
+    const peak = (overload ? 1300 : 2200) * vary;
     const vol = overload ? 0.05 : 0.035;
     const band = this.ctx.createBiquadFilter();
     band.type = 'bandpass';
@@ -1827,6 +1828,20 @@ export class SoundEngine {
       osc.start(t);
       osc.stop(t + dur + 0.05);
     }
+    // Lock-on: a bright two-tone click right at the top of the charge, so the shot lands on a cue.
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    click.type = 'triangle';
+    click.frequency.setValueAtTime(peak * 1.2, t + dur - 0.05);
+    click.frequency.setValueAtTime(peak * 1.6, t + dur - 0.025);
+    clickGain.gain.setValueAtTime(0.0001, t);
+    clickGain.gain.setValueAtTime(0.0001, t + dur - 0.05);
+    clickGain.gain.exponentialRampToValueAtTime(vol * 0.9, t + dur - 0.045);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    click.connect(clickGain);
+    clickGain.connect(this.sfxGain);
+    click.start(t);
+    click.stop(t + dur + 0.02);
   }
 
   // Rail Lance discharge: a hard supersonic crack (high-passed noise snap), a falling metallic zing
@@ -1837,6 +1852,7 @@ export class SoundEngine {
     if (!this.claimVoice('railfire', 70, 2, dur)) return;
     const t = this.ctx.currentTime;
     const body = (overload ? 1.25 : 1) * (0.9 + Math.min(0.25, hits * 0.03));
+    const vary = 0.95 + Math.random() * 0.1;
 
     const noise = this.noiseSource();
     const high = this.ctx.createBiquadFilter();
@@ -1854,8 +1870,8 @@ export class SoundEngine {
     const ring = this.ctx.createBiquadFilter();
     const zingGain = this.ctx.createGain();
     zing.type = 'square';
-    zing.frequency.setValueAtTime(overload ? 1800 : 3200, t);
-    zing.frequency.exponentialRampToValueAtTime(overload ? 140 : 320, t + dur * 0.8);
+    zing.frequency.setValueAtTime((overload ? 1800 : 3200) * vary, t);
+    zing.frequency.exponentialRampToValueAtTime((overload ? 140 : 320) * vary, t + dur * 0.8);
     ring.type = 'bandpass';
     ring.frequency.setValueAtTime(2400, t);
     ring.frequency.exponentialRampToValueAtTime(600, t + dur * 0.8);
@@ -1879,6 +1895,23 @@ export class SoundEngine {
     subGain.connect(this.sfxGain);
     sub.start(t);
     sub.stop(t + (overload ? 0.57 : 0.22));
+
+    // Impact: a dull meaty thud a beat after the crack when the lance connects, heavier the more it pierced.
+    if (hits > 0) {
+      const thud = this.ctx.createOscillator();
+      const thudGain = this.ctx.createGain();
+      const ti = t + 0.025;
+      thud.type = 'triangle';
+      thud.frequency.setValueAtTime(95 * vary, ti);
+      thud.frequency.exponentialRampToValueAtTime(42, ti + 0.12);
+      thudGain.gain.setValueAtTime(0.0001, t);
+      thudGain.gain.setValueAtTime((0.09 + Math.min(0.08, hits * 0.015)) * body, ti);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, ti + 0.14);
+      thud.connect(thudGain);
+      thudGain.connect(this.sfxGain);
+      thud.start(t);
+      thud.stop(ti + 0.15);
+    }
 
     if (overload) {
       const boom = this.noiseSource();

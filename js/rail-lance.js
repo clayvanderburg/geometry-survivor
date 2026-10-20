@@ -26,7 +26,10 @@ const MIN_REACH = 520;            // px, if the ship is somehow at the screen ed
 const EDGE_MARGIN = 40;           // px the lance runs past the screen edge
 const MUZZLE = 1.5;               // x hull radius: where the lance leaves the turret
 const TIE_GAP = 46;               // px between the coil rings drawn along a discharge
-const HUD_STEPS = 10;             // HUD charge gauge resolution (keeps the chip HTML from changing every tick)
+const HUD_STEPS = 10;
+const IMPACT_FX = 6;              // enemies per lance that get the full impact burst (all are still hit)
+// Discharge width over its life: a fat flash that snaps thin (ease-out), so the shot lands as a punch.
+const beamSwell = (k) => 1 + 1.4 * (1 - k) ** 3;             // HUD charge gauge resolution (keeps the chip HTML from changing every tick)
 
 // Enemies the lance can hit and pull: anything alive and not invulnerable.
 const railTarget = (e) => !e.dead && !e.invulnerable;
@@ -197,19 +200,29 @@ export class RailLance {
         const e = hits[order[k]];
         if (e.dead) continue; // killed by an earlier lance this shot (the snapshot outlives the splice)
         game.hitEnemy(e, d, 'rail', ln.dx * W.railKnock, ln.dy * W.railKnock, 1, stat);
-        if (k < 6) fx.spawnExplosionSparks?.(e.x, e.y, overload ? 6 : 3, RAIL_HUE, 2.4, 8, 1.6);
+        if (k < IMPACT_FX) {
+          // Impact: sparks blown out the far side along the lance, a hot ring and a white pop on the hull.
+          fx.spawnDirectionalSparks?.(e.x, e.y, Math.atan2(ln.dy, ln.dx), 0.5, overload ? 9 : 5, RAIL_HUE + 20, overload ? 16 : 12);
+          fx.spawnShockwave?.(e.x, e.y, (e.radius || 10) * (overload ? 3.2 : 2.2), RAIL_HUE, overload ? 3 : 2, 0.16);
+          fx.spawnImpact?.(e.x, e.y, Math.atan2(ln.dy, ln.dx), overload ? 12 : 8, 0.09);
+        }
         d *= keep;
         landed++;
       }
       hits.length = 0;
       if (b.t8) this.addWake(ln, dmg * W.wakeShare / (W.wakeLife / W.wakeTick)); // an Overload's wake is as big as its beam
-      // Muzzle flash and a pulse down the grid along the line.
-      fx.spawnFlash?.(ln.x1, ln.y1, overload ? 30 : 16, RAIL_HUE, 0.1);
+      // Muzzle flash, a recoil ring and sparks kicked back off the turret, and a pulse down the grid along the line.
+      fx.spawnFlash?.(ln.x1, ln.y1, overload ? 42 : 24, RAIL_HUE, overload ? 0.16 : 0.11);
+      fx.spawnShockwave?.(ln.x1, ln.y1, overload ? 46 : 26, RAIL_HUE + 20, overload ? 4 : 2.5, 0.2);
+      fx.spawnDirectionalSparks?.(ln.x1, ln.y1, Math.atan2(-ln.dy, -ln.dx), 0.9, overload ? 8 : 4, RAIL_HUE, 7);
       for (let s = 1; s <= 3; s++) game.grid?.applyImpulse?.(ln.x1 + ln.dx * ln.len * s * 0.25, ln.y1 + ln.dy * ln.len * s * 0.25, overload ? 26 : 12, 70, RAIL_HUE);
     }
     this.lances += n;
     this.flash = overload ? 0.2 : 0.12;
-    game.addShake?.(overload ? 4 : 1.5);
+    game.addShake?.(overload ? 7 : 2.5);
+    // An Overload Shot that connects gets a beat of hit-stop (plain shots don't: one a second would judder the game).
+    if (overload && landed > 0) game.requestHitStop?.(2);
+    if (overload) game.chromaFlash = Math.max(game.chromaFlash || 0, 0.35);
     game.sound.playRailFire?.(overload, landed);
   }
 
@@ -366,15 +379,16 @@ export class RailLance {
         const bm = this.beams[i];
         const k = Math.min(1, bm.age / BEAM_LIFE);
         const fade = 1 - k;
+        const swell = beamSwell(k);
         const wide = bm.overload ? bm.width : 0;
         if (pass === 0) {
-          ctx.lineWidth = (6 + wide * 2.2) * (1 + 0.6 * k);
+          ctx.lineWidth = (6 + wide * 2.2) * (1 + 0.6 * k) * swell;
           ctx.strokeStyle = `hsla(${RAIL_HUE}, 100%, 62%, ${0.28 * fade})`;
         } else if (pass === 1) {
-          ctx.lineWidth = (2.4 + wide * 0.9) * fade + 0.4;
+          ctx.lineWidth = (2.4 + wide * 0.9) * fade * swell + 0.4;
           ctx.strokeStyle = `hsla(${RAIL_HUE + 15}, 100%, 76%, ${0.85 * fade})`;
         } else {
-          ctx.lineWidth = (bm.overload ? 2.4 : 1.1) * fade + 0.3;
+          ctx.lineWidth = (bm.overload ? 2.4 : 1.1) * fade * swell + 0.3;
           ctx.strokeStyle = `rgba(255, 255, 255, ${0.95 * fade})`;
         }
         ctx.beginPath();
