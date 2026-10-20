@@ -208,8 +208,8 @@ function drawBlast(ctx, h) {
   }
   const t = 1 - Math.max(0, h.fuse) / h.maxFuse;
   const flash = 0.5 + 0.5 * Math.cos(h.fuse * Math.PI * (6 + t * 14));
-  ctx.strokeStyle = `hsla(${flash > 0.5 ? 0 : h.hue}, 100%, 62%, ${0.45 + 0.4 * t})`;
-  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = `hsla(${flash > 0.5 ? 0 : h.hue}, 100%, 62%, ${0.6 + 0.4 * t})`;
+  ctx.lineWidth = 3.2;
   ctx.beginPath();
   const spin = h.t * 1.5;
   for (let k = 0; k < 8; k++) {
@@ -223,7 +223,7 @@ function drawBlast(ctx, h) {
     ctx.lineTo(h.x + Math.cos(a) * h.r * 0.82, h.y + Math.sin(a) * h.r * 0.82);
   }
   ctx.stroke();
-  ctx.fillStyle = `hsla(0, 100%, 55%, ${0.08 + 0.2 * t})`;
+  ctx.fillStyle = `hsla(0, 100%, 55%, ${0.12 + 0.26 * t})`;
   ctx.beginPath();
   ctx.arc(h.x, h.y, h.r * t, 0, Math.PI * 2);
   ctx.fill();
