@@ -38,11 +38,12 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // rank, from live player data in v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
 // offensive weapons are tuned up to the Autocannon's real output (card benches, Clay's runs), since the
 // potential model over-rates splash and burst hits that overkill or miss. Rocket Pods 1.5 (under target in
-// player data at every level); Swarm Missiles 0.5 (v0.36.1, under review with Clay). FIRE_RATE_TRIM fires
-// a weapon that much faster at the same hit damage, so it multiplies DPS at every level: Swarm Missiles
-// x1.3 (Clay's ask: they are a run-start pick now).
+// player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
+// far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
+// multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.5, rockets: 1.5 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;

@@ -28,9 +28,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.5 damage and x1.3 fire rate, Rocket Pods x1.5', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.5, rockets: 1.5 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -160,7 +160,10 @@ test('piercing bolts hit the first enemy for full damage and each one behind for
 test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder, Orbit Blades +50% ring / +30% spin', () => {
   const b = (id) => levelBuild(id, 1);
   assert.ok(near(1.44 / W.missileCooldown(b('missiles')), 1.3), 'missiles fire 30% faster than the 1.44 s of v0.42');
-  assert.ok(near(W.missileDamageMult(b('missiles')), 0.5 * DPS_TARGET(1) * 1.44 / 2), 'same missile damage as v0.42, so +30% DPS');
+  // Clay: +30% fire rate as a real gain (hits not rescaled down) and half -> 70% damage: ~1.82x v0.42 DPS.
+  assert.ok(near(W.missileDamageMult(b('missiles')), 0.7 * DPS_TARGET(1) * 1.44 / 2), 'missiles hit 1.4x as hard as v0.42 (0.5 -> 0.7)');
+  assert.ok(near(lv1('missiles') / (0.5 * DPS_TARGET(1)), 1.3 * 1.4), 'missile DPS is 1.82x v0.42 at LV 1');
+  assert.ok(near(POTENTIAL_DPS.missiles(makeBuild('missiles', 8, { damage: 4, reload: 3 })) / lv1('missiles'), DAMAGE_GROWTH ** 4 * (1 + RATE_STEP * 3)), '...and at every level');
   assert.ok(lv1('rockets') >= lv1('blaster') * 1.25, 'Rocket Pods out-potential the Autocannon at LV 1 (their hits splash, overkill or miss)');
   assert.equal(W.orbitalRadius(b('orbitals')), 155); // 103 * 1.5
   assert.ok(near(W.orbitalSpin(b('orbitals')), 4.85 * 1.3, 0.01));
