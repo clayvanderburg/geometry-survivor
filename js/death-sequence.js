@@ -1,16 +1,15 @@
 // Death sequence (visual only): when the shield collapses the run is already over and recorded; this
 // plays the ship's meltdown and detonation over the frozen sector, slams an 80s-arcade headline
-// ("YOU GOT FRAGGED") with a quip, then hands over to the game-over screen. Any fresh key, click,
-// tap or controller A / Start skips ahead once the blast has gone off.
+// ("YOU GOT FRAGGED") with a quip, and holds there until the player continues to the game-over screen
+// (Enter, controller A / Start or the on-screen CONTINUE button) once the blast has gone off.
 import { drawCrabShip } from './ship-renderer.js';
 
 export const DEATH_TIMING = Object.freeze({
   detonate: 0.35, // meltdown before the ship blows
   headline: 0.85, // headline slams in
   quip: 1.25,     // quip starts typing
-  hint: 1.8,      // "PRESS ANY KEY" blinks in
-  reveal: 3.6,    // game-over screen opens
-  skippable: 0.5  // earliest skip (so a held fire/dash input can't eat the whole thing)
+  replay: 1.6,    // the instant-replay monitor powers on (when there is a tape)
+  skippable: 0.5  // earliest continue (so a held fire/dash input can't eat the whole thing)
 });
 
 // [kicker, headline, weight]: FRAGGED is the signature, the rest keep it fresh.
@@ -72,16 +71,15 @@ export class DeathSequence {
     this.landed = false;
     this.revealed = false;
     this.fragments = [];
+    this.replay = null; // ReplayPlayer (js/replay.js), handed over once the tape stops
   }
 
   get canSkip() { return this.t >= DEATH_TIMING.skippable && !this.revealed; }
-  get done() { return this.t >= DEATH_TIMING.reveal; }
 
-  // game: hooks for the shared effects ({ particles, grid, sound, addShake, flash }). Returns true on
-  // the tick the sequence finishes.
+  // game: hooks for the shared effects ({ particles, grid, sound, addShake, flash }). Runs until the
+  // player continues: the headline keeps swaying meanwhile.
   update(dt, game) {
-    if (this.revealed) return false;
-    const before = this.t;
+    if (this.revealed) return;
     this.t += dt;
     if (this.t < DEATH_TIMING.detonate) {
       // Meltdown: the hull leaks sparks and shudders harder as it goes critical.
@@ -95,6 +93,7 @@ export class DeathSequence {
       game.addShake?.(14);
       game.sound?.playExplosion?.(0.9);
     }
+    if (this.replay && this.t >= DEATH_TIMING.replay) this.replay.update(dt);
     for (const f of this.fragments) {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
@@ -103,12 +102,12 @@ export class DeathSequence {
       f.rot += f.spin * dt;
       f.life -= dt;
     }
-    return before < DEATH_TIMING.reveal && this.t >= DEATH_TIMING.reveal;
   }
 
+  // The player continues to the results; refused during the first DEATH_TIMING.skippable seconds.
   skip() {
     if (!this.canSkip) return false;
-    this.t = DEATH_TIMING.reveal;
+    this.revealed = true;
     return true;
   }
 
@@ -194,8 +193,8 @@ export class DeathSequence {
     ctx.restore();
   }
 
-  // Screen space: dim + scanlines, then the headline, quip, killer tag and skip hint.
-  drawOverlay(ctx, w, h, source = null, scale = 1, touch = false) {
+  // Screen space: dim + scanlines, then the headline, quip and killer tag.
+  drawOverlay(ctx, w, h, source = null, scale = 1) {
     if (this.revealed) return;
     const t = this.t;
     // A white-hot flash on detonation.
@@ -233,10 +232,11 @@ export class DeathSequence {
       ctx.restore();
     }
 
+    // With a replay tape the headline moves up to make room for the monitor below it.
+    const replay = this.replay;
     const cx = w / 2;
-    const cy = h * 0.42;
     // Fit both lines across ~88% of the width (the kicker sits left of centre).
-    let size = Math.min(h * 0.2, 150);
+    let size = Math.min(h * (replay ? 0.14 : 0.2), 150);
     ctx.save();
     ctx.font = HEADLINE_FONT(100);
     const headW = ctx.measureText(this.headline).width / 100;
@@ -244,6 +244,7 @@ export class DeathSequence {
     ctx.restore();
     const halfSpan = Math.max(headW / 2, kickW / 2 + 0.6) || 3;
     size = Math.max(28, Math.min(size, (w * 0.44) / halfSpan));
+    const cy = replay ? size * 1.3 + Math.max(12, h * 0.04) : h * 0.42;
     // Slam: drops in from 2.6x with a small overshoot, then sways like a neon sign on a loose hook.
     const s = since < 0.16 ? 2.6 - 1.75 * (since / 0.16) : 1 + 0.07 * Math.exp(-(since - 0.16) * 9) * Math.cos((since - 0.16) * 30);
     const sway = Math.sin(t * 2.1) * 0.035;
@@ -314,12 +315,21 @@ export class DeathSequence {
       ctx.shadowBlur = 8;
       ctx.fillText(`KILLED BY: ${this.killer}`, cx, cy + size * 0.55 + quipSize * 1.8);
     }
-    if (t >= DEATH_TIMING.hint && Math.floor(t * 2.5) % 2 === 0) {
-      ctx.font = MONO_FONT(Math.round(quipSize * 0.7));
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-      ctx.shadowBlur = 0;
-      ctx.fillText(touch ? 'TAP TO CONTINUE' : 'PRESS ANY KEY', cx, h - Math.max(40, h * 0.1));
-    }
     ctx.restore();
+
+    // The instant-replay monitor, between the text and the CONTINUE button.
+    if (replay && t >= DEATH_TIMING.replay) {
+      const frame = replay.clip.frames[0].canvas;
+      const aspect = frame.width / frame.height || 16 / 9;
+      const top = cy + size * 0.55 + quipSize * 3.2;
+      const bottom = h - Math.max(h * 0.09, 28) - 80;
+      let mh = Math.min(bottom - top, h * 0.42);
+      let mw = mh * aspect;
+      if (mw > w * 0.88) { mw = w * 0.88; mh = mw / aspect; }
+      if (mh >= 70) {
+        const open = Math.min(1, (t - DEATH_TIMING.replay) / 0.25);
+        replay.draw(ctx, cx - mw / 2, top + Math.max(0, (bottom - top - mh) / 2), mw, mh, open);
+      }
+    }
   }
 }

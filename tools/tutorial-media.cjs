@@ -48,8 +48,8 @@ const CLIPS = {
   // nothing (blue -> amber -> red). The shield never quite breaks, so the clip never ends in a game over.
   swarm: {
     frames: 50, every: 6, zoom: 1.5, warmup: 10, hud: true,
-    hudKeep: '.bars-wrapper > .bar-group',
-    hudCss: '.bars-wrapper > .bar-group { transform: scale(2.2); transform-origin: top right; }',
+    hudKeep: '#shield-group',
+    hudCss: '#shield-group { transform: scale(2.2); transform-origin: bottom center; }',
     setup: (g, p) => {
       g.wave = 6;
       g.autoFire = false;
