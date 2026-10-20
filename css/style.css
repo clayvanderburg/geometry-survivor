@@ -4892,3 +4892,84 @@ body.touch-mode .start-pick-title { font-size: 18px; }
 }
 .scope-global .upg-scope { background: #dfe8f5; color: #0b1020; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8px; padding: 0 6px; letter-spacing: 1px; bottom: -8px; left: 8px; }
+
+/* Hangar (js/hangar-ui.js, behind the HANGAR_ENABLED flag): ship cards, feats, unlock toast. */
+.hangar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.hangar-ship {
+  --ship-col: #00f3ff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--ship-col) 40%, transparent);
+  border-radius: 10px;
+  background: rgba(4, 10, 24, 0.75);
+  outline: none;
+}
+.hangar-ship:focus-visible, .hangar-ship:focus-within { box-shadow: 0 0 0 2px var(--ship-col); }
+.hangar-ship.selected { border-color: var(--ship-col); box-shadow: 0 0 18px color-mix(in srgb, var(--ship-col) 35%, transparent); }
+.hangar-ship.locked { border-color: rgba(120, 140, 170, 0.25); background: rgba(4, 6, 14, 0.8); }
+.hangar-ship-stage { position: relative; height: 150px; border-radius: 8px; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ship-col) 12%, transparent), transparent 70%); }
+.hangar-ship.locked .hangar-ship-stage { background: radial-gradient(circle at 50% 50%, rgba(120, 140, 170, 0.12), transparent 70%); }
+.hangar-ship-canvas { width: 100%; height: 100%; display: block; }
+.hangar-ship-stage .guide-new { left: auto; right: 6px; }
+.hangar-feat-row .guide-new { position: static; margin-left: 6px; vertical-align: middle; }
+.hangar-lock { position: absolute; left: 50%; top: 50%; translate: -50% -50%; font-size: 26px; opacity: 0.7; }
+.hangar-ship-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.hangar-ship-head h3 { font-size: 16px; font-weight: 900; letter-spacing: 3px; color: #fff; text-shadow: 0 0 10px var(--ship-col); }
+.hangar-ship.locked .hangar-ship-head h3 { color: #8592a8; text-shadow: none; }
+.hangar-tier { font-size: 9px; font-weight: 900; letter-spacing: 2px; color: var(--text-dim); }
+.hangar-blurb, .hangar-feat, .hangar-kit, .hangar-quirk { font-size: 11px; line-height: 1.4; color: #c8d6ea; }
+.hangar-kit b, .hangar-quirk b, .hangar-feat b { color: var(--ship-col); letter-spacing: 1.5px; margin-right: 4px; font-size: 10px; }
+.hangar-ship.locked .hangar-feat b { color: #ffcc00; }
+.hangar-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.hangar-chip { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.15); color: #dfe8f5; }
+.hangar-chip b { font-weight: 900; letter-spacing: 1px; margin-right: 3px; color: var(--text-dim); }
+.hangar-chip.good { border-color: rgba(0, 255, 136, 0.45); color: var(--emerald); }
+.hangar-chip.bad { border-color: rgba(255, 90, 90, 0.45); color: #ff7a7a; }
+.hangar-select { margin-top: auto; padding: 8px 12px; font-size: 12px; letter-spacing: 2px; }
+.hangar-select:disabled { opacity: 0.75; cursor: default; border-color: var(--ship-col); color: var(--ship-col); }
+.hangar-progress { position: relative; height: 18px; border-radius: 4px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.hangar-progress-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, rgba(255, 204, 0, 0.35), rgba(255, 204, 0, 0.6)); }
+.hangar-progress.done .hangar-progress-fill { background: rgba(0, 255, 136, 0.45); }
+.hangar-progress span { position: relative; display: block; text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 1.5px; line-height: 18px; color: #fff; }
+.hangar-summary { margin: 4px 0 10px; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: var(--text-dim); }
+.hangar-feat-list { display: flex; flex-direction: column; gap: 8px; }
+.hangar-feat-row { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid rgba(0, 243, 255, 0.18); border-radius: 8px; background: rgba(4, 10, 24, 0.7); outline: none; }
+.hangar-feat-row:focus-visible { box-shadow: 0 0 0 2px var(--cyan, #00f3ff); }
+.hangar-feat-row.done { border-color: rgba(0, 255, 136, 0.4); }
+.hangar-feat-row h3 { font-size: 13px; font-weight: 900; letter-spacing: 2px; color: #fff; }
+.hangar-feat-row p { font-size: 11px; color: #c8d6ea; }
+.hangar-feat-side { display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: right; }
+.hangar-reward { font-size: 10px; font-weight: 900; letter-spacing: 1.5px; color: #ffcc00; }
+.hangar-date { font-size: 10px; color: var(--emerald); letter-spacing: 1px; }
+.hangar-toast {
+  position: absolute;
+  top: 112px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(640px, 90vw);
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 204, 0, 0.75);
+  background: rgba(20, 14, 2, 0.9);
+  box-shadow: 0 0 22px rgba(255, 204, 0, 0.35);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #fff3c4;
+  pointer-events: none;
+  animation: guideToastIn 0.35s cubic-bezier(0.2, 1.3, 0.4, 1);
+  transition: opacity 0.35s ease-in;
+}
+.hangar-toast-icon { color: #ffcc00; font-size: 18px; text-shadow: 0 0 10px #ffcc00; }
+.hangar-toast-out { opacity: 0; }
+@media (max-width: 640px) {
+  .hangar-feat-row { grid-template-columns: minmax(0, 1fr); }
+  .hangar-feat-side { text-align: left; }
+}

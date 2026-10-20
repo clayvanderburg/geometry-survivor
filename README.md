@@ -169,6 +169,16 @@ Pick the mode next to **LAUNCH** on the title screen (click, `[1]` `[2]` `[3]`, 
 
 Each mode has its own global boards and its own top 8 in MY RUNS (below).
 
+## Hangar & feats (in development, behind a flag)
+
+Ships, feats, weapon unlocks and mastery (`docs/HANGAR_DESIGN.md`) are built behind `HANGAR_ENABLED` in
+`js/hangar-flag.js`, **off for every player** until the whole update is signed off. With it off the game and
+its saves are exactly as before. Turn it on for one device with `?hangar=1` (remembered; `?hangar=0` forgets
+it) or the **HANGAR (preview)** switch in the hidden tuner. Then the title screen gets a **HANGAR** button
+(SHIPS and FEATS tabs) and runs count toward feats (`js/feats.js`; NORMAL and HARDCORE runs, BLITZ only for
+its own feats; tuner runs and the Weapon Range never). Ships are data in `js/ships.js`; sim one with
+`npm run balance -- --ship <id>`.
+
 ## Global leaderboard
 
 The title and game-over boards share scores between all players through a **Netlify Function** backed by **Netlify Blobs**. Both are built into the Netlify site this game already deploys to: no extra account, API key or Netlify UI setup is needed. The browser game itself still loads no third-party code.

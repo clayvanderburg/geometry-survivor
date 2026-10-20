@@ -260,12 +260,73 @@ export function drawShipWake(ctx, p, tuning) {
   ctx.restore();
 }
 
+// Hangar ship decorations, in the hull's frame (x forward). Thin neon strokes like the rest of the crab.
+function drawLookExtras(ctx, r, look, col, inner, alpha, now) {
+  const line = (pts, color = col, width = 1.8, close = false) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * r, y * r) : ctx.moveTo(x * r, y * r)));
+    if (close) ctx.closePath();
+    ctx.stroke();
+  };
+  ctx.save();
+  ctx.globalAlpha = 0.9 * alpha;
+  for (const extra of look.extras) {
+    if (extra === 'scythes') for (const s of [-1, 1]) line([[0.5, s * 0.9], [1.25, s * 1.35], [2.05, s * 1.05], [1.45, s * 1.12]], col, 2.2);
+    else if (extra === 'hopper') line([[-0.15, -0.45], [-0.6, -0.4], [-0.6, 0.4], [-0.15, 0.45]], inner, 2, true);
+    else if (extra === 'stinger') { line([[-0.9, 0], [-1.7, 0], [-1.95, 0.18]], col, 2.4); line([[-1.7, 0], [-1.95, -0.18]], inner, 1.4); }
+    else if (extra === 'dome') {
+      ctx.strokeStyle = inner;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-0.1 * r, 0, r * 0.62, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-0.1 * r, 0, r * 0.36, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (extra === 'nozzles') for (const s of [-1, 1]) line([[0.78, s * 0.62], [1.12, s * 0.74], [1.12, s * 0.5]], '#ffcc00', 1.6, true);
+    else if (extra === 'vents') {
+      const glow = 0.5 + 0.5 * Math.sin(now * 0.006);
+      ctx.globalAlpha = (0.45 + 0.45 * glow) * alpha;
+      for (const s of [-1, 1]) for (let k = 0; k < 3; k++) line([[-0.15 - k * 0.2, s * 0.62], [-0.25 - k * 0.2, s * 0.78]], '#ff9b3d', 1.6);
+      ctx.globalAlpha = 0.9 * alpha;
+    } else if (extra === 'dice') for (const [x, y] of [[0.15, -0.38], [0.15, 0.38], [-0.35, 0]]) {
+      line([[x + 0.14, y], [x + 0.07, y - 0.13], [x - 0.07, y - 0.13], [x - 0.14, y], [x - 0.07, y + 0.13], [x + 0.07, y + 0.13]], inner, 1.3, true);
+    } else if (extra === 'hatches') for (const s of [-1, 1]) for (const x of [0.2, -0.3]) line([[x + 0.14, s * 0.62], [x - 0.14, s * 0.62], [x - 0.14, s * 0.86], [x + 0.14, s * 0.86]], inner, 1.4, true);
+    else if (extra === 'seams') {
+      const glow = 0.55 + 0.45 * Math.sin(now * 0.004);
+      ctx.globalAlpha = glow * alpha;
+      line([[0.7, -0.1], [0.3, 0.15], [-0.1, -0.12], [-0.55, 0.2]], '#ff5a5a', 1.5);
+      line([[0.2, -0.75], [-0.05, -0.45], [-0.35, -0.6]], '#ff5a5a', 1.3);
+      line([[0.2, 0.75], [-0.1, 0.5], [-0.4, 0.66]], '#ff5a5a', 1.3);
+      ctx.globalAlpha = 0.9 * alpha;
+    } else if (extra === 'tail') {
+      const wag = Math.sin(now * 0.004) * 0.25;
+      let x = -0.9, y = 0;
+      for (let k = 0; k < 5; k++) {
+        const nx = x - 0.42, ny = Math.sin(k * 0.9 + wag * 4) * 0.14 * (k + 1) * 0.5;
+        line([[x, y], [nx, ny]], k % 2 ? inner : col, 2.6 - k * 0.3);
+        x = nx; y = ny;
+      }
+      line([[x, y], [x - 0.3, y - 0.22], [x - 0.18, y], [x - 0.3, y + 0.22], [x, y]], col, 1.6, true);
+    } else if (extra === 'crown') line([[0.35, -0.42], [0.15, -0.2], [0.05, -0.5], [-0.1, -0.2], [-0.25, -0.5], [-0.35, -0.2], [-0.55, -0.42], [-0.45, 0.42], [0.25, 0.42]], '#ffcc00', 1.5, true);
+    else if (extra === 'facets') {
+      const hue = (now * 0.05) % 360;
+      line([[0.9, 0], [0.25, -1.12], [-0.68, 0], [0.25, 1.12], [0.9, 0]], `hsl(${hue}, 100%, 70%)`, 1.1);
+    }
+  }
+  ctx.restore();
+}
+
 export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance.now()) {
     const r = p.radius;
     const flashAlpha = p.invuln > 0 && Math.floor(now / 50) % 2 === 0 ? 0.45 : 1;
     const drillScale = p.stats.drillScale || 1.0;
 
-    const carapaceCol = tuning.carapaceColor || '#00f3ff';
+    // Hangar ships (js/ships.js shipLook) reshape and recolour the crab; no look = the crab as always.
+    const look = p.look || null;
+    const carapaceCol = look?.color || tuning.carapaceColor || '#00f3ff';
     const innerCol = tuning.innerArmorColor || '#00ffaa';
     const drillIdleCol = tuning.drillIdleColor || '#00f3ff';
     const drillActiveCol = tuning.drillActiveColor || '#00ffaa';
@@ -306,6 +367,7 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     for (let side = -1; side <= 1; side += 2) {
       const lean = bank * side;
       ctx.save();
+      if (look?.wings) ctx.scale(look.wings.sweep, look.wings.span);
       ctx.scale(1, 1 - (lean > 0 ? 0.26 : -0.06) * Math.abs(lean));
       for (let pass = 0; pass < 2; pass++) {
         ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
@@ -336,6 +398,10 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.globalAlpha = flashAlpha;
 
     // 1c. Wide Geometric Crab Carapace (Hexagonal Armored Shell)
+    if (look?.carapace) {
+      ctx.save();
+      ctx.scale(look.carapace.l, look.carapace.w);
+    }
     for (let pass = 0; pass < 2; pass++) {
       ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
       ctx.globalAlpha = (pass === 0 ? 0.65 : 1.0) * flashAlpha;
@@ -366,6 +432,8 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.lineTo(r * 0.52, r * 0.35);
     ctx.closePath();
     ctx.stroke();
+    if (look?.carapace) ctx.restore();
+    if (look?.extras?.length) drawLookExtras(ctx, r, look, carapaceCol, innerCol, flashAlpha, now);
 
     ctx.restore(); // End hull orientation
 
@@ -406,7 +474,8 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       // Angle the two crab drill-claws slightly inward like pincers (pinching tighter while it bites)
       const pinchAngle = -side * (armDrilling ? 0.28 : 0.16);
       ctx.rotate(pinchAngle);
-      ctx.scale(drillScale, drillScale);
+      const clawScale = drillScale * (look?.claws?.[arm] ?? 1);
+      ctx.scale(clawScale, clawScale);
 
       // Outer Crab Pincer Jaw Brackets framing the drill
       ctx.strokeStyle = armDrilling ? drillJawCol : innerCol;
