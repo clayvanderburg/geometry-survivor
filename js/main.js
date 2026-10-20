@@ -3,6 +3,7 @@ import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches, updateShipAnimation, kickShipRecoil, drawShipWake } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
 import { DeathSequence, DEATH_TIMING } from './death-sequence.js';
+import { ReplayRecorder, ReplayPlayer, REPLAY_SETTINGS } from './replay.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
@@ -1675,6 +1676,9 @@ export class Game {
     this.sound.init();
     this.deathSeq = null;
     this.syncDeathContinue();
+    // Instant replay: the tape rolls through every run (only the death screen plays it back).
+    this.replayRec ??= new ReplayRecorder(isTouchDevice() ? REPLAY_SETTINGS.touch : REPLAY_SETTINGS.desktop);
+    this.replayRec.reset();
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
@@ -4753,6 +4757,7 @@ export class Game {
 
     this.renderHubUI();
     const cause = this.lastRunSummary?.cause;
+    if (dying) this.replayRec?.markDeath();
     this.deathSeq = dying && this.player ? new DeathSequence(this.player, {
       killer: cause && cause !== 'unknown' ? hostileEntry(cause)?.name || String(cause).toUpperCase() : null
     }) : null;
@@ -4775,6 +4780,12 @@ export class Game {
     if (btn.textContent !== label) btn.textContent = label;
     if (show) btn.classList.remove('hidden');
     else btn.classList.add('hidden');
+    // The HUD and touch controls step aside while the death screen is up.
+    const body = globalThis.document?.body;
+    if (body && !!this.deathSeq !== body.classList.contains('death-screen')) {
+      if (this.deathSeq) body.classList.add('death-screen');
+      else body.classList.remove('death-screen');
+    }
   }
 
   // Shared effects the death sequence drives.
@@ -4918,6 +4929,12 @@ export class Game {
     if (this.deathSeq) {
       const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
       this.deathSeq.update(dt, this.deathFx());
+      // The tape stops when the headline lands: the last seconds of play plus the blast.
+      if (this.deathSeq.landed && !this.deathSeq.tapeTaken) {
+        this.deathSeq.tapeTaken = true;
+        const clip = this.replayRec?.takeClip();
+        if (clip) this.deathSeq.replay = new ReplayPlayer(clip);
+      }
       if (skip) this.revealGameOver();
       else this.syncDeathContinue();
       this.gpDashLatch = !!gp?.dash;
@@ -6413,6 +6430,10 @@ export class Game {
       ctx.restore();
     }
 
+    // Instant-replay tape: the finished frame (minus the death overlay) while playing and through the blast.
+    if (this.replayRec && !this.range?.active && (this.state === 'PLAYING' || (this.deathSeq && !this.deathSeq.landed))) {
+      this.replayRec.record(this.canvas, this.frameSeconds ?? 1 / 60);
+    }
     this.deathSeq?.drawOverlay(ctx, this.width, this.height, this.canvas, this.renderScale ?? 1);
   }
 

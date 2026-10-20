@@ -8,6 +8,7 @@ export const DEATH_TIMING = Object.freeze({
   detonate: 0.35, // meltdown before the ship blows
   headline: 0.85, // headline slams in
   quip: 1.25,     // quip starts typing
+  replay: 1.6,    // the instant-replay monitor powers on (when there is a tape)
   skippable: 0.5  // earliest continue (so a held fire/dash input can't eat the whole thing)
 });
 
@@ -70,6 +71,7 @@ export class DeathSequence {
     this.landed = false;
     this.revealed = false;
     this.fragments = [];
+    this.replay = null; // ReplayPlayer (js/replay.js), handed over once the tape stops
   }
 
   get canSkip() { return this.t >= DEATH_TIMING.skippable && !this.revealed; }
@@ -91,6 +93,7 @@ export class DeathSequence {
       game.addShake?.(14);
       game.sound?.playExplosion?.(0.9);
     }
+    if (this.replay && this.t >= DEATH_TIMING.replay) this.replay.update(dt);
     for (const f of this.fragments) {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
@@ -229,10 +232,11 @@ export class DeathSequence {
       ctx.restore();
     }
 
+    // With a replay tape the headline moves up to make room for the monitor below it.
+    const replay = this.replay;
     const cx = w / 2;
-    const cy = h * 0.42;
     // Fit both lines across ~88% of the width (the kicker sits left of centre).
-    let size = Math.min(h * 0.2, 150);
+    let size = Math.min(h * (replay ? 0.14 : 0.2), 150);
     ctx.save();
     ctx.font = HEADLINE_FONT(100);
     const headW = ctx.measureText(this.headline).width / 100;
@@ -240,6 +244,7 @@ export class DeathSequence {
     ctx.restore();
     const halfSpan = Math.max(headW / 2, kickW / 2 + 0.6) || 3;
     size = Math.max(28, Math.min(size, (w * 0.44) / halfSpan));
+    const cy = replay ? size * 1.3 + Math.max(12, h * 0.04) : h * 0.42;
     // Slam: drops in from 2.6x with a small overshoot, then sways like a neon sign on a loose hook.
     const s = since < 0.16 ? 2.6 - 1.75 * (since / 0.16) : 1 + 0.07 * Math.exp(-(since - 0.16) * 9) * Math.cos((since - 0.16) * 30);
     const sway = Math.sin(t * 2.1) * 0.035;
@@ -311,5 +316,20 @@ export class DeathSequence {
       ctx.fillText(`KILLED BY: ${this.killer}`, cx, cy + size * 0.55 + quipSize * 1.8);
     }
     ctx.restore();
+
+    // The instant-replay monitor, between the text and the CONTINUE button.
+    if (replay && t >= DEATH_TIMING.replay) {
+      const frame = replay.clip.frames[0].canvas;
+      const aspect = frame.width / frame.height || 16 / 9;
+      const top = cy + size * 0.55 + quipSize * 3.2;
+      const bottom = h - Math.max(h * 0.09, 28) - 80;
+      let mh = Math.min(bottom - top, h * 0.42);
+      let mw = mh * aspect;
+      if (mw > w * 0.88) { mw = w * 0.88; mh = mw / aspect; }
+      if (mh >= 70) {
+        const open = Math.min(1, (t - DEATH_TIMING.replay) / 0.25);
+        replay.draw(ctx, cx - mw / 2, top + Math.max(0, (bottom - top - mh) / 2), mw, mh, open);
+      }
+    }
   }
 }

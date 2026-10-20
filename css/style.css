@@ -2396,6 +2396,9 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 
 /* [H] hides the HUD: every overlay goes, leaving the game view (and a faint way back). */
 .hud-hidden #hud { display: none; }
+.death-screen #hud,
+.death-screen #hud-hidden-hint,
+.death-screen #touch-controls { display: none !important; }
 
 .hud-hidden-hint {
   position: absolute;
@@ -2423,6 +2426,7 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 
 .neon-btn.death-continue {
   position: absolute;
+  white-space: nowrap;
   left: 50%;
   bottom: max(9%, 28px);
   transform: translateX(-50%);
