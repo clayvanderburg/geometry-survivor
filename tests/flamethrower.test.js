@@ -93,7 +93,7 @@ test('every flame formula reads only its own rank; LV 1 numbers', () => {
   }
   assert.equal(W.flameTickRate(base), 8);
   assert.equal(W.flameRange(base), 280);
-  assert.equal(W.flameConeHalf(base), 0.55);
+  assert.equal(W.flameConeHalf(base), 0.275);
   assert.equal(W.flameBurnRank(base), 1);
   assert.equal(W.flameBurnRank(makeBuild('flamethrower', 18, { burn: 4 }, { 6: 'boost', 12: 'boost' })), ELEMENT_MAX_RANKS, 'burn rank caps at 5');
 });
@@ -192,7 +192,7 @@ test('the cone: hits what is in front within reach and width, harder up close, a
 
 test('Nozzle Pressure and Wide Nozzle reach further and wider', () => {
   const p = flamePlayer({ cards: [['flamethrower_range', 4], ['flamethrower_cone', 4]] });
-  const far = enemy(p, 380, 0), wide = enemy(p, Math.cos(0.6) * 120, Math.sin(0.6) * 120);
+  const far = enemy(p, 380, 0), wide = enemy(p, Math.cos(0.4) * 120, Math.sin(0.4) * 120); // outside the LV 1 cone (±0.275 rad)
   const r = rig(p, [far, wide]);
   run(r, 0.5);
   assert.ok(hitSet(r).has(far) && hitSet(r).has(wide));

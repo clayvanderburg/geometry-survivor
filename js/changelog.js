@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.1',
+    date: '2026-10-20',
+    title: 'Tighter Sprays',
+    notes: [
+      { type: 'balance', text: 'Flamethrower, Cryo Sprayer and Acid Sprayer start with a cone half as wide. Wide Nozzle cards still widen it.' },
+      { type: 'balance', text: 'Tesla Arc is no longer a starting weapon choice (it can still turn up as a NEW WEAPON).' }
+    ]
+  },
+  {
     version: '0.42.0',
     date: '2026-10-20',
     title: 'Pick Your Weapon',

@@ -14,8 +14,8 @@ const key = (code) => ({ code, repeat: false, preventDefault() {} });
 // startGame paints the first frame: give the headless game a do-nothing canvas context.
 const launchable = (g) => Object.assign(g, { ctx: new Proxy({}, { get: () => () => {} }) });
 
-test('the pick offers the four direct damage dealers; the last pick is stored and read back safely', () => {
-  assert.deepEqual(START_WEAPON_CHOICES, ['blaster', 'rockets', 'missiles', 'lightning']);
+test('the pick offers the three direct damage dealers; the last pick is stored and read back safely', () => {
+  assert.deepEqual(START_WEAPON_CHOICES, ['blaster', 'rockets', 'missiles']);
   assert.deepEqual(STARTING_WEAPONS, ['blaster'], 'headless runs and tools keep the Autocannon');
   const s = memoryStorage();
   assert.equal(readStartWeapon(s), 'blaster', 'nothing stored: Autocannon');
@@ -68,7 +68,7 @@ test('LAUNCH opens the pick first; a pick starts the run with it, BACK returns w
   assert.equal(t.startPickIndex, START_WEAPON_CHOICES.indexOf('missiles'));
   t.handleStartPickKey(key('ArrowRight'), false);
   t.handleStartPickKey(key('Enter'), false);
-  assert.deepEqual(ownedWeapons(t.player), ['lightning']);
+  assert.deepEqual(ownedWeapons(t.player), ['blaster'], 'wraps round to the first card');
   // Esc backs out.
   t.state = 'GAMEOVER';
   t.startGame();
