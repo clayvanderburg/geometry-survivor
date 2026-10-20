@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.3',
+    date: '2026-10-20',
+    title: 'Stronger Armory',
+    notes: [
+      { type: 'balance', text: 'Plasma Overcharge now gives +1.5% weapon damage per rank (up to +60%, was +40%).' },
+      { type: 'balance', text: 'Aegis Shield Matrix now gives +2 max shield per rank (up to +80, was +60).' },
+      { type: 'balance', text: 'Every Void Core you spent on these two upgrades is refunded, so you can re-buy them at the new values.' }
+    ]
+  },
+  {
     version: '0.43.2',
     date: '2026-10-20',
     title: 'No Free Rides',
