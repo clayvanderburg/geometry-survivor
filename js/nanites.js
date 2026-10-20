@@ -27,6 +27,12 @@ const MOTE_HUE = 150;
 const MAX_SWARMS = 24;          // >= swarms alive at once (mains + daughters + plague), oldest recycled past it
 const MAX_CANISTERS = 6;
 const MAX_INFECTED = 96;        // Nanite Plague: infected enemies tracked at once (oldest dropped past it)
+const MAX_STREAKS = 48;         // feeding streaks in flight (oldest recycled past it)
+const STREAKS_PER_KILL = 3;
+const STREAK_TIME = 0.3;        // s a streak takes to reach the swarm's heart
+const GROW_EASE = 9;            // per s: how fast a swarm swells to its new size after a kill
+const POP = 0.1;                // a kill pops the swarm this much past its size for a moment
+const COMBO_GAP = 0.7;          // s without a kill before a swarm's feeding combo resets
 const SEEK_EVERY = 0.35;        // s between a swarm's looks at its pack
 const PACK_RADIUS = 110;        // px: "a pack" when picking where to launch
 const MAX_CANDIDATES = 32;      // enemies tried as pack centres per launch
@@ -36,21 +42,24 @@ export const SWARM_FISSION = 1;
 export const SWARM_PLAGUE = 2;
 const STATS = ['nanite', 'nanite_fission', 'nanite_plague'];
 
-// Current radius of a swarm: it swells in over W.naniteGrow s and disperses over the last W.naniteFade s.
-// Damage reads the same radius the swarm is drawn at.
+// Current radius of a swarm: it swells in over W.naniteGrow s and disperses over the last W.naniteFade s;
+// after a kill it eases up to its new size (`shown` chases `grow`) with a quick pop past it. Damage
+// reads the same radius the swarm is drawn at.
 export function swarmRadius(s) {
   const grow = Math.min(1, s.age / W.naniteGrow);
   const left = Math.max(0, Math.min(1, (s.life - s.age) / W.naniteFade));
-  return s.radius * s.grow * (0.45 + 0.55 * grow) * left;
+  const pop = 1 + POP * 4 * s.pulse * (1 - s.pulse); // 0 at the kill, peaks mid-pulse, settles back
+  return s.radius * (s.shown ?? s.grow) * pop * (0.45 + 0.55 * grow) * left;
 }
 
 export class NaniteSwarm {
   constructor() {
     this.swarms = Array.from({ length: MAX_SWARMS }, () => ({
-      x: 0, y: 0, tx: 0, ty: 0, age: 0, life: 0, radius: 0, r: 0, grow: 1, kills: 0, buds: 0, fed: 0, kind: 0, seek: 0, pulse: 0, seed: 0
+      x: 0, y: 0, tx: 0, ty: 0, age: 0, life: 0, radius: 0, r: 0, grow: 1, shown: 1, kills: 0, combo: 0, comboT: 0, buds: 0, fed: 0, kind: 0, seek: 0, pulse: 0, spin: 0, seed: 0
     }));
     this.canisters = Array.from({ length: MAX_CANISTERS }, () => ({ x: 0, y: 0, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, kind: 0, seed: 0 }));
     this.infected = [];
+    this.streaks = Array.from({ length: MAX_STREAKS }, () => ({ x: 0, y: 0, s: null, t: 0, bend: 0 }));
     this.clear();
   }
 
@@ -75,6 +84,8 @@ export class NaniteSwarm {
     this.plagues = 0;
     this.kills = 0;
     this.infected.length = 0;
+    this.streakCount = 0;
+    for (const k of this.streaks) k.s = null;
   }
 
   get activeCount() {
@@ -109,6 +120,7 @@ export class NaniteSwarm {
     }
     this.updateCanisters(dt, game);
     this.updateSwarms(dt, game);
+    this.updateStreaks(dt);
     if (this.plague || this.infected.length) this.updatePlague(dt, game);
     this.tickT -= dt;
     if (this.tickT <= 0) {
@@ -223,12 +235,16 @@ export class NaniteSwarm {
     s.radius = radius;
     s.r = 0;
     s.grow = 1;
+    s.shown = 1;
     s.kills = 0;
+    s.combo = 0;
+    s.comboT = 0;
     s.buds = 0;
     s.fed = 0;
     s.kind = kind;
     s.seek = Math.random() * SEEK_EVERY;
     s.pulse = 0.6;
+    s.spin = 0;
     s.seed = Math.random();
     return s;
   }
@@ -246,6 +262,9 @@ export class NaniteSwarm {
         continue;
       }
       s.pulse *= pulseDecay;
+      s.shown += (s.grow - s.shown) * Math.min(1, GROW_EASE * dt);
+      s.spin += dt * (1 + 2.5 * s.pulse); // the motes whirl up while the swarm feeds
+      if (s.comboT > 0 && (s.comboT -= dt) <= 0) s.combo = 0;
       // Follow the pack: aim at the centre of the enemies around the swarm that no other swarm is eating
       // (re-read every SEEK_EVERY s), or at the nearest such enemy when the pack is gone, so swarms
       // spread over a crowd instead of merging.
@@ -330,8 +349,21 @@ export class NaniteSwarm {
   fed(game, s, e) {
     this.kills++;
     s.kills++;
-    s.grow = Math.min(this.goo ? W.gooGrowMax : W.naniteGrowMax, s.grow + W.naniteGrowPerKill);
+    const cap = this.goo ? W.gooGrowMax : W.naniteGrowMax;
+    const wasFull = s.grow >= cap;
+    s.grow = Math.min(cap, s.grow + W.naniteGrowPerKill);
     s.pulse = 1;
+    // Feeding juice: the wreck streams into the swarm, and every kill in a run sings one note higher.
+    s.combo = s.comboT > 0 ? s.combo + 1 : 0;
+    s.comboT = COMBO_GAP;
+    for (let k = 0; k < STREAKS_PER_KILL; k++) this.addStreak(e.x + (Math.random() - 0.5) * 10, e.y + (Math.random() - 0.5) * 10, s);
+    game.particles?.spawnExplosionSparks?.(e.x, e.y, 5, NANITE_HUE, 1.2, 4, 1.2);
+    game.sound?.playNaniteFeed?.(s.combo);
+    if (!wasFull && s.grow >= cap) {
+      // Gorged: one bright ring and a chime the moment a swarm reaches full size.
+      game.particles?.spawnShockwave?.(s.x, s.y, s.radius * cap * 1.15, MOTE_HUE, 3, 0.35);
+      game.sound?.playNaniteGorged?.();
+    }
     if (this.goo && s.fed < W.gooLifeMax) {
       const add = Math.min(W.gooLifePerKill, W.gooLifeMax - s.fed);
       s.fed += add;
@@ -346,6 +378,42 @@ export class NaniteSwarm {
         game.sound?.playNaniteBloom?.();
       }
     }
+  }
+
+  // A feeding streak from a wreck into swarm `s` (the oldest one is recycled when the pool is full).
+  addStreak(x, y, s) {
+    let k;
+    if (this.streakCount < MAX_STREAKS) k = this.streaks[this.streakCount++];
+    else {
+      k = this.streaks[0];
+      for (let i = 1; i < this.streakCount; i++) if (this.streaks[i].t > k.t) k = this.streaks[i];
+    }
+    k.x = x;
+    k.y = y;
+    k.s = s;
+    k.t = 0;
+    k.bend = (Math.random() - 0.5) * 1.6;
+  }
+
+  updateStreaks(dt) {
+    for (let i = this.streakCount - 1; i >= 0; i--) {
+      const k = this.streaks[i];
+      k.t += dt / STREAK_TIME;
+      if (k.t < 1 && k.s && k.s.age < k.s.life) continue;
+      k.s = null;
+      this.streaks[i] = this.streaks[this.streakCount - 1];
+      this.streaks[--this.streakCount] = k;
+    }
+  }
+
+  // Where a streak's head is: easing in (slow off the wreck, snapping into the heart) on a slight curve.
+  streakPoint(k, t, out) {
+    const e = t * t * t;
+    const dx = k.s.x - k.x, dy = k.s.y - k.y;
+    const side = Math.sin(t * Math.PI) * k.bend * 0.25;
+    out.x = k.x + dx * e - dy * side;
+    out.y = k.y + dy * e + dx * side;
+    return out;
   }
 
   // Nanite Plague: remember a bitten enemy (once) so its death anywhere can be noticed.
@@ -444,7 +512,7 @@ export class NaniteSwarm {
       for (let m = 0; m < n; m++) {
         const h = hash(s.seed * 97 + m * 13.37);
         const dir = m % 2 === 0 ? 1 : -1;
-        const q = h * 6.283 + t * (1.1 + 1.6 * hash(m + s.seed)) * dir;
+        const q = h * 6.283 + s.spin * (1.1 + 1.6 * hash(m + s.seed)) * dir;
         const rr = s.r * (0.18 + 0.74 * hash(h * 31 + m)) * (0.92 + 0.08 * Math.sin(t * 3 + m));
         const mx = s.x + Math.cos(q) * rr;
         const my = s.y + Math.sin(q * (1 + 0.15 * (m % 3))) * rr;
@@ -453,6 +521,25 @@ export class NaniteSwarm {
       }
     }
     ctx.fill();
+
+    // Feeding streaks: short bright dashes racing from each wreck into its swarm.
+    if (this.streakCount) {
+      const pa = this._pa || (this._pa = { x: 0, y: 0 });
+      const pb = this._pb || (this._pb = { x: 0, y: 0 });
+      ctx.strokeStyle = `hsla(${MOTE_HUE}, 100%, 85%, ${a(0.9)})`;
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < this.streakCount; i++) {
+        const k = this.streaks[i];
+        if (!k.s || !this.inView(game, k.x, k.y, 200)) continue;
+        this.streakPoint(k, Math.max(0, k.t - 0.18), pa);
+        this.streakPoint(k, Math.min(1, k.t), pb);
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+      }
+      ctx.stroke();
+    }
 
     // Canisters in flight: a bright diamond with a short tail.
     if (this.canCount) {

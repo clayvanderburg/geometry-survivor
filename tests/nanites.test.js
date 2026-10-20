@@ -204,8 +204,33 @@ test('kills grow the swarm (up to its cap); a swarm disperses at the end of its 
   step(g, 60 * 2.5);
   assert.equal(n.count, 0, 'dispersed');
   // The radius swells in and shrinks to nothing as it disperses.
-  const t = { age: 0, life: 4, radius: 60, grow: 1 };
+  const t = { age: 0, life: 4, radius: 60, grow: 1, shown: 1, pulse: 0 };
   assert.ok(swarmRadius(t) < 60 && swarmRadius({ ...t, age: 2 }) === 60 && swarmRadius({ ...t, age: 4 }) === 0);
+});
+
+test('a kill feels like feeding: the swarm eases up to its new size with a pop, the wreck streams in, a rising note plays', () => {
+  const { g, p } = freshPlayer();
+  const n = g.nanites;
+  n.update(1 / 60, g);
+  n.launchT = 1e9;
+  const notes = [];
+  let gorged = 0;
+  g.sound = new Proxy({}, { get: (t, k) => (k === 'playNaniteFeed' ? (c) => notes.push(c) : k === 'playNaniteGorged' ? () => { gorged++; } : () => {}) });
+  const s = n.addSwarm(p.x + 300, p.y, 60, 10, SWARM_MAIN);
+  s.age = 1;
+  for (let k = 0; k < 12; k++) dummy(g, p.x + 300 + (k % 4) * 4, p.y + Math.floor(k / 4) * 4, 1);
+  n.tickT = 0;
+  step(g, 1);
+  assert.ok(s.grow > 1 && s.shown < s.grow, 'the size eases toward the new growth, never jumps');
+  assert.ok(n.streakCount > 0 && n.streakCount <= n.streaks.length, 'wrecks stream into the swarm');
+  assert.deepEqual(notes.slice(0, 3), [0, 1, 2], 'each kill in a run plays the next note up');
+  assert.equal(gorged, 1, 'one chime when the swarm reaches full size');
+  const r0 = s.r;
+  step(g, 6);
+  assert.ok(s.r > r0, 'it swells');
+  step(g, 60);
+  assert.ok(Math.abs(s.shown - s.grow) < 1e-3 && s.pulse < 0.05, 'and settles at its new size');
+  assert.equal(n.streakCount, 0, 'streaks land and are recycled');
 });
 
 test('Fission Bloom: a main swarm buds daughters every few kills that fly to the next pack (nanite_fission damage)', () => {

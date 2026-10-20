@@ -2034,6 +2034,28 @@ export class SoundEngine {
     for (let i = 0; i < 3; i++) this.tone(2600 + Math.random() * 1800, i * 0.035, 0.025, 0.012, 'square');
   }
 
+  // A swarm swallowing a kill: a soft wet "gulp" (a sine dipping fast) under a bright glassy note that
+  // climbs a pentatonic scale with each kill in a feeding run (`combo`), so a swarm chewing through a
+  // pack plays a rising little melody. Throttled so a big pack stays musical, not a buzz.
+  playNaniteFeed(combo = 0) {
+    if (!this.claimVoice('naniteFeed', 55, 3, 0.16)) return;
+    const steps = [0, 2, 4, 7, 9];
+    const n = Math.min(combo, 14);
+    const semis = steps[n % 5] + 12 * Math.floor(n / 5);
+    const f = 660 * Math.pow(2, semis / 12) * (0.99 + Math.random() * 0.02);
+    this.tone(320, 0, 0.09, 0.05, 'sine', 120);
+    this.tone(f, 0.012, 0.12, 0.03, 'triangle');
+    this.tone(f * 2, 0.012, 0.06, 0.008, 'sine');
+  }
+
+  // A swarm reaching full size: a bright two-note chime with a shimmer on top.
+  playNaniteGorged() {
+    if (!this.claimVoice('naniteGorged', 250, 1, 0.4)) return;
+    this.tone(1046, 0, 0.22, 0.04, 'triangle');
+    this.tone(1568, 0.06, 0.3, 0.04, 'triangle');
+    this.tone(3136, 0.06, 0.18, 0.01, 'sine');
+  }
+
   // Fission Bloom bud / Nanite Plague burst: a small glassy up-arpeggio.
   playNaniteBloom() {
     if (!this.claimVoice('naniteBloom', 180, 2, 0.25)) return;
