@@ -33,26 +33,26 @@ test('headline and quip pools are well formed and every pick comes from them', (
   assert.ok(DEATH_QUIPS.includes(pickQuip(() => 0.999999)));
 });
 
-test('the sequence detonates once, then finishes exactly once at reveal time', () => {
+test('the sequence detonates once and holds on the headline until the player continues', () => {
   const seq = new DeathSequence(ship(), { killer: 'BRUISER' });
   const game = fx();
-  let finished = 0;
-  for (let t = 0; t < DEATH_TIMING.reveal + 1; t += 1 / 60) if (seq.update(1 / 60, game)) finished++;
-  assert.equal(finished, 1);
-  assert.ok(seq.detonated && seq.landed && seq.done);
+  for (let t = 0; t < 30; t += 1 / 60) seq.update(1 / 60, game);
+  assert.ok(seq.detonated && seq.landed);
+  assert.equal(seq.revealed, false, 'never continues by itself');
   assert.equal(game.log.flash, 1);
   assert.ok(game.log.shake >= 14);
   assert.equal(seq.fragments.length, 16);
 });
 
-test('skipping waits for the blast window, then jumps to the reveal', () => {
+test('continuing waits for the blast window', () => {
   const seq = new DeathSequence(ship());
   const game = fx();
   seq.update(0.1, game);
   assert.equal(seq.skip(), false, 'too early: a held input must not eat the sequence');
   for (let i = 0; i < 40; i++) seq.update(1 / 60, game);
   assert.equal(seq.skip(), true);
-  assert.ok(seq.done);
+  assert.ok(seq.revealed);
+  assert.equal(seq.skip(), false, 'only once');
 });
 
 test('world and overlay drawing balance save/restore through the whole timeline', () => {
@@ -60,10 +60,10 @@ test('world and overlay drawing balance save/restore through the whole timeline'
   const game = fx();
   let depth = 0;
   const ctx = ctxProxy((d) => { depth += d; assert.ok(depth >= 0); });
-  for (let t = 0; t < DEATH_TIMING.reveal; t += 0.1) {
+  for (let t = 0; t < 5; t += 0.1) {
     seq.update(0.1, game);
     seq.drawWorld(ctx, {});
-    seq.drawOverlay(ctx, 390, 760, null, 1, true);
+    seq.drawOverlay(ctx, 390, 760, null, 1);
   }
   assert.equal(depth, 0);
 });
