@@ -348,6 +348,7 @@ export function botControls(game, pilot, state) {
   // Anticipation: controls land `lead` ticks after they are decided (the reaction latency), so the
   // pilot judges threats where they will be by then, the way a player leads a pack that chases them.
   const lead = state.lead || 0;
+  const kite = pilot.kite ?? 1; // threat radius scale: >1 keeps the pack further away
   const px = p.x + p.vx * lead, py = p.y + p.vy * lead;
   let fx = 0, fy = 0;
   let nearest = Infinity;
@@ -358,7 +359,7 @@ export function botControls(game, pilot, state) {
     const e = enemies[i];
     const dx = px - (e.x + (e.vx || 0) * lead), dy = py - (e.y + (e.vy || 0) * lead);
     const d = Math.hypot(dx, dy) || 1;
-    const R = e.isBoss ? 460 : e.type === 'blackhole' ? 340 : 270;
+    const R = (e.isBoss ? 460 : e.type === 'blackhole' ? 340 : 270) * kite;
     const gap = d - e.radius - p.radius;
     if (gap < nearest) nearest = gap;
     if (d < 300) crowd++;
