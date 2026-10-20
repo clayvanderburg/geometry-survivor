@@ -3970,7 +3970,7 @@ export class Game {
         // Orbiting blades ONLY shred enemies, never asteroids!
         for (let i = enemies.length - 1; i >= 0; i--) {
           const e = enemies[i];
-          if (e.dead) continue;
+          if (!e || e.dead) continue; // a kill this tick (on-kill bursts) can shift the list past i
           const dx = e.x - ox;
           const dy = e.y - oy;
           const reach = e.radius + bladeR;
