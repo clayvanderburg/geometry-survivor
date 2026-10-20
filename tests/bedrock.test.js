@@ -36,7 +36,8 @@ test('a bedrock wall is one slab over a gapless chain of collision circles that 
     const solid = [...pieces, ...am.asteroids.filter((r) => r.chunk && r.slab === slab)];
     for (const v of slab.outline) {
       const edge = Math.min(...solid.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
-      assert.ok(Math.abs(edge) < width * 0.16, `rim vertex ${edge.toFixed(1)} px off the collision edge (width ${width})`);
+      // Rough rock: notches bite in (the collision stays a little fuller there), spurs barely jut past it.
+      assert.ok(edge > -width * 0.48 && edge < width * 0.18, `rim vertex ${edge.toFixed(1)} px off the collision edge (width ${width})`);
     }
     assert.ok(slab.chunks.length >= 2, 'rubble chunks round the rim');
   }
@@ -47,9 +48,10 @@ test('a monolith is one big slab covered by a few collision circles', () => {
   const slab = am.addBedrockMonolith(2000, 2000, 100);
   assert.equal(slab.pieces.length, 7);
   assert.ok(slab.pieces.every((r) => r.radius <= 70), 'pieces stay small for the spatial hash');
+  const solid = am.asteroids.filter((r) => r.slab === slab);
   for (const v of slab.outline) {
-    const edge = Math.min(...slab.pieces.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
-    assert.ok(Math.abs(edge) < 12, `rim vertex ${edge.toFixed(1)} px off the collision edge`);
+    const edge = Math.min(...solid.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
+    assert.ok(edge > -28 && edge < 12, `rim vertex ${edge.toFixed(1)} px off the collision edge`);
   }
   am.rebuildSpatialHash();
   assert.deepEqual(am.slabs, [slab]);

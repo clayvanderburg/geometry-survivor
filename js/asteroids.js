@@ -38,16 +38,78 @@ export const isBedrock = (rock) => !!rock?.unbreakable;
 const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
 
 // --- Bedrock slab geometry --------------------------------------------------------------------------
-const SLAB_TOP = 0.6; // the raised top face sits at this share of the rim's distance from the spine
-const SLAB_JITTER = 0.06; // rim vertices wander ± this share in and out, for a hewn, faceted edge
+const SLAB_TOP = 0.6; // the raised top face sits at about this share of the rim's distance from the spine
+const SLAB_TOP_SPREAD = 0.22; // ...give or take half this, per vertex, so the bevel is uneven
 const SLAB_ROUND_TURN = 0.45; // rad: outer corners sharper than this get a rounded (two-facet) rim
 
 const newSlab = (kind) => ({ kind, outline: [], chunks: [], pieces: [], minX: 0, maxX: 0, minY: 0, maxY: 0, look: null });
 
 // Rim vertex `r` px from (cx, cy) along unit (dx, dy), with its top-face partner and outward direction.
 function facetVertex(cx, cy, dx, dy, r) {
-  return { x: cx + dx * r, y: cy + dy * r, ix: cx + dx * r * SLAB_TOP, iy: cy + dy * r * SLAB_TOP, ox: dx, oy: dy };
+  const top = SLAB_TOP + (Math.random() - 0.5) * SLAB_TOP_SPREAD;
+  return { x: cx + dx * r, y: cy + dy * r, ix: cx + dx * r * top, iy: cy + dy * r * top, ox: dx, oy: dy };
 }
+
+// Distance of a rim vertex from the spine, as a share of the face distance: mostly a little inside the
+// collision edge, now and then a notch bitten out of it or a spur jutting past it.
+function rimReach() {
+  const roll = Math.random();
+  if (roll < 0.12) return 0.78 + Math.random() * 0.08; // notch
+  if (roll < 0.24) return 1.08 + Math.random() * 0.08; // spur
+  return 0.88 + Math.random() * 0.16;
+}
+
+// Breaks up every rim edge with 0-2 extra kinks (mostly bitten inward) so the edge reads hewn and
+// irregular instead of evenly faceted. `scale` sets how far a kink can move (a wall's face distance).
+function roughenRim(outline, scale) {
+  const out = [];
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    out.push(a);
+    const roll = Math.random();
+    const kinks = roll < 0.3 ? 0 : roll < 0.8 ? 1 : 2;
+    const ts = Array.from({ length: kinks }, () => 0.2 + Math.random() * 0.6).sort((x, y) => x - y);
+    for (const t of ts) {
+      const mx = a.x + (b.x - a.x) * t;
+      const my = a.y + (b.y - a.y) * t;
+      const mix = a.ix + (b.ix - a.ix) * t;
+      const miy = a.iy + (b.iy - a.iy) * t;
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      let px = -(b.y - a.y) / len;
+      let py = (b.x - a.x) / len;
+      if (px * (mx - mix) + py * (my - miy) < 0) { px = -px; py = -py; } // point it outward
+      const d = scale * (Math.random() * 0.27 - 0.19);
+      const k = 1 + (Math.random() - 0.5) * 0.3; // the top face kinks with it, by its own amount
+      out.push({ x: mx + px * d, y: my + py * d, ix: mix + px * d * k * 0.6, iy: miy + py * d * k * 0.6, ox: px, oy: py });
+    }
+  }
+  return out;
+}
+
+// Hairline cracks running in from the bevel across the top face: 2-3 jagged segments each.
+function slabCracks(outline, count) {
+  const cracks = [];
+  for (let c = 0; c < count && outline.length; c++) {
+    const v = outline[Math.floor(Math.random() * outline.length)];
+    const bevel = Math.hypot(v.x - v.ix, v.y - v.iy);
+    let a = Math.atan2(v.iy - v.y, v.ix - v.x);
+    let x = v.ix;
+    let y = v.iy;
+    const pts = [{ x, y }];
+    const segs = 2 + Math.floor(Math.random() * 2);
+    for (let k = 0; k < segs; k++) {
+      a += (Math.random() - 0.5) * 1.2;
+      const l = bevel * (0.35 + Math.random() * 0.4);
+      x += Math.cos(a) * l;
+      y += Math.sin(a) * l;
+      pts.push({ x, y });
+    }
+    cracks.push(pts);
+  }
+  return cracks;
+}
+
 
 function pathLength(points) {
   let len = 0;
@@ -77,7 +139,7 @@ function wallOutline(points, w) {
     for (let k = 0; k < 8; k++) out.push(facetVertex(spine[0].x, spine[0].y, Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4), w));
     return out;
   }
-  const jit = () => w * (1 - SLAB_JITTER + Math.random() * SLAB_JITTER * 2);
+  const jit = () => w * rimReach();
   const dir = (a, b) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
   const left = [];
   const right = [];
@@ -100,7 +162,8 @@ function wallOutline(points, w) {
     const sharp = turn > SLAB_ROUND_TURN;
     const side = (arr, sign, inner) => {
       if (!sharp || inner) {
-        const r = jit() * (inner ? miter : 1);
+        // Mitered inner corners stay close to the true corner (a notch there would leave a dead pocket).
+        const r = inner && miter > 1.02 ? w * (0.94 + Math.random() * 0.1) * miter : jit();
         arr.push(facetVertex(p.x, p.y, mx * sign, my * sign, r));
       } else {
         arr.push(facetVertex(p.x, p.y, nIn.x * sign, nIn.y * sign, jit()));
@@ -134,6 +197,7 @@ function wallOutline(points, w) {
 }
 
 function finishSlab(slab) {
+  slab.cracks = slabCracks(slab.outline, Math.max(2, Math.round(slab.outline.length / 7)));
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   const grow = (v) => { minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); };
   slab.outline.forEach(grow);
@@ -156,14 +220,18 @@ function slabLook(sl) {
   if (sl.look) return sl.look;
   const has = typeof Path2D !== 'undefined';
   let ridges = null;
+  let cracks = null;
   if (has) {
     ridges = new Path2D();
     for (const v of sl.outline) { ridges.moveTo(v.x, v.y); ridges.lineTo(v.ix, v.iy); }
+    cracks = new Path2D();
+    for (const c of sl.cracks || []) c.forEach((pt, i) => (i ? cracks.lineTo(pt.x, pt.y) : cracks.moveTo(pt.x, pt.y)));
   }
   sl.look = {
     rim: has ? polyPath(sl.outline, 'x', 'y') : null,
     top: has ? polyPath(sl.outline, 'ix', 'iy') : null,
     ridges,
+    cracks,
     chunks: sl.chunks.map((ch) => ({ verts: ch.verts, path: has ? polyPath(ch.verts, 'x', 'y') : null }))
   };
   return sl.look;
@@ -338,8 +406,9 @@ export class AsteroidManager {
     // Collision spine: circles every BEDROCK_SPACING x width along the line, both ends included.
     for (const pt of resamplePath(points, width * BEDROCK_SPACING)) this.addSlabPiece(slab, pt.x, pt.y, width);
     // Visible outline: faceted faces either side of the spine, rounded at outer corners and both ends.
-    slab.outline = wallOutline(points, width);
-    this.addSlabChunks(slab, Math.max(2, Math.round(pathLength(points) / (width * 3.2))), width);
+    slab.outline = roughenRim(wallOutline(points, width), width);
+    this.backSpurs(slab, width);
+    this.addSlabChunks(slab, Math.max(3, Math.round(pathLength(points) / (width * 2.2))), width);
     finishSlab(slab);
     return slab;
   }
@@ -358,12 +427,26 @@ export class AsteroidManager {
     const turn = Math.random() * Math.PI * 2;
     for (let k = 0; k < sides; k++) {
       const a = turn + ((k + (Math.random() - 0.5) * 0.35) * Math.PI * 2) / sides;
-      const r = radius * (0.9 + Math.random() * 0.1);
+      const r = radius * (0.84 + Math.random() * 0.2);
       slab.outline.push(facetVertex(x, y, Math.cos(a), Math.sin(a), r));
     }
-    this.addSlabChunks(slab, 3 + Math.floor(Math.random() * 3), radius * 0.55);
+    slab.outline = roughenRim(slab.outline, radius * 0.4);
+    this.backSpurs(slab, radius * 0.4);
+    this.addSlabChunks(slab, 4 + Math.floor(Math.random() * 4), radius * 0.55);
     finishSlab(slab);
     return slab;
+  }
+
+  // Spurs that jut past the collision circles get a small solid piece of their own, so the rim you see
+  // is the rim you hit.
+  backSpurs(slab, scale) {
+    const spine = slab.pieces.slice();
+    const r = scale * 0.14;
+    for (const v of slab.outline) {
+      let edge = Infinity;
+      for (const p of spine) edge = Math.min(edge, Math.hypot(v.x - p.x, v.y - p.y) - p.radius);
+      if (edge > scale * 0.05) this.addSlabPiece(slab, v.x - v.ox * r * 0.7, v.y - v.oy * r * 0.7, r, true);
+    }
   }
 
   // Rubble chunks hugging a slab's rim: small solid shards at random outline vertices, poking out.
@@ -371,17 +454,21 @@ export class AsteroidManager {
     const rim = slab.outline;
     for (let c = 0; c < count && rim.length; c++) {
       const v = rim[Math.floor(Math.random() * rim.length)];
-      const r = scale * (0.22 + Math.random() * 0.2);
-      const x = v.x + v.ox * r * 0.55;
-      const y = v.y + v.oy * r * 0.55;
+      // Mostly small flecks, now and then a bigger slab of rubble; shards are stretched along a random axis.
+      const r = scale * (Math.random() < 0.3 ? 0.3 + Math.random() * 0.16 : 0.12 + Math.random() * 0.16);
+      const x = v.x + v.ox * r * (0.3 + Math.random() * 0.5);
+      const y = v.y + v.oy * r * (0.3 + Math.random() * 0.5);
       if (x < r || y < r || x > this.worldWidth - r || y > this.worldHeight - r) continue;
-      const sides = 4 + Math.floor(Math.random() * 2);
+      const sides = 3 + Math.floor(Math.random() * 4);
       const turn = Math.random() * Math.PI * 2;
+      const stretch = 1 + Math.random() * 0.7;
       const verts = [];
       for (let k = 0; k < sides; k++) {
-        const a = turn + (k * Math.PI * 2) / sides + (Math.random() - 0.5) * 0.5;
-        const rr = r * (0.75 + Math.random() * 0.4);
-        verts.push({ x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr });
+        const a = (k * Math.PI * 2) / sides + (Math.random() - 0.5) * 0.7;
+        const rr = r * (0.6 + Math.random() * 0.5);
+        const lx = Math.cos(a) * rr * stretch;
+        const ly = (Math.sin(a) * rr) / stretch;
+        verts.push({ x: x + lx * Math.cos(turn) - ly * Math.sin(turn), y: y + lx * Math.sin(turn) + ly * Math.cos(turn) });
       }
       slab.chunks.push({ x, y, r, verts });
       this.addSlabPiece(slab, x, y, r * 0.85, true);
@@ -924,8 +1011,8 @@ export class AsteroidManager {
   }
 
   // A bedrock slab (world coordinates, under the camera transform): a near-black body, a raised top face
-  // a shade lighter, faint bevel ridges joining the two, a dim inner edge and a bright pale-violet rim.
-  // Rubble chunks get the body and rim. No cracks or flashes: it never takes damage.
+  // a shade lighter with hairline cracks, faint bevel ridges joining the two, a dim inner edge and a bright
+  // pale-violet rim. Rubble chunks get the body and rim. No cracks or flashes: it never takes damage.
   drawSlab(ctx, sl) {
     const look = slabLook(sl);
     ctx.globalCompositeOperation = 'source-over';
@@ -934,6 +1021,15 @@ export class AsteroidManager {
     ctx.fillStyle = 'rgba(30, 22, 50, 0.98)';
     fillOrStroke(ctx, look.top, sl.outline, 'ix', 'iy', 'fill');
     for (const ch of look.chunks) fillOrStroke(ctx, ch.path, ch.verts, 'x', 'y', 'fill');
+    // Cracks: dark hairlines cut into the top face.
+    ctx.strokeStyle = 'rgba(6, 3, 12, 0.95)';
+    ctx.lineWidth = 1.8;
+    if (look.cracks) ctx.stroke(look.cracks);
+    else {
+      ctx.beginPath();
+      for (const c of sl.cracks || []) c.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
+      ctx.stroke();
+    }
 
     ctx.globalCompositeOperation = 'lighter';
     ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 40%, 62%, 0.22)`;
