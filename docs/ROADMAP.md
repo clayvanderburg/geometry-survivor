@@ -22,6 +22,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 | 2026-10-20 | **Tesla Arc is always SHOCK** ("it's friggin lightning"): stun arcs are its baseline, like the Flamethrower's FIRE. It has no element cards; its SHOCK rank follows its level (+1 at LV 6/12/18). |
 | 2026-10-20 | **Class-based weapon balance** (replaces "all offensive weapons equal" for realized damage): per target at equal level vs the Autocannon (100%): automatic single-target (Drones, Turret) ~85%; area weapons 60–70% per target, about even in total against packs; close-range defensive (Shock Field, Orbit Blades) lower by design. Encoded as `WEAPON_CLASS` / `CLASS_TARGET`; area targets enforced once enemies-hit-per-blast is measured. |
+| 2026-10-20 | **A full Void Armory is about 3× total power** vs 0 Armory (offense × defense, `armoryPower` in `js/progression.js`, pinned ±15% by `tests/armory.test.js`). v0.43.3: Plasma Overcharge +1.25%/rank (+50%, refunded), new **Last Stand Protocol** (one rank, 2,000 cores: once per run a broken shield returns at 25% with a free Supernova; not in HARDCORE). Rank 3 everywhere ≈ 1.3×, half ranks ≈ 1.65× (under 10% of the full cost), full ≈ 3.15×. The difficulty curve is sized against these tiers. |
 
 ## Priorities (in order)
 

@@ -786,6 +786,7 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
     hp: maxHp,
     maxHp,
     bombs: 2 + (bonuses.extraBombs || 0),
+    lastStand: bonuses.lastStand || 0, // Last Stand Protocol: shield share restored once per run (js/last-stand.js)
     // Void Armory multipliers that live outside `stats` (dash cooldown and distance, gold per vein,
     // reroll cost).
     dashCooldownMult: bonuses.dashCooldownMult ?? 1,

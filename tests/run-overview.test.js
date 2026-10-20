@@ -45,7 +45,7 @@ test('a fresh ship with no armory ranks: BASE = TOTAL and nothing in PERMANENT o
 });
 
 test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RUN', () => {
-  const g = freshGame({ damage: 10, maxHp: 5, critChance: 5, moveSpeed: 5, dashDistance: 10, dash: 10 });
+  const g = freshGame({ damage: 8, maxHp: 5, critChance: 5, moveSpeed: 5, dashDistance: 10, dash: 10 }); // 8 x 1.25% = +10%
   const p = g.player;
   let r = rowsById(p);
   assert.equal(r.damage.base, String(TUNING.baseDamage));
