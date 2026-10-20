@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.3',
+    date: '2026-10-20',
+    title: 'Independent Drill Claws',
+    notes: [
+      { type: 'new', text: 'Your two drill claws now swing on their own: the left claw reaches for rock on your left, the right claw for rock on your right.' },
+      { type: 'balance', text: 'Rock straight ahead always comes first: both claws team up on it at full twin-claw speed. Two rocks drilled at once share that speed, so mining is no faster overall.' }
+    ]
+  },
+  {
     version: '0.42.2',
     date: '2026-10-20',
     title: 'Tesla Arc Recharged',
