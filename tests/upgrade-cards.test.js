@@ -23,7 +23,7 @@ globalThis.document = {
 const { Game } = await import('../js/main.js');
 const { TUNING } = await import('../js/config.js');
 const { UPGRADE_POOL, RARITY, applyUpgradeLevels, rollUpgrades, levelJumpChances } = await import('../js/upgrades.js');
-const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText } = await import('../js/upgrade-cards.js');
+const { STAT_ROWS, describeUpgrade, renderUpgradeCard, levelText, cardScope, CARD_SCOPES } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, blasterStreams } = await import('../js/weapon-scaling.js');
 const { STAT_CARD_BY_ID, ELEMENT_CARD_BY_ID, levelCardWeapon, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
 const { weaponLevel } = await import('../js/loadout.js');
@@ -296,4 +296,27 @@ test('the HUD lists each weapon once (slot chip, real level) and nothing else; u
   assert.match(upgrades, /Status Potency LV 1</);
   for (const name of ['Autocannon', 'Tesla Arc', 'Plasma Grenades']) assert.ok(!upgrades.includes(name), `${name} is not listed twice`);
   assert.match(upgradesHtml(p), /STATUS EFFECTS[\s\S]*Status Potency[\s\S]*LV 1/);
+});
+
+test('every offered card maps to a scope, and the level-up card shows it', () => {
+  const p = makePlayer();
+  const counts = { weapon: 0, utility: 0, global: 0 };
+  for (const u of UPGRADE_POOL) {
+    const scope = cardScope(u);
+    assert.ok(CARD_SCOPES.includes(scope), `${u.id} has no scope`);
+    counts[scope]++;
+    const d = describeUpgrade(p, u);
+    assert.equal(d.scope, scope);
+    const view = renderUpgradeCard(d, '[1]');
+    assert.equal(view.className.includes(`scope-${scope}`), scope !== 'weapon', `${u.id} class`);
+    assert.equal(view.html.includes('upg-scope'), scope !== 'weapon', `${u.id} label`);
+  }
+  assert.ok(counts.weapon && counts.utility && counts.global, JSON.stringify(counts));
+  assert.equal(cardScope({ id: 'blaster_damage' }), 'weapon');
+  assert.equal(cardScope({ id: 'pierce' }), 'utility');
+  assert.equal(cardScope({ id: 'rockets_radius' }), 'utility');
+  assert.equal(cardScope({ id: 'magnet' }), 'utility');
+  assert.equal(cardScope({ id: 'crit_chance' }), 'global');
+  assert.equal(cardScope({ id: 'tag_area', category: 'SPECIALIST' }), 'global');
+  assert.equal(cardScope({ id: 'status_potency', statusCard: true }), 'global');
 });

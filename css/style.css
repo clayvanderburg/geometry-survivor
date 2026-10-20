@@ -4831,3 +4831,35 @@ body.touch-mode .splash-tap { display: inline; }
 .start-pick-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
 body.touch-mode .start-pick-hint { display: none; }
 body.touch-mode .start-pick-title { font-size: 18px; }
+
+/* Card scope (upgrade-cards.js cardScope): utility cards get a dashed inner edge, global cards a double
+   one, each with a small pill on the bottom border. Neutral white so rarity colors stay readable; weapon
+   POWER cards keep the plain look. The ring ignores the pointer and sits inside the focus outline. */
+.upgrade-option.scope-utility::after,
+.upgrade-option.scope-global::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+.upgrade-option.scope-global::after { border: 3px double rgba(255, 255, 255, 0.38); }
+.upg-scope {
+  position: absolute;
+  bottom: -9px;
+  left: 12px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: #0b1020;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  color: #dfe8f5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.scope-global .upg-scope { background: #dfe8f5; color: #0b1020; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8px; padding: 0 6px; letter-spacing: 1px; bottom: -8px; left: 8px; }
