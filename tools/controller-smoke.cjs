@@ -363,15 +363,13 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'controller-gameplay.png' });
 
-    // MAIN MENU from pause: Down twice (and Right) reach it, A asks ABANDON RUN? (focus on CANCEL), B backs
+    // MAIN MENU from pause: the d-pad reaches it (steerTo: the button rows move when one is added), A asks ABANDON RUN? (focus on CANCEL), B backs
     // out (still paused), A again then Left + A confirms: the title, with nothing recorded.
     const runsBefore = await page.evaluate(() => __game.progression.data.totalRuns);
     await press(START);
     await expect('PAUSED', 'Start pauses for MAIN MENU');
     await page.waitForTimeout(400);
-    await press(DOWN);
-    await press(DOWN);
-    await walkTo('btn-pause-menu', RIGHT, 2);
+    await steerTo('btn-pause-menu');
     await press(A);
     if (await pauseFocus() !== 'btn-quit-cancel' || !(await page.evaluate(() => __game.quitConfirm))) throw Error('A on MAIN MENU should ask to confirm, focus on CANCEL');
     await press(B);
