@@ -1918,11 +1918,54 @@ export class SoundEngine {
     osc.stop(t + 0.05);
   }
 
-  // Sentry turret bolt.
+  // Short band-passed noise burst (clanks, chatter, servo hiss) at `start` s from now.
+  noiseHit(start, dur, vol, freq, q = 1, glideTo = 0) {
+    const t = this.ctx.currentTime + start;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(freq, t);
+    if (glideTo) band.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+    band.Q.value = q;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8);
+    noise.stop(t + dur + 0.01);
+  }
+
+  // Sentry turret LMG: a dry mechanical "chk" (noise crack over a low square pop), a little pitch
+  // variety per round so a burst chatters instead of droning.
   playTurretShot() {
     if (!this.enabled || !this.ctx) return;
     if (this.playSample('turret_shot')) return;
-    this.playLaser(0.72);
+    if (!this.claimVoice('turret', 55, 3, 0.07)) return;
+    const v = 0.94 + Math.random() * 0.12;
+    this.noiseHit(0, 0.035, 0.07, 2600 * v, 1.3);
+    this.tone(210 * v, 0, 0.055, 0.045, 'square', 85 * v);
+  }
+
+  // Sentry turret planted: a heavy clunk as it lands, a servo whirr as it unfolds, a ready chirp.
+  playTurretDeploy() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('turretDeploy', 90, 3, 0.4)) return;
+    this.tone(150, 0, 0.2, 0.2, 'sine', 42);
+    this.noiseHit(0, 0.07, 0.12, 900, 1.6);
+    this.tone(320, 0.07, 0.16, 0.025, 'sawtooth', 960);
+    this.tone(1320, 0.25, 0.08, 0.045, 'sine', 1980);
+  }
+
+  // Sentry turret breaks down: the servo winds down, a soft clunk as it folds, then a falling blip.
+  playTurretPackUp() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('turretPack', 120, 2, 0.4)) return;
+    this.tone(900, 0, 0.22, 0.022, 'sawtooth', 240);
+    this.tone(120, 0.18, 0.16, 0.12, 'sine', 48);
+    this.noiseHit(0.18, 0.05, 0.06, 700, 1.4);
+    this.tone(880, 0.26, 0.12, 0.03, 'sine', 440);
   }
 
   // Proximity mine laid: a clank and an arming chirp.

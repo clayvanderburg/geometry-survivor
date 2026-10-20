@@ -30,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x4.2', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -78,7 +78,7 @@ test('every stat formula reads only its own rank', () => {
     singularity: { pull: W.singularityPullRadius, duration: W.singularityLife, cooldown: W.singularityCooldown, core: W.singularityCoreRadius, damage: W.singularityCollapseDamageMult },
     orbitals: { count: W.orbitalBlades, radius: W.orbitalRadius, spin: W.orbitalSpin, size: W.orbitalBladeRadius },
     mines: { capacity: W.mineMaxActive, rate: W.mineCooldown, radius: W.mineBlastRadius, fuse: W.mineLifetime, damage: W.mineDamageMult },
-    turret: { rate: W.turretFireRate, lifetime: W.turretDuration, redeploy: W.turretCooldown, damage: W.turretDamageMult },
+    turret: { rate: W.turretFireRate, reload: W.turretReload, pierce: W.turretPierce, damage: W.turretDamageMult },
     drones: { rate: W.droneFireRate, wingmen: W.droneCount, range: W.droneRange, damage: W.droneDamageMult },
     grenades: { count: W.grenadeCount, rate: W.grenadeCooldown, radius: W.grenadeBlastRadius, range: W.grenadeRange, damage: W.grenadeDamageMult },
     gas: { rate: W.gasTick, radius: W.gasRadius, linger: W.gasLife, damage: W.gasDamageMult },

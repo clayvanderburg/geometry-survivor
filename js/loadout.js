@@ -54,7 +54,7 @@ export const WEAPONS = [
   {
     id: 'turret', name: 'Sentry Turret', hudName: 'Sentry Turret', levelId: 'turret', levelKey: 'turret', category: 'DEPLOYABLE', tagSources: ['turret'],
     color: '#5aa8ff',
-    summary: 'Temporary auto-turrets that shoot the nearest enemy they can see.'
+    summary: 'Stand still to plant turret charges; each turret shoots the nearest enemy it can see for a while. Charges reload over time.'
   },
   {
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
