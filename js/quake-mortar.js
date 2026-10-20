@@ -24,6 +24,12 @@ const MAX_CANDIDATES = 24; // nearest enemies scored as pack centres for a volle
 const LEAD = 0.6;          // share of a target's motion over the flight the shell leads
 
 const ease = (k) => 1 - (1 - k) * (1 - k); // the ring rolls out fast, then slows as it spreads
+// Shell height along the flight: it climbs quickly, hangs near the apex, then drops hard onto the
+// marker (the last third falls faster than it rose), so every landing reads as a heavy slam.
+const shellHeight = (h, k) => {
+  const q = Math.pow(Math.min(1, Math.max(0, k)), 0.72);
+  return h * 4 * q * (1 - q);
+};
 
 export class QuakeMortar {
   constructor() {
@@ -84,7 +90,7 @@ export class QuakeMortar {
       const k = Math.min(1, s.age / s.flight);
       s.x = s.sx + (s.lx - s.sx) * k;
       s.y = s.sy + (s.ly - s.sy) * k;
-      s.z = s.h * 4 * k * (1 - k);
+      s.z = shellHeight(s.h, k);
       if (k < 1) continue;
       this.shells[i] = this.shells[this.shellCount - 1];
       this.shells[--this.shellCount] = s;
@@ -253,10 +259,13 @@ export class QuakeMortar {
     fx.spawnFlash?.(x, y, radius * 0.45, HUE + 12, 0.18);
     fx.spawnShockwave(x, y, radius * 0.35, 48, 3, 0.2);
     fx.spawnExplosionSparks(x, y, Math.round(8 + 8 * small), HUE, 2, 9, 2.2);
+    // Ground chunks thrown out of the crater, and a quick white-hot flash ring: the slam has weight.
+    fx.spawnPolygonShatter?.(x, y, 10 + 10 * Math.min(1.6, small), 5, Math.random() * Math.PI * 2, HUE, 0.8 + 0.4 * Math.min(1.6, small));
+    fx.spawnShockwave(x, y, radius * 0.18, 45, 5 * Math.min(1.6, small) + 1, 0.12);
     game.grid?.applyImpulse(x, y, big ? 70 : 40 * Math.min(1.5, small), radius * 1.2, HUE);
     game.grid?.ripple?.(x, y, radius, HUE, big ? 1.6 : 1.1);
     game.sound.playQuakeImpact?.(big ? 1.4 : Math.min(1, 0.55 + 0.45 * small));
-    if (big || small >= 1) game.addShake?.(big ? 7 : 2.5);
+    game.addShake?.(big ? 8 : 1.5 + 2 * Math.min(1, small * small)); // a skip barely nudges, a full shell thuds
   }
 
   // The ring front between last tick's radius and this one's hits everything it crosses, once.
@@ -479,7 +488,7 @@ export class QuakeMortar {
       const k = Math.min(1, r.age / r.life);
       const cur = r.radius * ease(k);
       const fade = 1 - k;
-      const w = r.big ? 1.6 : 1;
+      const w = (r.big ? 1.6 : 1) * (1 + 1.4 * Math.max(0, 1 - k / 0.18)); // a fat, punchy front at the impact that thins as it spreads
       ctx.fillStyle = `hsla(${HUE}, 100%, 55%, ${0.08 * fade})`;
       ctx.beginPath();
       ctx.arc(r.x, r.y, cur, 0, Math.PI * 2);
@@ -518,6 +527,16 @@ export class QuakeMortar {
     for (let i = 0; i < this.shellCount; i++) {
       const s = this.shells[i];
       if (!this.inView(game, s.x, s.y - s.z, 40)) continue;
+      // Ember trail: a few fading points back along the arc, so the shell's weight and drop read in motion.
+      const kk = Math.min(1, s.age / s.flight);
+      for (let j = 1; j <= 4; j++) {
+        const kj = Math.max(0, kk - j * 0.035);
+        const tx = s.sx + (s.lx - s.sx) * kj, ty = s.sy + (s.ly - s.sy) * kj - shellHeight(s.h, kj);
+        ctx.fillStyle = `hsla(${HUE + 10}, 100%, 62%, ${0.45 - j * 0.1})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, (5 - j) * s.scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
       const lift = 1 + s.z / 160;
       const r = 7 * s.scale * lift;
       ctx.fillStyle = `hsla(${HUE}, 100%, 50%, 0.16)`;

@@ -1800,7 +1800,9 @@ export class SoundEngine {
     const dur = 0.24;
     if (!this.claimVoice('quakeLaunch', 120, 2, dur)) return;
     const body = 0.85 + Math.min(0.3, Math.max(0, shells - 2) * 0.08);
-    this.tone(120, 0, 0.2, 0.16 * body, 'sine', 42);
+    const pitch = 0.95 + Math.random() * 0.1;
+    this.tone(120 * pitch, 0, 0.2, 0.16 * body, 'sine', 42);
+    this.tone(62 * pitch, 0.015, 0.26, 0.1 * body, 'sine', 30); // chest-deep recoil under the thoomp
     this.tone(240, 0.01, 0.04, 0.035, 'square', 180);
     const t = this.ctx.currentTime;
     const noise = this.noiseSource();
@@ -1825,10 +1827,11 @@ export class SoundEngine {
     if (!this.claimVoice('quakeImpact', 70, 3, dur)) return;
     const t = this.ctx.currentTime;
     const v = Math.min(1.4, Math.max(0.4, size));
+    const pitch = 0.94 + Math.random() * 0.12; // no two quakes sound quite alike
     const crackNoise = this.noiseSource();
     const crackBand = this.ctx.createBiquadFilter();
     crackBand.type = 'bandpass';
-    crackBand.frequency.value = 2200;
+    crackBand.frequency.value = 2200 * pitch;
     crackBand.Q.value = 0.9;
     const crack = this.ctx.createGain();
     crack.gain.setValueAtTime(0.1 * v, t);
@@ -1841,7 +1844,7 @@ export class SoundEngine {
     const sub = this.ctx.createOscillator();
     const subGain = this.ctx.createGain();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(85, t);
+    sub.frequency.setValueAtTime(85 * pitch / Math.sqrt(v), t);
     sub.frequency.exponentialRampToValueAtTime(28, t + dur * 0.8);
     subGain.gain.setValueAtTime(0.0001, t);
     subGain.gain.exponentialRampToValueAtTime(0.2 * v, t + 0.012);
