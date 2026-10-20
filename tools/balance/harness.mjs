@@ -120,6 +120,40 @@ function installInstrumentation(game, metrics) {
   let hitDepth = 0;
   let pendingContact = null;
 
+  // Enemies per hit: each damageEnemiesInRadius call is one area hit (blast, burst, pool tick);
+  // other hits are grouped per source per tick (a sprayer's sweep or a gas tick hits many at once).
+  const areaStack = [];
+  let tickSrc = new Map(), tickAt = -1;
+  const flushTick = () => { for (const [src, set] of tickSrc) metrics.multiHit(`tick:${src}`, set.size); tickSrc = new Map(); };
+  const tickHit = (src, e) => {
+    if (game.elapsedTime !== tickAt) { flushTick(); tickAt = game.elapsedTime; }
+    let set = tickSrc.get(src);
+    if (!set) tickSrc.set(src, set = new Set());
+    set.add(e);
+  };
+  game.damageEnemiesInRadius = function (cx, cy, radius, dmg, hue, source = 'other', knock, edgeFalloff, stat = source) {
+    const hit = new Set();
+    areaStack.push(hit);
+    try { return proto.damageEnemiesInRadius.call(this, cx, cy, radius, dmg, hue, source, knock, edgeFalloff, stat); } finally {
+      areaStack.pop();
+      const key = attribute(source);
+      metrics.multiHit(`area:${key === 'other' && stat && stat !== 'other' ? stat : key}`, hit.size);
+    }
+  };
+  // Autocannon pierce: enemies each bolt hit by the time it leaves play (bolts that hit nothing are misses).
+  game.updateBullets = function (dt) {
+    const before = this.bullets;
+    const r = proto.updateBullets.call(this, dt);
+    const alive = new Set(this.bullets);
+    for (const b of before) {
+      if (alive.has(b) || (b.source ?? 'blaster') !== 'blaster' || b.kind) continue;
+      const n = b.hitEnemies?.size || 0;
+      metrics.multiHit('bolt:blaster', n);
+      metrics.multiHit(`bolt:blaster pierce ${Math.max(0, b.pierce) + n}`, n); // pierce is spent one per enemy hit
+    }
+    return r;
+  };
+
   const attribute = (source) => {
     const ctx = ctxStack.length ? ctxStack[ctxStack.length - 1] : null;
     if (ctx === 'blackhole_burst') return 'vortex_burst';
@@ -137,6 +171,8 @@ function installInstrumentation(game, metrics) {
     e.hitsTaken = (e.hitsTaken || 0) + 1;
     hitDepth++;
     e.lastHitSource = src;
+    if (areaStack.length) areaStack[areaStack.length - 1].add(e);
+    else tickHit(src, e);
     try {
       proto.hitEnemy.call(this, e, dmg, source, kx, ky, flash, stat);
     } finally {
@@ -301,6 +337,14 @@ export function createMetrics() {
     thinHandAt: null, // { time, level } of the first hand with fewer than 3 cards
     slotsFullAt: null, // { time, level } when every weapon slot was filled
     breakthroughs: [], // { weapon, level, kind, time } for every Breakthrough taken
+    hitCounts: {},    // `area:<src>` | `tick:<src>` | `bolt:blaster` -> { events, enemies, hist }
+    multiHit(key, n) {
+      const h = m.hitCounts[key] || (m.hitCounts[key] = { events: 0, enemies: 0, hist: {} });
+      h.events++;
+      h.enemies += n;
+      const bin = Math.min(n, 10);
+      h.hist[bin] = (h.hist[bin] || 0) + 1;
+    },
     damage(src, eff, raw) {
       m.dealt[src] = (m.dealt[src] || 0) + eff;
       m.dealtRaw[src] = (m.dealtRaw[src] || 0) + raw;
@@ -345,6 +389,11 @@ export function createMetrics() {
 export function botControls(game, pilot, state) {
   const p = game.player;
   const enemies = game.enemyManager.enemies;
+  // Anticipation: controls land `lead` ticks after they are decided (the reaction latency), so the
+  // pilot judges threats where they will be by then, the way a player leads a pack that chases them.
+  const lead = state.lead || 0;
+  const kite = pilot.kite ?? 1; // threat radius scale: >1 keeps the pack further away
+  const px = p.x + p.vx * lead, py = p.y + p.vy * lead;
   let fx = 0, fy = 0;
   let nearest = Infinity;
   let crowd = 0;
@@ -352,9 +401,9 @@ export function botControls(game, pilot, state) {
   let bossNear = false;
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    const dx = p.x - e.x, dy = p.y - e.y;
+    const dx = px - (e.x + (e.vx || 0) * lead), dy = py - (e.y + (e.vy || 0) * lead);
     const d = Math.hypot(dx, dy) || 1;
-    const R = e.isBoss ? 460 : e.type === 'blackhole' ? 340 : 270;
+    const R = (e.isBoss ? 460 : e.type === 'blackhole' ? 340 : 270) * kite;
     const gap = d - e.radius - p.radius;
     if (gap < nearest) nearest = gap;
     if (d < 300) crowd++;
@@ -524,13 +573,17 @@ export function pickCard(choices, strategy) {
 }
 
 // Pilot skill is reaction latency: the controls applied each tick were decided this many ticks ago.
+// With `anticipate` (the default) the pilot leads enemy and ship motion by that latency when it
+// decides (see botControls), as players do; without it, a crowd closing in is judged 200 ms late,
+// which made weak-opening builds (Rocket Pods / Swarm Missiles starts) die in wave 1-2 (calibration,
+// docs/BALANCE_REPORT.md).
 export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 
 // --- One simulated run ------------------------------------------------------------------------
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal' }) {
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank, mode });
     const metrics = createMetrics();
@@ -543,6 +596,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     const pilot = { mineBias: 0, ...(strategy.pilot || {}) };
     const botState = { orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTimer: 0 };
     const latency = PILOT_SKILLS[skill] ?? (Math.max(1, Math.round(Number(skill))) || 1);
+    if (anticipate) botState.lead = latency - 1;
     const pipeline = [];
     let controls = { moveX: 0, moveY: 0, dash: false, bomb: false };
     game.pollGamepad = () => ({
@@ -646,6 +700,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       thinHandAt: metrics.thinHandAt,
       slotsFullAt: metrics.slotsFullAt,
       breakthroughs: metrics.breakthroughs,
+      hitCounts: metrics.hitCounts,
       startWeapon: strategy.startWeapon ?? null,
       enemiesAt,
       dealt: metrics.dealt,
