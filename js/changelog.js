@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.6',
+    date: '2026-10-20',
+    title: 'Opening Salvo',
+    notes: [
+      { type: 'balance', text: 'Swarm Missiles fire 30% faster (a salvo every 1.1 s, was 1.44 s) and each missile hits 15% harder. A missile start now holds its own.' },
+      { type: 'balance', text: 'Rocket Pods fire a volley every 0.5 s (was 0.65 s) and deal 50% more damage, on par with the Autocannon.' },
+      { type: 'balance', text: 'Aegis Orbit Blades spin on a 50% wider ring, 30% faster, so they meet enemies before they reach your hull. The Counter-Rotating Ring sits a little closer to match.' }
+    ]
+  },
+  {
     version: '0.42.5',
     date: '2026-10-20',
     title: 'Afterburner Jets',

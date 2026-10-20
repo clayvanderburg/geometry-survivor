@@ -28,9 +28,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM)'
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles LV 1 damage x0.5', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.75 and Rocket Pods x1.5 LV 1 damage', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.5 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.75, rockets: 1.5 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
   assert.equal(damageGrowth('rockets'), DAMAGE_GROWTH);
@@ -153,9 +153,28 @@ test('piercing bolts hit the first enemy for full damage and each one behind for
   assert.deepEqual(row.map((e) => +(1000 - e.hp).toFixed(6)), [100, +(100 * f).toFixed(6), +(100 * f * f).toFixed(6)]);
 });
 
+// Clay's weapons pass: offensive openers sit level with the Autocannon (raised, never by nerfing it), and
+// the close-range Orbit Blades get a wider, faster ring. Missiles and rockets look weak in the potential
+// model's own terms (splash, overkill), so their LV1_TRIM is set from the card benches, not from POTENTIAL_DPS.
+test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder, Orbit Blades +50% ring / +30% spin', () => {
+  const b = (id) => levelBuild(id, 1);
+  assert.ok(near(1.44 / W.missileCooldown(b('missiles')), 1.3, 0.02), 'missiles fire ~30% faster than the 1.44 s of v0.42');
+  assert.ok(lv1('missiles') > 1.3 * 0.5 * DPS_TARGET(1), 'missile hits did not get softer to pay for the faster salvos');
+  assert.ok(lv1('rockets') >= lv1('blaster') * 1.25, 'Rocket Pods out-potential the Autocannon at LV 1 (their hits splash, overkill or miss)');
+  assert.equal(W.orbitalRadius(b('orbitals')), 155); // 103 * 1.5
+  assert.ok(near(W.orbitalSpin(b('orbitals')), 4.85 * 1.3, 0.01));
+  // A maxed ring (11 Reach + 11 Spin ranks, plus 3 from ACROSS THE BOARD) stays on a 720 px screen and its
+  // blades never move further per tick than a swarmer's contact width (14 px hull + 18 px blade, both sides),
+  // so they cannot skip past one.
+  const max = makeBuild('orbitals', 18, { radius: 14, spin: 14 });
+  assert.ok(W.orbitalRadius(max) <= 300, `ring radius ${W.orbitalRadius(max)} px`);
+  const step = W.orbitalSpin(max) * W.orbitalRadius(max) / 60;
+  assert.ok(step <= 2 * (14 + 18), `blade step ${step.toFixed(1)} px/tick`);
+});
+
 test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and drones; wide mines', () => {
   const b = (id) => levelBuild(id, 1);
-  assert.equal(W.missileCooldown(b('missiles')), 1.44);
+  assert.equal(W.missileCooldown(b('missiles')), 1.1);
   assert.ok(Math.abs(W.turretFireRate(b('turret')) - 6.1) < 1e-9);
   assert.ok(Math.abs(W.droneFireRate(b('drones')) - 7.6) < 1e-9);
   assert.equal(W.mineBlastRadius(b('mines')), 120);
