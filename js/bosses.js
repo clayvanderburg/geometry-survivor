@@ -32,7 +32,7 @@ export function bossHp(waveScale, tier = 'minor') {
 // burst.
 export const QUEEN = {
   ring: 16, orbitR: 92, orbitSpin: 1.5, peelEvery: 3.2, peelCount: 5, hatchEvery: 1.3,
-  rageAt: 0.5, rageSpeed: 1.9, rageSpawnEvery: 1.7, rageSpawn: 2, deathMayflies: 14,
+  rageAt: 0.5, rageSpeed: 2.6, rageSpawnEvery: 1.7, rageSpawn: 2, deathMayflies: 14,
   circleR: 170, circleSpin: 2.2, circleTime: [1.4, 2.4], diveKick: 5
 };
 
@@ -77,8 +77,9 @@ function release(o, player, dive) {
 }
 
 const broodQueen = {
+  ram: { range: 320 }, // js/boss-ram.js: the shared telegraphed charge
   name: 'BROOD QUEEN', epithet: 'MOTHER OF THE SWARM', tier: 'minor', hue: 325, debut: ['mayfly'],
-  stats: () => ({ speed: 1.4, radius: 34, sides: 4, vRot: 0 }),
+  stats: () => ({ speed: 2.0, radius: 34, sides: 4, vRot: 0 }),
   onArrive(e, m) {
     e.aiTimer = QUEEN.peelEvery;
     e.hatchT = QUEEN.hatchEvery;
@@ -90,8 +91,8 @@ const broodQueen = {
   },
   update(e, m, env) {
     const { dt, player } = env;
-    e.vx = (e.vx + env.moveX * 0.2) * 0.92;
-    e.vy = (e.vy + env.moveY * 0.2) * 0.92;
+    e.vx = (e.vx + env.moveX * 0.25) * 0.92;
+    e.vy = (e.vy + env.moveY * 0.25) * 0.92;
     if (Math.hypot(e.vx, e.vy) > 0.05) e.rotation = Math.atan2(e.vy, e.vx);
 
     if (!e.enraged && e.hp <= e.maxHp * QUEEN.rageAt) {
@@ -166,7 +167,7 @@ const broodQueen = {
 // head meets tail), REARS with a marked strike lane, STRIKES down it, then winds free and coils again.
 export const OURO = {
   segments: 26, gap: 30, headRadius: 30, bodyRadius: 22, tailRadius: 12,
-  speed: 2.1, rageSpeed: 2.7, turnRate: 1.7, weave: 0.6, weaveRate: 1.3,
+  speed: 2.4, rageSpeed: 3.0, turnRate: 1.7, weave: 0.6, weaveRate: 1.3,
   shedEvery: 7, shedSegments: 3, shedMin: 12, spawnSegments: 6,
   coilAt: 0.5, coilTime: 4.2, coilR0: 330, coilR1: 135, coilSpeed: 3.6,
   rearTime: 0.7, strikeTime: 0.55, strikeSpeed: 10.5, windTime: 3,
@@ -435,7 +436,7 @@ const wingCommander = {
 // it spins up, sprays a spiral of orbs and launches gunner pods.
 export const HIVE = {
   bays: 4, bayRadius: 58, bayHpShare: 0.25, coreHpScale: 0.6, bayLaunchEvery: 2.6, bayDrones: 3,
-  holdRange: 260, speed: 0.9, exposedSpeed: 1.3, spin: 0.25, exposedSpin: 0.8,
+  holdRange: 260, speed: 1.4, exposedSpeed: 1.9, spin: 0.25, exposedSpin: 0.8,
   spiralEvery: 0.14, spiralStep: 0.45, spiralSpeed: 3.2, podEvery: 7, pods: 2, podCap: 4
 };
 
@@ -447,6 +448,7 @@ function bayCount(e, m) {
 }
 
 const hiveCarrier = {
+  ram: { range: 380, speed: 8, cooldown: 6.5, windup: 1 },
   name: 'HIVE CARRIER', epithet: 'MOTHER OF A THOUSAND DRONES', tier: 'major', hue: 120, debut: ['carrier', 'drone', 'gunner'],
   hpScale: HIVE.coreHpScale,
   stats: () => ({ speed: HIVE.speed, radius: 44, sides: 6, vRot: 0 }),
@@ -475,7 +477,7 @@ const hiveCarrier = {
       env.particles?.spawnShockwave?.(e.x, e.y, 320, e.hue, 6, 0.55);
       env.grid?.applyImpulse(e.x, e.y, 80, 320, e.hue);
     }
-    const push = dist > HIVE.holdRange ? 0.1 : dist < HIVE.holdRange - 60 ? -0.06 : 0;
+    const push = dist > HIVE.holdRange ? 0.14 : dist < HIVE.holdRange - 60 ? -0.06 : 0;
     e.vx = (e.vx + env.moveX * push) * 0.94;
     e.vy = (e.vy + env.moveY * push) * 0.94;
     e.rotation += (e.phase === 2 ? HIVE.exposedSpin : HIVE.spin) * dt;
@@ -540,10 +542,11 @@ const hiveCarrier = {
 export const HORIZON = {
   pullRadius: 400, bend: 2.2, enemyPull: 0.9, eatHeal: 0.025, eatRadius: 1.05,
   breathEvery: 6, rageBreathEvery: 4, inhaleTime: 1.6, ring: 16, rageRing: 24, ringSpeed: 2.6,
-  speed: 0.75, rageAt: 0.5, vortexes: 2, escortHulks: 2
+  speed: 1.2, rageAt: 0.5, vortexes: 2, escortHulks: 2
 };
 
 const eventHorizon = {
+  ram: { range: 420, speed: 7.5, cooldown: 6, windup: 1 }, // the well drags you into the lane
   name: 'EVENT HORIZON', epithet: 'THE HUNGER BETWEEN STARS', tier: 'minor', hue: 280, debut: ['blackhole', 'hulk'],
   stats: () => ({ speed: HORIZON.speed, radius: 40, sides: 12, vRot: 0.02, gravityWell: true, pullRadius: HORIZON.pullRadius, bendMult: HORIZON.bend }),
   onArrive(e, m) {
@@ -560,8 +563,8 @@ const eventHorizon = {
   },
   update(e, m, env) {
     const { dt } = env;
-    e.vx = (e.vx + env.dirX * 0.06) * 0.95;
-    e.vy = (e.vy + env.dirY * 0.06) * 0.95;
+    e.vx = (e.vx + env.dirX * 0.08) * 0.95;
+    e.vy = (e.vy + env.dirY * 0.08) * 0.95;
     if (!e.enraged && e.hp <= e.maxHp * HORIZON.rageAt) {
       e.enraged = true;
       for (let k = 0; k < HORIZON.vortexes; k++) {
@@ -659,7 +662,7 @@ const eventHorizon = {
 // CAGES: a ring of gates round where you are that closes in, walls facing you. Break out through a beam
 // before it tightens; the blast takes the rest of the ring with it.
 export const ARCH = {
-  range: 380, band: 60, speed: 1.4, buildEvery: 2.4, rageBuildEvery: 1.5, buildTime: 0.7, maxGates: 8,
+  range: 380, band: 60, speed: 2.0, buildEvery: 2.4, rageBuildEvery: 1.5, buildTime: 0.7, maxGates: 8,
   ringMin: 170, ringMax: 260, cageEvery: 8, cageGates: 6, cageR: 300, cageTime: 5, guards: 2, rageAt: 0.5
 };
 
@@ -671,6 +674,7 @@ function gatesOf(e, m) {
 }
 
 const architect = {
+  ram: { range: 460, speed: 10, cooldown: 6, overshoot: 180 },
   name: 'THE ARCHITECT', epithet: 'IT DRAWS THE LINES YOU DIE BEHIND', tier: 'major', hue: 55, debut: ['gate', 'shielder'],
   stats: () => ({ speed: ARCH.speed, radius: 32, sides: 3, vRot: 0 }),
   onArrive(e, m) {
@@ -687,8 +691,8 @@ const architect = {
     const radial = dist > ARCH.range + ARCH.band ? 1 : dist < ARCH.range - ARCH.band ? -1 : 0;
     const rx = radial > 0 ? env.moveX : dirX;
     const ry = radial > 0 ? env.moveY : dirY;
-    e.vx = (e.vx + rx * radial * 0.16 - dirY * e.strafeSign * 0.07) * 0.92;
-    e.vy = (e.vy + ry * radial * 0.16 + dirX * e.strafeSign * 0.07) * 0.92;
+    e.vx = (e.vx + rx * radial * 0.2 - dirY * e.strafeSign * 0.07) * 0.92;
+    e.vy = (e.vy + ry * radial * 0.2 + dirX * e.strafeSign * 0.07) * 0.92;
     e.rotation += 0.6 * dt;
     if (!e.enraged && e.hp <= e.maxHp * ARCH.rageAt) {
       e.enraged = true;
@@ -763,9 +767,9 @@ const architect = {
 // beaten (and pays out) when its last piece dies. The first cell buds Mitosis Cells as it goes.
 export const PROG = {
   gens: [ // per generation: share of the boss HP each piece gets, radius, speed
-    { hp: 0.45, radius: 46, speed: 1.1 },
-    { hp: 0.25, radius: 32, speed: 1.6 },
-    { hp: 0.12, radius: 22, speed: 2.1 }
+    { hp: 0.45, radius: 46, speed: 1.6 },
+    { hp: 0.25, radius: 32, speed: 2.1 },
+    { hp: 0.12, radius: 22, speed: 2.7 }
   ],
   children: 2, cells: 2, budEvery: 5, mergeAfter: 4, regen: 0.03, mergeSpeed: 0.12
 };
@@ -787,6 +791,7 @@ function spawnPiece(m, root, gen, x, y, vx, vy, hp) {
 }
 
 const progenitor = {
+  ram: { range: 300, cooldown: 7, windup: 0.9, speed: 8 }, // every piece, each on its own clock
   name: 'PROGENITOR', epithet: 'IT IS ALL OF THEM', tier: 'minor', hue: 95, debut: ['mitosis'],
   stats: () => ({ speed: PROG.gens[0].speed, radius: PROG.gens[0].radius, sides: 9, vRot: 0.01 }),
   onArrive(e) {
@@ -831,7 +836,7 @@ const progenitor = {
     const tx = mate ? (mate.x - e.x) : env.moveX;
     const ty = mate ? (mate.y - e.y) : env.moveY;
     const len = Math.hypot(tx, ty) || 1;
-    const gain = mate ? PROG.mergeSpeed * 2 : 0.1;
+    const gain = mate ? PROG.mergeSpeed * 2 : 0.16;
     e.vx = (e.vx + (tx / len) * gain) * 0.94;
     e.vy = (e.vy + (ty / len) * gain) * 0.94;
     if (e.gen === 0) {
@@ -884,8 +889,9 @@ export const COND = {
 };
 
 const conductor = {
+  ram: { range: 440, speed: 9.5, cooldown: 5.5, overshoot: 180 },
   name: 'THE CONDUCTOR', epithet: 'EVERY HULL IS AN INSTRUMENT', tier: 'major', hue: 165, debut: ['conduit', 'repulsor'],
-  stats: () => ({ speed: 1.5, radius: 30, sides: 5, vRot: 0 }),
+  stats: () => ({ speed: 2.0, radius: 30, sides: 5, vRot: 0 }),
   onArrive(e, m) {
     e.links = [];
     e.aiTimer = 1;
@@ -895,7 +901,7 @@ const conductor = {
   },
   update(e, m, env) {
     const { dt, dirX, dirY, dist, player } = env;
-    const radial = dist > COND.hold + 60 ? 0.16 : dist < COND.hold - 60 ? -0.2 : 0;
+    const radial = dist > COND.hold + 60 ? 0.2 : dist < COND.hold - 60 ? -0.2 : 0;
     e.vx = (e.vx + (radial > 0 ? env.moveX : dirX) * radial - dirY * e.strafeSign * 0.06) * 0.92;
     e.vy = (e.vy + (radial > 0 ? env.moveY : dirY) * radial + dirX * e.strafeSign * 0.06) * 0.92;
     e.rotation += 0.5 * dt;
@@ -995,7 +1001,7 @@ function callChoir(e, m, arrival) {
 // its line. Kill one and the survivor enrages (faster, firing lancer beams), and if it is not finished
 // within REVIVE seconds its twin returns at half HP. Beaten (and paid out) when both are down together.
 export const TWINS = {
-  orbitR: 260, spin: 0.55, rageSpin: 0.95, sweep: 0.9, sweepRate: 0.8, centerSpeed: 1.6, speed: 4,
+  orbitR: 260, spin: 0.55, rageSpin: 0.95, sweep: 0.9, sweepRate: 0.8, centerSpeed: 2.2, speed: 4,
   hpScale: 0.6, reviveTime: 10, reviveHp: 0.5, tetherWidth: 6, rageLanceCooldown: 2.2
 };
 
@@ -1123,12 +1129,13 @@ const eclipseTwins = {
 // Past wave 30 the run goes on, and bosses start arriving in pairs.
 export const PRISM = {
   hpScale: 1.3, phaseAt: [2 / 3, 1 / 3], ring: 12, peelEvery: 2.6, hatchEvery: 1.1, cageEvery: 6.5,
-  pullRadius: 380, breathEvery: 4, orbRing: 20, beamSpin: 0.6, beamLength: 520, beamWarmup: 1.5, speed: 1.2
+  pullRadius: 380, breathEvery: 4, orbRing: 20, beamSpin: 0.6, beamLength: 520, beamWarmup: 1.5, speed: 1.8
 };
 
 const PRISM_PHASES = ['SWARM', 'LATTICE', 'SINGULARITY'];
 
 const prism = {
+  ram: { range: 380, cooldown: 5, when: (e) => e.phase < 2 }, // phase 2 has the lighthouse beam
   name: 'THE PRISM', epithet: 'ALL LIGHT, ALL AT ONCE', tier: 'major', hue: 0, debut: [],
   hpScale: PRISM.hpScale,
   stats: () => ({ speed: PRISM.speed, radius: 40, sides: 3, vRot: 0 }),
@@ -1149,8 +1156,8 @@ const prism = {
     const { dt, player } = env;
     e.hue = (e.hue + 70 * dt) % 360; // the spectrum, round and round
     e.rotation += (0.6 + e.phase * 0.4) * dt;
-    e.vx = (e.vx + env.moveX * 0.12) * 0.94;
-    e.vy = (e.vy + env.moveY * 0.12) * 0.94;
+    e.vx = (e.vx + env.moveX * 0.18) * 0.94;
+    e.vy = (e.vy + env.moveY * 0.18) * 0.94;
     const frac = e.hp / e.maxHp;
     const phase = frac <= PRISM.phaseAt[1] ? 2 : frac <= PRISM.phaseAt[0] ? 1 : 0;
     if (phase > e.phase) {
