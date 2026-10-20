@@ -58,6 +58,7 @@ export const DEFAULT_TUNING = {
   rockHpMult: 1.6,
   rockSizeMult: 0.8,
   goldVeinChance: 0.15,
+  bedrockFormations: 0, // random unbreakable bedrock walls/arcs in the sector (level-design preview; 0 = none)
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -93,6 +94,18 @@ export const DEFAULT_TUNING = {
   singularityCollapseMult: 1.0,
   singularityPullFalloff: 3,
   singularityCollapseEdgeFalloff: 0.75,
+
+  // 6a. Space-Time Rifts (js/rifts.js): now and then a rift tears open near the ship. Fly into it and
+  // it flings you to a random spot on the far side of the map, then seals behind you.
+  riftsEnabled: 1,
+  riftFirstDelay: 45, // s into a run before the first rift can open
+  riftIntervalMin: 50, // s between rifts (from one closing to the next opening), random in [min, max]
+  riftIntervalMax: 80,
+  riftOpenTime: 9, // s a rift stays open before it seals
+  riftRadius: 46, // px: the aperture (the ship goes through when its centre crosses ~70% of this)
+  riftSpawnMin: 360, // px from the ship a rift opens at
+  riftSpawnMax: 640,
+  riftExitInvuln: 1.0, // s of invulnerability after coming out the far side
 
   // 6b. Spawn Placement & Pursuit (where enemies appear and how they close in; not how many or how tough)
   spawnRingMarginMin: 40,
@@ -301,6 +314,7 @@ export const TUNING_SCHEMA = [
       { key: 'rockHpMult', label: 'Asteroid Rock HP Mult', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
       { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.4, max: 2.2, step: 0.05, unit: 'x' },
       { key: 'goldVeinChance', label: 'Gold Vein Share of Rocks', type: 'range', min: 0, max: 0.6, step: 0.01, unit: 'prob' },
+      { key: 'bedrockFormations', label: 'Unbreakable Bedrock Formations (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
@@ -340,6 +354,20 @@ export const TUNING_SCHEMA = [
       { key: 'singularityCollapseMult', label: 'Singularity Collapse Damage', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
       { key: 'singularityPullFalloff', label: 'Singularity Pull Falloff (1 = old curve, higher = weaker rim)', type: 'range', min: 1, max: 4, step: 0.1, unit: '^' },
       { key: 'singularityCollapseEdgeFalloff', label: 'Singularity Collapse Damage Lost at Rim', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'x' }
+    ]
+  },
+  {
+    group: '🌌 Space-Time Rifts',
+    items: [
+      { key: 'riftsEnabled', label: 'Space-Time Rifts', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'riftFirstDelay', label: 'First Rift After', type: 'range', min: 0, max: 300, step: 5, unit: 's' },
+      { key: 'riftIntervalMin', label: 'Time Between Rifts (Min)', type: 'range', min: 5, max: 300, step: 5, unit: 's' },
+      { key: 'riftIntervalMax', label: 'Time Between Rifts (Max)', type: 'range', min: 5, max: 400, step: 5, unit: 's' },
+      { key: 'riftOpenTime', label: 'Rift Stays Open For', type: 'range', min: 2, max: 30, step: 0.5, unit: 's' },
+      { key: 'riftRadius', label: 'Rift Aperture Size', type: 'range', min: 20, max: 120, step: 2, unit: 'px' },
+      { key: 'riftSpawnMin', label: 'Rift Opens At Least This Far From Ship', type: 'range', min: 120, max: 1200, step: 20, unit: 'px' },
+      { key: 'riftSpawnMax', label: 'Rift Opens At Most This Far From Ship', type: 'range', min: 160, max: 1600, step: 20, unit: 'px' },
+      { key: 'riftExitInvuln', label: 'Invulnerability After a Jump', type: 'range', min: 0, max: 4, step: 0.1, unit: 's' }
     ]
   },
   {

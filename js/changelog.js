@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.40.0',
+    date: '2026-10-20',
+    title: 'Space-Time Rifts',
+    notes: [
+      { type: 'new', text: 'Space-time rifts: about once a minute a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
+      { type: 'new', text: 'An arrow at the screen edge and a ring on the radar point to an open rift. It closes after about 9 seconds.' }
+    ]
+  },
+  {
     version: '0.39.4',
     date: '2026-10-20',
     title: 'HUD & Low Shield Warning',

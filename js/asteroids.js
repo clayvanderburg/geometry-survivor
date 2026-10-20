@@ -17,6 +17,17 @@ export const CORE_VEIN_CHANCE = 0.08;
 export const SHIELD_VEIN_CHANCE = 0.07;
 export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer rocks than this share remain
 
+// Bedrock: unbreakable rock for level design (permanent walls and boundaries). Nothing breaks it: not the
+// drill-claws, elite grinding, boss portals or blasts. It blocks ships, enemies and shots like any rock,
+// elites steer round it instead of plowing through, and new clusters are never placed on it.
+// Lay it with addBedrock / addBedrockWall, then rebuildSpatialHash(). TUNING.bedrockFormations scatters
+// a few random walls and arcs through the generated sector (0 in the standard sector).
+export const BEDROCK_RADIUS = 38;
+export const BEDROCK_SPACING = 1.15; // piece spacing along a wall, in piece radii (under 2, so no gaps)
+export const BEDROCK_HP = 1e9; // never drained; finite so every `hp > 0` check treats it as solid
+export const BEDROCK_HUE = 268;
+export const isBedrock = (rock) => !!rock?.unbreakable;
+
 // Numeric spatial-hash key (no string building per query: ~1000 rocks are probed many times a tick).
 // Unique for cell coordinates in [-1024, 3071], far beyond the arena.
 const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
@@ -24,8 +35,10 @@ const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
 // Per-rock render cache: the outline as a Path2D (browser only) and the rock's resting colors.
 function rockLook(a) {
   if (a.look) return a.look;
-  const isRich = a.oreType !== 'rock';
+  const bedrock = isBedrock(a);
+  const isRich = a.oreType !== 'rock' && !bedrock;
   let path = null;
+  let inner = null;
   if (typeof Path2D !== 'undefined') {
     path = new Path2D();
     for (let v = 0; v < a.verts.length; v++) {
@@ -34,6 +47,30 @@ function rockLook(a) {
       else path.lineTo(pt.x, pt.y);
     }
     path.closePath();
+    if (bedrock) {
+      // Bedrock wears an inset facet so it reads as solid slab, not drillable rock.
+      inner = new Path2D();
+      for (let v = 0; v < a.verts.length; v++) {
+        const pt = a.verts[v];
+        if (v === 0) inner.moveTo(pt.x * 0.58, pt.y * 0.58);
+        else inner.lineTo(pt.x * 0.58, pt.y * 0.58);
+      }
+      inner.closePath();
+    }
+  }
+  if (bedrock) {
+    a.look = {
+      isRich: false,
+      bedrock: true,
+      path,
+      inner,
+      cos: Math.cos(a.rotation),
+      sin: Math.sin(a.rotation),
+      fill: 'rgba(15, 11, 28, 0.97)',
+      stroke: `hsla(${a.hue}, 45%, 74%, 0.95)`,
+      core: `hsla(${a.hue}, 70%, 58%, 0.55)`
+    };
+    return a.look;
   }
   a.look = {
     isRich,
@@ -68,6 +105,10 @@ export class AsteroidManager {
     this.isDrilling = false;
     this.drillingRocks = [];
 
+    // Bedrock first, so the clusters fill in round it.
+    const formations = Math.max(0, Math.round(TUNING.bedrockFormations ?? 0));
+    for (let f = 0; f < formations; f++) this.spawnBedrockFormation({ x: centerX, y: centerY, radius: 600 });
+
     const clusterCount = Math.round(TUNING.clusterCount ?? 38);
     for (let c = 0; c < clusterCount; c++) {
       let cx = 260 + Math.random() * (this.worldWidth - 520);
@@ -81,14 +122,122 @@ export class AsteroidManager {
       this.spawnCluster(cx, cy, { x: centerX, y: centerY, radius: 250 });
     }
 
-    this.sectorRockCount = this.asteroids.length;
+    this.sectorRockCount = this.breakableCount();
     this.rebuildSpatialHash();
   }
 
-  // Mined-out sectors get a fresh cluster each wave while the rock count is below REPLENISH_SHARE of
-  // the sector's starting count.
+  // Rocks that can be mined (everything but bedrock).
+  breakableCount() {
+    let n = 0;
+    for (let i = 0; i < this.asteroids.length; i++) if (!this.asteroids[i].unbreakable) n++;
+    return n;
+  }
+
+  // Mined-out sectors get a fresh cluster each wave while the breakable rock count is below
+  // REPLENISH_SHARE of the sector's starting count (bedrock never counts: it can't be mined out).
   needsReplenish() {
-    return this.asteroids.length < (this.sectorRockCount || 0) * REPLENISH_SHARE;
+    return this.breakableCount() < (this.sectorRockCount || 0) * REPLENISH_SHARE;
+  }
+
+  // One unbreakable piece. Breakable rock it lands on is cleared away (no ore drops). Returns the piece.
+  addBedrock(x, y, radius = BEDROCK_RADIUS) {
+    for (let i = this.asteroids.length - 1; i >= 0; i--) {
+      const r = this.asteroids[i];
+      if (!r.unbreakable && Math.hypot(r.x - x, r.y - y) < (r.radius + radius) * 0.8) this.asteroids.splice(i, 1);
+    }
+    const sides = 6 + Math.floor(Math.random() * 2);
+    const verts = [];
+    for (let s = 0; s < sides; s++) {
+      const a = (s * Math.PI * 2) / sides;
+      const rJitter = radius * (0.9 + Math.random() * 0.14);
+      verts.push({ x: Math.cos(a) * rJitter, y: Math.sin(a) * rJitter });
+    }
+    const rock = {
+      x,
+      y,
+      radius,
+      sides,
+      verts,
+      rotation: Math.random() * Math.PI * 2,
+      oreType: 'bedrock',
+      unbreakable: true,
+      hp: BEDROCK_HP,
+      maxHp: BEDROCK_HP,
+      hue: BEDROCK_HUE,
+      hitFlash: 0
+    };
+    this.asteroids.push(rock);
+    return rock;
+  }
+
+  // A gapless wall of bedrock along a polyline ([{ x, y }, ...]): pieces overlap so nothing slips
+  // between them. Returns the pieces laid.
+  addBedrockWall(points, radius = BEDROCK_RADIUS) {
+    const pieces = [];
+    if (!points?.length) return pieces;
+    const step = radius * BEDROCK_SPACING;
+    pieces.push(this.addBedrock(points[0].x, points[0].y, radius));
+    let carry = 0; // distance already walked past the last piece
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      let d = step - carry;
+      while (d <= len) {
+        const t = d / len;
+        pieces.push(this.addBedrock(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, radius));
+        d += step;
+      }
+      carry = len - (d - step);
+    }
+    const last = points[points.length - 1];
+    const tail = pieces[pieces.length - 1];
+    if (Math.hypot(tail.x - last.x, tail.y - last.y) > step * 0.35) pieces.push(this.addBedrock(last.x, last.y, radius));
+    return pieces;
+  }
+
+  // A random bedrock wall, bend or arc somewhere in the arena, kept out of `avoid` ({ x, y, radius }).
+  spawnBedrockFormation(avoid = null) {
+    const margin = 420;
+    let cx = 0;
+    let cy = 0;
+    for (let tries = 0; tries < 20; tries++) {
+      cx = margin + Math.random() * (this.worldWidth - margin * 2);
+      cy = margin + Math.random() * (this.worldHeight - margin * 2);
+      if (!avoid || Math.hypot(cx - avoid.x, cy - avoid.y) > avoid.radius + 300) break;
+    }
+    const angle = Math.random() * Math.PI * 2;
+    const kind = Math.floor(Math.random() * 3);
+    const points = [];
+    if (kind === 0) {
+      // Straight wall
+      const half = 160 + Math.random() * 220;
+      points.push({ x: cx - Math.cos(angle) * half, y: cy - Math.sin(angle) * half });
+      points.push({ x: cx + Math.cos(angle) * half, y: cy + Math.sin(angle) * half });
+    } else if (kind === 1) {
+      // Bend: two legs meeting at a corner
+      const legA = 200 + Math.random() * 200;
+      const legB = 200 + Math.random() * 200;
+      const turn = angle + (Math.random() < 0.5 ? 1 : -1) * (Math.PI * (0.4 + Math.random() * 0.2));
+      points.push({ x: cx + Math.cos(angle) * legA, y: cy + Math.sin(angle) * legA });
+      points.push({ x: cx, y: cy });
+      points.push({ x: cx + Math.cos(turn) * legB, y: cy + Math.sin(turn) * legB });
+    } else {
+      // Arc: part of a ring, open on one side
+      const r = 190 + Math.random() * 140;
+      const sweep = Math.PI * (0.55 + Math.random() * 0.6);
+      const steps = 10;
+      for (let s = 0; s <= steps; s++) {
+        const a = angle - sweep / 2 + (sweep * s) / steps;
+        points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+      }
+    }
+    const pad = BEDROCK_RADIUS + 40;
+    for (const pt of points) {
+      pt.x = Math.max(pad, Math.min(this.worldWidth - pad, pt.x));
+      pt.y = Math.max(pad, Math.min(this.worldHeight - pad, pt.y));
+    }
+    return this.addBedrockWall(points);
   }
 
   // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
@@ -103,6 +252,7 @@ export class AsteroidManager {
     // Vein HP was set for the old 1.15x rocks: it shrinks with rock size so drilling time per area holds.
     const veinHp = hpMult * Math.min(1, sizeMult / 1.15);
     const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
+    const bedrock = this.asteroids.filter(isBedrock);
 
     const placed = [];
     for (let i = 0; i < numRocks; i++) {
@@ -123,6 +273,14 @@ export class AsteroidManager {
         const other = placed[j];
         const minDist = (radius + other.radius) * 0.68;
         if (Math.hypot(x - other.x, y - other.y) < minDist) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (tooClose) continue;
+      for (let j = 0; j < bedrock.length; j++) {
+        const w = bedrock[j];
+        if (Math.hypot(x - w.x, y - w.y) < radius + w.radius + 4) {
           tooClose = true;
           break;
         }
@@ -187,7 +345,7 @@ export class AsteroidManager {
     let broken = 0;
     for (let i = this.asteroids.length - 1; i >= 0; i--) {
       const rock = this.asteroids[i];
-      if (rock.hp <= 0) continue;
+      if (rock.hp <= 0 || rock.unbreakable) continue;
       const reach = radius + rock.radius;
       if ((rock.x - x) ** 2 + (rock.y - y) ** 2 > reach * reach) continue;
       rock.hp = 0;
@@ -278,8 +436,8 @@ export class AsteroidManager {
       const distRight = Math.hypot(rock.x - rightClawX, rock.y - rightClawY) - rock.radius;
       const distCenter = Math.hypot(rock.x - player.x, rock.y - player.y) - rock.radius;
 
-      // If within the Crab Ship's front Drill-Claws (or touching hull), grind the rock!
-      if (distLeft <= drillReach || distRight <= drillReach || distCenter <= player.radius + 14) {
+      // If within the Crab Ship's front Drill-Claws (or touching hull), grind the rock! Bedrock only blocks.
+      if (!rock.unbreakable && (distLeft <= drillReach || distRight <= drillReach || distCenter <= player.radius + 14)) {
         this.isDrilling = true;
         this.drillingRocks.push(rock);
 
@@ -367,7 +525,7 @@ export class AsteroidManager {
         const dy = e.y - rock.y;
         const dSq = dx * dx + dy * dy;
         const minDist = e.radius + rock.radius;
-        if (grinds) {
+        if (grinds && !rock.unbreakable) {
           const touch = minDist + contact;
           // Pressed against it, and the rock is on the ship's side of the elite (it is in the way).
           if (dSq < touch * touch && dSq > 0.01) {
@@ -501,6 +659,11 @@ export class AsteroidManager {
       ctx.translate(a.x, a.y);
       ctx.rotate(a.rotation);
     }
+    if (look.bedrock) {
+      this.drawBedrockPiece(ctx, a, look);
+      if (!base) ctx.restore();
+      return;
+    }
     const hpRatio = Math.max(0, a.hp / a.maxHp);
     const isRich = look.isRich;
     const flashing = a.hitFlash > 0;
@@ -551,5 +714,31 @@ export class AsteroidManager {
       ctx.stroke();
     }
     if (!base) ctx.restore();
+  }
+
+  // Bedrock: a near-black slab with a bright pale-violet rim and an inset facet. No cracks or flashes.
+  drawBedrockPiece(ctx, a, look) {
+    const path = look.path;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = look.fill;
+    if (!path) {
+      ctx.beginPath();
+      for (let v = 0; v < a.verts.length; v++) {
+        const pt = a.verts[v];
+        if (v === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.closePath();
+    }
+    if (path) ctx.fill(path); else ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = look.stroke;
+    ctx.lineWidth = 3.2;
+    if (path) ctx.stroke(path); else ctx.stroke();
+    if (look.inner) {
+      ctx.strokeStyle = look.core;
+      ctx.lineWidth = 1.6;
+      ctx.stroke(look.inner);
+    }
   }
 }
