@@ -11,7 +11,7 @@ const h = await import('../tools/balance/harness.mjs');
 const { MODES, MODE_IDS, modeRules, normalizeMode, readStoredMode, writeStoredMode, MODE_STORAGE_KEY, cycleMode, modeBonuses } = await import('../js/modes.js');
 const { TUNING, DEFAULT_TUNING, baseTuning, updateTuningKey, applyTuningOverlay, clearTuningOverlay } = await import('../js/config.js');
 const { UPGRADE_POOL, eligibleUpgrades, rollUpgrades, rollLevelUpHand, applyUpgradeLevels, BASE_SHIELD } = await import('../js/upgrades.js');
-const { normalizeSave, LOCAL_TOP } = await import('../js/progression.js');
+const { normalizeSave, LOCAL_TOP, META_BY_ID } = await import('../js/progression.js');
 const { buildBoardView } = await import('../js/leaderboard.js');
 const { sanitizeRunStats } = await import('../js/stats-rules.js');
 const { GAME_VERSION } = await import('../js/version.js');
@@ -40,7 +40,7 @@ function cardsThatRaiseShield() {
     const p = JSON.parse(fresh);
     p.hp = 50;
     applyUpgradeLevels(p, { ...u, levelJump: 1 });
-    return p.maxHp > BASE_SHIELD + ARMORY_RANK * 1.5 || p.hp > 50;
+    return p.maxHp > BASE_SHIELD + ARMORY_RANK * META_BY_ID.maxHp.per || p.hp > 50;
   }).map((u) => u.id);
 }
 
@@ -75,7 +75,7 @@ test('the title choice is remembered, and blocked storage reads as NORMAL', () =
 test('HARDCORE: base shield (no Aegis Shield Matrix), other armory upgrades still apply, and no regen ever', () => {
   const normal = run('normal');
   const hc = run('hardcore');
-  assert.equal(normal.player.maxHp, BASE_SHIELD + ARMORY_RANK * 1.5, 'NORMAL keeps the armory shield');
+  assert.equal(normal.player.maxHp, BASE_SHIELD + ARMORY_RANK * META_BY_ID.maxHp.per, 'NORMAL keeps the armory shield');
   assert.equal(hc.player.maxHp, BASE_SHIELD);
   assert.equal(hc.player.hp, BASE_SHIELD);
   assert.equal(hc.player.base.maxHp, BASE_SHIELD);

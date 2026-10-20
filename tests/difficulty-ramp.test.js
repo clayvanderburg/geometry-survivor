@@ -22,10 +22,12 @@ const { hpBudgetScale } = await import('../js/waves.js');
 const silent = new Proxy({}, { get: () => () => {} });
 
 const RAMP_KEYS = [
-  'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'waveHpGrowthRamp', 'spawnIntervalStart', 'spawnIntervalTau', 'spawnIntervalMin',
-  'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
+  'waveLength', 'waveHpStart', 'waveHpStartLight', 'waveHpPerWave', 'waveHpGrowth', 'waveHpGrowthFrom', 'waveHpGrowthRamp',
+  'waveHpLateFrom', 'waveHpLateGrowth', 'waveHpLateRamp', 'spawnIntervalStart', 'spawnIntervalTau', 'spawnIntervalMin',
+  'packSizeMult', 'swarmPackPerWave', 'swarmPackMax', 'packLateFrom', 'swarmPackLatePerWave', 'blinkerPackLatePerWave', 'skirmishPackPerWave', 'skirmishPackMax', 'splitterPackPerWave', 'splitterPackMax',
   'mayflyPackPerWave', 'mayflyPackMax', 'hpBudget', 'hpBudgetMin', 'hpBudgetMax',
-  'bossHpMult', 'campaignBossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth', 'xpPerWave'
+  'bossHpMult', 'campaignBossHpMult', 'damageRampBase', 'damageRampFrom', 'damageRampPerWave', 'damageRampSmooth',
+  'damageRampLateFrom', 'damageRampLatePerWave', 'damageRampLateSmooth', 'contactDamage', 'bossContactDamage', 'xpPerWave'
 ];
 
 function withTuning(values, fn) {
@@ -66,7 +68,7 @@ test('every Difficulty Ramp key is in the tuner group with an in-range default',
 });
 
 test('enemy HP scale follows the linear and compound ramp terms, for the game and the Field Guide', () => {
-  withTuning({ waveHpStart: 2, waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4, waveHpGrowthRamp: 0 }, () => {
+  withTuning({ waveHpStart: 2, waveHpPerWave: 0.5, waveHpGrowth: 1.1, waveHpGrowthFrom: 4, waveHpGrowthRamp: 0, waveHpLateGrowth: 1 }, () => {
     for (const wave of [1, 4, 5, 12, 40]) {
       const expected = (2 + (wave - 1) * 0.5) * Math.pow(1.1, Math.max(0, wave - 4));
       assert.ok(Math.abs(waveScaleAt(wave) - expected) < 1e-9, `wave ${wave}`);
@@ -165,7 +167,7 @@ test('pack sizes read the per-wave growth, caps and the global multiplier', () =
 });
 
 test('contact and plasma-orb damage share the damage ramp', () => {
-  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.2, damageRampSmooth: 0 }, () => {
+  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.2, damageRampSmooth: 0, damageRampLatePerWave: 0, contactDamage: 18, bossContactDamage: 38 }, () => {
     assert.equal(damageRampAt(10), 1);
     assert.ok(Math.abs(damageRampAt(15) - 2) < 1e-9);
     const g = rampGame({ wave: 15 });
@@ -173,10 +175,23 @@ test('contact and plasma-orb damage share the damage ramp', () => {
     assert.ok(Math.abs(contactDamageAt({ isBoss: true }, 15) - 76) < 1e-9);
     assert.ok(Math.abs(g.enemyBulletDamage({ damage: 12 }) - 24) < 1e-9);
   });
-  withTuning({ damageRampBase: 0.5, damageRampFrom: 10, damageRampPerWave: 0.1, damageRampSmooth: 0 }, () => {
+  withTuning({ damageRampBase: 0.5, damageRampFrom: 10, damageRampPerWave: 0.1, damageRampSmooth: 0, damageRampLatePerWave: 0, contactDamage: 18 }, () => {
     assert.equal(damageRampAt(3), 0.5);
     assert.ok(Math.abs(contactDamageAt({ contactMult: 1 }, 20) - 18 * 1.5) < 1e-9);
   });
+  // The late ramp stacks on top from damageRampLateFrom; contactDamage / bossContactDamage set the base.
+  withTuning({ damageRampBase: 1, damageRampFrom: 10, damageRampPerWave: 0.1, damageRampSmooth: 0, damageRampLateFrom: 30, damageRampLatePerWave: 0.05, damageRampLateSmooth: 0, contactDamage: 20, bossContactDamage: 50 }, () => {
+    assert.ok(Math.abs(damageRampAt(30) - 3) < 1e-9);
+    assert.ok(Math.abs(damageRampAt(40) - (1 + 3 + 0.5)) < 1e-9);
+    assert.ok(Math.abs(contactDamageAt({ contactMult: 0.5 }, 30) - 30) < 1e-9);
+    assert.ok(Math.abs(contactDamageAt({ isBoss: true }, 30) - 150) < 1e-9);
+  });
+});
+
+test('late HP compounding stacks on top of the main ramp from waveHpLateFrom', () => {
+  const at = (w, late) => withTuning({ waveHpGrowthRamp: 0, waveHpLateFrom: 30, waveHpLateGrowth: late, waveHpLateRamp: 0 }, () => waveScaleAt(w));
+  assert.equal(at(30, 1.05), at(30, 1));
+  assert.ok(Math.abs(at(40, 1.05) / at(40, 1) - Math.pow(1.05, 10)) < 1e-9);
 });
 
 test('kill XP grows with xpPerWave', () => {

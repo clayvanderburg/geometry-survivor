@@ -10,6 +10,7 @@ import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserCha
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
 import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
+import { RAM } from './boss-ram.js';
 import { BORER } from './borers.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
@@ -53,6 +54,13 @@ function eliteGrindText() {
   if (!(eliteMiningDps() > 0)) return '';
   return ` It grinds through asteroids at ${eliteGrindSpeed()}, unaffected by your drill upgrades, instead of going round, and the broken rock drops its ore for you.`;
 }
+// The shared boss RAM (js/boss-ram.js), for bosses whose def carries a ram config.
+function ramText(id, note = '') {
+  const ram = BOSS_DEFS[id]?.ram;
+  if (!ram) return '';
+  return ` RAM: get within ${ram.range ?? RAM.range} px${note} and it braces behind a red lane, then charges down it. Sidestep the lane or dash through.`;
+}
+
 function bossGrindText() {
   const blast = TUNING.bossPortalBlast ?? 280;
   const portal = blast > 0 ? ` Its portal blows apart every rock within ${blast} px as it arrives.` : '';
@@ -180,7 +188,7 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
-    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${ramText('brood_queen')}${bossGrindText()}`,
     tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
   },
   {
@@ -195,27 +203,27 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
-    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge, slow mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${ramText('hive_carrier')}${bossGrindText()}`,
     tip: 'Take the bays out one at a time while dodging the drones; area damage hits several. Once the core is exposed, circle wide through the gaps in the spiral.'
   },
   {
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
-    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
     tip: 'Fight it from the edge of its pull and kill things away from it so it cannot feed. Shoot from close range so the bend has less time to steer your shots off.'
   },
   {
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
-    what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${ramText('architect')}${bossGrindText()}`,
     tip: 'Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early, and the blast takes the rest of the ring.'
   },
   {
     id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
-    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${ramText('progenitor', ' of any piece')}${bossGrindText()}`,
     tip: 'Keep up the pressure on every piece: one left alone heals and finds a partner. Finish the smallest ones before they merge.'
   },
   {
     id: 'conductor', name: BOSS_DEFS.conductor.name, group: 'boss', boss: true, unlockWave: bossWave('conductor'),
-    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that hangs back and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: linked hulls take less damage and move faster, and while ${COND.shieldLinks} or more links hold, the Conductor is untouchable. Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor. At ${pct(COND.rageAt)} HP it plays the crescendo: every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that hangs back and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: linked hulls take less damage and move faster, and while ${COND.shieldLinks} or more links hold, the Conductor is untouchable. Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor. At ${pct(COND.rageAt)} HP it plays the crescendo: every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${ramText('conductor')}${bossGrindText()}`,
     tip: 'Follow the beams: thin its choir below four links and its shield drops. Take out the Repulsors first, then burst it while the choir regroups.'
   },
   {
@@ -225,7 +233,7 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'prism', name: BOSS_DEFS.prism.name, group: 'boss', boss: true, unlockWave: bossWave('prism'),
-    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a spinning prism that cycles through every color and fights with the campaign's moves, one phase per third of its HP. SWARM: a ring of shard swarmers that peel off to dive or circle you. LATTICE: closing cages of laser gates. SINGULARITY: a gravity well that exhales rings of ${PRISM.orbRing} orbs while a lighthouse beam sweeps round it. Past wave 30 the run goes on, and bosses come in pairs.${bossGrindText()}`,
+    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a spinning prism that cycles through every color and fights with the campaign's moves, one phase per third of its HP. SWARM: a ring of shard swarmers that peel off to dive or circle you. LATTICE: closing cages of laser gates. SINGULARITY: a gravity well that exhales rings of ${PRISM.orbRing} orbs while a lighthouse beam sweeps round it.${ramText('prism', ' in the first two phases')} Past wave ${CAMPAIGN_WAVES} the run goes on, and bosses come in pairs.${bossGrindText()}`,
     tip: 'Phase one: sweep the ring with area damage. Phase two: break each cage early through a beam. Phase three: stay outside the beam\'s reach and circle with it, slipping through the orb rings.'
   }
 ];
@@ -361,7 +369,7 @@ export const MECHANIC_ENTRIES = [
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
       'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
-      `Contact damage is ${Math.round(18 * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round(38 * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base (plasma orbs too). A hit gives 0.65 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
+      `Contact damage is ${Math.round((TUNING.contactDamage ?? 18) * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round((TUNING.bossContactDamage ?? 38) * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base, steepening again after wave ${TUNING.damageRampLateFrom ?? 30} (plasma orbs too). A hit gives 0.4 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
   {

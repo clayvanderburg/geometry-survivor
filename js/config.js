@@ -238,6 +238,12 @@ export const DEFAULT_TUNING = {
   waveHpGrowth: 1.1, // 1.06 before v0.31 (enemy HP outgrew even maxed-armory builds)
   waveHpGrowthFrom: 8, // 18 before v0.31, 12 before v0.31.1
   waveHpGrowthRamp: 10, // 14 before v0.31.1: full compounding by ~wave 18, when weapons hit LV15
+  // Late-campaign HP stage: a second compounding stage on top from waveHpLateFrom, eased in over
+  // waveHpLateRamp waves. Off (1) in v0.43.2: late difficulty leans on contact damage, density and bosses
+  // until the Armory rework sets each tier's power (then it may flatten the late curve instead).
+  waveHpLateFrom: 30,
+  waveHpLateGrowth: 1,
+  waveHpLateRamp: 10,
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
   spawnIntervalStart: 2.6,
@@ -246,6 +252,11 @@ export const DEFAULT_TUNING = {
   packSizeMult: 1.2, // 1.0 before v0.29, 1.1 before v0.31
   swarmPackPerWave: 2,
   swarmPackMax: 40,
+  // Late density: past packLateFrom the boid swarm's cap grows by swarmPackLatePerWave boids a wave and the
+  // blinker pack's by blinkerPackLatePerWave hulls (v0.43.2).
+  packLateFrom: 25,
+  swarmPackLatePerWave: 1,
+  blinkerPackLatePerWave: 0.2,
   skirmishPackPerWave: 0.6,
   skirmishPackMax: 24,
   splitterPackPerWave: 0.4,
@@ -264,6 +275,12 @@ export const DEFAULT_TUNING = {
   damageRampFrom: 10,
   damageRampPerWave: 0.07, // 0.04 before v0.29, 0.044 before v0.31
   damageRampSmooth: 12, // (10 before v0.31) waves over which the ramp eases in to its full per-wave rate
+  damageRampLateFrom: 30, // from here the ramp steepens by damageRampLatePerWave (v0.43.2)
+  damageRampLatePerWave: 0.06,
+  damageRampLateSmooth: 12,
+  // Contact hits (js/enemies.js contactDamageAt): base damage per hull hit, before the ramp.
+  contactDamage: 23, // 18 before v0.43.2 (a skilled pilot could charge through packs)
+  bossContactDamage: 48, // 38 before v0.43.2
   xpPerWave: 0,
 
   // 14. Gold, Rerolls & Locks (gold is per run: mined from gold veins, spent on the level-up hand)
@@ -523,12 +540,18 @@ export const TUNING_SCHEMA = [
       { key: 'waveHpGrowth', label: 'Enemy HP: Compound Growth / Wave', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
       { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
       { key: 'waveHpGrowthRamp', label: 'Enemy HP: Waves to Reach Full Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
+      { key: 'waveHpLateFrom', label: 'Enemy HP: Late Compounding From Wave', type: 'range', min: 1, max: 100, step: 1, unit: '' },
+      { key: 'waveHpLateGrowth', label: 'Enemy HP: Late Compound Growth / Wave (on top)', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
+      { key: 'waveHpLateRamp', label: 'Enemy HP: Waves to Reach Full Late Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
       { key: 'spawnIntervalTau', label: 'Pack Spawn Interval: Waves to Close 63% of the Gap', type: 'range', min: 1, max: 30, step: 0.5, unit: '' },
       { key: 'spawnIntervalMin', label: 'Pack Spawn Interval Floor', type: 'range', min: 0.2, max: 4, step: 0.05, unit: 's' },
       { key: 'packSizeMult', label: 'Pack Size Multiplier (all packs)', type: 'range', min: 0.25, max: 3, step: 0.05, unit: 'x' },
       { key: 'swarmPackPerWave', label: 'Boid Swarm: Extra Boids / Wave', type: 'range', min: 0, max: 6, step: 0.1, unit: '' },
       { key: 'swarmPackMax', label: 'Boid Swarm: Max Boids', type: 'range', min: 6, max: 80, step: 1, unit: '' },
+      { key: 'packLateFrom', label: 'Late Density: From Wave', type: 'range', min: 1, max: 100, step: 1, unit: '' },
+      { key: 'swarmPackLatePerWave', label: 'Late Density: Extra Max Boids / Wave', type: 'range', min: 0, max: 5, step: 0.1, unit: '' },
+      { key: 'blinkerPackLatePerWave', label: 'Late Density: Extra Max Blinkers / Wave', type: 'range', min: 0, max: 2, step: 0.05, unit: '' },
       { key: 'skirmishPackPerWave', label: 'Skirmish Pack: Extra Hulls / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
       { key: 'skirmishPackMax', label: 'Skirmish Pack: Max Hulls', type: 'range', min: 3, max: 99, step: 1, unit: '' },
       { key: 'splitterPackPerWave', label: 'Splitter Pack: Extra Splitters / Wave', type: 'range', min: 0, max: 2, step: 0.02, unit: '' },
@@ -544,6 +567,11 @@ export const TUNING_SCHEMA = [
       { key: 'damageRampFrom', label: 'Contact/Orb Damage Ramp Starts After Wave', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'damageRampPerWave', label: 'Contact/Orb Damage Ramp / Wave', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
       { key: 'damageRampSmooth', label: 'Contact/Orb Damage Ramp Ease-In', type: 'range', min: 0, max: 30, step: 1, unit: 'waves' },
+      { key: 'damageRampLateFrom', label: 'Contact/Orb Damage: Late Ramp From Wave', type: 'range', min: 1, max: 100, step: 1, unit: '' },
+      { key: 'damageRampLatePerWave', label: 'Contact/Orb Damage: Late Ramp / Wave (on top)', type: 'range', min: 0, max: 0.4, step: 0.005, unit: 'x' },
+      { key: 'damageRampLateSmooth', label: 'Contact/Orb Damage: Late Ramp Ease-In', type: 'range', min: 0, max: 30, step: 1, unit: 'waves' },
+      { key: 'contactDamage', label: 'Contact Damage per Hull Hit (before the ramp)', type: 'range', min: 1, max: 80, step: 1, unit: '' },
+      { key: 'bossContactDamage', label: 'Boss Contact Damage per Hit (before the ramp)', type: 'range', min: 1, max: 150, step: 1, unit: '' },
       { key: 'xpPerWave', label: 'Kill XP Growth / Wave', type: 'range', min: 0, max: 0.5, step: 0.005, unit: 'x' }
     ]
   },

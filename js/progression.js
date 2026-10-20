@@ -30,12 +30,12 @@ export const ARMORY_TOP_COST = 1000;
 
 const BASE_META_UPGRADES = [
   // OFFENSE
-  { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.01, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
+  { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.015, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
   { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
   // DEFENSE
-  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 1.5, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
+  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 2, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
   // MOBILITY
   { id: 'moveSpeed', cat: 'mobility', name: 'Vector Thrusters', icon: '➤', color: '#00ff88', stat: 'move speed', per: 0.008, fmt: 'pct', maxRank: 25, baseCost: 12, growth: 1.14 },
   { id: 'dash', cat: 'mobility', name: 'Blink Coils', icon: '⇢', color: '#5aa8ff', stat: 'dash cooldown', per: -0.01, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },
@@ -63,7 +63,11 @@ export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u])
 // an upgrade not listed is revision 1). A save remembers the revision each upgrade was bought at; when the
 // build's is newer, the cores the player actually paid for that upgrade (`paid`, whatever the price curve
 // was then) are refunded in full and its ranks reset. Removing an upgrade adds it to RETIRED_UPGRADES instead.
-export const ARMORY_REVISIONS = Object.freeze({});
+export const ARMORY_REVISIONS = Object.freeze({
+  // v0.43.3, toward a full Armory of ~3x power (see armoryPower):
+  damage: 2, // +1.5% per rank (was +1%)
+  maxHp: 2 // +2 shield per rank (was +1.5)
+});
 const MAX_REFUND_NOTES = 24;
 
 // Cost of buying rank `rank` + 1 (rank is the current rank).
@@ -80,14 +84,16 @@ export function armorySpent(ranks = {}) {
   return cores;
 }
 
-// Total effect at `rank` as card text: "+15.0%", "+2.0% pts", "+40", "+0.20 s", "-7.5%".
+// Total effect at `rank` as card text: "+15%", "+1.25%", "+2.0% pts", "+40", "+0.20 s", "-7.5%".
 export function formatArmoryValue(upg, rank) {
   const v = upg.per * rank;
   const sign = v < 0 ? '-' : '+';
   const a = Math.abs(v);
   if (upg.fmt === 'flat') return `${sign}${Math.round(a)}`;
   if (upg.fmt === 'sec') return `${sign}${a.toFixed(2)} s`;
-  const pct = (a * 100).toFixed(a * 100 < 10 ? 1 : 0);
+  // One decimal under 10% (two when needed: +1.25%), whole numbers above unless a half shows (+12.5%).
+  const n = Math.round(a * 10000) / 100;
+  const pct = n < 10 ? (Number.isInteger(n * 10) ? n.toFixed(1) : n.toFixed(2)) : String(Math.round(n * 10) / 10);
   return upg.fmt === 'pts' ? `${sign}${pct}% pts` : `${sign}${pct}%`;
 }
 
@@ -115,6 +121,22 @@ export function armoryBonuses(ranks = {}) {
     miningRangeMult: 1 + step('miningReach'),
     extraBombs: r('bombs')
   };
+}
+
+// Total power of a set of ranks against a bare ship: offense × defense, the number the Armory is sized by
+// (a full Armory is about 3x; tests/armory.test.js pins it). Offense is expected damage per hit (damage ×
+// crits); defense is effective shield on a mid-campaign ship (POWER_REF: 75 base + one Shield Capacitor,
+// plus passive regen over a 30 s fight). Utility (speed, dash, area, XP, economy,
+// starting bombs) is left out: it helps, but by how much depends on the build and the pilot.
+export const POWER_REF = Object.freeze({ shield: 95, regen: 0.6, window: 30, critChance: 0.05, critDamage: 1.5 });
+
+export function armoryPower(ranks = {}, ref = POWER_REF) {
+  const b = armoryBonuses(ranks);
+  const crit = (chance, dmg) => 1 + chance * (dmg - 1);
+  const offense = b.damageMult * crit(ref.critChance + b.critChanceBonus, ref.critDamage + b.critDamageBonus) / crit(ref.critChance, ref.critDamage);
+  const shield = ref.shield + b.bonusHp;
+  const defense = (shield + ref.regen * ref.window) / (ref.shield + ref.regen * ref.window);
+  return { offense, defense, total: offense * defense };
 }
 
 const DEFAULT_HIGHSCORES = [
