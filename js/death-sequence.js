@@ -1,16 +1,14 @@
 // Death sequence (visual only): when the shield collapses the run is already over and recorded; this
 // plays the ship's meltdown and detonation over the frozen sector, slams an 80s-arcade headline
-// ("YOU GOT FRAGGED") with a quip, then hands over to the game-over screen. Any fresh key, click,
-// tap or controller A / Start skips ahead once the blast has gone off.
+// ("YOU GOT FRAGGED") with a quip, and holds there until the player continues to the game-over screen
+// (Enter, controller A / Start or the on-screen CONTINUE button) once the blast has gone off.
 import { drawCrabShip } from './ship-renderer.js';
 
 export const DEATH_TIMING = Object.freeze({
   detonate: 0.35, // meltdown before the ship blows
   headline: 0.85, // headline slams in
   quip: 1.25,     // quip starts typing
-  hint: 1.8,      // "PRESS ANY KEY" blinks in
-  reveal: 3.6,    // game-over screen opens
-  skippable: 0.5  // earliest skip (so a held fire/dash input can't eat the whole thing)
+  skippable: 0.5  // earliest continue (so a held fire/dash input can't eat the whole thing)
 });
 
 // [kicker, headline, weight]: FRAGGED is the signature, the rest keep it fresh.
@@ -75,13 +73,11 @@ export class DeathSequence {
   }
 
   get canSkip() { return this.t >= DEATH_TIMING.skippable && !this.revealed; }
-  get done() { return this.t >= DEATH_TIMING.reveal; }
 
-  // game: hooks for the shared effects ({ particles, grid, sound, addShake, flash }). Returns true on
-  // the tick the sequence finishes.
+  // game: hooks for the shared effects ({ particles, grid, sound, addShake, flash }). Runs until the
+  // player continues: the headline keeps swaying meanwhile.
   update(dt, game) {
-    if (this.revealed) return false;
-    const before = this.t;
+    if (this.revealed) return;
     this.t += dt;
     if (this.t < DEATH_TIMING.detonate) {
       // Meltdown: the hull leaks sparks and shudders harder as it goes critical.
@@ -103,12 +99,12 @@ export class DeathSequence {
       f.rot += f.spin * dt;
       f.life -= dt;
     }
-    return before < DEATH_TIMING.reveal && this.t >= DEATH_TIMING.reveal;
   }
 
+  // The player continues to the results; refused during the first DEATH_TIMING.skippable seconds.
   skip() {
     if (!this.canSkip) return false;
-    this.t = DEATH_TIMING.reveal;
+    this.revealed = true;
     return true;
   }
 
@@ -194,8 +190,8 @@ export class DeathSequence {
     ctx.restore();
   }
 
-  // Screen space: dim + scanlines, then the headline, quip, killer tag and skip hint.
-  drawOverlay(ctx, w, h, source = null, scale = 1, touch = false) {
+  // Screen space: dim + scanlines, then the headline, quip and killer tag.
+  drawOverlay(ctx, w, h, source = null, scale = 1) {
     if (this.revealed) return;
     const t = this.t;
     // A white-hot flash on detonation.
@@ -313,12 +309,6 @@ export class DeathSequence {
       ctx.shadowColor = CYAN;
       ctx.shadowBlur = 8;
       ctx.fillText(`KILLED BY: ${this.killer}`, cx, cy + size * 0.55 + quipSize * 1.8);
-    }
-    if (t >= DEATH_TIMING.hint && Math.floor(t * 2.5) % 2 === 0) {
-      ctx.font = MONO_FONT(Math.round(quipSize * 0.7));
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-      ctx.shadowBlur = 0;
-      ctx.fillText(touch ? 'TAP TO CONTINUE' : 'PRESS ANY KEY', cx, h - Math.max(40, h * 0.1));
     }
     ctx.restore();
   }

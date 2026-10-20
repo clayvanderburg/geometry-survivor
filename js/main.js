@@ -2,7 +2,7 @@ import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
 import { drawPlayerShield, drawCrabShip, shieldTouches, updateShipAnimation, kickShipRecoil, drawShipWake } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
-import { DeathSequence } from './death-sequence.js';
+import { DeathSequence, DEATH_TIMING } from './death-sequence.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
@@ -584,8 +584,10 @@ export class Game {
     window.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') this.setTouchMode(true);
       else if (e.pointerType === 'mouse') this.setTouchMode(false);
-      if (this.deathSeq?.skip()) this.revealGameOver();
     }, true);
+    document.getElementById('btn-death-continue')?.addEventListener('click', () => {
+      if (this.deathSeq?.skip()) this.revealGameOver();
+    });
 
     const titleNameInput = document.getElementById('title-pilot-name');
     const goNameInput = document.getElementById('go-pilot-name');
@@ -664,11 +666,11 @@ export class Game {
         if (!e.repeat) this.splash.dismiss();
         return;
       }
-      // The death sequence swallows keys (a held key must not relaunch behind it); a fresh one skips it.
+      // The death sequence swallows keys (a held key must not relaunch behind it); a fresh Enter skips it.
       if (this.deathSeq) {
         if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
         e.preventDefault();
-        if (!e.repeat && this.deathSeq.skip()) this.revealGameOver();
+        if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.deathSeq.skip()) this.revealGameOver();
         return;
       }
       const focused = document.activeElement;
@@ -1672,6 +1674,7 @@ export class Game {
   startGame() {
     this.sound.init();
     this.deathSeq = null;
+    this.syncDeathContinue();
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
@@ -4759,7 +4762,19 @@ export class Game {
   revealGameOver() {
     if (this.deathSeq) this.deathSeq.revealed = true;
     this.deathSeq = null;
+    this.syncDeathContinue();
     if (this.state === 'GAMEOVER') document.getElementById('gameover-modal').classList.remove('hidden');
+  }
+
+  // The death sequence's CONTINUE button: shown once the headline lands, labelled for the input in use.
+  syncDeathContinue() {
+    const btn = document.getElementById('btn-death-continue');
+    if (!btn) return;
+    const show = !!this.deathSeq && this.deathSeq.t >= DEATH_TIMING.headline;
+    const label = this.gpActive ? 'Ⓐ CONTINUE' : this.touchMode ? 'CONTINUE ▶' : 'CONTINUE ⏎';
+    if (btn.textContent !== label) btn.textContent = label;
+    if (show) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
   }
 
   // Shared effects the death sequence drives.
@@ -4902,7 +4917,9 @@ export class Game {
     const gp = this.pollGamepad();
     if (this.deathSeq) {
       const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
-      if (this.deathSeq.update(dt, this.deathFx()) || skip) this.revealGameOver();
+      this.deathSeq.update(dt, this.deathFx());
+      if (skip) this.revealGameOver();
+      else this.syncDeathContinue();
       this.gpDashLatch = !!gp?.dash;
       this.gpBombLatch = !!gp?.bomb;
       return;
@@ -6396,7 +6413,7 @@ export class Game {
       ctx.restore();
     }
 
-    this.deathSeq?.drawOverlay(ctx, this.width, this.height, this.canvas, this.renderScale ?? 1, this.touchMode);
+    this.deathSeq?.drawOverlay(ctx, this.width, this.height, this.canvas, this.renderScale ?? 1);
   }
 
   singularityCoreRadius(sg) {
