@@ -2300,6 +2300,141 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.8, 0.05);
   }
 
+  // Glaive Discs throw: a quick rising whirr (filtered noise swept up under a detuned square), a touch
+  // fuller for bigger throws. Throttled so a fast launcher never stacks into a drone.
+  playGlaiveThrow(discs = 2) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.16;
+    if (!this.claimVoice('glaive_throw', 90, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const body = 0.8 + Math.min(0.4, discs * 0.06);
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(900, t);
+    band.frequency.exponentialRampToValueAtTime(3800, t + dur);
+    band.Q.value = 3;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.001, t);
+    ng.gain.linearRampToValueAtTime(0.07 * body, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, dur + 0.02);
+
+    const whirr = this.ctx.createOscillator();
+    const wg = this.ctx.createGain();
+    whirr.type = 'square';
+    whirr.frequency.setValueAtTime(180, t);
+    whirr.frequency.exponentialRampToValueAtTime(520, t + dur);
+    wg.gain.setValueAtTime(0.012 * body, t);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    whirr.connect(wg);
+    wg.connect(this.sfxGain);
+    whirr.start(t);
+    whirr.stop(t + dur + 0.01);
+  }
+
+  // Glaive Disc ricochet, layered for weight: a noise "tick" transient (the edge biting), a bell-like
+  // ping of inharmonic partials and, on enemies, a short low thump under it. Pitch climbs a semitone per
+  // hit along the chain plus a random +-1.5 semitone jitter, so a ricochet run never sounds like a loop.
+  // `kind`: 'enemy' (bright ping), 'rock' (lower, longer clang with grit) or 'plate' (dull deflect clank).
+  playGlaiveRicochet(hits = 1, kind = 'enemy') {
+    if (!this.enabled || !this.ctx) return;
+    const rock = kind === 'rock';
+    const plate = kind === 'plate';
+    const dur = rock ? 0.2 : plate ? 0.1 : 0.16;
+    if (!this.claimVoice('glaive_hit', 38, 4, dur)) return;
+    const t = this.ctx.currentTime;
+    const jitter = Math.pow(2, (Math.random() * 3 - 1.5) / 12);
+    const base = (rock ? 430 : plate ? 760 : 1180 * Math.pow(2, Math.min(12, hits) / 12)) * jitter;
+    const partials = rock ? [[1, 0.05, 0.2], [2.32, 0.026, 0.12], [3.9, 0.014, 0.07]]
+      : plate ? [[1, 0.04, 0.08], [1.48, 0.03, 0.06]]
+        : [[1, 0.045, 0.16], [2.76, 0.022, 0.09], [5.4, 0.01, 0.05]];
+    for (const [ratio, vol, decay] of partials) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = rock || plate ? 'triangle' : 'sine';
+      o.frequency.setValueAtTime(base * ratio * 1.03, t);
+      o.frequency.exponentialRampToValueAtTime(base * ratio, t + 0.02); // a tiny downward bend: struck metal
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + decay);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + decay + 0.02);
+    }
+    // Transient: a few ms of filtered noise for the bite (grittier and lower off rock).
+    const noise = this.noiseSource();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = rock ? 'bandpass' : 'highpass';
+    hp.frequency.value = rock ? 1800 : 4500;
+    const ng = this.ctx.createGain();
+    const nd = rock ? 0.045 : 0.018;
+    ng.gain.setValueAtTime(rock ? 0.06 : 0.045, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + nd);
+    noise.connect(hp);
+    hp.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, nd + 0.01);
+    if (kind === 'enemy') {
+      // Weight: a quick low thump under the ping.
+      const th = this.ctx.createOscillator();
+      const tg = this.ctx.createGain();
+      th.type = 'sine';
+      th.frequency.setValueAtTime(190, t);
+      th.frequency.exponentialRampToValueAtTime(80, t + 0.06);
+      tg.gain.setValueAtTime(0.05, t);
+      tg.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      th.connect(tg);
+      tg.connect(this.sfxGain);
+      th.start(t);
+      th.stop(t + 0.08);
+    }
+  }
+
+  // Fission Discs split: two bright pings a fifth apart, 25 ms apart, like a blade snapping in two.
+  playGlaiveSplit() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('glaive_split', 70, 2, 0.14)) return;
+    const t = this.ctx.currentTime;
+    const f = 1600 * Math.pow(2, (Math.random() * 2 - 1) / 12);
+    [[f, 0], [f * 1.5, 0.025]].forEach(([freq, at]) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t + at);
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.linearRampToValueAtTime(0.04, t + at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + at + 0.11);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + 0.12);
+    });
+  }
+
+  // Boomerang Recall catch: a short rising "shink" as a disc slots back into the hull.
+  playGlaiveCatch() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('glaive_catch', 60, 2, 0.1)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(640 * Math.pow(2, (Math.random() * 2 - 1) / 12), t);
+    o.frequency.exponentialRampToValueAtTime(1300, t + 0.07);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.035, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.09);
+    o.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+
   // Elite grinding through rock: a low, gritty scrape tick, heavily throttled (one voice, ~9/s) and
   // well under the blade grind. `vol` (0-1) falls off with the grind point's distance from the ship.
   playEliteGrind(vol = 1) {

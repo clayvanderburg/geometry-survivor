@@ -23,6 +23,7 @@ import { GasTrail } from './gas-trail.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
+import { GlaiveDiscs } from './glaive.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
@@ -453,6 +454,7 @@ export class Game {
         acidspray: 0,
         shockfield: 0,
         raillance: 0,
+        glaive: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -483,6 +485,7 @@ export class Game {
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
     (this.railLance ||= new RailLance()).clear();
+    (this.glaive ||= new GlaiveDiscs()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -5371,6 +5374,7 @@ export class Game {
     this.grenades?.update(dt, this);
     this.gasTrail?.update(dt, this);
     this.shockField?.update(dt, this);
+    this.glaive?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -6746,6 +6750,7 @@ export class Game {
     this.cryoSprayer?.draw(ctx, this);
     this.acidSprayer?.draw(ctx, this);
     this.railLance?.draw(ctx, this);
+    this.glaive?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 

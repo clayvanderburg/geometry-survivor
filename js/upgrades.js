@@ -54,7 +54,8 @@ const CORE_INFO = {
   cryospray: { headline: 'cryoRange', summary: 'A nozzle spins slowly round your ship spraying a cone of frost: everything inside slows as COLD builds, then FREEZES solid. Asteroids block the spray.' },
   acidspray: { headline: 'acidRange', summary: 'A nozzle spins slowly round your ship spraying a cone of acid: everything inside CORRODES, taking acid ticks and more damage from every weapon. Asteroids block the spray.' },
   shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' },
-  raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' }
+  raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
+  glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
@@ -186,6 +187,7 @@ export const UPGRADE_POOL = [
   ...weaponGroup('acidspray'),
   ...weaponGroup('shockfield'),
   ...weaponGroup('raillance'),
+  ...weaponGroup('glaive'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {

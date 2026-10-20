@@ -260,6 +260,15 @@ export const STAT_ROWS = [
   { id: 'railMagnet', label: 'Magnetic pull reach', get: (p) => wb(p, 'raillance', (b) => (b.t4 ? W.magnetRange : null)), fmt: int, newText: (a) => `CHARGE DRAGS ENEMIES // ${a} PX` },
   { id: 'railWake', label: 'Ion Wake damage / tick', get: (p) => wb(p, 'raillance', (b) => (b.t8 ? weaponDamage(p, 'rail', b) / W.railDamageMult(b) * W.railWakeDamageMult(b) : null)), fmt: dec1, newText: (a, row) => `ION WAKE // ${row.fmt(a)} DMG / TICK` },
   { id: 'railOverload', label: 'Overload Shot damage', get: (p) => wb(p, 'raillance', (b) => (b.t12 ? weaponDamage(p, 'rail', b) * W.overloadMult : null)), fmt: dec1, newText: (a, row) => `EVERY ${W.overloadEvery}RD SHOT // ${row.fmt(a)} DMG` },
+  // Glaive Discs
+  { id: 'glaiveCount', label: 'Discs per throw', get: (p) => wb(p, 'glaive', W.glaiveCount), fmt: int, headline: (b, a) => `+${a - b} DISC${a - b > 1 ? 'S' : ''}`, newText: (a) => `GLAIVE DISCS // ${a} PER THROW` },
+  { id: 'glaiveBounces', label: 'Ricochets per disc', get: (p) => wb(p, 'glaive', W.glaiveBounces), fmt: int, headline: (b, a) => `+${a - b} RICOCHET${a - b > 1 ? 'S' : ''}` },
+  { id: 'glaiveDamage', label: 'Disc damage', get: (p) => wb(p, 'glaive', (b) => weaponDamage(p, 'glaive', b)), fmt: dec1, headline: 'pct', unit: 'DISC DAMAGE' },
+  { id: 'glaiveCooldown', label: 'Throw interval', get: (p) => wb(p, 'glaive', W.glaiveCooldown), fmt: secs, headline: 'pct', unit: 'GLAIVE THROW INTERVAL' },
+  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', W.glaiveSpeed), fmt: (v) => `${Math.round(v)} px/s`, headline: 'pct', unit: 'DISC SPEED' },
+  { id: 'glaiveFission', label: 'Twins per disc', get: (p) => wb(p, 'glaive', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'DISCS SPLIT ON THEIR FIRST HIT' },
+  { id: 'glaiveMomentum', label: 'Ricochet damage growth', get: (p) => wb(p, 'glaive', (b) => (b.t8 ? W.momentumGrowth - 1 : null)), fmt: pct, newText: (a, row) => `EVERY RICOCHET +${row.fmt(a)} DAMAGE` },
+  { id: 'glaiveRecall', label: 'Return-trip hits', get: (p) => wb(p, 'glaive', (b) => (b.t12 ? W.recallHits : null)), fmt: int, newText: (a) => `DISCS RETURN // ${a} HITS ON THE WAY` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -485,7 +494,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

@@ -95,6 +95,11 @@ export const WEAPONS = [
     id: 'raillance', name: 'Rail Lance', hudName: 'Rail Lance', levelId: 'raillance', levelKey: 'raillance', category: 'PRIMARY', tagSources: ['rail'],
     color: '#9d8cff',
     summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and rock to the edge of the screen. Slow fire, huge hits.'
+  },
+  {
+    id: 'glaive', name: 'Glaive Discs', hudName: 'Glaive Discs', levelId: 'glaive', levelKey: 'glaive', category: 'AUTONOMOUS', tagSources: ['glaive'],
+    color: '#ff8a3d',
+    summary: 'Spinning discs flung at the nearest enemies. Each one ricochets from enemy to enemy, and off rocks, losing a little speed every bounce.'
   }
 ];
 

@@ -475,7 +475,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, glaive discs orange, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },

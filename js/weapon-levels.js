@@ -145,6 +145,13 @@ export const STAT_CARDS = {
     card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', cap(3)),
     card('raillance', 'raillance_width', 'width', 'Rail Lance Flux Lens', 'railWidth', 'Rail Lance: a wider line that clips more enemies. Only its width.', cap(6)),
     card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', cap(5))
+  ],
+  glaive: [
+    card('glaive', 'glaive_damage', 'damage', 'Glaive Edge', 'glaiveDamage', 'Glaive Discs: keener edges. Only damage per hit.'),
+    card('glaive', 'glaive_count', 'count', 'Glaive Disc Count', 'glaiveCount', 'Glaive Discs: one more disc per throw.', cap(4)),
+    card('glaive', 'glaive_chain', 'chain', 'Glaive Ricochet', 'glaiveBounces', 'Glaive Discs: each disc ricochets to one more enemy. Only ricochets.', cap(6)),
+    card('glaive', 'glaive_rate', 'rate', 'Glaive Launcher', 'glaiveCooldown', 'Glaive Discs: throws more often. Only throw rate.', cap(8)),
+    card('glaive', 'glaive_speed', 'speed', 'Glaive Spin', 'glaiveSpeed', 'Glaive Discs: faster discs. Only disc speed.', cap(6))
   ]
 };
 
@@ -281,7 +288,8 @@ export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
   grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
-  raillance: 'RAIL LANCE'
+  raillance: 'RAIL LANCE',
+  glaive: 'GLAIVE DISCS'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -366,6 +374,11 @@ export const TRANSFORMS = {
     6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, and every lance hits harder.'),
     12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever stands on it or walks through.'),
     18: tf('overload', 'Overload Shot', 'Every third Rail Lance shot is an Overload: a beam three times as wide that hits twice as hard.')
+  },
+  glaive: {
+    6: tf('fission', 'Fission Discs', 'A Glaive Disc splits in two on its first hit. Both twins ricochet on through the pack with every bounce the disc had left.'),
+    12: tf('momentum', 'Momentum Edge', 'Glaive Discs feed on impact: every bounce speeds them up instead of slowing them, and every ricochet hits harder than the last.'),
+    18: tf('recall', 'Boomerang Recall', 'Spent Glaive Discs no longer fade: they swing back to your ship, slicing through the enemies on the way home.')
   }
 };
 
