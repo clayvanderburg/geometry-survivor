@@ -10,6 +10,7 @@
 // Game wires it in with a few lines (update(): holdsWave / tickFinalStand / blocksSpawning / music).
 import { CAMPAIGN_WAVES } from './wave-plan.js';
 import { VICTORY_DELAY } from './victory.js';
+import { awardWaveBonus } from './score-bonus.js';
 
 export const FINAL_STAND = Object.freeze({
   surgePacks: 8,            // extra packs the boss arrives with (on top of the wave's usual opening)
@@ -134,6 +135,7 @@ function wreckStragglers(game) {
 // The beat between the last kill and the VICTORY screen: silence, a bass hit, the banner.
 function sectorClear(game) {
   game.showBanner?.('★ SECTOR CLEAR ★');
+  awardWaveBonus(game, CAMPAIGN_WAVES);
   game.sound?.playSectorClear?.();
   game.addShake?.(10);
   const p = game.player;

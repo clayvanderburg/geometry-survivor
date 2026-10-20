@@ -11,6 +11,7 @@ import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVE
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
+import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
@@ -379,6 +380,7 @@ export class Game {
     this.novaCalloutDone = false;
     resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
     resetFinalStand(this); // wave 50's FINAL STAND (js/final-stand.js)
+    resetScoreBonus(this); // wave and victory bonuses (js/score-bonus.js)
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -4847,10 +4849,11 @@ export class Game {
     }
 
     const statsEl = document.getElementById('gameover-stats');
+    const breakdown = scoreBreakdown(this);
     statsEl.innerHTML = `
       <div class="go-stat-box">
         <div class="go-stat-label">FINAL SCORE</div>
-        <div class="go-stat-val" style="color:var(--cyan)">${this.score.toLocaleString()}</div>
+        <div class="go-stat-val" style="color:var(--cyan)">${this.score.toLocaleString()}${breakdown ? `<div class="go-stat-sub">${breakdown}</div>` : ''}</div>
       </div>
       <div class="go-stat-box">
         <div class="go-stat-label">VOID CORES EARNED</div>
@@ -5113,6 +5116,7 @@ export class Game {
     // Wave 50 has no timer: the FINAL STAND holds it until the sector is clear (js/final-stand.js).
     if (!range && this.waveTimer >= (TUNING.waveLength ?? 22) && !holdsWave(this)) {
       this.waveTimer = 0;
+      awardWaveBonus(this, this.wave); // survived it (js/score-bonus.js)
       this.wave++;
       this.coresDroppedThisWave = 0;
       this.sessionCores += 1;
