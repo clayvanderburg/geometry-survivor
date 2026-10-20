@@ -109,7 +109,7 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_rate', 'rate', 'Flamethrower Fuel Pump', 'flameTickRate', 'Flamethrower: pumps more fuel, so the flames scorch more often. Only scorch rate.', cap(8)),
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
-    card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Swivel Mount', 'flameTurn', 'Flamethrower: the nozzle swings round to your aim faster. Only swivel speed.', cap(6)),
+    card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Spin Rotor', 'flameTurn', 'Flamethrower: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
     card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burnMax', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4))
   ],
   shockfield: [

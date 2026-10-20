@@ -47,7 +47,7 @@ export class Flamethrower {
     this.time = 0;
     this.scorches = 0;
     this.rings = 0;
-    this.swivel = null; // the nozzle's own heading (radians); null until the weapon is first owned
+    this.swivel = null; // the spinning nozzle's heading (radians); null until the weapon is first owned
     for (const n of this.nozzles) n.on = false;
   }
 
@@ -60,7 +60,8 @@ export class Flamethrower {
     const p = game.player;
     const owned = (p.weapons.flamethrower || 0) > 0;
     if (owned) this.swing(p, weaponBuild(p, 'flamethrower'), dt);
-    const firing = owned && !!wantFire;
+    // No aiming at all: the nozzle spins round the ship and sprays the whole time it's equipped.
+    const firing = owned;
     if (!firing && this.count === 0 && this.heat === 0) {
       if (this.firing) this.silence(game);
       return;
@@ -119,13 +120,10 @@ export class Flamethrower {
     game.sound?.setFlameRoar?.(0);
   }
 
-  // The nozzle swivels toward the turret's aim at flameTurnRate instead of snapping to it, so auto-aim
-  // switching targets sweeps the cone round smoothly. It keeps turning while the spray is off.
+  // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate.
   swing(p, b, dt) {
-    if (this.swivel === null) { this.swivel = p.angle; return; }
-    const d = wrap(p.angle - this.swivel);
-    const step = W.flameTurnRate(b) * dt;
-    this.swivel = wrap(this.swivel + (Math.abs(d) <= step ? d : Math.sign(d) * step));
+    if (this.swivel === null) this.swivel = p.angle;
+    this.swivel = wrap(this.swivel + W.flameTurnRate(b) * dt);
   }
 
   // Place the nozzles on the turret and clip each ray of their cones at the first rock face.

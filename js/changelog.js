@@ -14,10 +14,10 @@ export const CHANGELOG = Object.freeze([
   {
     version: '0.39.2',
     date: '2026-10-19',
-    title: 'Swivel Nozzle',
+    title: 'Spinning Flamethrower',
     notes: [
-      { type: 'balance', text: 'The Flamethrower nozzle now swings round to your aim at its own pace instead of snapping between targets, so the cone sweeps smoothly.' },
-      { type: 'new', text: 'New Flamethrower card: SWIVEL MOUNT turns the nozzle 35% faster per rank (up to 6).' }
+      { type: 'balance', text: 'The Flamethrower no longer aims: its nozzle spins slowly round your ship and sprays nonstop. Wider cone, harder hits, full burn.' },
+      { type: 'new', text: 'New Flamethrower card: SPIN ROTOR spins the nozzle 35% faster per rank (up to 6).' }
     ]
   },
   {
