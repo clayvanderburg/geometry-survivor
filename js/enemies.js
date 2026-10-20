@@ -975,6 +975,34 @@ export class EnemyManager {
       ctx.stroke();
     }
 
+    // Three spiral arms of accreting matter winding into the core: crimson far out, orange, then
+    // white-hot near the horizon (one path per heat band).
+    const arms = 3, steps = 16, rOut = r * 5.4, rIn = r * 0.85;
+    const swirl = e.pulsePhase * 0.55;
+    const bands = [['hsla(' + e.hue + ', 100%, 62%, 0.45)', 2.8, 0, 7], ['hsla(22, 100%, 64%, 0.65)', 2.1, 6, 12], ['rgba(255, 240, 225, 0.9)', 1.4, 11, steps]];
+    for (const [stroke, width, from, to] of bands) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      for (let k = 0; k < arms; k++) {
+        for (let s = from; s <= to; s++) {
+          const t = s / steps;
+          const rad = rOut * Math.pow(rIn / rOut, t); // logarithmic spiral inward
+          const a = swirl + (k * Math.PI * 2) / arms + t * 2.6;
+          const x = Math.cos(a) * rad, y = Math.sin(a) * rad;
+          if (s === from) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Lensing shimmer: a faint ring just outside the horizon that breathes.
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 80%, ${0.18 + 0.12 * Math.sin(e.pulsePhase * 2)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * (1.3 + 0.06 * Math.sin(e.pulsePhase * 2)), 0, Math.PI * 2);
+    ctx.stroke();
+
     // White-hot photon ring hugging the event horizon
     ctx.strokeStyle = 'rgba(255, 236, 242, 0.85)';
     ctx.lineWidth = 1.4;

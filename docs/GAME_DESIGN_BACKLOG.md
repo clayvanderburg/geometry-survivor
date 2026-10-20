@@ -78,6 +78,7 @@
 - **Naming (decided):** the crimson gravity *enemies* are **Vortexes** (killable; internal type `blackhole`). "Black hole" is reserved for the planned **black hole portal** feature below.
 - **Suspected issue:** existing gravity pull is not visibly/mechanically noticeable; verify actual forces on player/enemies and whether effect is too subtle.
 - Improve inward particle movement, trajectory bending, warped grid, collapse and explosion feedback. Potential beat pulses.
+  - **Implemented (visual):** Vortexes wear three swirling accretion arms (crimson → orange → white-hot) and a breathing lensing ring; infall streams are denser with long trailing arcs; on death space snaps back (inward ring, hard grid rebound, flash) and every stream it was swallowing is flung back out as sparks. The ship's tug was already a real share of thrust (50–75%, `playerPullShare`), so pull strengths were left alone.
 - New wormholes/anomalies: hidden in mined asteroid pockets OR randomly rip open in space; linked or unpredictable destinations, including across the map.
 - Preserve momentum where fun; make entrances/exits dramatic, with sound filtering/silence and bass hit.
 - Safety: don't drop player into unavoidable deaths—safe destination rules and brief invulnerability.
