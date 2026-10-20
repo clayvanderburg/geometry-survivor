@@ -331,15 +331,16 @@ test('Rocket Pods fire a volley about every 0.65 s at LV 1; their cards add rock
 
 test('Rocket Pods: Cryo Warheads chill enemies caught by Rocket Pod blasts (and only Rocket Pod blasts)', async () => {
   const { applyOnHitStatuses } = await import('../js/status-effects.js');
+  const frosty = { weapons: { rockets_frost: 2 }, stats: { damage: 10 } };
   const e = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 2 } }, e, 'rocket');
-  assert.ok(e.st.chillT > 0 && e.speedScale < 1, 'rocket hit chills');
+  applyOnHitStatuses(frosty, e, 'rocket', 10);
+  assert.ok(e.st.cold > 0 && e.speedScale < 1, 'rocket hit chills');
   const dry = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 0 } }, dry, 'rocket');
-  assert.ok(!(dry.st?.chillT > 0), 'no chill without the element');
+  applyOnHitStatuses({ weapons: { rockets_frost: 0 }, stats: { damage: 10 } }, dry, 'rocket', 10);
+  assert.ok(!(dry.st?.cold > 0), 'no chill without the element');
   const missile = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 2 } }, missile, 'missile');
-  assert.ok(!(missile.st?.chillT > 0), 'FROST rockets do not make missiles chill');
+  applyOnHitStatuses(frosty, missile, 'missile', 10);
+  assert.ok(!(missile.st?.cold > 0), 'FROST rockets do not make missiles chill');
 });
 
 test('every weapon levels 1 to 18 through its stat cards (11 ranks per card at most), and stops at LV 18', () => {
