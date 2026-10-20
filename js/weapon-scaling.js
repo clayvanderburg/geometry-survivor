@@ -45,9 +45,11 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
 // pierce, so less of the curve is lost to overkill. Glaive Discs also take the Autocannon's 0.8 card steps, so
-// they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6).
+// they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Quake Mortar 0.33: its rings
+// roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
+// shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -67,7 +69,8 @@ export const WEAPON_CLASS = Object.freeze({
   shockfield: 'defensive', orbitals: 'defensive',
   raillance: 'aimed', // slow, huge aimed hits that pierce the whole line: held to the Autocannon in the card bench
   nanites: 'area',
-  harpoon: 'aimed' // Claw Harpoon: its mining and yank are utility, not DPS
+  harpoon: 'aimed', // Claw Harpoon: its mining and yank are utility, not DPS
+  quake: 'area'
 });
 export const CLASS_TARGET = Object.freeze({
   aimed: Object.freeze({ perTarget: 1, enforced: true }),
@@ -721,6 +724,50 @@ export const WEAPON_SCALING = {
   // Damage of one throw hit on the first enemy on its line.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
+  // --- Quake Mortar (stats: damage, count, rate, radius, bore) --------------------------------------
+  // Autonomous: every volley interval the mortar lobs `count` heavy shells at the densest packs within
+  // quakeRange (quake-mortar.js). Each shell flies quakeFlight s, then lands as a shockwave ring that rolls
+  // out to quakeRadius over quakeRingTime s: every enemy the front passes takes one hit (full at the
+  // impact, quakeEdgeFalloff less at the rim) and is shoved outward, and every rock it passes takes
+  // quakeRockDamage of mining damage (the ring cracks rocks, and breaks them: they count as mined).
+  // Bore Charge is the rock damage only (UTILITY). A ring is valued at one hit per target.
+  quakeShells: (b) => 2 + b.r.count,
+  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
+  quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
+  quakeRockDamage: (b) => 25 * (1 + 0.5 * (b?.r?.bore || 0)), // x the ship's mining speed / 75: a plain rock (~85 HP) takes 4 rings, 1 with 6 Bore ranks
+  quakeRange: 480,
+  quakeFlight: 0.85,
+  quakeRingTime: 0.5,
+  quakeEdgeFalloff: 0.3,
+  quakeKnock: 3.2,
+  // Transforms: Skipping Shells (a landed shell skips on to the next pack skipBounces times, each skip a
+  // quake skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Fault Lines (every
+  // main impact tears faultCount fissures faultLengthMult x the ring radius long that erupt faultDelay s
+  // later for faultShare, valued at faultHitShare), Epicenter (every epicenterEvery-th volley the hull
+  // itself slams a ring of epicenterRadiusMult x the radius for epicenterShare of a whole volley, valued
+  // at epicenterHitShare: it lands on whatever is crowding the ship).
+  skipBounces: 2,
+  skipShare: 0.5,
+  skipRadiusFrac: 0.65,
+  skipRange: 280,
+  skipFlight: 0.4,
+  skipHitShare: 0.3, // smaller rings landing after the main ring thinned the pack: card bench (realized ~ the boost)
+  faultCount: 3,
+  faultShare: 0.5,
+  faultLengthMult: 1.9,
+  faultWidth: 24,
+  faultDelay: 0.35,
+  faultHitShare: 0.15, // a thin line catches few enemies the ring missed: card bench (realized ~ the boost)
+  epicenterEvery: 3,
+  epicenterShare: 0.8,
+  epicenterRadiusMult: 2,
+  epicenterKnockMult: 2.2,
+  epicenterHitShare: 1.7, // a ship-sized ring lands on the whole crowd closing in: card bench (realized ~ the boost)
+  quakeUnits: (b) => 1 + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
+    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0),
+  // Damage of one quake ring (main impact) to each enemy it passes.
+  quakeDamageMult: (b) => lv1Trim('quake') * lv1('quake', 'quake', (b0) => DPS_TARGET(1) * W.quakeCooldown(b0) / (W.quakeShells(b0) * W.quakeUnits(b0))) * hitMult(b) * tfScale(b, W.quakeUnits),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -940,7 +987,9 @@ export const POTENTIAL_DPS = {
   raillance: (b) => W.railLances(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
   glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b),
   nanites: (b) => W.naniteDamageMult(b) * W.naniteUnits(b) * W.naniteUptime(b) / W.naniteTick(b),
-  harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b)
+  harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b),
+  // One volley: every shell's ring, skips and fault lines, plus its share of the Epicenter slam.
+  quake: (b) => W.quakeShells(b) * W.quakeDamageMult(b) * W.quakeUnits(b) / W.quakeCooldown(b)
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -969,7 +1018,8 @@ export const WEAPON_TAGS = {
   rail: ['kinetic'],
   glaive: ['projectile', 'kinetic'],
   nanite: ['deployable', 'area', 'corrode'],
-  harpoon: ['projectile', 'kinetic']
+  harpoon: ['projectile', 'kinetic'],
+  quake: ['explosive', 'area']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -1008,7 +1058,8 @@ export const SOURCE_WEAPON = {
   drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield',
   rail: 'raillance', glaive: 'glaive',
   nanite: 'nanites',
-  harpoon: 'harpoon'
+  harpoon: 'harpoon',
+  quake: 'quake'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -1056,6 +1107,7 @@ export function weaponDamage(p, weapon, b) {
     case 'glaive': base = d * W.glaiveDamageMult(sourceBuild(p, weapon, b)); break;
     case 'nanite': base = d * W.naniteDamageMult(sourceBuild(p, weapon, b)); break;
     case 'harpoon': base = d * W.harpoonDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'quake': base = d * W.quakeDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));
@@ -1074,6 +1126,7 @@ export const gasCloudRadius = (p, b = weaponBuild(p, 'gas')) => W.gasRadius(b) *
 export const flameRange = (p, b = weaponBuild(p, 'flamethrower')) => W.flameRange(b) * areaMult(p);
 export const fieldRadius = (p, b = weaponBuild(p, 'shockfield')) => W.fieldRadius(b) * areaMult(p);
 export const naniteRadius = (p, b = weaponBuild(p, 'nanites')) => W.naniteRadius(b) * areaMult(p);
+export const quakeRadius = (p, b = weaponBuild(p, 'quake')) => W.quakeRadius(b) * areaMult(p);
 
 // Crits. A player without crit stats never crits (test fixtures); resetRun seeds the tuned base.
 export const critChance = (p) => Math.min(1, p.stats.critChance ?? 0);

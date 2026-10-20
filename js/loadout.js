@@ -110,6 +110,11 @@ export const WEAPONS = [
     id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
     color: '#ffcc00',
     summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
+  },
+  {
+    id: 'quake', name: 'Quake Mortar', hudName: 'Quake Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
+    color: '#ff8a5c',
+    summary: 'Lobs heavy shells at the densest packs. Each one lands as an expanding shockwave ring that hits everything it rolls over, knocks it back and cracks rocks.'
   }
 ];
 

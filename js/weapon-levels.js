@@ -166,6 +166,13 @@ export const STAT_CARDS = {
     card('harpoon', 'harpoon_range', 'range', 'Claw Harpoon Tether Length', 'harpoonRange', 'Claw Harpoon: a longer tether, so the claw flies further. Only reach.', cap(8)),
     card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', cap(6)),
     card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
+  ],
+  quake: [
+    card('quake', 'quake_damage', 'damage', 'Quake Mortar Shell Charge', 'quakeDamage', 'Quake Mortar: heavier shells. Only shockwave damage.'),
+    card('quake', 'quake_count', 'count', 'Quake Mortar Barrels', 'quakeShells', 'Quake Mortar: one more shell per volley, aimed at the next pack.', cap(4)),
+    card('quake', 'quake_rate', 'rate', 'Quake Mortar Autoloader', 'quakeCooldown', 'Quake Mortar: fires volleys more often. Only fire rate.', cap(8)),
+    card('quake', 'quake_radius', 'radius', 'Quake Mortar Shockwave Size', 'quakeRadius', 'Quake Mortar: the rings roll out wider. Only ring size.'),
+    card('quake', 'quake_bore', 'bore', 'Quake Mortar Bore Charge', 'quakeRock', 'Quake Mortar: the rings crack rocks harder and break them sooner (they count as mined). Only rock damage.', cap(6))
   ]
 };
 
@@ -306,7 +313,8 @@ export const WEAPON_BADGE = {
   raillance: 'RAIL LANCE',
   glaive: 'GLAIVE DISCS',
   nanites: 'NANITE SWARM',
-  harpoon: 'CLAW HARPOON'
+  harpoon: 'CLAW HARPOON',
+  quake: 'QUAKE MORTAR'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -406,6 +414,11 @@ export const TRANSFORMS = {
     6: tf('slam', 'Seismic Slam', 'Every time the Claw Harpoon reels in, your claws snap shut in a seismic slam that hits everything round your nose.'),
     12: tf('spin', 'Drill Spin', 'At the end of every throw the Claw Harpoon spins in place, grinding every enemy and rock round its tip before it reels back.'),
     18: tf('chain', 'Chain Harpoon', 'At the end of every throw the Claw Harpoon leaps on to up to 3 more enemies near its tip, skewering each one before it reels back.')
+  },
+  quake: {
+    6: tf('skip', 'Skipping Shells', 'Quake Mortar shells skip on after they land: each one bounces to the next pack twice, quaking again in smaller rings.'),
+    12: tf('fault', 'Fault Lines', 'Every Quake Mortar impact tears three glowing fissures across the ground that erupt a moment later, hitting everything along them and splitting rocks.'),
+    18: tf('epicenter', 'Epicenter', 'Every third Quake Mortar volley your own hull becomes the epicenter: a huge ring slams out around the ship, hurling back everything close and cracking the rocks around you.')
   }
 };
 

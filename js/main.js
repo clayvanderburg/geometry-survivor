@@ -26,6 +26,7 @@ import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
 import { GlaiveDiscs } from './glaive.js';
 import { ClawHarpoon } from './claw-harpoon.js';
+import { QuakeMortar } from './quake-mortar.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
@@ -459,6 +460,7 @@ export class Game {
         glaive: 0,
         nanites: 0,
         harpoon: 0,
+        quake: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -492,6 +494,7 @@ export class Game {
     (this.glaive ||= new GlaiveDiscs()).clear();
     (this.nanites ||= new NaniteSwarm()).clear();
     (this.clawHarpoon ||= new ClawHarpoon()).clear();
+    (this.quakeMortar ||= new QuakeMortar()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -2149,7 +2152,8 @@ export class Game {
     this.updateHUD();
   }
 
-  // Weapons and explosions ONLY damage enemies — never asteroids!
+  // Weapons and explosions ONLY damage enemies — never asteroids! (The Quake Mortar's rings are the one
+  // weapon that cracks rocks, on purpose: quake-mortar.js / AsteroidManager.quakeRock.)
   // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
   // Blasts deal full damage to anything touching the center and fade linearly toward the rim
   // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
@@ -5383,6 +5387,7 @@ export class Game {
     this.nanites?.update(dt, this);
     this.shockField?.update(dt, this);
     this.glaive?.update(dt, this);
+    this.quakeMortar?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -6750,6 +6755,7 @@ export class Game {
     this.nanites?.drawGround(ctx, this);
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
+    this.quakeMortar?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
     this.rifts?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
@@ -6763,6 +6769,7 @@ export class Game {
     if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
+    this.quakeMortar?.drawAir(ctx, this);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {

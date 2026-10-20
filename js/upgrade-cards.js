@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, chillSlow,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius, naniteRadius,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius, naniteRadius, quakeRadius,
   shockStun, shockLongStun, shockLongChance, statusPotency, statusDecay, statusDotShare, stacksPerBaseDamage, burnSpreadChance,
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -326,7 +326,17 @@ export const STAT_ROWS = [
   ...elementRows('flamethrower'),
   ...elementRows('cryospray'),
   ...elementRows('acidspray'),
-  ...elementRows('lightning') // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
+  ...elementRows('lightning'), // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
+
+  // Quake Mortar
+  { id: 'quakeShells', label: 'Shells / volley', get: (p) => wb(p, 'quake', W.quakeShells), fmt: int, headline: 'count', unit: 'SHELLS / VOLLEY', newText: (a) => `QUAKE MORTAR // ${a} / VOLLEY` },
+  { id: 'quakeDamage', label: 'Shockwave damage', get: (p) => wb(p, 'quake', (b) => weaponDamage(p, 'quake', b)), fmt: dec1, headline: 'pct', unit: 'SHOCKWAVE DAMAGE' },
+  { id: 'quakeCooldown', label: 'Volley interval', get: (p) => wb(p, 'quake', W.quakeCooldown), fmt: secs, headline: 'pct', unit: 'MORTAR VOLLEY INTERVAL' },
+  { id: 'quakeRadius', label: 'Shockwave radius', get: (p) => wb(p, 'quake', (b) => quakeRadius(p, b)), fmt: int, headline: 'count', unit: 'SHOCKWAVE RADIUS' },
+  { id: 'quakeRock', label: 'Rock damage / ring', get: (p) => wb(p, 'quake', (b) => W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75), fmt: int, headline: 'pct', unit: 'ROCK DAMAGE' },
+  { id: 'quakeSkip', label: 'Skips / shell', get: (p) => wb(p, 'quake', (b) => (b.t4 ? W.skipBounces : null)), fmt: int, newText: (a) => `SHELLS SKIP // ${a} MORE QUAKES` },
+  { id: 'quakeFault', label: 'Fault lines / impact', get: (p) => wb(p, 'quake', (b) => (b.t8 ? W.faultCount : null)), fmt: int, newText: (a) => `IMPACTS TEAR // ${a} FAULT LINES` },
+  { id: 'quakeEpicenter', label: 'Epicenter radius', get: (p) => wb(p, 'quake', (b) => (b.t12 ? quakeRadius(p, b) * W.epicenterRadiusMult : null)), fmt: int, newText: (a) => `EPICENTER // ${a} RADIUS` }
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -516,7 +526,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive', nanites: 'nanite', harpoon: 'harpoon' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive', nanites: 'nanite', harpoon: 'harpoon', quake: 'quake' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

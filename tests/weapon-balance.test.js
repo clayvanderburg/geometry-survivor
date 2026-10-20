@@ -30,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9', () => {
+test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Quake Mortar x0.33', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -50,7 +50,7 @@ test('weapons built for damage stay equal: every Damage rank is the same x DAMAG
 });
 
 test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon (times its CARD_STEP_TRIM)', () => {
-  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge', raillance: 'rate', glaive: 'rate', nanites: 'rate', harpoon: 'rate' };
+  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge', raillance: 'rate', glaive: 'rate', nanites: 'rate', harpoon: 'rate', quake: 'rate' };
   for (const [id, stat] of Object.entries(RATE)) {
     for (let r = 1; r <= 6; r++) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { [stat]: r }));
@@ -87,7 +87,8 @@ test('every stat formula reads only its own rank', () => {
     raillance: { rate: W.railCycle, count: W.railLances, width: W.railWidth, pierce: W.railKeep, damage: W.railDamageMult },
     glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult },
     nanites: { rate: W.naniteTick, radius: W.naniteRadius, duration: W.naniteLife, cooldown: W.naniteCooldown, damage: W.naniteDamageMult },
-    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, grapple: W.harpoonHookSize, drill: W.harpoonDrill, damage: W.harpoonDamageMult }
+    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, grapple: W.harpoonHookSize, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
+    quake: { count: W.quakeShells, rate: W.quakeCooldown, radius: W.quakeRadius, bore: W.quakeRockDamage, damage: W.quakeDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
     const base = levelBuild(id, 1);
@@ -124,7 +125,7 @@ test('damage per hit never drops as Damage ranks go up', () => {
     orbitals: W.orbitalDamageMult, mines: W.mineDamageMult, turret: W.turretDamageMult, drones: W.droneDamageMult,
     grenades: W.grenadeDamageMult, gas: W.gasDamageMult, flamethrower: W.flameDamageMult, shockfield: W.fieldDamageMult,
     raillance: W.railDamageMult, glaive: W.glaiveDamageMult,
-    nanites: W.naniteDamageMult, harpoon: W.harpoonDamageMult
+    nanites: W.naniteDamageMult, harpoon: W.harpoonDamageMult, quake: W.quakeDamageMult
   };
   for (const [id, f] of Object.entries(perHit)) {
     for (let r = 1; r < WEAPON_MAX_LEVEL; r++) assert.ok(f(makeBuild(id, 1 + r, { damage: r })) > f(makeBuild(id, r, { damage: r - 1 })), `${id} rank ${r}`);
