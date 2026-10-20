@@ -11,7 +11,8 @@ import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVE
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
 import { applyBossHazards } from './boss-hazards.js';
 import { playBossCue } from './boss-sfx-major.js';
-import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
+import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
+import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
@@ -398,6 +399,7 @@ export class Game {
     this.novaCalloutTimer = 0;
     this.novaCalloutDone = false;
     resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
+    resetFinalStand(this); // wave 50's FINAL STAND (js/final-stand.js)
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -2766,7 +2768,7 @@ export class Game {
     const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
-    if (isCampaignWin(this, e)) this.victoryTimer = VICTORY_DELAY; // the final boss: VICTORY follows (js/victory.js)
+    if (isCampaignWin(this, e)) finalBossDown(this); // the final boss: clear the sector, then VICTORY (js/final-stand.js)
   }
 
   showVictory() { showVictory(this); }
@@ -5164,14 +5166,15 @@ export class Game {
     );
     // Boss warning drops the mix out; a live boss pins it at full intensity with the boss riff.
     const bossStage = this.getBossStage();
-    this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
+    this.sound.setMusicState(finalStandMusic(this) ?? { intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
     // Weapon Range: dummies and respawns instead of waves, bosses, lieutenants and packs.
     const range = this.range?.active ? this.range : null;
     if (range) range.tick();
 
     // Escalate waves every `waveLength` seconds (Difficulty Ramp tuning)
-    if (!range && this.waveTimer >= (TUNING.waveLength ?? 22)) {
+    // Wave 50 has no timer: the FINAL STAND holds it until the sector is clear (js/final-stand.js).
+    if (!range && this.waveTimer >= (TUNING.waveLength ?? 22) && !holdsWave(this)) {
       this.waveTimer = 0;
       this.wave++;
       this.coresDroppedThisWave = 0;
@@ -5196,9 +5199,10 @@ export class Game {
     if (!range) {
       this.enemyManager.wave = this.wave;
       this.processPendingBossSpawns();
+      tickFinalStand(this, dt);
       this.updateLieutenantSchedule();
       this.spawnCooldown -= dt;
-      if (this.spawnCooldown <= 0) {
+      if (this.spawnCooldown <= 0 && !blocksSpawning(this)) {
         this.spawnWavePack();
         this.spawnCooldown = this.packInterval();
       }

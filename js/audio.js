@@ -1598,6 +1598,26 @@ export class SoundEngine {
     return playBossCue(this, name);
   }
 
+  // FINAL STAND cleared: one deep sub-bass hit with a long tail into the silence before VICTORY.
+  playSectorClear() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (const [f, vol, dur] of [[48, 0.5, 2.4], [96, 0.18, 1.2]]) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * 1.6, t);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.18);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
+    this.proceduralExplosion(0.8);
+  }
+
   // Lieutenant arrival: a short rising two-tone brass sweep over a sub thump (smaller than the boss sting).
   playLieutenantArrival() {
     if (!this.enabled || !this.ctx) return;

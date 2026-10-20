@@ -346,23 +346,46 @@ test('the first boss of a run shows the Supernova bomb reminder once, pointing a
   assert.ok(!(fresh.novaCalloutTimer > 0), 'no reminder with no bombs to use');
 });
 
-test('beating the wave-50 final boss opens VICTORY: continue into ENDLESS, or end the run as a win', async () => {
+test('wave 50 FINAL STAND: no timer, a surge then no spawns, SECTOR CLEAR, VICTORY; continue resumes at wave 51', async () => {
   Object.assign(TUNING, DEFAULT_TUNING);
   const { CAMPAIGN_WAVES, FINAL_BOSS } = await import('../js/wave-plan.js');
+  const { FINAL_STAND } = await import('../js/final-stand.js');
   const { g } = bossGame();
-  Object.assign(g, { wave: CAMPAIGN_WAVES, victoryTimer: 0, campaignWon: false, kills: 1234, score: 98765 });
+  Object.assign(g, { wave: CAMPAIGN_WAVES, victoryTimer: 0, campaignWon: false, kills: 1234, score: 98765, spawnCooldown: 0 });
+  let packs = 0;
+  g.spawnWavePack = () => { packs++; };
   const finalBoss = { type: FINAL_BOSS, bossWave: CAMPAIGN_WAVES, bossTier: 'major', x: 2100, y: 2000, hue: 200, name: 'THE PRISM', epithet: '' };
+  const straggler = () => { g.enemyManager.queueSpawn('blackhole', 3800, 2000, 1, { instant: true }); tick(g); };
 
-  // A non-final wave's boss (or the final boss type fought earlier, e.g. in the sandbox) wins nothing.
+  // The wave never times out, the surge arrives, and regular packs stay off.
+  g.waveTimer = TUNING.waveLength * 3;
+  tick(g, 60 * 10);
+  assert.equal(g.wave, CAMPAIGN_WAVES, 'wave 50 has no timer');
+  assert.equal(packs, FINAL_STAND.surgePacks, 'only the surge spawns: regular spawning has stopped');
+  assert.equal(g.finalStand.phase, 'fight');
+
+  // A non-final wave's boss (or the final boss type fought earlier) wins nothing.
   g.onBossDefeated({ ...finalBoss, bossWave: 40 }, 2600, 0);
-  assert.equal(g.victoryTimer, 0);
+  assert.equal(g.finalStand.phase, 'fight');
 
+  // The final boss falls with a straggler still out there: no VICTORY until the sector is clear.
+  straggler();
   g.onBossDefeated(finalBoss, 2600, 0);
-  assert.ok(g.victoryTimer > 0, 'the final boss starts the victory countdown');
+  assert.equal(g.finalStand.phase, 'sweep');
+  tick(g, 60);
+  assert.equal(g.state, 'PLAYING');
+  assert.equal(g.victoryTimer, 0, 'hostiles left: no countdown yet');
+  g.enemyManager.enemies.length = 0;
+  tick(g);
+  assert.equal(g.finalStand.phase, 'sweep', 'the BOSS DESTROYED card plays out first');
+  g.bossCardTimer = 0;
+  tick(g);
+  assert.equal(g.finalStand.phase, 'clear', 'the last kill sounds SECTOR CLEAR');
+  assert.ok(g.victoryTimer > 0);
   let ticks = 0;
   while (g.state === 'PLAYING' && ticks < 600) { tick(g); ticks++; }
   assert.equal(g.state, 'VICTORY', `VICTORY after ${ticks} ticks`);
-  assert.ok(ticks >= 2.5 * 60, 'it waits out the death payoff first');
+  assert.ok(ticks >= 2.4 * 60, 'the SECTOR CLEAR beat plays out first');
   assert.equal(g.campaignWon, true);
   assert.ok(!hidden('victory-modal'));
   assert.match(document.getElementById('victory-stats').innerHTML, /98,765/);
@@ -370,10 +393,15 @@ test('beating the wave-50 final boss opens VICTORY: continue into ENDLESS, or en
   tick(g, 30);
   assert.equal(g.elapsedTime, t, 'the run is paused behind the screen');
 
-  // CONTINUE: the run goes on, endless; the final boss can't win it twice.
+  // CONTINUE: the run goes on into ENDLESS at wave 51, packs back on; one victory per run.
   g.continueEndless();
   assert.equal(g.state, 'PLAYING');
   assert.ok(hidden('victory-modal'));
+  packs = 0;
+  tick(g, 60 * 4);
+  assert.equal(g.wave, CAMPAIGN_WAVES + 1);
+  assert.ok(packs > 0, 'regular spawning restarts');
+  assert.equal(g.finalStand, null);
   g.onBossDefeated(finalBoss, 2600, 0);
   assert.equal(g.victoryTimer, 0, 'one victory per run');
 
@@ -384,4 +412,33 @@ test('beating the wave-50 final boss opens VICTORY: continue into ENDLESS, or en
   g.endVictoriousRun();
   assert.deepEqual(ends, [{ victory: true }]);
   assert.ok(hidden('victory-modal'));
+});
+
+test('FINAL STAND anti-stall: stragglers are drawn in, then wrecked, so the ending always comes', async () => {
+  Object.assign(TUNING, DEFAULT_TUNING);
+  const { CAMPAIGN_WAVES, FINAL_BOSS } = await import('../js/wave-plan.js');
+  const { FINAL_STAND, pullStragglers } = await import('../js/final-stand.js');
+  const { g } = bossGame();
+  Object.assign(g, { wave: CAMPAIGN_WAVES, victoryTimer: 0, campaignWon: false });
+  g.spawnWavePack = () => {};
+  tick(g);
+  g.enemyManager.queueSpawn('blackhole', 4000, 2000, 1, { instant: true });
+  tick(g, 2);
+  const far = g.enemyManager.enemies.find(e => e.type === 'blackhole');
+  far.hp = far.maxHp = 1e12;
+  g.onBossDefeated({ type: FINAL_BOSS, bossWave: CAMPAIGN_WAVES, bossTier: 'major', x: 0, y: 0, hue: 0 }, 1, 0);
+  tick(g, 60 * (FINAL_STAND.pullAfter - 1));
+  assert.equal(g.finalStand.pulling, false, 'no pull before the timer');
+  tick(g, 60 * 2);
+  assert.equal(g.finalStand.pulling, true, 'stragglers are drawn in after the timer');
+  // The pull itself: far hostiles step toward the ship, near ones are left alone.
+  const pulled = { x: g.player.x + 2000, y: g.player.y }, near = { x: g.player.x + 200, y: g.player.y };
+  pullStragglers({ player: g.player, enemyManager: { enemies: [pulled, near] } }, 1);
+  assert.equal(pulled.x, g.player.x + 2000 - FINAL_STAND.pullSpeed);
+  assert.equal(near.x, g.player.x + 200);
+  tick(g, 60 * (FINAL_STAND.wreckAfter - FINAL_STAND.pullAfter));
+  assert.ok(far.dead, 'an unkillable straggler is wrecked at the hard stop');
+  let ticks = 0;
+  while (g.state === 'PLAYING' && ticks < 600) { tick(g); ticks++; }
+  assert.equal(g.state, 'VICTORY');
 });

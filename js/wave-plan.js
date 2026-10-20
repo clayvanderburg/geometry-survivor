@@ -3,7 +3,7 @@
 // read it without import cycles.
 //
 //   * Every 5th wave has a boss: a MINOR boss on waves 5, 15, 25, 35, 45 and a MAJOR one on 10, 20, 30,
-//     40, 50. Beating the wave-50 boss wins the campaign (Game.showVictory); a pilot who keeps flying
+//     40, 50. Wave 50 is the FINAL STAND (js/final-stand.js): beat its boss and clear the field to win; a pilot who keeps flying
 //     goes endless, where bosses come in combos (two minors, or a major with a minor escort).
 //   * New hostiles only debut on boss waves: the boss brings them in, the next waves feature them,
 //     then they join the regular pack mix.

@@ -1,12 +1,15 @@
-// Campaign VICTORY: beating the final boss (wave CAMPAIGN_WAVES, js/wave-plan.js) pauses the run on a gold
+// Campaign VICTORY: clearing wave CAMPAIGN_WAVES's FINAL STAND (js/final-stand.js) pauses the run on a gold
 // VICTORY screen (#victory-modal) with two ways on: CONTINUE FOR HIGH SCORE (ENDLESS: the run goes on and
 // the score keeps counting; past wave 50 bosses come in pairs) or END RUN (finish here; the results read
 // VICTORY). A pilot who won and later falls in ENDLESS keeps the win: their results read CAMPAIGN WON.
 // Game wires these in with a few lines (state 'VICTORY', game.victoryTimer, game.campaignWon).
 import { CAMPAIGN_WAVES, FINAL_BOSS } from './wave-plan.js';
 import { bossDef } from './bosses.js';
+import { TUNING } from './config.js';
 
-export const VICTORY_DELAY = 2.5;      // s of play between the final boss's death payoff and the screen
+export const ENDLESS_LEAD_IN = 3; // s of calm after CONTINUE before wave 51 (and its packs) arrive
+
+export const VICTORY_DELAY = 2.5;      // s of play between SECTOR CLEAR and the screen
 export const VICTORY_KEY_GRACE = 800;  // ms before ENTER counts on the screen (a held key must not skip it)
 
 const el = (id) => globalThis.document?.getElementById(id);
@@ -66,6 +69,9 @@ function closeVictory(game) {
 export function continueEndless(game) {
   if (game.state !== 'VICTORY') return;
   closeVictory(game);
+  // The FINAL STAND stopped spawning: wave 51 (and regular packs) follow after a short lead-in.
+  game.waveTimer = Math.max(game.waveTimer || 0, (TUNING.waveLength ?? 22) - ENDLESS_LEAD_IN);
+  game.spawnCooldown = Math.max(game.spawnCooldown || 0, ENDLESS_LEAD_IN);
   game.showBanner?.('∞ ENDLESS // BOSSES NOW COME IN PAIRS // HOW FAR CAN YOU GO?');
 }
 
