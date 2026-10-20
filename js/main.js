@@ -33,7 +33,7 @@ import {
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
-import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
+import { WEAPONS, STARTING_WEAPONS, START_WEAPON_CHOICES, readStartWeapon, writeStartWeapon, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
   DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects,
   shockCritBonus, clearStatusArcs
@@ -262,6 +262,7 @@ export class Game {
     this.postGlobal = readPostGlobal(defaultStatsStorage()); // title-screen checkbox: post runs to the GLOBAL board
     // Game mode (js/modes.js): the title-screen choice (remembered) and the mode of the run being flown.
     this.selectedMode = readStoredMode(defaultStatsStorage());
+    this.startWeapon = readStartWeapon(defaultStatsStorage()); // the run-start pick, remembered (js/loadout.js)
     this.mode = DEFAULT_MODE;
     this.globalBoard.setMode(this.selectedMode);
     this.statsUpload = null;
@@ -334,7 +335,8 @@ export class Game {
 
   // A fresh run in `mode` (NORMAL unless startGame passes the title choice): its TUNING overlay goes on
   // before anything reads TUNING, and the mode's Void Armory bonuses (HARDCORE drops the shield bonus).
-  resetRun(mode = DEFAULT_MODE) {
+  // `startWeapon`: the weapon picked after LAUNCH (START_WEAPON_CHOICES); none = the default kit.
+  resetRun(mode = DEFAULT_MODE, startWeapon = null) {
     this.resetInput();
     this.mode = normalizeMode(mode);
     applyTuningOverlay(modeRules(this.mode).tuning);
@@ -438,9 +440,9 @@ export class Game {
       }
     };
 
-    // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
+    // Run-start snapshot (discards rebuild from it), then the ship's starting weapon(s) at LV 1.
     snapshotBase(this.player);
-    for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    for (const id of START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS) acquireWeapon(this.player, id);
     this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
@@ -678,6 +680,10 @@ export class Game {
         this.handleTutorialKey(e, onControl);
         return;
       }
+      if (this.startPickOpen) {
+        this.handleStartPickKey(e, onControl);
+        return;
+      }
       if (this.guideOpen) {
         this.handleGuideKey(e, onControl);
         return;
@@ -865,6 +871,8 @@ export class Game {
       this.sound.init();
       this.startGame();
     });
+
+    document.getElementById('btn-start-pick-back')?.addEventListener('click', () => this.cancelStartPick());
 
     document.getElementById('btn-weapon-range')?.addEventListener('click', () => {
       this.sound.init();
@@ -1687,7 +1695,8 @@ export class Game {
     }
   }
 
-  startGame() {
+  // `picked`: the starting weapon was just chosen (the pop-up opens first otherwise, when enabled).
+  startGame({ picked = false } = {}) {
     this.sound.init();
     this.deathSeq = null;
     this.syncDeathContinue();
@@ -1698,6 +1707,8 @@ export class Game {
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
     if (this.guideOpen) this.closeGuide();
+    if (!picked && !this.range?.active && this.openStartPick()) return;
+    this.closeStartPick();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.add('hidden');
@@ -1715,7 +1726,7 @@ export class Game {
     this.ctx.fillRect(0, 0, this.width, this.height);
 
     // The Weapon Range ignores modes; a real run (and a restart) flies the title-screen choice.
-    this.resetRun(this.range?.active ? DEFAULT_MODE : this.selectedMode);
+    this.resetRun(this.range?.active ? DEFAULT_MODE : this.selectedMode, this.range?.active ? null : this.startWeapon);
     this.syncModeUI();
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
@@ -4847,6 +4858,10 @@ export class Game {
       this.updateTutorialController(gp, dt);
       return;
     }
+    if (this.startPickOpen) {
+      this.updateStartPickController(gp, dt);
+      return;
+    }
     if (this.guideOpen) {
       this.updateGuideController(gp, dt);
       return;
@@ -5812,6 +5827,131 @@ export class Game {
     this.menuNav?.clear();
   }
 
+  // --- Starting weapon pick (pops up after LAUNCH / RESTART) ---------------------------------------
+
+  // The browser boot switches this on; headless tests and tools start with the default kit.
+  enableStartPick() {
+    this.startPickEnabled = true;
+    return this;
+  }
+
+  // Show the pick: the NEW WEAPON pick cards of START_WEAPON_CHOICES with their LV 1 numbers, the last
+  // pick lit. Returns false when it can't open (headless, already open), so the run starts at once.
+  openStartPick() {
+    const doc = globalThis.document;
+    const modal = doc?.getElementById?.('start-pick-modal');
+    const grid = doc?.getElementById?.('start-pick-options');
+    if (!this.startPickEnabled || this.startPickOpen || !modal || !grid) return false;
+    const preview = this.startPreviewPlayer();
+    const shownAt = performance.now();
+    grid.innerHTML = '';
+    this.startPickCards = START_WEAPON_CHOICES.map((id, idx) => {
+      const d = { ...describeWeaponPick(preview, id), rarityLabel: 'STARTING WEAPON', levelHtml: 'START // LV 1' };
+      const view = renderUpgradeCard(d, `[${idx + 1}]`);
+      const card = doc.createElement('div');
+      card.className = view.className;
+      card.innerHTML = view.html;
+      card.addEventListener('click', () => {
+        if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+        this.chooseStartWeapon(id);
+      });
+      grid.appendChild(card);
+      return card;
+    });
+    this.startPickIndex = Math.max(0, START_WEAPON_CHOICES.indexOf(this.startWeapon));
+    this.highlightStartPick();
+    this.startPickReturnFocus = doc.activeElement;
+    this.closeMobileWindows?.();
+    modal.classList.remove('hidden');
+    this.startPickOpen = true;
+    this.resetInput();
+    this.menuNav?.clear();
+    doc.activeElement?.blur?.();
+    return true;
+  }
+
+  closeStartPick() {
+    if (!this.startPickOpen) return;
+    this.startPickOpen = false;
+    globalThis.document?.getElementById?.('start-pick-modal')?.classList.add('hidden');
+    this.menuNav?.clear();
+    this.menuState = null;
+  }
+
+  // BACK / Esc / B: return to the screen that launched (title, game over or pause), nothing changed.
+  cancelStartPick() {
+    if (!this.startPickOpen) return;
+    this.closeStartPick();
+    this.startPickReturnFocus?.focus?.();
+  }
+
+  chooseStartWeapon(id) {
+    if (!this.startPickOpen || !START_WEAPON_CHOICES.includes(id)) return;
+    this.startWeapon = id;
+    writeStartWeapon(defaultStatsStorage(), id);
+    this.sound.playUiSelect?.();
+    this.startGame({ picked: true });
+  }
+
+  highlightStartPick() {
+    (this.startPickCards || []).forEach((c, i) => c.classList.toggle('picked', i === this.startPickIndex));
+  }
+
+  // A fresh run's ship (this run's base stats, nothing equipped), so the cards show LV 1 numbers.
+  startPreviewPlayer() {
+    if (!this.player) this.resetRun(this.selectedMode); // no ship yet (the browser boot always builds one)
+    const p = this.player;
+    const base = p?.base;
+    return {
+      ...p,
+      stats: structuredClone(base?.stats ?? p.stats),
+      weapons: structuredClone(base?.weapons ?? p.weapons),
+      upgradeLevels: {},
+      breakthroughs: {},
+      banished: {},
+      loadout: []
+    };
+  }
+
+  // Keyboard: [1-4] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  handleStartPickKey(e, onControl) {
+    const code = e.code;
+    if (e.repeat) return;
+    const n = START_WEAPON_CHOICES.length;
+    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+    if (digit && Number(digit[1]) <= n) {
+      e.preventDefault();
+      this.chooseStartWeapon(START_WEAPON_CHOICES[Number(digit[1]) - 1]);
+    } else if (code === 'ArrowRight' || code === 'KeyD' || code === 'ArrowLeft' || code === 'KeyA') {
+      e.preventDefault();
+      this.startPickIndex = (this.startPickIndex + (code === 'ArrowRight' || code === 'KeyD' ? 1 : -1) + n) % n;
+      this.highlightStartPick();
+      this.sound.playUiSelect?.();
+    } else if ((code === 'Enter' || code === 'NumpadEnter' || code === 'Space') && !onControl) {
+      e.preventDefault();
+      this.chooseStartWeapon(START_WEAPON_CHOICES[this.startPickIndex]);
+    } else if (code === 'Escape' || code === 'Backspace') {
+      e.preventDefault();
+      this.cancelStartPick();
+    }
+  }
+
+  // Controller: D-pad between the cards (focus starts on the last pick), A launches, B goes back.
+  updateStartPickController(gp, dt) {
+    const root = globalThis.document?.getElementById?.('start-pick-modal');
+    if (this.menuState !== 'START_PICK') {
+      this.menuState = 'START_PICK';
+      this.menuGrace = 0.3;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !root) return;
+    this.menuNav.update(root, gp, dt, this.startPickCards?.[this.startPickIndex] || null);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B)) this.cancelStartPick();
+    else if (gp.pressed(PAD.A) || gp.pressed(PAD.START)) this.menuNav.activate();
+  }
+
   // The browser boot switches this on: the first LAUNCH on a device (the tutorial was never skipped or
   // finished here) shows the tutorial before the run. Headless tests and tools leave it off.
   enableFirstLaunchTutorial() {
@@ -6584,5 +6724,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().showSplash());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableStartPick().showSplash());
 }

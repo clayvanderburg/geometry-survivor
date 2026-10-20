@@ -22,7 +22,7 @@ import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
 import { handSizeFor, slotDamageBonus } from './slot-rewards.js';
-import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
+import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
 
 export const GUIDE_GROUPS = [
@@ -390,7 +390,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
-      `You carry up to ${weaponSlots()} weapons. The crab starts with ${STARTING_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(' and ')}. Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
+      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the crab's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
       `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
       `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',

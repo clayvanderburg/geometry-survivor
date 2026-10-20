@@ -361,6 +361,21 @@
       </div>
     </div>
 
+    <!-- Starting weapon: pops up after LAUNCH / RESTART (Game.openStartPick); cards built from
+         START_WEAPON_CHOICES in js/loadout.js -->
+    <div id="start-pick-modal" class="modal-overlay guide-overlay start-pick-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="start-pick-title">
+      <div class="modal-card start-pick-card">
+        <span class="glitch-subtitle">LOADOUT // PRE-LAUNCH</span>
+        <h2 id="start-pick-title" class="start-pick-title">CHOOSE YOUR STARTING WEAPON</h2>
+        <p class="start-pick-sub">More weapons join through <b>NEW WEAPON</b> cards as you level up.</p>
+        <div id="start-pick-options" class="upgrade-choices-grid cards-4"></div>
+        <div class="start-pick-foot">
+          <button id="btn-start-pick-back" class="neon-btn">◀ BACK</button>
+          <span class="start-pick-hint">[1-4] or click to launch · ←/→ + [ENTER] · [ESC] back · Controller: D-Pad + A, B back</span>
+        </div>
+      </div>
+    </div>
+
     <!-- In-Game Slide-Over Live Tuner & Sandbox Drawer -->
     <div id="tuner-drawer" class="tuner-drawer hidden">
       <div class="tuner-drawer-header">
