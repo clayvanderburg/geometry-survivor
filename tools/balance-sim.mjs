@@ -297,6 +297,26 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       const a = ttk[`${t}|${b}`];
       return a ? `${histMedian(a.hist).toFixed(2)}s / ${(a.hits / a.n).toFixed(1)} / ${pct(a.oneHit / a.n)} (${a.n})` : '—';
     })])));
+    // Enemies per hit: how many enemies an area hit (blast, burst, pool tick), a damage tick of a
+    // sweeping/aura weapon, or an Autocannon bolt (pierce) actually reaches. Area weapons' DPS targets
+    // are per target, so this is the multiplier between per-target and realized DPS.
+    const hc = {};
+    for (const r of runs) for (const [k, v] of Object.entries(r.hitCounts || {})) {
+      const a = hc[k] || (hc[k] = { events: 0, enemies: 0, hist: {} });
+      a.events += v.events;
+      a.enemies += v.enemies;
+      for (const [b, c] of Object.entries(v.hist)) a.hist[b] = (a.hist[b] || 0) + c;
+    }
+    const hcRows = Object.entries(hc).filter(([, a]) => a.events >= 50).sort((x, y) => y[1].events - x[1].events);
+    if (hcRows.length) {
+      out.push('\n## Enemies per hit (area: per blast/burst/pool tick; tick: per damage tick of a sweep or aura; bolt: Autocannon enemies per bolt, pierce)');
+      out.push(table(['hit', 'events', 'enemies / event', 'enemies / event that hit', 'hit nothing', '1', '2', '3-4', '5+'], hcRows.map(([k, a]) => {
+        const h = (b) => a.hist[b] || 0;
+        const hitting = a.events - h(0);
+        const share = (n) => pct(n / a.events);
+        return [k, a.events, (a.enemies / a.events).toFixed(2), hitting ? (a.enemies / hitting).toFixed(2) : '—', share(h(0)), share(h(1)), share(h(2)), share(h(3) + h(4)), share([5, 6, 7, 8, 9, 10].reduce((s, b) => s + h(b), 0))];
+      })));
+    }
     // Weapon balance from the game's own run stats (js/run-stats.js), the same numbers stats.html shows.
     const summary = statsSummary(opts, runs);
     const curve = summary.weapons.filter(w => w.curve);

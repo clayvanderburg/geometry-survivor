@@ -120,6 +120,40 @@ function installInstrumentation(game, metrics) {
   let hitDepth = 0;
   let pendingContact = null;
 
+  // Enemies per hit: each damageEnemiesInRadius call is one area hit (blast, burst, pool tick);
+  // other hits are grouped per source per tick (a sprayer's sweep or a gas tick hits many at once).
+  const areaStack = [];
+  let tickSrc = new Map(), tickAt = -1;
+  const flushTick = () => { for (const [src, set] of tickSrc) metrics.multiHit(`tick:${src}`, set.size); tickSrc = new Map(); };
+  const tickHit = (src, e) => {
+    if (game.elapsedTime !== tickAt) { flushTick(); tickAt = game.elapsedTime; }
+    let set = tickSrc.get(src);
+    if (!set) tickSrc.set(src, set = new Set());
+    set.add(e);
+  };
+  game.damageEnemiesInRadius = function (cx, cy, radius, dmg, hue, source = 'other', knock, edgeFalloff, stat = source) {
+    const hit = new Set();
+    areaStack.push(hit);
+    try { return proto.damageEnemiesInRadius.call(this, cx, cy, radius, dmg, hue, source, knock, edgeFalloff, stat); } finally {
+      areaStack.pop();
+      const key = attribute(source);
+      metrics.multiHit(`area:${key === 'other' && stat && stat !== 'other' ? stat : key}`, hit.size);
+    }
+  };
+  // Autocannon pierce: enemies each bolt hit by the time it leaves play (bolts that hit nothing are misses).
+  game.updateBullets = function (dt) {
+    const before = this.bullets;
+    const r = proto.updateBullets.call(this, dt);
+    const alive = new Set(this.bullets);
+    for (const b of before) {
+      if (alive.has(b) || (b.source ?? 'blaster') !== 'blaster' || b.kind) continue;
+      const n = b.hitEnemies?.size || 0;
+      metrics.multiHit('bolt:blaster', n);
+      metrics.multiHit(`bolt:blaster pierce ${Math.max(0, b.pierce) + n}`, n); // pierce is spent one per enemy hit
+    }
+    return r;
+  };
+
   const attribute = (source) => {
     const ctx = ctxStack.length ? ctxStack[ctxStack.length - 1] : null;
     if (ctx === 'blackhole_burst') return 'vortex_burst';
@@ -137,6 +171,8 @@ function installInstrumentation(game, metrics) {
     e.hitsTaken = (e.hitsTaken || 0) + 1;
     hitDepth++;
     e.lastHitSource = src;
+    if (areaStack.length) areaStack[areaStack.length - 1].add(e);
+    else tickHit(src, e);
     try {
       proto.hitEnemy.call(this, e, dmg, source, kx, ky, flash, stat);
     } finally {
@@ -301,6 +337,14 @@ export function createMetrics() {
     thinHandAt: null, // { time, level } of the first hand with fewer than 3 cards
     slotsFullAt: null, // { time, level } when every weapon slot was filled
     breakthroughs: [], // { weapon, level, kind, time } for every Breakthrough taken
+    hitCounts: {},    // `area:<src>` | `tick:<src>` | `bolt:blaster` -> { events, enemies, hist }
+    multiHit(key, n) {
+      const h = m.hitCounts[key] || (m.hitCounts[key] = { events: 0, enemies: 0, hist: {} });
+      h.events++;
+      h.enemies += n;
+      const bin = Math.min(n, 10);
+      h.hist[bin] = (h.hist[bin] || 0) + 1;
+    },
     damage(src, eff, raw) {
       m.dealt[src] = (m.dealt[src] || 0) + eff;
       m.dealtRaw[src] = (m.dealtRaw[src] || 0) + raw;
@@ -656,6 +700,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       thinHandAt: metrics.thinHandAt,
       slotsFullAt: metrics.slotsFullAt,
       breakthroughs: metrics.breakthroughs,
+      hitCounts: metrics.hitCounts,
       startWeapon: strategy.startWeapon ?? null,
       enemiesAt,
       dealt: metrics.dealt,
