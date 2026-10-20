@@ -55,6 +55,14 @@ function eliteGrindText() {
   if (!(eliteMiningDps() > 0)) return '';
   return ` It grinds through asteroids at ${eliteGrindSpeed()}, unaffected by your drill upgrades, instead of going round, and the broken rock drops its ore for you.`;
 }
+// The late HP stage (enemies.js lateHpScaleAt): how fast HP compounds once it is fully in.
+function lateHpText() {
+  const late = TUNING.waveHpLateGrowth ?? 1;
+  if (late === 1) return '';
+  const rate = ((TUNING.waveHpGrowth ?? 1.09) * late - 1) * 100;
+  return `, ${late < 1 ? 'easing' : 'rising'} to ${rate.toFixed(1).replace(/\.0$/, '')}% per wave from wave ${TUNING.waveHpLateFrom ?? 30}`;
+}
+
 // The shared boss RAM (js/boss-ram.js), for bosses whose def carries a ram config.
 function ramText(id, note = '') {
   const ram = BOSS_DEFS[id]?.ram;
@@ -389,7 +397,7 @@ export const MECHANIC_ENTRIES = [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
       `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
       `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
-      `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
+      `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}${lateHpText()}.`
     ]
   },
   {
