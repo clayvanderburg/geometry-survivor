@@ -136,6 +136,7 @@ export function particleDensity(enemyCount = 0) {
 // --- Burst presets ----------------------------------------------------------------------------
 // burst(fx, name, x, y, opts): fx = { particles, grid } (either may be missing). opts.hue overrides
 // the preset colour, opts.scale sizes it. Every call is a handful of pooled particle spawns.
+let lastPickupGlint = -Infinity;
 export const BURSTS = Object.freeze({
   // The ship levels up: a bright bloom, two rings and a sparkle of embers.
   levelUp(fx, x, y, { hue = 145, scale = 1 } = {}) {
@@ -161,7 +162,12 @@ export const BURSTS = Object.freeze({
   },
   // An XP geom lands: a tiny glint (cheap enough for a big hoover).
   pickup(fx, x, y, { hue = 150, scale = 1 } = {}) {
-    fx.particles?.spawnFlash?.(x, y, 14 * scale, hue, 0.1);
+    if ((fx.particles?.density ?? 1) < 0.8) return; // dense waves / REDUCE EFFECTS: skip the glints
+    // At most one glint per 70 ms, so hoovering a big cluster doesn't white out the ship.
+    const now = globalThis.performance?.now?.() ?? Date.now();
+    if (now - lastPickupGlint < 70) return;
+    lastPickupGlint = now;
+    fx.particles?.spawnFlash?.(x, y, 11 * scale, hue, 0.09);
   },
   // Gold: a warm glint with a couple of sparks.
   gold(fx, x, y, { hue = 48, scale = 1 } = {}) {
@@ -173,6 +179,18 @@ export const BURSTS = Object.freeze({
     fx.particles?.spawnFlash?.(x, y, 46 * scale, hue, 0.3);
     fx.particles?.spawnShockwave?.(x, y, 60 * scale, hue, 2.5, 0.4);
     fx.particles?.spawnExplosionSparks?.(x, y, 10, hue, 1, 6, 2.2);
+  },
+  // The shield takes a hit: short arcs crackle around its rim (opts.r = shield radius).
+  shieldCrackle(fx, x, y, { hue = 190, scale = 1, r = 26 } = {}) {
+    const arcs = Math.max(2, Math.round(3 * scale));
+    for (let i = 0; i < arcs; i++) {
+      const a = Math.random() * Math.PI * 2, span = 0.7 + Math.random() * 0.6;
+      fx.particles?.spawnLightning?.(x + Math.cos(a) * r, y + Math.sin(a) * r, x + Math.cos(a + span) * r, y + Math.sin(a + span) * r, hue, 1.2, 0.16, 0);
+    }
+  },
+  // Dash take-off: a fan of speed streaks thrown out behind the ship (opts.angle = travel direction).
+  dash(fx, x, y, { hue = 188, scale = 1, angle = 0 } = {}) {
+    fx.particles?.spawnDirectionalSparks?.(x, y, angle + Math.PI, 0.55, Math.round(14 * scale), hue, 13);
   },
   // A ring sized to whatever popped (radius r).
   pop(fx, x, y, { hue = 190, scale = 1, r = 12 } = {}) {
