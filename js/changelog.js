@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-20',
     title: 'Opening Salvo',
     notes: [
-      { type: 'balance', text: 'Swarm Missiles fire 30% faster (every 1.1 s, was 1.44 s). As your starting weapon they also hit 15% harder; picked up later, they hit lighter to match.' },
+      { type: 'balance', text: 'Swarm Missiles fire 30% faster (a salvo every 1.1 s, was 1.44 s) with the same damage per missile: +30% damage output.' },
       { type: 'balance', text: 'Rocket Pods fire a volley every 0.5 s (was 0.65 s) and deal 50% more damage, on par with the Autocannon.' },
       { type: 'balance', text: 'Aegis Orbit Blades spin on a 50% wider ring, 30% faster, so they meet enemies before they reach your hull. The Counter-Rotating Ring sits a little closer to match.' }
     ]

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // POWER card adds the same damage output on every weapon, so weapons built for damage stay equal.
 // UTILITY cards (size, radius, reach, pull...) add none. Difficulty of use is tuned separately.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, STARTER_TRIM, trimOf, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
 const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
 // Weapons whose damage depends on something other than attacking: shards need kills, the dash nova
@@ -14,8 +14,8 @@ const CONDITIONAL = new Set(['shrapnel', 'thrusters']);
 const IDS = Object.keys(STAT_CARDS);
 const near = (a, b, tol = 1e-6) => Math.abs(a / b - 1) < tol;
 const lv1 = (id) => POTENTIAL_DPS[id](levelBuild(id, 1));
-// LV 1 potential after a weapon's deliberate LV1_TRIM (1 for weapons on the shared curve).
-const lv1Target = (id) => DPS_TARGET(1) * (LV1_TRIM[id] ?? 1);
+// LV 1 potential after a weapon's deliberate LV1_TRIM and FIRE_RATE_TRIM (1 for weapons on the shared curve).
+const lv1Target = (id) => DPS_TARGET(1) * (LV1_TRIM[id] ?? 1) * (FIRE_RATE_TRIM[id] ?? 1);
 
 test('every weapon is on the shared DPS curve', () => {
   const weapons = h.classifyUpgrades().filter((c) => c.isWeapon && !c.isSynergy && !CONDITIONAL.has(c.id));
@@ -24,19 +24,14 @@ test('every weapon is on the shared DPS curve', () => {
   for (const id of IDS) assert.ok(POTENTIAL_DPS[id], `${id} needs a POTENTIAL_DPS entry`);
 });
 
-test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM)', () => {
+test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM and FIRE_RATE_TRIM)', () => {
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.5 (x0.75 as the run-start pick), Rocket Pods x1.5', () => {
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.5 damage and x1.3 fire rate, Rocket Pods x1.5', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
   assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.5, rockets: 1.5 });
-  assert.deepEqual({ ...STARTER_TRIM }, { missiles: 0.75 });
-  const start = (id, lv, ranks) => ({ ...makeBuild(id, lv, ranks), starter: true });
-  for (const [lv, ranks] of [[1, {}], [8, { damage: 4, reload: 3 }]]) {
-    assert.ok(near(POTENTIAL_DPS.missiles(start('missiles', lv, ranks)) / POTENTIAL_DPS.missiles(makeBuild('missiles', lv, ranks)), 1.5), `a missile start keeps x1.5 at LV ${lv}`);
-    assert.equal(trimOf(start('rockets', lv, ranks)), 1.5, 'no starter bonus for Rocket Pods: their trim already covers it');
-  }
+  assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
   assert.equal(damageGrowth('rockets'), DAMAGE_GROWTH);
@@ -164,9 +159,8 @@ test('piercing bolts hit the first enemy for full damage and each one behind for
 // model's own terms (splash, overkill), so their LV1_TRIM is set from the card benches, not from POTENTIAL_DPS.
 test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder, Orbit Blades +50% ring / +30% spin', () => {
   const b = (id) => levelBuild(id, 1);
-  assert.ok(near(1.44 / W.missileCooldown(b('missiles')), 1.3, 0.02), 'missiles fire ~30% faster than the 1.44 s of v0.42');
-  assert.ok(near(lv1('missiles'), 0.5 * DPS_TARGET(1)), 'missiles taken mid-run keep their DPS: lighter missiles, ~30% more often');
-  assert.ok(near(POTENTIAL_DPS.missiles({ ...b('missiles'), starter: true }), 0.75 * DPS_TARGET(1)), 'a missile start: x1.5 (faster and ~15% heavier missiles than v0.42)');
+  assert.ok(near(1.44 / W.missileCooldown(b('missiles')), 1.3), 'missiles fire 30% faster than the 1.44 s of v0.42');
+  assert.ok(near(W.missileDamageMult(b('missiles')), 0.5 * DPS_TARGET(1) * 1.44 / 2), 'same missile damage as v0.42, so +30% DPS');
   assert.ok(lv1('rockets') >= lv1('blaster') * 1.25, 'Rocket Pods out-potential the Autocannon at LV 1 (their hits splash, overkill or miss)');
   assert.equal(W.orbitalRadius(b('orbitals')), 155); // 103 * 1.5
   assert.ok(near(W.orbitalSpin(b('orbitals')), 4.85 * 1.3, 0.01));
@@ -181,7 +175,7 @@ test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder
 
 test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and drones; wide mines', () => {
   const b = (id) => levelBuild(id, 1);
-  assert.equal(W.missileCooldown(b('missiles')), 1.1);
+  assert.ok(near(W.missileCooldown(b('missiles')), 1.44 / 1.3));
   assert.ok(Math.abs(W.turretFireRate(b('turret')) - 6.1) < 1e-9);
   assert.ok(Math.abs(W.droneFireRate(b('drones')) - 7.6) < 1e-9);
   assert.equal(W.mineBlastRadius(b('mines')), 120);

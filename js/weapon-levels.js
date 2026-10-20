@@ -405,9 +405,7 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
 // Build of an owned weapon. `levelKey` is the player.weapons key holding its level (loadout.js).
 export function weaponBuild(p, id, lv = null) {
   const level = lv ?? (id === 'blaster' ? Math.max(1, p.weapons?.blaster || 0) : (p.weapons?.[id] || 0));
-  const b = makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id));
-  if (p.startWeapon === id) b.starter = true; // the run-start pick (STARTER_TRIM in weapon-scaling.js)
-  return b;
+  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id));
 }
 
 // A weapon at a level with no stat ranks and no Breakthroughs (Storm Protocol's fixed chain level).

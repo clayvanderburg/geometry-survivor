@@ -443,7 +443,6 @@ export class Game {
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapon(s) at LV 1.
     snapshotBase(this.player);
     for (const id of START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS) acquireWeapon(this.player, id);
-    this.player.startWeapon = START_WEAPON_CHOICES.includes(startWeapon) ? startWeapon : null;
     this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
