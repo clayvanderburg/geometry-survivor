@@ -583,7 +583,7 @@ export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true }) {
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true, kite = 1 }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank, mode });
     const metrics = createMetrics();
@@ -593,7 +593,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       if (rock.oreType === 'gold_vein') metrics.goldVeins++;
       return shatter.call(this, rock);
     };
-    const pilot = { mineBias: 0, ...(strategy.pilot || {}) };
+    const pilot = { mineBias: 0, kite, ...(strategy.pilot || {}) };
     const botState = { orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTimer: 0 };
     const latency = PILOT_SKILLS[skill] ?? (Math.max(1, Math.round(Number(skill))) || 1);
     if (anticipate) botState.lead = latency - 1;
