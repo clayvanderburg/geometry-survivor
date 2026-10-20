@@ -171,7 +171,7 @@ test('bruisers shrug off knockback and survive ramming the ship; swarmers still 
   game.update(1 / 60);
   assert.ok(manager.enemies.includes(ram), 'a sturdy bruiser bounces off instead of dying on contact');
   assert.ok(game.player.hp < 100);
-  assert.ok(Math.abs(100 - game.player.hp - 18 * 1.5 * damageRampAt(game.wave)) < 1e-9, 'bruiser contact hits 1.5x harder');
+  assert.ok(Math.abs(100 - game.player.hp - TUNING.contactDamage * 1.5 * damageRampAt(game.wave)) < 1e-9, 'bruiser contact hits 1.5x harder');
 });
 
 test('gunner holds its range band and fires a slow orb only after a visible aim', () => {

@@ -59,12 +59,15 @@ export function pickWavePack(wave, rand = Math.random) {
 // Waves since a pack's lead type unlocked (pack sizes of late-joining types grow from their debut).
 const since = (type, wave, legacy) => Math.max(0, wave - (legacy ? (LEGACY_UNLOCK[type] ?? 1) : unlockWaveOf(type)));
 
+// Extra members a capped pack gains per wave past packLateFrom (late-campaign density).
+const latePack = (wave, perWave) => Math.floor(Math.max(0, wave - (TUNING.packLateFrom ?? 25)) * (perWave ?? 0));
+
 // Members of a pack as [type, count] pairs; Game.spawnWavePack lays them out. `legacy` sizes packs
 // by the pre-campaign unlock waves (for the HP budget).
 export function packRoster(id, wave, legacy = false) {
   const s = (type) => since(type, wave, legacy);
   switch (id) {
-    case 'swarm': return [['swarmer', packSize(Math.min(TUNING.swarmPackMax ?? 34, 12 + wave * (TUNING.swarmPackPerWave ?? 2)))]];
+    case 'swarm': return [['swarmer', packSize(Math.min((TUNING.swarmPackMax ?? 34) + latePack(wave, TUNING.swarmPackLatePerWave), 12 + wave * (TUNING.swarmPackPerWave ?? 2)))]];
     case 'skirmish': {
       const n = packSize(Math.min(TUNING.skirmishPackMax ?? 99, 3 + Math.floor(wave * (TUNING.skirmishPackPerWave ?? 0.6))));
       return [['pinwheel', Math.ceil(n / 2)], ['weaver', Math.floor(n / 2)]];
@@ -92,7 +95,7 @@ export function packRoster(id, wave, legacy = false) {
     // A small colony; each cell counts double for the HP budget (they grow and split if left alone).
     case 'mitosis': return [['mitosis', Math.min(6, 3 + Math.floor(s('mitosis') / 6)) * 2]];
     case 'gate': return [['gate', Math.min(4, 2 + Math.floor(s('gate') / 6))]];
-    case 'blinker': return [['blinker', packSize(Math.min(7, 3 + Math.floor(s('blinker') / 3)))]];
+    case 'blinker': return [['blinker', packSize(Math.min(7 + latePack(wave, TUNING.blinkerPackLatePerWave), 3 + Math.floor(s('blinker') / 3)))]];
     // A repulsor shielding a skirmish line.
     case 'repulsor': return [['repulsor', 1], ['pinwheel', 2], ['weaver', 2]];
     case 'lancer': return [['lancer', Math.min(4, 2 + Math.floor(s('lancer') / 6))]];

@@ -59,7 +59,7 @@ import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.
 import { statsSkipReason } from './stats-rules.js';
 import { wellPullScale, singularityPullScale, playerPullCap, playerPullShare, SHIP_THRUST_PER_TICK } from './gravity.js';
 import {
-  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, lieutenantTypes
+  ARCHETYPE_INFO, ARCHETYPE_DEATH_TIER, damageTakenMult as armorTakenMult, shieldBlocks, bounceFromShip, blockShip, lieutenantTypes
 } from './archetypes.js';
 import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD_TIME } from './lieutenants.js';
 import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
@@ -5455,8 +5455,10 @@ export class Game {
       }
       // Contact uses the same hull-hugging outline the shield draws.
       if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
-        if (p.invuln <= 0) {
+        if (p.invuln > 0) blockShip(p, e);
+        else {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
+          blockShip(p, e, true);
 
           // Sturdy hulls (Bruisers, Lieutenants) bounce off; everything else but bosses pops on impact.
           if (e.sturdy) bounceFromShip(e, p.x, p.y);
