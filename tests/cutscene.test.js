@@ -92,7 +92,8 @@ test('the opening scene: a valid script, about 30–45 s, the full cast, a warp-
   const t = estimateDuration(OPENING_SCENE);
   assert.ok(t >= 30 && t <= 45, `opening runs ${t.toFixed(1)} s`);
   const lines = OPENING_SCENE.steps.filter((s) => s.do === 'say');
-  assert.deepEqual([...new Set(lines.map((s) => s.who))].sort(), Object.keys(CAST).sort());
+  assert.deepEqual([...new Set(lines.map((s) => s.who))].sort(), ['dispatch', 'miner', 'vex']);
+  for (const s of lines) assert.ok(CAST[s.who], s.who);
   assert.equal(lines.at(-1).who, 'miner');
   for (const s of lines) assert.ok(s.text.length <= 90, `keep lines punchy: "${s.text}"`);
   const kinds = OPENING_SCENE.steps.map((s) => s.do);

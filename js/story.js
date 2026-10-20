@@ -12,7 +12,8 @@ import { registerStoryPortraits } from './portraits.js';
 export const INTRO_SEEN_KEY = 'vexolith_intro_seen';
 
 // The hero: JACK HAMMER, the campaign's working name (docs/SECTORS_DESIGN.md). Alternatives for Clay:
-// REX ROCKWELL, DUKE MAVERICK. Dispatch is DEE REYES; the VEX never speak our language.
+// REX ROCKWELL, DUKE MAVERICK. Dispatch is DEE REYES; DR. PIXIE runs R&D (js/pixie.js); the VEX never
+// speak our language.
 export const MINER_NAME = 'JACK HAMMER';
 export const MINER_TAG = 'JACK';
 export const MINER_FIRST = 'Jack';
@@ -21,6 +22,7 @@ export const MINER_FIRST = 'Jack';
 export const CAST = Object.freeze({
   miner: { name: MINER_TAG, color: '#ffb347', portrait: 'miner', voice: { wave: 'square', freq: 165, jitter: 0.14, vol: 0.05, dur: 0.05 } },
   dispatch: { name: 'DEE // ASTRA DISPATCH', color: '#00f3ff', portrait: 'dispatch', voice: { wave: 'triangle', freq: 640, jitter: 0.06, vol: 0.07, dur: 0.035 } },
+  pixie: { name: 'DR. PIXIE // ASTRA R&D', color: '#62ffb5', portrait: 'pixie', voice: { wave: 'triangle', freq: 900, jitter: 0.28, vol: 0.05, dur: 0.035 } },
   vex: { name: 'VEX SIGNAL', color: '#ff2bd6', portrait: 'vex', voice: { wave: 'sawtooth', freq: 92, jitter: 0.04, vol: 0.06, dur: 0.075, glide: 0.6 } }
 });
 

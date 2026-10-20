@@ -2224,6 +2224,15 @@ export class SoundEngine {
     osc.stop(t + dur + 0.02);
   }
 
+  // Dr. Pixie's EUREKA: a bright rising major arpeggio with a bell on top and a little sparkle tail.
+  playEureka() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    [1046.5, 1318.5, 1568, 2093].forEach((f, i) => this.tone(f, 0.06 + i * 0.055, 0.22 + (i === 3 ? 0.35 : 0), 0.07, 'triangle'));
+    this.tone(2093, 0.28, 0.6, 0.035, 'sine', 2637);
+    this.tone(523.25, 0.06, 0.3, 0.05, 'square', 1046.5);
+    this.sparkle(0.32, 5);
+  }
+
   // Warp-in sting: a dissonant brass stab (D minor over an E-flat) on a sub drop and a rising rift tear.
   playWarpSting() {
     if (!this.enabled || !this.ctx || !this.sfxGain) return;

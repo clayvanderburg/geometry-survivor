@@ -74,11 +74,15 @@ export function mouthFrame(t, typing) {
   return k === 0 ? 0 : k === 2 ? 2 : 1;
 }
 
-// DOM controller for #dialogue-box. One line at a time: show(line) types it out; advance() completes the
+// DOM controller for #dialogue-box (or another box: `ids` names its root, name, text and portrait
+// elements, as the radio box does). One line at a time: show(line) types it out; advance() completes the
 // typing, or (once complete) reports the line as read. `sound` is the SoundEngine (blips).
+export const DIALOGUE_IDS = Object.freeze({ root: 'dialogue-box', name: 'dialogue-name', text: 'dialogue-text', portrait: 'dialogue-portrait' });
+
 export class DialogueBox {
-  constructor({ sound = null, cps = TYPE_CPS } = {}) {
+  constructor({ sound = null, cps = TYPE_CPS, ids = DIALOGUE_IDS } = {}) {
     this.sound = sound;
+    this.ids = ids;
     this.cps = cps;
     this.root = null;
     this.line = null;
@@ -91,11 +95,11 @@ export class DialogueBox {
   bind() {
     if (this.root) return true;
     const doc = globalThis.document;
-    this.root = doc?.getElementById('dialogue-box') || null;
+    this.root = doc?.getElementById(this.ids.root) || null;
     if (!this.root) return false;
-    this.nameEl = doc.getElementById('dialogue-name');
-    this.textEl = doc.getElementById('dialogue-text');
-    this.canvas = doc.getElementById('dialogue-portrait');
+    this.nameEl = doc.getElementById(this.ids.name);
+    this.textEl = doc.getElementById(this.ids.text);
+    this.canvas = doc.getElementById(this.ids.portrait);
     this.ctx = this.canvas?.getContext?.('2d') || null;
     if (this.canvas) this.canvas.width = this.canvas.height = PORTRAIT_SIZE;
     return true;
@@ -116,7 +120,9 @@ export class DialogueBox {
     this.root.dataset.speaker = line.who || '';
     if (this.nameEl) this.nameEl.textContent = line.name || sp?.name || '';
     if (this.textEl) this.textEl.textContent = '';
-    this.root.classList.remove('dialogue-ready');
+    this.root.classList.remove('dialogue-ready', 'dialogue-pop');
+    void this.root.offsetWidth; // restart the pop-in for every new line
+    this.root.classList.add('dialogue-pop');
     this.drawPortrait();
   }
 
