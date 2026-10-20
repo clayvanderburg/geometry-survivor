@@ -1,5 +1,5 @@
 // stats.html: the developer balance dashboard. Two dataset slots (A, B), each either the live
-// aggregate from GET /api/stats/summary?version=<v>|all or a local JSON file:
+// aggregate from GET /api/stats/summary?version=<v>|all[&armory=<tier>] or a local JSON file:
 //   - a summary (`tools/balance-sim.mjs --stats-out`, or a saved /api/stats/summary answer),
 //   - an array of run summaries, or `balance-sim --json` output (aggregated here with the same code).
 // Vanilla JS + inline SVG, no dependencies. Nothing here is reachable from the game's menus.
@@ -69,9 +69,13 @@ function setStatus(slot, text, err = false) {
   el.classList.toggle('err', err);
 }
 
+const ARMORY_LABELS = { none: 'no Armory', partial: 'partial Armory', maxed: 'maxed Armory', unknown: 'Armory not recorded' };
+const armoryOf = (slot) => document.querySelector(`[data-slot="${slot}"] [data-armory]`)?.value || '';
+
 async function loadLive(slot, version) {
+  const armory = armoryOf(slot);
   setStatus(slot, `Loading players · ${version}…`);
-  const res = await requestJson(globalThis.fetch?.bind(globalThis), `${SUMMARY_URL}?version=${encodeURIComponent(version)}`, { timeoutMs: 20000 });
+  const res = await requestJson(globalThis.fetch?.bind(globalThis), `${SUMMARY_URL}?version=${encodeURIComponent(version)}${armory ? `&armory=${encodeURIComponent(armory)}` : ''}`, { timeoutMs: 20000 });
   if (!res.ok) {
     state[slot] = null;
     const why = res.reason === 'http' ? res.data?.error || `HTTP ${res.status}` : res.reason === 'unavailable' ? 'the /api/stats function is not deployed here' : res.reason;
@@ -80,7 +84,7 @@ async function loadLive(slot, version) {
     return;
   }
   state[slot] = res.data;
-  state.label[slot] = `Players · ${version === 'all' ? 'all versions' : `v${version}`}`;
+  state.label[slot] = `Players · ${version === 'all' ? 'all versions' : `v${version}`}${armory ? ` · ${ARMORY_LABELS[armory]}` : ''}`;
   if (!state.versions) fillVersions(res.data);
   setStatus(slot, `${state.label[slot]} · ${res.data.runs} runs${res.data.truncated ? ` (newest ${res.data.scanned} of ${res.data.stored})` : ''} · computed ${new Date(res.data.computedAt || res.data.generatedAt).toLocaleString()}${res.data.cached ? ' (cached)' : ''}`);
   render();
@@ -208,6 +212,7 @@ function overview() {
       ${tile('Wave median', (d) => d.run.wave.median ?? '—')}
       ${tile('Gold earned / spent', (d) => `${num(d.gold.earned)} <small>/ ${num(d.gold.spent)}</small>`)}
       ${tile('Rerolls · locks · banishes / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)}</small>`)}
+      ${tile('Armory: none · partial · maxed · not recorded <small>(runs)</small>', (d) => (d.armoryTiers ? d.armoryTiers.map((t) => t.runs).join(' · ') : '—'))}
     </div></section>`;
 }
 
@@ -343,6 +348,10 @@ function bind() {
       const v = e.target.value;
       if (!v) { state[slot] = null; setStatus(slot, ''); render(); return; }
       loadLive(slot, v);
+    });
+    root.querySelector('[data-armory]')?.addEventListener('change', () => {
+      const v = root.querySelector('[data-version]').value;
+      if (v) loadLive(slot, v);
     });
     root.querySelector('[data-file]').addEventListener('change', (e) => {
       const file = e.target.files?.[0];

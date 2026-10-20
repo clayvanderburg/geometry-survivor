@@ -279,7 +279,8 @@ export class RunStats {
   }
 
   // Ends the run and returns the summary (see js/stats-rules.js for the field list). Idempotent.
-  finish({ time = 0, wave = 1, level = 1, score = 0, kills = 0, died = true, gold = {}, loadout = [] } = {}) {
+  // `armory`: { ranks: { id: rank }, spent } of the Void Armory the run was flown with (omitted: not sent).
+  finish({ time = 0, wave = 1, level = 1, score = 0, kills = 0, died = true, gold = {}, loadout = [], armory = null } = {}) {
     if (this.finished) return this.finished;
     for (const rec of this.groups.values()) this.closeSegment(rec, time);
     const weapons = {};
@@ -323,6 +324,10 @@ export class RunStats {
       cards: pairs(this.cards),
       weaponPicks: pairs(this.weaponPicks)
     };
+    if (armory) {
+      this.finished.armory = Object.fromEntries(Object.entries(armory.ranks || {}).filter(([, r]) => r > 0));
+      this.finished.armorySpent = Math.max(0, Math.round(armory.spent || 0));
+    }
     return this.finished;
   }
 }
