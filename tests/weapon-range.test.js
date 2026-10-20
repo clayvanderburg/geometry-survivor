@@ -138,7 +138,7 @@ test('formations: the right count, a ring round the ship, a line along the aim, 
   const ring = radii('ring', 8);
   assert.ok(ring.every((r) => Math.abs(r - ring[0]) < 1e-6), 'one radius');
   const close = radii('close', 12);
-  assert.ok(close.every((r) => r < 130) && close[0] < ring[0], 'CLOSE sits inside Orbit Blade reach');
+  assert.ok(close.every((r) => r < 130) && close[0] < ring[0], 'CLOSE sits inside the Shock Field and the Orbit Blade ring');
   const line = formationPoints('line', 5, { x: 0, y: 0, angle: Math.PI / 2 });
   assert.ok(line.every((q) => Math.abs(q.x) < 1e-9 && q.y > 0), 'straight ahead along the aim');
   assert.ok(line.every((q, i) => i === 0 || q.y > line[i - 1].y), 'stretching away from the ship');

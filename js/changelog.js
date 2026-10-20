@@ -12,6 +12,32 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.1',
+    date: '2026-10-20',
+    title: 'Stun Arcs Built In',
+    notes: [
+      { type: 'balance', text: "Tesla Arc is always SHOCK: from LV 1 its arcs zap-stun enemies and shock arcs jump between enemies that touch. It's lightning." },
+      { type: 'balance', text: 'Its shock grows stronger at LV 6, 12 and 18. The Tesla Arc element cards (Stun Arcs, Searing Arcs, Cryo Arcs, Nanite Swarm) are gone.' },
+      { type: 'balance', text: 'It counts as a SHOCK weapon for status cards, the Shock Amplifier and Supercritical.' },
+      { type: 'balance', text: 'Escort Drones hit 2.7x as hard and Sentry Turret bolts 4.2x as hard: self-aiming guns now deal about 85% of the Autocannon at the same level.' }
+    ]
+  },
+  {
+    version: '0.43.0',
+    date: '2026-10-20',
+    title: 'Victory, Rifts & Bedrock',
+    notes: [
+      { type: 'new', text: 'VICTORY: beat the wave-50 boss to win the campaign. Then keep going in ENDLESS to push your high score (bosses come in pairs), or end the run there as a win.' },
+      { type: 'balance', text: 'Bosses every 5th wave, majors every 10th (was 3rd/6th), with 20 new wave themes. Bosses left far behind warp back, and the OUROBOROS arrives coiled up.' },
+      { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels through asteroids, bore-charges down a marked lane and spits gravel at you. Rock is no cover from it.' },
+      { type: 'new', text: 'Space-time rifts open about every 40 s (edge arrow + radar ring). Fly in to be flung to the far side of the map; you can\'t be hurt mid-jump.' },
+      { type: 'new', text: 'Asteroids are solid masses that break into chunks as you drill, with short ore seams. Unbreakable violet bedrock forms their cores and walls in the sector.' },
+      { type: 'balance', text: 'Swarm Missiles: +30% fire rate and harder hits (half → 70% damage), about 1.8x the damage. Rocket Pods: a volley every 0.5 s and 50% more damage.' },
+      { type: 'balance', text: 'Aegis Orbit Blades spin on a 50% wider ring, 30% faster, so they meet enemies before they reach your hull.' },
+      { type: 'balance', text: 'Geom Attractor Field: at max level XP gain is 2x (was 3x) and the pickup radius is half what it was (still most of the screen).' }
+    ]
+  },
+  {
     version: '0.42.5',
     date: '2026-10-20',
     title: 'Afterburner Jets',

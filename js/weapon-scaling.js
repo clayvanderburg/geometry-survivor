@@ -33,11 +33,43 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
 export const DAMAGE_GROWTH = 1.42; // Damage card: x1.42 damage per hit per rank (compounding; 1.5 before v0.29, 1.45 before v0.31)
 export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
-// Deliberate departures from the shared curve, set from live player data (stats dashboard, v0.36.1).
-// CARD_STEP_TRIM scales a weapon's Damage-card bonus and fire-rate step per rank (Autocannon 0.8:
-// x1.336 damage and +32% fire rate per rank); LV1_TRIM scales its LV 1 hit damage (Swarm Missiles 0.5).
+// Deliberate departures from the shared curve (README *Weapon levels*). CARD_STEP_TRIM scales a weapon's
+// Damage-card bonus and fire-rate step per rank (Autocannon 0.8: x1.336 damage and +32% fire rate per
+// rank, from live player data in v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
+// offensive weapons are tuned up to the Autocannon's real output (card benches, Clay's runs), since the
+// potential model over-rates splash and burst hits that overkill or miss. Rocket Pods 1.5 (under target in
+// player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
+// far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
+// multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
+// Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.5 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
+const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
+
+// Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
+// as a share of the Autocannon's (the aimed single-target reference). The shared potential curve above is
+// the model the trims are applied to; this is what they aim at, measured in the card bench
+// (tests/weapon-balance.test.js). Automatic single-target weapons give up a little for aiming themselves.
+// Area weapons hit several enemies, so they deal less to each one but about as much in total against a
+// pack (`pack`). Close-range defensive weapons sit lower by design: the last line of defense. Only the
+// `enforced` classes are tested today: the area and defensive numbers wait for the Balance lane's
+// measurement of real enemies hit per blast / pass, so the tests record where those weapons sit instead.
+export const WEAPON_CLASS = Object.freeze({
+  blaster: 'aimed',
+  drones: 'auto', turret: 'auto',
+  rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
+  lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
+  shockfield: 'defensive', orbitals: 'defensive'
+});
+export const CLASS_TARGET = Object.freeze({
+  aimed: Object.freeze({ perTarget: 1, enforced: true }),
+  auto: Object.freeze({ perTarget: 0.85, enforced: true }),
+  area: Object.freeze({ perTarget: [0.6, 0.7], pack: 1, enforced: false }),
+  defensive: Object.freeze({ perTarget: 'below auto', enforced: false })
+});
+const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
@@ -90,7 +122,7 @@ export const WEAPON_SCALING = {
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 0.65 / rateMult(b.r.reload), // 1 s before v0.39.8 (same DPS: each rocket hits a little softer)
+  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload), // 0.65 s before the weapons pass, 1 s before v0.39.8
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 11, // 8.5 before v0.39.8
@@ -110,11 +142,11 @@ export const WEAPON_SCALING = {
   mirvHitShare: 0.85, // three small payloads cover no more ground than one rocket's blast: each valued at this share
   rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
-  wingRocketDamageMult: (b) => lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
+  wingRocketDamageMult: (b) => lv1Trim('rockets') * lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => 1.44 / rateMult(b.r.reload),
+  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload), // 1.44 s before the weapons pass
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
@@ -137,7 +169,7 @@ export const WEAPON_SCALING = {
   nukeRadiusMult: 2.2,
   nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
   missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
-  missileDamageMult: (b) => LV1_TRIM.missiles * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
+  missileDamageMult: (b) => lv1Trim('missiles') * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) * fireRateTrim('missiles') / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
@@ -206,13 +238,16 @@ export const WEAPON_SCALING = {
   // Damage per tick of contact; a pass lasts ORBITAL_REF_CONTACT px of arc, so spin and blade size never
   // change the potential (they sweep more distinct enemies instead).
   orbitalBlades: (b) => 2 + b.r.count,
-  orbitalRadius: (b) => 103 + 10 * b.r.radius,
-  orbitalSpin: (b) => 4.85 * (1 + 0.12 * b.r.spin),
+  // LV 1 ring 155 px at 6.3 rad/s (103 px / 4.85 before the weapons pass: +50% / +30%). Reach and Spin
+  // ranks keep about their old absolute steps (+10 px, +0.47 rad/s), so a maxed ring stays on screen and
+  // its blades never move further per tick than ORBITAL_REF_CONTACT (they cannot skip past a swarmer).
+  orbitalRadius: (b) => 155 + 10 * b.r.radius,
+  orbitalSpin: (b) => 6.3 * (1 + 0.075 * b.r.spin),
   orbitalBladeRadius: (b) => 18 * (1 + 0.15 * (b?.r?.size || 0)),
   // Transforms: Counter-Rotating Ring (a second ring at counterRadiusMult x radius, spinning the other
   // way), Blade Fling (each blade flings a saw disc every flingEvery s), Nova Ring (each blade bursts
   // every novaEvery s). Fling and nova are each worth 22% of the rings' contact damage.
-  counterRadiusMult: 1.45,
+  counterRadiusMult: 1.3, // 1.45 before the weapons pass (the inner ring is wider now)
   flingEvery: 2.5,
   flingShare: 0.22,
   flingSpeed: 9,
@@ -309,7 +344,7 @@ export const WEAPON_SCALING = {
   mortarHitShare: 1.75, // a shell on a pack catches its neighbours too: valued at this share
   turretShotUnits: (b) => W.turretBarrels(b),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretShotUnits(b) * (1 + (b.t12 ? W.mortarShare * W.mortarHitShare : 0)),
-  turretDamageMult: (b) => lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
+  turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, (x) => W.turretShotUnits(x) * (1 + (x.t12 ? W.mortarShare * W.mortarHitShare : 0))),
   mortarDamageMult: (b) => W.mortarShare * W.turretFireRate(b) * W.turretShotUnits(b) * W.mortarEvery * W.turretDamageMult(b),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
@@ -324,7 +359,7 @@ export const WEAPON_SCALING = {
   podShare: 0.22,
   podBlast: 60,
   droneUnits: (b) => W.droneCount(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
-  droneDamageMult: (b) => lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
+  droneDamageMult: (b) => lv1Trim('drones') * lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
   podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
 
   // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------

@@ -10,3 +10,4 @@ Read the rules in [README.md](README.md) (*Versions & patch notes*) before mergi
 - New weapons or Breakthroughs (or ones that now look different) need their clips re-recorded with `npm run weapon-media -- --only <id>` (`tests/weapon-media.test.js`).
 - Run `npm test` before pushing.
 - **Small, low-risk fixes** (UI/CSS tweaks, typos, one-line bugs): open the PR and merge it right away once `npm test` passes. No need to ask first. Anything larger or gameplay-affecting still waits for review.
+- **Void Armory changes always refund Void Cores.** Changing an Armory upgrade's effect or cost bumps its revision in `ARMORY_REVISIONS` (`js/progression.js`); removing one adds it to `RETIRED_UPGRADES`. Add a test.

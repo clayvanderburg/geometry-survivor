@@ -58,6 +58,11 @@ export const DEFAULT_TUNING = {
   rockHpMult: 1.6,
   rockSizeMult: 0.8,
   goldVeinChance: 0.15,
+  bedrockBorder: 1, // the arena edge is a wall of unbreakable bedrock (off: a glowing line)
+  bedrockFormations: 7, // slots for random bedrock clumps (blobs, ridges, branching arms) in the sector...
+  bedrockFormationChance: 0.7, // ...each filled with this chance (about 5 per sector)
+  bedrockWrapChance: 0.85, // chance a clump is wrapped in a mineable asteroid (its hard core, showing through)
+  rockDebris: 40, // small groups (2-6 nodes) and single nodes scattered between the asteroids
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -94,6 +99,18 @@ export const DEFAULT_TUNING = {
   singularityPullFalloff: 3,
   singularityCollapseEdgeFalloff: 0.75,
 
+  // 6a. Space-Time Rifts (js/rifts.js): now and then a rift tears open near the ship. Fly into it and
+  // it flings you to a random spot on the far side of the map, then seals behind you.
+  riftsEnabled: 1,
+  riftFirstDelay: 30, // s into a run before the first rift can open
+  riftIntervalMin: 25, // s between rifts (from one closing to the next opening), random in [min, max]
+  riftIntervalMax: 45,
+  riftOpenTime: 9, // s a rift stays open before it seals
+  riftRadius: 46, // px: the aperture (the ship goes through when its centre crosses ~70% of this)
+  riftSpawnMin: 360, // px from the ship a rift opens at
+  riftSpawnMax: 640,
+  riftExitInvuln: 1.0, // s of invulnerability after coming out the far side
+
   // 6b. Spawn Placement & Pursuit (where enemies appear and how they close in; not how many or how tough)
   spawnRingMarginMin: 40,
   spawnRingMarginMax: 160,
@@ -109,6 +126,11 @@ export const DEFAULT_TUNING = {
   bossHitStop: 0.1,
   bossSlowMo: 0.5,
   bossPackRate: 0.7, // packs arrive at this share of their usual rate while a boss wave's boss is up
+  // Leash (js/boss-warp.js): a boss left beyond bossLeashDist for bossLeashTime warps back in near the ship
+  // through a bossWarpTime rift (0 distance: never).
+  bossLeashDist: 1500,
+  bossLeashTime: 2.5,
+  bossWarpTime: 1.2,
 
   // 8. Hit Feedback & Damage Numbers
   knockbackMult: 1.0,
@@ -136,6 +158,7 @@ export const DEFAULT_TUNING = {
   spawnWeightConduit: 7,
   spawnWeightRepulsor: 7,
   spawnWeightLancer: 9,
+  spawnWeightBorer: 10,
   enemyBulletSpeed: 4.2,
   enemyBulletDamage: 12,
   lieutenantHpShare: 0.4,
@@ -156,6 +179,8 @@ export const DEFAULT_TUNING = {
   eliteMiningMult: 1.0,
   bossMiningMult: 4, // bosses grind at this many times the elite rate: they bust right through rock
   serpentMiningMult: 2, // serpent heads mine too (their bodies glide over rock)
+  borerMiningMult: 3, // a borer's drill vs the elite base; boreMiningMult mid-charge (js/borers.js)
+  boreMiningMult: 30,
   bossPortalBlast: 280, // px: rock within this radius of a boss's portal is blown up as it arrives
 
   // 10. Deployables (mines, sentry turrets, escort drones; per-level numbers live in weapon-scaling.js)
@@ -301,6 +326,11 @@ export const TUNING_SCHEMA = [
       { key: 'rockHpMult', label: 'Asteroid Rock HP Mult', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
       { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.4, max: 2.2, step: 0.05, unit: 'x' },
       { key: 'goldVeinChance', label: 'Gold Vein Share of Rocks', type: 'range', min: 0, max: 0.6, step: 0.01, unit: 'prob' },
+      { key: 'bedrockBorder', label: 'Bedrock Arena Wall (Regen Sector)', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'bedrockFormations', label: 'Bedrock Formation Slots (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
+      { key: 'bedrockFormationChance', label: 'Chance Each Bedrock Slot Fills', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'bedrockWrapChance', label: 'Bedrock Buried in an Asteroid', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'rockDebris', label: 'Small Rock Groups & Singles (Regen Sector)', type: 'range', min: 0, max: 150, step: 1, unit: '' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
@@ -343,6 +373,20 @@ export const TUNING_SCHEMA = [
     ]
   },
   {
+    group: '🌌 Space-Time Rifts',
+    items: [
+      { key: 'riftsEnabled', label: 'Space-Time Rifts', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'riftFirstDelay', label: 'First Rift After', type: 'range', min: 0, max: 300, step: 5, unit: 's' },
+      { key: 'riftIntervalMin', label: 'Time Between Rifts (Min)', type: 'range', min: 5, max: 300, step: 5, unit: 's' },
+      { key: 'riftIntervalMax', label: 'Time Between Rifts (Max)', type: 'range', min: 5, max: 400, step: 5, unit: 's' },
+      { key: 'riftOpenTime', label: 'Rift Stays Open For', type: 'range', min: 2, max: 30, step: 0.5, unit: 's' },
+      { key: 'riftRadius', label: 'Rift Aperture Size', type: 'range', min: 20, max: 120, step: 2, unit: 'px' },
+      { key: 'riftSpawnMin', label: 'Rift Opens At Least This Far From Ship', type: 'range', min: 120, max: 1200, step: 20, unit: 'px' },
+      { key: 'riftSpawnMax', label: 'Rift Opens At Most This Far From Ship', type: 'range', min: 160, max: 1600, step: 20, unit: 'px' },
+      { key: 'riftExitInvuln', label: 'Invulnerability After a Jump', type: 'range', min: 0, max: 4, step: 0.1, unit: 's' }
+    ]
+  },
+  {
     group: '📍 Spawn Placement & Pursuit',
     items: [
       { key: 'spawnRingMarginMin', label: 'Spawn Ring: Min Distance Past Screen Edge', type: 'range', min: 0, max: 400, step: 10, unit: 'px' },
@@ -361,7 +405,10 @@ export const TUNING_SCHEMA = [
       { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
       { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
       { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' },
-      { key: 'bossPackRate', label: 'Pack Rate During a Boss Wave\'s Fight', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' }
+      { key: 'bossPackRate', label: 'Pack Rate During a Boss Wave\'s Fight', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'bossLeashDist', label: 'Boss Warps Back When You Are Beyond', type: 'range', min: 0, max: 4000, step: 50, unit: 'px' },
+      { key: 'bossLeashTime', label: 'Boss Warp: Seconds Out of Reach First', type: 'range', min: 0.5, max: 10, step: 0.25, unit: 's' },
+      { key: 'bossWarpTime', label: 'Boss Warp Rift Telegraph', type: 'range', min: 0.3, max: 4, step: 0.1, unit: 's' }
     ]
   },
   {
@@ -379,21 +426,22 @@ export const TUNING_SCHEMA = [
       { key: 'spawnWeightSwarm', label: 'Pack Weight: Boid Swarm', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSkirmish', label: 'Pack Weight: Pinwheels + Weavers', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightSplitter', label: 'Pack Weight: Splitters', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightMayfly', label: 'Pack Weight: Mayfly Cloud (wave 3+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightSerpent', label: 'Pack Weight: Serpents (wave 6+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 9+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightKestrel', label: 'Pack Weight: Kestrel Wings (wave 9+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 12+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightCarrier', label: 'Pack Weight: Carriers (wave 12+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightHulk', label: 'Pack Weight: Hulk (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 18+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightGate', label: 'Pack Weight: Laser Gates (wave 18+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightMitosis', label: 'Pack Weight: Mitosis Colony (wave 21+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 24+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightRepulsor', label: 'Pack Weight: Repulsor + Escort (wave 24+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
-      { key: 'spawnWeightLancer', label: 'Pack Weight: Lancers (wave 27+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightMayfly', label: 'Pack Weight: Mayfly Cloud (wave 5+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBruiser', label: 'Pack Weight: Bruisers (wave 10+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightSerpent', label: 'Pack Weight: Serpents (wave 10+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlinker', label: 'Pack Weight: Blinkers (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightKestrel', label: 'Pack Weight: Kestrel Wings (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGunner', label: 'Pack Weight: Gunners (wave 20+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightCarrier', label: 'Pack Weight: Carriers (wave 20+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBlackhole', label: 'Pack Weight: Vortex (wave 25+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightHulk', label: 'Pack Weight: Hulk (wave 25+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightShielder', label: 'Pack Weight: Shielders (wave 30+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightGate', label: 'Pack Weight: Laser Gates (wave 30+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightMitosis', label: 'Pack Weight: Mitosis Colony (wave 35+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightConduit', label: 'Pack Weight: Conduit + Pack (wave 40+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightRepulsor', label: 'Pack Weight: Repulsor + Escort (wave 40+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightLancer', label: 'Pack Weight: Lancers (wave 45+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightBorer', label: 'Pack Weight: Borers (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
       { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
       { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
@@ -409,6 +457,8 @@ export const TUNING_SCHEMA = [
       { key: 'eliteMiningMult', label: 'Elite Mining Speed (x Base Drill DPS)', type: 'range', min: 0.25, max: 4.0, step: 0.05, unit: 'x' },
       { key: 'bossMiningMult', label: 'Boss Mining Speed (x Elite Rate)', type: 'range', min: 1, max: 12, step: 0.5, unit: 'x' },
       { key: 'serpentMiningMult', label: 'Serpent Head Mining Speed (x Elite Rate)', type: 'range', min: 0, max: 6, step: 0.25, unit: 'x' },
+      { key: 'borerMiningMult', label: 'Borer Drill (× elite mining)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'boreMiningMult', label: 'Borer Bore-Charge Drill (× elite mining)', type: 'range', min: 0, max: 60, step: 1, unit: 'x' },
       { key: 'bossPortalBlast', label: 'Boss Portal Blasts Rock Within', type: 'range', min: 0, max: 600, step: 10, unit: 'px' }
     ]
   },
@@ -462,7 +512,7 @@ export const TUNING_SCHEMA = [
   {
     group: '📈 Difficulty Ramp',
     items: [
-      { key: 'waveLength', label: 'Wave Length (bosses every 3 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
+      { key: 'waveLength', label: 'Wave Length (bosses every 5 waves)', type: 'range', min: 8, max: 90, step: 1, unit: 's' },
       { key: 'waveHpStart', label: 'Enemy HP: Wave 1 Scale (tougher hulls)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
       { key: 'waveHpStartLight', label: 'Enemy HP: Wave 1 Scale (light swarm: swarmers, pinwheels, weavers, fragments)', type: 'range', min: 0.25, max: 6, step: 0.05, unit: 'x' },
       { key: 'waveHpPerWave', label: 'Enemy HP: Linear Growth / Wave', type: 'range', min: 0, max: 1, step: 0.01, unit: 'x' },

@@ -252,7 +252,7 @@ export function applyRangeLoadout(p, config) {
 
 // --- Dummy formations -------------------------------------------------------------------------
 
-// Spawn points around (x, y): RING round the ship, a CLOSE ring inside Orbit Blade reach, a tight PACK
+// Spawn points around (x, y): RING round the ship, a CLOSE ring inside the Shock Field and the Orbit Blade ring, a tight PACK
 // ahead of it, a LINE stretching away along the aim (a pierce test) or a random SCATTER. `angle` is the
 // ship's aim; `bounds` keeps points inside the world.
 export function formationPoints(formation, count, { x, y, angle = 0, bounds = null } = {}, rand = Math.random) {

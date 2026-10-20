@@ -69,12 +69,15 @@ const CLIPS = {
     },
     tick: (g, p) => { g.keys = {}; p.vx = p.vy = 0; if (p.hp > p.maxHp * 0.04) p.invuln = Math.min(p.invuln, 0.35); }
   },
-  // Drilling into an asteroid cluster: plain rock, a gold vein and a green shield vein.
+  // Drilling into a solid asteroid: the edge breaks into loose chunks, a gold seam and a green shield vein.
   mine: {
     frames: 44, every: 4, zoom: 1.35,
     setup: (g, p) => {
       const rocks = g.asteroidManager.asteroids;
-      const pick = rocks.find(r => r.oreType === 'gold_vein' && rocks.some(o => o.oreType === 'shield_vein' && Math.hypot(o.x - r.x, o.y - r.y) < 150))
+      // A gold vein on the asteroid's left edge (open space where the ship starts), shield nearby.
+      const open = (r) => !rocks.some(o => o !== r && Math.hypot(o.x - (r.x - r.radius - 40), o.y - r.y) < o.radius + 30);
+      const pick = rocks.find(r => r.oreType === 'gold_vein' && open(r) && rocks.some(o => o.oreType === 'shield_vein' && Math.hypot(o.x - r.x, o.y - r.y) < 150))
+        || rocks.find(r => r.oreType === 'gold_vein' && open(r))
         || rocks.find(r => r.oreType === 'gold_vein');
       p.x = pick.x - 170;
       p.y = pick.y;
@@ -105,7 +108,7 @@ const CLIPS = {
       g.applyLiveTuning('FORCE_LEVELUP');
     }
   },
-  // The wave-3 Brood Queen warping in next to the ship in open space (the end of its warning, the
+  // The wave-5 Brood Queen warping in next to the ship in open space (the end of its warning, the
   // arrival with her swarmer ring), then closing in while the ship holds its ground and shoots.
   boss: {
     frames: 50, every: 5, zoom: 1.35, warmup: 120, hud: true,
@@ -122,10 +125,10 @@ const CLIPS = {
       p.vx = p.vy = 0;
       g.camX = p.x - g.width / 2;
       g.camY = p.y - g.height / 2;
-      g.wave = 3;
-      g.enemyManager.wave = 3;
+      g.wave = 5;
+      g.enemyManager.wave = 5;
       g.spawnCooldown = 999;
-      g.queueBossEncounter({ x: p.x + 300, y: p.y - 20, onScreen: true }, g.getWaveScale(), { id: 'brood_queen', wave: 3 });
+      g.queueBossEncounter({ x: p.x + 300, y: p.y - 20, onScreen: true }, g.getWaveScale(), { id: 'brood_queen', wave: 5 });
     },
     tick: (g, p) => {
       g.keys = {};
