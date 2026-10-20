@@ -42,9 +42,11 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7, Sentry
-// Turret 4.2 and Glaive Discs 2.9 bring the automatic class to its WEAPON_CLASS target (below).
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, glaive: 2.9 });
+// Turret 4.2 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). Glaive Discs
+// also take the Autocannon's 0.8 card steps, so they track it at every level (kept on target to LV 18 against
+// level-matched HP, not only at LV 3 / 6).
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, glaive: 3.5 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -550,7 +552,7 @@ export const WEAPON_SCALING = {
   // (LV1_TRIM) is set from the card bench like the Drones' and Turret's.
   glaiveCount: (b) => 2 + (b.r.count || 0),
   glaiveBounces: (b) => 4 + (b.r.chain || 0),
-  glaiveCooldown: (b) => 1.2 / rateMult(b.r.rate),
+  glaiveCooldown: (b) => 1.2 / (1 + rateStep('glaive') * (b.r.rate || 0)), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
   glaiveSpeed: (b) => 560 * (1 + 0.12 * (b?.r?.speed || 0)), // px/s at launch
   glaiveSpeedLoss: 0.07,        // share of its speed a disc sheds per bounce
   glaiveMinSpeedShare: 0.4,     // ... and it fades once under this share of its launch speed

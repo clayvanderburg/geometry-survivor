@@ -30,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x4.2, Glaive Discs x2.9', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, glaive: 2.9 });
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x4.2, Glaive Discs x3.5 with Autocannon card steps', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, glaive: 3.5 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -184,7 +184,7 @@ test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder
 // the still-pack and chasing-crowd scenarios over 2 seeds.
 const DAMAGE_BUILD = { blaster: ['blaster_damage', 'firerate'], drones: ['drones_damage', 'drones_rate'], turret: ['turret_damage', 'turret_rate'], glaive: ['glaive_damage', 'glaive_rate'] };
 const SOURCES = { blaster: ['blaster', 'helix'], drones: ['drone'], turret: ['turret', 'siege'], glaive: ['glaive', 'glaive_recall'] };
-function benchDps(id, lv) {
+function benchDps(id, lv, tuning = {}) {
   const [dmg, rate] = DAMAGE_BUILD[id];
   const setup = (p) => {
     if (id !== 'blaster') {
@@ -197,7 +197,7 @@ function benchDps(id, lv) {
   let sum = 0;
   for (const scenario of ['pack', 'chase']) {
     for (let seedIndex = 0; seedIndex < 2; seedIndex++) {
-      const r = h.benchUpgrade({ scenario, seedIndex, setup });
+      const r = h.benchUpgrade({ scenario, seedIndex, setup, tuning });
       sum += SOURCES[id].reduce((a, s) => a + (r.dps[s] || 0), 0);
     }
   }
@@ -221,6 +221,17 @@ test('class-based balance: automatic single-target weapons realize ~85% of the A
       const share = benchDps(id, lv) / ref;
       assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `${id} LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
     }
+  }
+});
+
+// Past ~LV 9 the bench's wave-6 targets die to single hits, so late levels are measured against targets
+// that never die (pure per-target DPS). Glaive Discs grow on the Autocannon's own trimmed card steps
+// (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
+test('class-based balance: Glaive Discs stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
+  const tank = { enemyHpMult: 1e6 };
+  for (const lv of [12, 18]) {
+    const share = benchDps('glaive', lv, tank) / benchDps('blaster', lv, tank);
+    assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `glaive LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
   }
 });
 
