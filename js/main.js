@@ -5918,7 +5918,7 @@ export class Game {
       ctx.fillStyle = color;
       for (let i = 0; i < rocks.length; i++) {
         const r = rocks[i];
-        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0) continue;
+        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0 || r.slab?.border) continue; // the radar frame is the wall
         const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
         ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
       }
@@ -6094,12 +6094,15 @@ export class Game {
     }
     this.grid.draw(ctx, this.camX, this.camY, this.width, this.height);
 
-    // 2. Glowing Outer Sector Boundary Wall
-    ctx.save();
-    ctx.strokeStyle = `rgba(255, 0, 127, ${0.55 + beatPulse * 0.35})`;
-    ctx.lineWidth = 5;
-    ctx.strokeRect(12, 12, this.worldWidth - 24, this.worldHeight - 24);
-    ctx.restore();
+    // 2. Outer Sector Boundary: a bedrock wall (drawn with the asteroids); a glowing line where there is
+    // none (the Weapon Range's empty field, or the bedrock wall switched off).
+    if (!this.asteroidManager.bordered) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 0, 127, ${0.55 + beatPulse * 0.35})`;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(12, 12, this.worldWidth - 24, this.worldHeight - 24);
+      ctx.restore();
+    }
 
     // 3. Draw Destructible Asteroid Clusters & Active Mining Laser Beams
     this.asteroidManager.draw(ctx, this.camX, this.camY, this.width, this.height);

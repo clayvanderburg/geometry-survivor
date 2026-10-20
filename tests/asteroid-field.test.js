@@ -33,7 +33,7 @@ function sectors(n = 4) {
 test('the field has ~2x the old ~465 rocks at ~2/3 the size and no more rock coverage', () => {
   Object.assign(TUNING, DEFAULT_TUNING);
   const fields = sectors();
-  const rocks = fields.flatMap((am) => am.asteroids);
+  const rocks = fields.flatMap((am) => am.asteroids.filter((r) => !r.unbreakable)); // mineable rock (bedrock: tests/bedrock.test.js)
   const count = rocks.length / fields.length;
   const meanR = rocks.reduce((a, r) => a + r.radius, 0) / rocks.length;
   const coverage = rocks.reduce((a, r) => a + Math.PI * r.radius ** 2, 0) / fields.length / 4200 ** 2;
@@ -54,7 +54,8 @@ test('the field has ~2x the old ~465 rocks at ~2/3 the size and no more rock cov
 
 test('spatial queries find every rock near a point and cellsFor tracks the smaller max radius', () => {
   const [am] = sectors(1);
-  assert.ok(am.maxRockRadius < 45);
+  assert.ok(Math.max(...am.asteroids.filter((r) => !r.unbreakable).map((r) => r.radius)) < 45, 'mineable rocks stay small');
+  assert.ok(am.maxRockRadius < 72, 'bedrock collision pieces stay modest too');
   for (const probe of [{ x: 600, y: 900 }, { x: 2100, y: 2100 }, { x: 3900, y: 300 }]) {
     const reach = 60;
     const want = am.asteroids.filter((r) => Math.hypot(r.x - probe.x, r.y - probe.y) - r.radius <= reach);

@@ -103,11 +103,42 @@ test('bedrock never counts toward replenishing, and clusters are never placed on
   reset();
 });
 
-test('the standard sector has no bedrock', () => {
+test('the standard sector is walled in by bedrock and gets a few small formations, clear of the start', () => {
   reset();
+  let formations = 0;
+  const N = 20;
+  for (let i = 0; i < N; i++) {
+    const am = new AsteroidManager(4200, 4200);
+    am.generateSector(2100, 2100);
+    assert.ok(am.bordered, 'walled in');
+    const border = am.slabs.filter((sl) => sl.border);
+    const inner = am.slabs.filter((sl) => !sl.border);
+    formations += inner.length;
+    // The wall hugs every edge: no stretch of edge without a piece near it.
+    for (let t = 0; t <= 4200; t += 60) {
+      for (const [x, y] of [[t, 0], [t, 4200], [0, t], [4200, t]]) {
+        assert.ok(border.some((sl) => sl.pieces.some((r) => Math.hypot(r.x - x, r.y - y) < r.radius)), `gap in the wall at ${x},${y}`);
+      }
+    }
+    // Formations stay modest and keep away from where the ship starts.
+    for (const sl of inner) {
+      assert.ok(sl.maxX - sl.minX < 640 && sl.maxY - sl.minY < 640, 'small formation');
+      for (const r of sl.pieces) assert.ok(Math.hypot(r.x - 2100, r.y - 2100) > 400, 'clear of the start');
+    }
+  }
+  const mean = formations / N;
+  assert.ok(mean > 1.5 && mean < 4.5, `about 3 formations per sector (${mean})`);
+});
+
+test('with the wall switched off the field is open (the game draws a boundary line instead)', () => {
+  reset();
+  TUNING.bedrockBorder = 0;
+  TUNING.bedrockFormations = 0;
   const am = new AsteroidManager(4200, 4200);
   am.generateSector(2100, 2100);
+  assert.equal(am.bordered, false);
   assert.equal(am.asteroids.filter(isBedrock).length, 0);
+  reset();
 });
 
 test('elites plow through plain rock but steer round bedrock', () => {

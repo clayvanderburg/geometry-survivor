@@ -24,8 +24,9 @@ export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer
 // rubble chunks hugging its edge. Under it, invisible overlapping collision circles (`slab` pieces) do
 // the physics, so every rock system (shots, pushout, pathing, spawns) treats it as rock with no changes.
 // Lay it with addBedrockWall (along a polyline) or addBedrockMonolith (one big block), then
-// rebuildSpatialHash(). TUNING.bedrockFormations scatters random formations through the generated sector
-// (0 in the standard sector).
+// rebuildSpatialHash(). The generated sector is walled in by a bedrock border (TUNING.bedrockBorder) and
+// gets a few small random formations: TUNING.bedrockFormations slots, each filled with
+// TUNING.bedrockFormationChance.
 export const BEDROCK_SIZES = Object.freeze({ thin: 26, standard: 40, massive: 58 }); // wall half-thickness, px
 export const BEDROCK_RADIUS = BEDROCK_SIZES.standard;
 export const BEDROCK_SPACING = 0.7; // collision circles along a wall, in half-thicknesses (the edge dips < 6% between them)
@@ -324,8 +325,12 @@ export class AsteroidManager {
     this.drillingRocks = [];
 
     // Bedrock first, so the clusters fill in round it.
-    const formations = Math.max(0, Math.round(TUNING.bedrockFormations ?? 0));
-    for (let f = 0; f < formations; f++) this.spawnBedrockFormation({ x: centerX, y: centerY, radius: 600 });
+    if ((TUNING.bedrockBorder ?? 1) >= 0.5) this.addBedrockBorder();
+    const slots = Math.max(0, Math.round(TUNING.bedrockFormations ?? 0));
+    const chance = TUNING.bedrockFormationChance ?? 1;
+    for (let f = 0; f < slots; f++) {
+      if (Math.random() < chance) this.spawnBedrockFormation({ x: centerX, y: centerY, radius: 600 });
+    }
 
     const clusterCount = Math.round(TUNING.clusterCount ?? 38);
     for (let c = 0; c < clusterCount; c++) {
@@ -475,8 +480,46 @@ export class AsteroidManager {
     }
   }
 
-  // A random bedrock formation somewhere in the arena, kept out of `avoid` ({ x, y, radius }): a straight
-  // wall, a bend or an arc in one of the BEDROCK_SIZES, or a lone monolith. Returns the slab.
+  // The arena wall: rough bedrock segments laid along all four edges, their spines on the edge so only
+  // the inner half shows. Segments vary in thickness and overlap at the joins, so the wall reads as a
+  // run of hewn blocks. Returns the slabs (flagged `border`).
+  addBedrockBorder() {
+    const W = this.worldWidth;
+    const H = this.worldHeight;
+    const slabs = [];
+    const edge = (x0, y0, x1, y1, nx, ny) => {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const ux = (x1 - x0) / len;
+      const uy = (y1 - y0) / len;
+      let d = -40; // start past the corner, so the corners close up
+      while (d < len + 40) {
+        const segLen = 320 + Math.random() * 380;
+        const a = d;
+        const b = Math.min(len + 40, d + segLen);
+        const mid = (a + b) / 2;
+        const bulge = Math.random() * 14; // a slight bow inward breaks up the straight line
+        const width = 36 + Math.random() * 18;
+        const slab = this.addBedrockWall([
+          { x: x0 + ux * a, y: y0 + uy * a },
+          { x: x0 + ux * mid + nx * bulge, y: y0 + uy * mid + ny * bulge },
+          { x: x0 + ux * b, y: y0 + uy * b }
+        ], width);
+        slab.border = true;
+        slabs.push(slab);
+        if (b >= len + 40) break;
+        d = b - (30 + Math.random() * 30); // overlap the next block
+      }
+    };
+    edge(0, 0, W, 0, 0, 1);
+    edge(W, 0, W, H, -1, 0);
+    edge(W, H, 0, H, 0, -1);
+    edge(0, H, 0, 0, 1, 0);
+    return slabs;
+  }
+
+  // A random bedrock formation somewhere in the arena, kept out of `avoid` ({ x, y, radius }): a short
+  // wall, a bend or an arc (mostly thin or standard, now and then massive) or a small monolith. Kept
+  // modest: they shape the field without walling it off. Returns the slab.
   spawnBedrockFormation(avoid = null) {
     const margin = 420;
     let cx = 0;
@@ -487,29 +530,29 @@ export class AsteroidManager {
       if (!avoid || Math.hypot(cx - avoid.x, cy - avoid.y) > avoid.radius + 300) break;
     }
     const kind = Math.floor(Math.random() * 4);
-    if (kind === 3) return this.addBedrockMonolith(cx, cy, 70 + Math.random() * 40);
+    if (kind === 3) return this.addBedrockMonolith(cx, cy, 50 + Math.random() * 35);
     const roll = Math.random();
-    const width = roll < 0.25 ? BEDROCK_SIZES.thin : roll < 0.75 ? BEDROCK_SIZES.standard : BEDROCK_SIZES.massive;
+    const width = roll < 0.4 ? BEDROCK_SIZES.thin : roll < 0.9 ? BEDROCK_SIZES.standard : BEDROCK_SIZES.massive;
     const angle = Math.random() * Math.PI * 2;
     const points = [];
     if (kind === 0) {
       // Straight wall
-      const half = 160 + Math.random() * 220;
+      const half = 90 + Math.random() * 120;
       points.push({ x: cx - Math.cos(angle) * half, y: cy - Math.sin(angle) * half });
       points.push({ x: cx + Math.cos(angle) * half, y: cy + Math.sin(angle) * half });
     } else if (kind === 1) {
       // Bend: two legs meeting at a corner
-      const legA = 200 + Math.random() * 200;
-      const legB = 200 + Math.random() * 200;
+      const legA = 110 + Math.random() * 130;
+      const legB = 110 + Math.random() * 130;
       const turn = angle + (Math.random() < 0.5 ? 1 : -1) * (Math.PI * (0.4 + Math.random() * 0.2));
       points.push({ x: cx + Math.cos(angle) * legA, y: cy + Math.sin(angle) * legA });
       points.push({ x: cx, y: cy });
       points.push({ x: cx + Math.cos(turn) * legB, y: cy + Math.sin(turn) * legB });
     } else {
       // Arc: part of a ring, open on one side
-      const r = 190 + Math.random() * 140;
-      const sweep = Math.PI * (0.55 + Math.random() * 0.6);
-      const steps = 8;
+      const r = 130 + Math.random() * 100;
+      const sweep = Math.PI * (0.45 + Math.random() * 0.45);
+      const steps = 7;
       for (let k = 0; k <= steps; k++) {
         const a = angle - sweep / 2 + (sweep * k) / steps;
         points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
@@ -536,6 +579,8 @@ export class AsteroidManager {
     const veinHp = hpMult * Math.min(1, sizeMult / 1.15);
     const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
     const bedrock = this.asteroids.filter(isBedrock);
+    // Behind a bedrock arena wall, rocks keep the same ship-wide gap from the wall's face.
+    const wallPad = bedrock.some((r) => r.slab?.border) ? 70 : 0;
 
     const placed = [];
     for (let i = 0; i < numRocks; i++) {
@@ -546,7 +591,7 @@ export class AsteroidManager {
 
       const radius = (26 + Math.random() * 22) * sizeMult;
       // Leave a wall gap wide enough for the ship to pass.
-      const edge = Math.max(80, radius + 60);
+      const edge = Math.max(80, radius + 60) + wallPad;
       const x = Math.max(edge, Math.min(this.worldWidth - edge, rx));
       const y = Math.max(edge, Math.min(this.worldHeight - edge, ry));
       if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < radius + avoid.radius) continue;
@@ -648,6 +693,7 @@ export class AsteroidManager {
     const slabs = new Set();
     for (let i = 0; i < this.asteroids.length; i++) if (this.asteroids[i].slab) slabs.add(this.asteroids[i].slab);
     this.slabs = [...slabs];
+    this.bordered = this.slabs.some((sl) => sl.border); // walled in by bedrock (else the game draws a line)
     for (let i = 0; i < this.asteroids.length; i++) {
       const a = this.asteroids[i];
       const gx = Math.floor(a.x / this.cellSize);

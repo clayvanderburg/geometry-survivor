@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.41.0',
+    date: '2026-10-20',
+    title: 'Bedrock',
+    notes: [
+      { type: 'new', text: 'Bedrock: jagged violet slabs of rock that nothing can break, not your drills, elites or bosses. A few small formations turn up in every sector.' },
+      { type: 'new', text: 'The edge of the sector is now a wall of bedrock instead of a glowing red line.' }
+    ]
+  },
+  {
     version: '0.40.0',
     date: '2026-10-20',
     title: 'Space-Time Rifts',

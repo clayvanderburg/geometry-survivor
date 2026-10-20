@@ -17,7 +17,7 @@ test('flying right past a rock behind the ship: the hull keeps facing right, the
   g.spawnWavePack = () => {};
   const am = g.asteroidManager;
   // One rock just behind and above the ship, inside drill reach, nothing else around.
-  const rock = Object.assign(am.asteroids[0], { x: p.x - 34, y: p.y - 30, radius: 18, hp: 1e9, maxHp: 1e9 });
+  const rock = Object.assign(am.asteroids.find((r) => !r.unbreakable), { x: p.x - 34, y: p.y - 30, radius: 18, hp: 1e9, maxHp: 1e9 });
   am.asteroids.length = 0;
   am.asteroids.push(rock);
   am.rebuildSpatialHash();

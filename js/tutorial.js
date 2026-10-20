@@ -15,7 +15,7 @@ import { TUNING } from './config.js';
 
 export const TUTORIAL_SEEN_KEY = 'vexolith_tutorial_seen';
 // The GAME_VERSION major.minor the slides were last checked against (see the rule above).
-export const TUTORIAL_REVIEWED_FOR = '0.40';
+export const TUTORIAL_REVIEWED_FOR = '0.41';
 export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 
 // Lines are plain text with **bold** and [[gold|green|purple:colored]] spans. A line may be an object
@@ -52,7 +52,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'mine', title: 'MINE ASTEROIDS', media: 'mine.webp',
       alt: 'The ship drilling through asteroids with gold and green veins',
       lines: [
-        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, and a tunnel is an escape route.',
+        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
         '[[gold:◆ Gold veins]] pay gold to change your upgrade choices. [[green:Green veins]] restore your shield. [[purple:Purple cores]] give ❖ Void Cores.'
       ]
     },

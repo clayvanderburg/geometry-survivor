@@ -58,7 +58,9 @@ export const DEFAULT_TUNING = {
   rockHpMult: 1.6,
   rockSizeMult: 0.8,
   goldVeinChance: 0.15,
-  bedrockFormations: 0, // random unbreakable bedrock walls/arcs in the sector (level-design preview; 0 = none)
+  bedrockBorder: 1, // the arena edge is a wall of unbreakable bedrock (off: a glowing line)
+  bedrockFormations: 6, // slots for small random bedrock walls, bends, arcs and monoliths in the sector...
+  bedrockFormationChance: 0.5, // ...each filled with this chance (about 3 per sector)
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -314,7 +316,9 @@ export const TUNING_SCHEMA = [
       { key: 'rockHpMult', label: 'Asteroid Rock HP Mult', type: 'range', min: 0.2, max: 4.0, step: 0.1, unit: 'x' },
       { key: 'rockSizeMult', label: 'Asteroid Rock Size Mult', type: 'range', min: 0.4, max: 2.2, step: 0.05, unit: 'x' },
       { key: 'goldVeinChance', label: 'Gold Vein Share of Rocks', type: 'range', min: 0, max: 0.6, step: 0.01, unit: 'prob' },
-      { key: 'bedrockFormations', label: 'Unbreakable Bedrock Formations (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
+      { key: 'bedrockBorder', label: 'Bedrock Arena Wall (Regen Sector)', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
+      { key: 'bedrockFormations', label: 'Bedrock Formation Slots (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
+      { key: 'bedrockFormationChance', label: 'Chance Each Bedrock Slot Fills', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
