@@ -833,6 +833,7 @@ html, body {
   letter-spacing: 1px;
   cursor: pointer;
 }
+.armory-early { grid-column: 1 / -1; font-size: 10px; color: #7f93b3; line-height: 1.3; }
 .armory-value { font-size: 11px; color: #a9bcd8; margin-bottom: 5px; }
 .armory-value b { color: #fff; }
 .armory-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-bottom: 6px; overflow: hidden; }

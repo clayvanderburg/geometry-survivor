@@ -29,7 +29,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 2. **Difficulty curve** after Clay playtests #119: contact damage, the wave-HP curve, faster bosses (most are the slowest things on the field). Enemies & Bosses lane.
 3. **Weapons pass:** Swarm Missiles +30% base fire rate, Rocket Pods up to Autocannon level, Orbit Blades +50% orbit radius / +30% spin, then the other weapons per the balance report. Weapons lane.
 4. **Balance sim calibration:** find why the bot under-rates missiles/rockets; check it against real player data.
-5. **Progression safety:** early-access warning and Void Core refunds for reworked Armory upgrades.
+5. **Progression safety:** ~~early-access warning and Void Core refunds for reworked Armory upgrades~~ (PR open: revisions + banner).
 6. **Hangar** (big update, own discussion), then burrower & mini-spawner enemies, sector travel.
 
 ## Lanes (who owns what)
