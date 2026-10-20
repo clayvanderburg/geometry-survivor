@@ -5,17 +5,19 @@
 //
 // Layout of the "stats" store:
 //   runs/<version>/<yyyy-mm-dd>/<random id>.json   one blob per run: never rewritten, so no write conflicts
-//   summary/<version|all>.json                     cached aggregate, recomputed when older than CACHE_MS
+//   summary/<version|all>[~<armory tier>].json     cached aggregate, recomputed when older than CACHE_MS
 //   ratelimit/<salted ip hash>                     { t } of the last upload from that client
 // No callsign and no IP is stored: the rate limit keys on a salted SHA-256 of the IP (same as /api/scores).
 //
 //   POST /api/stats                      one run summary (js/run-stats.js) -> 201 { accepted: true }
 //                                        or 400 / 413 / 415 / 422 / 429
-//   GET  /api/stats/summary?version=v|all  the aggregate (js/stats-aggregate.js) of the newest runs
+//   GET  /api/stats/summary?version=v|all[&armory=none|partial|maxed|unknown]
+//                                        the aggregate (js/stats-aggregate.js) of the newest runs, optionally
+//                                        only those flown with one Void Armory tier (js/stats-rules.js)
 import { randomUUID } from 'node:crypto';
 import { KNOWN_VERSIONS } from '../../js/changelog.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
-import { sanitizeRunStats, STATS_LIMITS } from '../../js/stats-rules.js';
+import { sanitizeRunStats, STATS_LIMITS, ARMORY_TIERS } from '../../js/stats-rules.js';
 import { aggregateRuns } from '../../js/stats-aggregate.js';
 import { clientIp, hashIp, writeConditions } from './leaderboard.mjs';
 
@@ -37,8 +39,17 @@ export const STATS_SERVER_LIMITS = Object.freeze({
 
 const VERSION_KEY = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 
+// ?armory= for the summary: one Armory tier, or none given (every run). Returns { armory } or { error }.
+export function summaryArmory(value) {
+  if (value === null || value === undefined || value === '' || value === ALL) return { armory: null };
+  if (ARMORY_TIERS.includes(value)) return { armory: value };
+  return { error: `unknown armory tier: use ${ARMORY_TIERS.join(', ')} or leave it out` };
+}
+
 export const runKey = (version, date, id) => `${RUNS_PREFIX}${version}/${date.toISOString().slice(0, 10)}/${id}.json`;
-export const summaryKey = (version) => `${SUMMARY_PREFIX}${version}.json`;
+export const summaryKey = (version, armory = null) => `${SUMMARY_PREFIX}${version}${armory ? `~${armory}` : ''}.json`;
+// Bump when the cached summary's shape changes, so stale caches are recomputed (2: armory tiers).
+export const SUMMARY_CACHE_VERSION = 2;
 export const runsPrefix = (version) => (version === ALL ? RUNS_PREFIX : `${RUNS_PREFIX}${version}/`);
 
 // ?version= for the summary: a known game version or 'all' (the default). Returns { version } or { error }.
@@ -162,14 +173,14 @@ export function createStatsHandler({
     return json(503, { error: 'stats store busy' }, { 'retry-after': '5' });
   }
 
-  async function computeSummary(blobs, version) {
+  async function computeSummary(blobs, version, armory) {
     const { keys, truncated } = await listKeys(blobs, runsPrefix(version), limits.MAX_KEYS_LISTED);
     const chosen = newestFirst(keys.filter((k) => k.endsWith('.json'))).slice(0, limits.MAX_RUNS_SCANNED);
     const runs = (await mapLimit(chosen, limits.FETCH_CONCURRENCY, async (key) => (await readJson(blobs, key))?.data))
       .filter((r) => r && typeof r === 'object');
     const t = now();
     return {
-      ...aggregateRuns(runs, { version, source: 'players', generatedAt: new Date(t).toISOString() }),
+      ...aggregateRuns(runs, { version, source: 'players', generatedAt: new Date(t).toISOString(), armory }),
       computedAt: t,
       stored: keys.length,
       scanned: chosen.length,
@@ -178,14 +189,17 @@ export function createStatsHandler({
   }
 
   async function handleSummary(req, blobs) {
-    const { version, error } = summaryVersion(new URL(req.url).searchParams.get('version'), versions);
+    const params = new URL(req.url).searchParams;
+    const { version, error } = summaryVersion(params.get('version'), versions);
     if (error) return json(400, { error, current: currentVersion });
-    const key = summaryKey(version);
+    const { armory, error: armoryError } = summaryArmory(params.get('armory'));
+    if (armoryError) return json(400, { error: armoryError, current: currentVersion });
+    const key = summaryKey(version, armory);
     const cached = await readJson(blobs, key);
     let summary = cached?.data;
-    const fresh = summary && Number.isFinite(summary.computedAt) && now() - summary.computedAt < limits.CACHE_MS && summary.schemaVersion === 1;
+    const fresh = summary && Number.isFinite(summary.computedAt) && now() - summary.computedAt < limits.CACHE_MS && summary.schemaVersion === SUMMARY_CACHE_VERSION;
     if (!fresh) {
-      summary = { ...(await computeSummary(blobs, version)), schemaVersion: 1 };
+      summary = { ...(await computeSummary(blobs, version, armory)), schemaVersion: SUMMARY_CACHE_VERSION };
       // Last writer wins: concurrent recomputes produce the same aggregate.
       try { await blobs.setJSON(key, summary); } catch (err) { log?.warn?.('[stats] summary cache write failed', err); }
     }

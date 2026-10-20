@@ -1464,7 +1464,8 @@ export class Game {
     return this.runStats.finish({
       time: this.elapsedTime, wave: this.wave, level: p?.level ?? 1, score: this.score, kills: this.kills,
       died: !(p?.hp > 0), gold: { earned: this.goldEarned, spent: this.goldSpent },
-      loadout: ownedWeapons(p || {}).map((id) => ({ id, lv: statsWeaponLevel(p, id) }))
+      loadout: ownedWeapons(p || {}).map((id) => ({ id, lv: statsWeaponLevel(p, id) })),
+      armory: this.progression ? { ranks: this.progression.data.ranks, spent: this.progression.armorySpent() } : null
     });
   }
 
