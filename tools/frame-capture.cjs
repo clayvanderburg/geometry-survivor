@@ -85,13 +85,12 @@ const SCENES = {
     await page.keyboard.press('Escape'); // past the splash screen
     await page.locator('#splash-screen').waitFor({ state: 'hidden' });
     await page.locator(scene === 'range' ? '#btn-weapon-range' : '#btn-start-game').click();
-    // LAUNCH opens the starting-weapon pick first: take the first card once its double-click guard is past.
-    const startPick = page.locator('#start-pick-modal:not(.hidden) #start-pick-options > *');
-    if (await startPick.count()) {
-      await page.waitForTimeout(350);
-      await startPick.first().click();
-    }
     await page.waitForTimeout(400);
+    // LAUNCH opens the starting-weapon pick: take the first card (Autocannon).
+    if (await page.locator('#start-pick-modal:not(.hidden)').count()) {
+      await page.locator('#start-pick-options > *').first().click();
+      await page.waitForTimeout(300);
+    }
 
     // Grab the running Game, then stop its requestAnimationFrame loop so only stepFrame() advances it.
     await page.evaluate(async ({ setups, scene, radius, setup, hud }) => {

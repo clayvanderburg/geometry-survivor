@@ -5168,16 +5168,16 @@ export class Game {
     } // On a controller with the right stick released, the turret holds its last heading.
 
     // The hull (and its wings and rocket pods) faces where the ship flies; only the drill arms swing round
-    // to the rock being drilled, and otherwise point along the hull.
+    // to rock. Each claw swings on its own (clawTargets): both onto a rock dead ahead, else port to the
+    // nearest rock on the left and starboard to the nearest on the right; otherwise along the hull.
     const speedMag = Math.hypot(p.vx, p.vy);
     if (speedMag > 0.35) p.hullAngle = turnToward(p.hullAngle ?? p.angle, Math.atan2(p.vy, p.vx), 0.22);
     p.hullAngle ??= p.angle;
-    let targetDrillAngle = p.hullAngle;
-    if (this.asteroidManager.isDrilling && this.asteroidManager.drillingRocks.length > 0) {
-      const rk = this.asteroidManager.drillingRocks[0];
-      targetDrillAngle = Math.atan2(rk.y - p.y, rk.x - p.x);
-    }
-    p.drillAngle = turnToward(p.drillAngle ?? p.hullAngle, targetDrillAngle, 0.22);
+    const clawAims = this.asteroidManager.clawAims?.(p) ?? [p.hullAngle, p.hullAngle];
+    p.clawAngles ??= [p.hullAngle, p.hullAngle];
+    for (let k = 0; k < 2; k++) p.clawAngles[k] = turnToward(p.clawAngles[k], clawAims[k], 0.22);
+    // Shared heading (older callers and previews): halfway between the two arms.
+    p.drillAngle = Math.atan2(Math.sin(p.clawAngles[0]) + Math.sin(p.clawAngles[1]), Math.cos(p.clawAngles[0]) + Math.cos(p.clawAngles[1]));
 
     // Spin the Twin Rotary Claw Drills
     const rpm = this.asteroidManager.isDrilling ? 34 : 11;
