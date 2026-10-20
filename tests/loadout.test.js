@@ -255,7 +255,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.deepEqual(p.loadout, ['blaster']);
 });
 
-test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite Rounds and Pulsar Helix', () => {
+test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer, Thermite Rounds and Pulsar Helix', () => withRandom(() => {
   const g = freshGame();
   const p = g.player;
   fill(p, ['rockets']);
@@ -269,12 +269,18 @@ test('discarding Autocannon removes Prism Split, Hyper-Capacitor, Phase Piercer,
   assert.equal(p.stats.fireRate, base.fireRate);
   assert.equal(p.weapons.pulsarHelix, 0);
   assert.ok(!eligibleUpgrades(p).some((u) => ['multishot', 'firerate', 'pierce', 'blaster_fire', 'tag_kinetic'].includes(u.id)));
-  // No Autocannon: the blaster stops firing, rocket pods keep going.
+  // No Autocannon: the blaster stops firing, rocket pods keep going. Check every frame, not just the
+  // last: rockets die on their first hit, so with enemies nearby none may be in flight at the end.
   g.player.invuln = 1e9;
-  for (let i = 0; i < 120; i++) g.update(1 / 60);
-  assert.ok(!g.bullets.some((b) => !b.source), 'no blaster bolts');
-  assert.ok(g.bullets.some((b) => b.source === 'rocket'), 'rockets still fire');
-});
+  let bolts = false, rockets = false;
+  for (let i = 0; i < 120; i++) {
+    g.update(1 / 60);
+    bolts ||= g.bullets.some((b) => !b.source);
+    rockets ||= g.bullets.some((b) => b.source === 'rocket');
+  }
+  assert.ok(!bolts, 'no blaster bolts');
+  assert.ok(rockets, 'rockets still fire');
+}, lcg()));
 
 test('a discard keeps live tuner changes to base stats (the run-start snapshot follows the tuner)', () => {
   const g = freshGame();
@@ -306,9 +312,9 @@ test('pause-menu discard goes through a confirm step', () => {
   assert.ok(!g.player.loadout.includes('missiles'));
 });
 
-test('Rocket Pods fire about once a second at LV 1; their cards add rockets and shorten the reload', () => {
+test('Rocket Pods fire a volley about every 0.65 s at LV 1; their cards add rockets and shorten the reload', () => {
   const lv1 = levelBuild('rockets', 1);
-  assert.equal(W.wingRocketCooldown(lv1), 1);
+  assert.equal(W.wingRocketCooldown(lv1), 0.65);
   assert.equal(W.wingRocketCount(lv1), 2);
   assert.ok(W.wingRocketCount(makeBuild('rockets', 4, { count: 3 })) === 5, 'more rockets per Tubes rank');
   assert.ok(W.wingRocketBlastRadius(makeBuild('rockets', 4, { radius: 3 })) > W.wingRocketBlastRadius(lv1), 'bigger blasts');
@@ -322,7 +328,7 @@ test('Rocket Pods fire about once a second at LV 1; their cards add rockets and 
   const fire = g.fireWingRockets.bind(g);
   g.fireWingRockets = (b) => { volleys++; return fire(b); };
   for (let i = 0; i < 600; i++) g.update(1 / 60); // 10 s of auto-fire
-  assert.ok(volleys >= 9 && volleys <= 11, `${volleys} volleys in 10 s`);
+  assert.ok(volleys >= 14 && volleys <= 17, `${volleys} volleys in 10 s`);
   applyUpgradeLevels(g.player, { ...UPGRADE_BY_ID.rockets_count, levelJump: 3 });
   g.bullets = [];
   g.fireWingRockets(weaponBuild(g.player, 'rockets'));
@@ -331,15 +337,16 @@ test('Rocket Pods fire about once a second at LV 1; their cards add rockets and 
 
 test('Rocket Pods: Cryo Warheads chill enemies caught by Rocket Pod blasts (and only Rocket Pod blasts)', async () => {
   const { applyOnHitStatuses } = await import('../js/status-effects.js');
+  const frosty = { weapons: { rockets_frost: 2 }, stats: { damage: 10 } };
   const e = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 2 } }, e, 'rocket');
-  assert.ok(e.st.chillT > 0 && e.speedScale < 1, 'rocket hit chills');
+  applyOnHitStatuses(frosty, e, 'rocket', 10);
+  assert.ok(e.st.cold > 0 && e.speedScale < 1, 'rocket hit chills');
   const dry = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 0 } }, dry, 'rocket');
-  assert.ok(!(dry.st?.chillT > 0), 'no chill without the element');
+  applyOnHitStatuses({ weapons: { rockets_frost: 0 }, stats: { damage: 10 } }, dry, 'rocket', 10);
+  assert.ok(!(dry.st?.cold > 0), 'no chill without the element');
   const missile = { type: 'swarmer', hp: 100, maxHp: 100 };
-  applyOnHitStatuses({ weapons: { rockets_frost: 2 } }, missile, 'missile');
-  assert.ok(!(missile.st?.chillT > 0), 'FROST rockets do not make missiles chill');
+  applyOnHitStatuses(frosty, missile, 'missile', 10);
+  assert.ok(!(missile.st?.cold > 0), 'FROST rockets do not make missiles chill');
 });
 
 test('every weapon levels 1 to 18 through its stat cards (11 ranks per card at most), and stops at LV 18', () => {
@@ -563,4 +570,19 @@ test('card fairness odds: the exact draw chances match what rollUpgrades actuall
   // A locked card is kept out of the draw.
   const lockId = [...odds.keys()][0];
   assert.equal(cardInclusionOdds(p, 2, lockId).has(lockId), false);
+});
+
+test('Volatile Shatter: 4 shards at LV 1, +3 per level, and a burst flies as glinting shards', () => {
+  assert.deepEqual([1, 2, 3, 8].map(W.shrapnelShards), [4, 7, 10, 25]);
+  const g = freshGame();
+  g.player.weapons.shrapnel = 3;
+  g.bullets.length = 0;
+  const e = g.enemyManager.enemies[0] ?? null;
+  const victim = e || { x: g.player.x + 200, y: g.player.y, radius: 10, hp: 0, maxHp: 10, type: 'swarmer', hue: 300, sides: 4, rotation: 0, score: 1, trail: [] };
+  if (!e) g.enemyManager.enemies.push(victim);
+  victim.hp = 0;
+  withRandom(() => g.killEnemy(victim), () => 0); // the burst chance always rolls in
+  const shards = g.bullets.filter((b) => b.stat === 'shrapnel');
+  assert.equal(shards.length, 10);
+  assert.ok(shards.every((b) => b.kind === 'shard'), 'drawn as shards, not plain bolts');
 });

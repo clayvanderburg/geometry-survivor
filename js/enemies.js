@@ -508,9 +508,9 @@ export class EnemyManager {
     // 2. Update active enemies with emergent behaviors
     for (let i = 0; i < len; i++) {
       const e = enemies[i];
-      // SHOCK stun (status-effects.js): the hull freezes in place, no steering, no attacks, no spin. Gravity
-      // drift and knockback still move it, and touching it still hurts.
-      const stunned = e.st !== undefined && e.st.stunT > 0;
+      // SHOCK stun or FROST freeze (status-effects.js): the hull holds in place, no steering, no attacks,
+      // no spin. Gravity drift and knockback still move it, and touching it still hurts.
+      const stunned = e.st !== undefined && (e.st.stunT > 0 || e.st.frozenT > 0);
       if (!stunned) e.rotation += e.vRot;
       e.pulsePhase += dt * 6;
       if (e.hitFlash > 0) e.hitFlash = Math.max(0, e.hitFlash - dt * 6);
@@ -813,7 +813,7 @@ export class EnemyManager {
       const r = e.radius * pulse;
       // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
       // version of their own hue, so the archetype stays recognisable.
-      const chilled = e.st && e.st.chillT > 0;
+      const chilled = e.st && (e.st.cold > 0 || e.st.frozenT > 0);
       const stunned = e.st && e.st.stunT > 0;
       const zap = stunned && Math.floor(e.st.stunT * 14) % 2 === 0;
       const color = e.hitFlash > 0
@@ -838,6 +838,15 @@ export class EnemyManager {
 
       ctx.save();
       ctx.translate(e.x, e.y);
+      // Hit squash: the hull flattens along the shot and kicks back a pixel or two, then springs back
+      // as the hit flash fades (bosses and big hulls barely give).
+      if (e.hitFlash > 0 && e.hitAng !== undefined) {
+        const s = e.hitFlash * Math.min(1, 26 / Math.max(10, e.radius));
+        ctx.rotate(e.hitAng);
+        ctx.translate(s * 2.2, 0);
+        ctx.scale(1 - 0.24 * s, 1 + 0.14 * s);
+        ctx.rotate(-e.hitAng);
+      }
       ctx.rotate(e.rotation);
 
       // Outer soft glow pass + inner crisp vector pass
@@ -974,6 +983,34 @@ export class EnemyManager {
       ctx.ellipse(0, 0, r * (2.05 + k * 0.55), r * (0.6 + k * 0.22), k === 0 ? spin : -spin * 0.7 + 1.1, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    // Three spiral arms of accreting matter winding into the core: crimson far out, orange, then
+    // white-hot near the horizon (one path per heat band).
+    const arms = 3, steps = 16, rOut = r * 5.4, rIn = r * 0.85;
+    const swirl = e.pulsePhase * 0.55;
+    const bands = [['hsla(' + e.hue + ', 100%, 62%, 0.45)', 2.8, 0, 7], ['hsla(22, 100%, 64%, 0.65)', 2.1, 6, 12], ['rgba(255, 240, 225, 0.9)', 1.4, 11, steps]];
+    for (const [stroke, width, from, to] of bands) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      for (let k = 0; k < arms; k++) {
+        for (let s = from; s <= to; s++) {
+          const t = s / steps;
+          const rad = rOut * Math.pow(rIn / rOut, t); // logarithmic spiral inward
+          const a = swirl + (k * Math.PI * 2) / arms + t * 2.6;
+          const x = Math.cos(a) * rad, y = Math.sin(a) * rad;
+          if (s === from) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Lensing shimmer: a faint ring just outside the horizon that breathes.
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 80%, ${0.18 + 0.12 * Math.sin(e.pulsePhase * 2)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * (1.3 + 0.06 * Math.sin(e.pulsePhase * 2)), 0, Math.PI * 2);
+    ctx.stroke();
 
     // White-hot photon ring hugging the event horizon
     ctx.strokeStyle = 'rgba(255, 236, 242, 0.85)';

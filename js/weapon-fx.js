@@ -14,6 +14,7 @@ const MAX_ORBS = 16;
 // Per-style look of a timed blast: does it show a target reticle while pending, how big is the burst.
 const STYLE = {
   pop: { reticle: false },
+  fireball: { reticle: false },
   tandem: { reticle: false },
   strike: { reticle: true },
   nuke: { reticle: true },
@@ -188,6 +189,19 @@ export class WeaponEffects {
         game.grid.applyImpulse(e.x, e.y, 50, r * 1.2, e.hue);
         game.sound.playImplosion?.();
         break;
+      case 'fireball': {
+        // Flamethrower Fireball: a rolling ball of fire, not just a ring. Two hot cores, a fast bright
+        // ring, a slower orange one, flung flames and drifting embers, and a grid thump.
+        fx.spawnFlash?.(e.x, e.y, r * 0.95, 26, 0.32);
+        fx.spawnFlash?.(e.x, e.y, r * 0.5, 48, 0.2);
+        fx.spawnShockwave(e.x, e.y, r, 34, 4.5, 0.32);
+        fx.spawnShockwave(e.x, e.y, r * 0.6, 14, 3, 0.45);
+        fx.spawnExplosionSparks(e.x, e.y, 22, 30, 3, 13, 2.6);
+        fx.spawnExplosionSparks(e.x, e.y, 10, 14, 0.6, 3, 3.4);
+        game.grid.applyImpulse(e.x, e.y, 34, r * 1.3, 30);
+        game.sound.playMissileImpact?.(0.6);
+        break;
+      }
       case 'nova':
         fx.spawnFlash?.(e.x, e.y, r * 0.55, e.hue, 0.18);
         fx.spawnShockwave(e.x, e.y, r, e.hue, 3, 0.3);
@@ -217,6 +231,58 @@ export class WeaponEffects {
       const c = e.cluster;
       this.hop(game, e.x, e.y, c.count, r * 0.75, r * c.spread, Math.max(36, r * c.radiusFrac), e.damage * c.share, c.delay, c.hue ?? e.hue, e.source);
     }
+  }
+
+  // Above the flames and enemies: Flamethrower fireballs in flight, lobbed in an arc over their stream
+  // (a hot core in an orange corona, a flickering tail) with a dim shadow under them on the ground.
+  drawAir(ctx, game) {
+    if (this.events.length === 0) return;
+    const vfx = TUNING.vfxIntensity ?? 1;
+    const t = this.time;
+    ctx.save();
+    for (let i = 0; i < this.events.length; i++) {
+      const e = this.events[i];
+      if (e.style !== 'fireball' || e.fromX === undefined) continue;
+      const k = Math.max(0, Math.min(1, 1 - e.t / e.maxT));
+      const gx = e.fromX + (e.x - e.fromX) * k;
+      const gy = e.fromY + (e.y - e.fromY) * k;
+      const lift = Math.sin(Math.PI * k) * 34;
+      const bx = gx, by = gy - lift;
+      const s = (0.75 + 0.35 * k) * vfx;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, 9 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      // Tail: three flickering tongues streaming back along the flight.
+      const back = Math.atan2(e.fromY - e.y, e.fromX - e.x);
+      ctx.strokeStyle = 'hsla(22, 100%, 55%, 0.55)';
+      ctx.lineCap = 'round';
+      for (let q = -1; q <= 1; q++) {
+        const a = back + q * 0.35 + Math.sin(t * 40 + q) * 0.12;
+        const len = (16 + 6 * Math.sin(t * 33 + q * 2)) * s;
+        ctx.lineWidth = (q === 0 ? 6 : 4) * s;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
+        ctx.stroke();
+      }
+      const flick = 1 + 0.12 * Math.sin(t * 47);
+      ctx.fillStyle = 'hsla(24, 100%, 52%, 0.5)';
+      ctx.beginPath();
+      ctx.arc(bx, by, 15 * s * flick, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'hsla(42, 100%, 62%, 0.85)';
+      ctx.beginPath();
+      ctx.arc(bx, by, 9 * s * flick, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 250, 230, 0.95)';
+      ctx.beginPath();
+      ctx.arc(bx, by, 4.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.restore();
   }
 
   // Plasma Grenade clouds (Lingering Cloud), one look per element: plasma a glowing radioactive haze
@@ -380,12 +446,12 @@ export class WeaponEffects {
           ctx.fill();
         }
       } else if (e.style === 'pop' && e.fromX !== undefined) {
-        // Bomblet in flight from its parent blast to where it pops.
+        // Bomblet (or a Flamethrower fireball, `size`) in flight from where it was thrown to where it pops.
         const bx = e.fromX + (e.x - e.fromX) * Math.min(1, k * 1.6);
         const by = e.fromY + (e.y - e.fromY) * Math.min(1, k * 1.6);
         ctx.fillStyle = `hsla(${e.hue}, 100%, ${70 + 25 * k}%, 0.95)`;
         ctx.beginPath();
-        ctx.arc(bx, by, (2.6 + 1.6 * Math.sin(t * 30)) * vfx, 0, Math.PI * 2);
+        ctx.arc(bx, by, ((e.size ?? 2.6) + 1.6 * Math.sin(t * 30)) * vfx, 0, Math.PI * 2);
         ctx.fill();
       }
     }

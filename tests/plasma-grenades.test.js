@@ -193,7 +193,7 @@ test('FIRE grenades burn; FROST chill; CORROSIVE corrode; SHOCK stun; clouds tak
   assert.ok(fire.bySource.burn_grenades > 0, 'burn ticks deal damage, credited to the grenades');
   assert.ok(fire.g.weaponFx.pools.some((x) => x.source === 'grenade' && x.look === 'fire' && x.hue === GRENADE_ELEMENTS.fire.hue), 'a fire cloud');
   const frost = grenadeFight({ cards: [['grenades_frost', 1]] });
-  assert.ok(frost.g.enemyManager.enemies.some((e) => e.st?.chillT > 0), 'grenade hits chill');
+  assert.ok(frost.g.enemyManager.enemies.some((e) => e.st?.cold > 0 || e.st?.frozenT > 0 || e.st?.freezeImmT > 0), 'grenade hits chill');
   const acid = grenadeFight({ cards: [['grenades_corrode', 1]] });
   assert.ok(acid.g.enemyManager.enemies.some((e) => e.st?.corrode > 0), 'grenade hits corrode');
   const shock = grenadeFight({ cards: [['grenades_shock', 1]], bt: { 12: 'transform' } });

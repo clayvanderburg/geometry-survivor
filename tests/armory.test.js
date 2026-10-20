@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // old saves, and every upgrade actually reaching the run. The balance harness builds a real headless Game.
 const h = await import('../tools/balance/harness.mjs');
 const {
-  META_UPGRADES, META_BY_ID, ARMORY_CATEGORIES, ARMORY_VERSION, STARTING_CORES, armoryCost, armoryBonuses, formatArmoryValue,
+  META_UPGRADES, META_BY_ID, ARMORY_CATEGORIES, ARMORY_VERSION, STARTING_CORES, armoryCost, armoryBonuses, formatArmoryValue, armorySpent,
   normalizeSave, ProgressionManager
 } = await import('../js/progression.js');
 const { TUNING } = await import('../js/config.js');
@@ -41,16 +41,16 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   const none = armoryBonuses({});
   assert.equal(none.damageMult, 1);
   assert.equal(none.extraBombs, 0);
-  const b = armoryBonuses({ damage: 10, armor: 30, dash: 25, maxHp: 5, critChance: 5, startGold: 3, bombs: 2 });
+  const b = armoryBonuses({ damage: 10, dashDistance: 25, dash: 25, maxHp: 5, critChance: 5, startGold: 3, bombs: 2 });
   assert.ok(Math.abs(b.damageMult - 1.1) < 1e-9);
-  assert.ok(Math.abs(b.damageTakenMult - 0.88) < 1e-9, '30 ranks of plating: -12% damage taken');
+  assert.ok(Math.abs(b.dashDistanceMult - 1.5) < 1e-9, '25 ranks of Afterburner Jets: +50% dash distance');
   assert.ok(Math.abs(b.dashCooldownMult - 0.75) < 1e-9);
   assert.equal(b.bonusHp, 7.5);
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
   assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+10%');
-  assert.equal(formatArmoryValue(META_BY_ID.armor, 10), '-4.0%');
+  assert.equal(formatArmoryValue(META_BY_ID.dash, 4), '-4.0%');
   assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+5');
 });
 
@@ -101,10 +101,28 @@ test('buying: costs escalate, insufficient cores and max rank refuse, the notice
   assert.equal(JSON.parse(store.get('vectra_survivor_save_v2')).armoryResetNotice, false);
 });
 
+test('REFUND ALL resets every rank and pays back exactly what was spent', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  store.set('vectra_survivor_save_v2', JSON.stringify({ armory: ARMORY_VERSION, pilotName: 'ACE', cores: 2000 }));
+  const prog = new ProgressionManager();
+  assert.equal(prog.refundAll(), 0, 'nothing bought, nothing refunded');
+  assert.equal(prog.data.cores, 2000);
+  for (const id of ['damage', 'damage', 'damage', 'maxHp', 'luck', 'bombs']) assert.equal(prog.buyUpgrade(id), true);
+  const spent = 2000 - prog.data.cores;
+  assert.equal(armorySpent(prog.data.ranks), spent);
+  assert.equal(prog.refundAll(), spent);
+  assert.equal(prog.data.cores, 2000, 'every core back');
+  assert.ok(META_UPGRADES.every((u) => prog.getRank(u.id) === 0), 'every rank back to 0');
+  const saved = JSON.parse(store.get('vectra_survivor_save_v2'));
+  assert.equal(saved.cores, 2000, 'persisted');
+  assert.equal(saved.ranks.damage, 0);
+});
+
 test('every armory stat reaches the run', () => {
   const base = gameWithRanks({});
-  const g = gameWithRanks({ damage: 10, critChance: 10, critDamage: 10, area: 10, maxHp: 10, armor: 20, phase: 5,
-    moveSpeed: 10, dash: 20, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
+  const g = gameWithRanks({ damage: 10, critChance: 10, critDamage: 10, area: 10, maxHp: 10,
+    moveSpeed: 10, dash: 20, dashDistance: 10, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
   const p = g.player, b = base.player;
   const near = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} vs ${e}`);
   near(p.stats.damage, b.stats.damage * 1.1, 'damage');
@@ -123,14 +141,10 @@ test('every armory stat reaches the run', () => {
   assert.equal(g.gold, 10, 'starting gold');
   near(g.rerollPrice(), Math.round(rerollCost(0) * 0.8), 'reroll discount');
   near(p.goldMult, 1.4, 'gold per vein');
-  // Damage taken and post-hit invulnerability.
-  p.hp = p.maxHp = 100; b.hp = b.maxHp = 100;
-  g.damagePlayer(20); base.damagePlayer(20);
-  near(100 - p.hp, 18.4, 'plating: -8% damage taken');
-  near(p.invuln, b.invuln + 0.05, 'phase buffer');
-  // Dash cooldown.
+  // Dash cooldown and distance (a longer burst at the same speed).
   g.triggerDash(); base.triggerDash();
   near(p.dashCooldown, b.dashCooldown * 0.8, 'dash cooldown');
+  near(p.dashTimer, b.dashTimer * 1.2, 'dash distance');
   // Live tuning recompute keeps the armory bonuses (crit and drill reach included).
   g.applyLiveTuning();
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance after a live retune');
@@ -147,6 +161,24 @@ test('the retired Chronos Capacitor (Autocannon fire rate) refunds every core sp
   assert.equal(save.ranks.fireRate, undefined, 'the upgrade is gone from the save');
   assert.equal(save.ranks.damage, 3);
   assert.equal(normalizeSave(save).cores, 100 + spent, 'a second load does not refund again');
+});
+
+test('the retired Ablative Plating and Phase Buffer refund every core spent on them, once', async () => {
+  const { normalizeSave, retiredRefund, armoryCost, RETIRED_UPGRADES, META_BY_ID } = await import('../js/progression.js');
+  assert.equal(META_BY_ID.armor, undefined);
+  assert.equal(META_BY_ID.phase, undefined);
+  const spent = (upg, rank) => Array.from({ length: rank }, (_, r) => armoryCost(upg, r)).reduce((a, c) => a + c, 0);
+  // Maxed out, each cost about ARMORY_TOP_COST for its last rank (the price curve they were bought on).
+  assert.ok(Math.abs(armoryCost(RETIRED_UPGRADES.armor, 29) - 1000) <= 20);
+  assert.ok(Math.abs(armoryCost(RETIRED_UPGRADES.phase, 14) - 1000) <= 20);
+  const refund = spent(RETIRED_UPGRADES.armor, 12) + spent(RETIRED_UPGRADES.phase, 4);
+  assert.equal(retiredRefund({ armor: 12, phase: 4 }), refund);
+  const save = normalizeSave({ armory: 2, cores: 50, ranks: { dash: 2, armor: 12, phase: 4 } });
+  assert.equal(save.cores, 50 + refund);
+  assert.equal(save.ranks.armor, undefined);
+  assert.equal(save.ranks.phase, undefined);
+  assert.equal(save.ranks.dash, 2);
+  assert.equal(normalizeSave(save).cores, 50 + refund, 'a second load does not refund again');
 });
 
 test('every upgrade\'s last rank costs about ARMORY_TOP_COST cores (or more, never cheaper than before)', async () => {

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 // the three Breakthroughs, and a hard guarantee that it never touches the ship's shield.
 const h = await import('../tools/balance/harness.mjs');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, weaponDamage, fieldRadius, shockStun } = await import('../js/weapon-scaling.js');
+const { statusState } = await import('../js/status-effects.js');
 const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, BREAKTHROUGH_LEVELS, BT_TRANSFORM_DPS, makeBuild, levelBuild, weaponBuild, weaponElement } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon, eligibleUpgrades, ownedElements, applyBreakthrough } = await import('../js/upgrades.js');
 const { WEAPON_BY_ID, WEAPONS, weaponTags } = await import('../js/loadout.js');
@@ -97,7 +98,7 @@ test('LV 1-18 numbers: radius, damage, recharge and stun each move only with the
   const maxed = makeBuild('shockfield', 18, { damage: 5, recharge: 4, radius: 8, stun: 4 });
   assert.ok(near(W.fieldCooldown(maxed), 2.2 / 2.6), 'four Capacitor ranks: at most about one discharge a second');
   assert.ok(W.fieldCooldown(maxed) > 0.8, 'never fires constantly');
-  assert.equal(W.fieldRadius(maxed), 125 + 12 * 8);
+  assert.equal(W.fieldRadius(maxed), 125 + 24 * 8);
   assert.equal(W.fieldStunRank(maxed), 5);
   const caps = Object.fromEntries(STAT_CARDS.shockfield.map((c) => [c.stat, c.maxLevel]));
   assert.deepEqual(caps, { damage: 11, recharge: 4, radius: 8, stun: 4 });
@@ -176,7 +177,7 @@ test('recharge: one discharge per cooldown even with enemies parked inside; Capa
 test('stuns go through the shared SHOCK rules: stun immunity is respected, bosses and lieutenants resist', () => {
   const { g, field } = fieldGame({ foes: [{ d: 50 }, { d: 70, a: 2, isBoss: true, radius: 30 }, { d: 70, a: 4, isLieutenant: true }, { d: 60, a: 5 }] });
   const [plain, boss, lt, immune] = g.enemyManager.enemies;
-  immune.st = { burn: 0, burnMax: 1, burnT: 0, burnTick: 0, burnDps: 0, chillT: 0, slow: 0, corrode: 0, corrodeMax: 1, corrodeT: 0, corrodePer: 0, stunT: 0, stunMax: 0, stunLong: false, stunImmT: 0.8, stamp: -1 };
+  statusState(immune).stunImmT = 0.8;
   withRandom(() => tick(g), 0.99); // no crits, no long stuns
   assert.equal(field.discharges, 1);
   const p = g.player;
@@ -184,7 +185,7 @@ test('stuns go through the shared SHOCK rules: stun immunity is respected, bosse
   assert.ok(near(boss.st.stunT, shockStun(p, 1) * TUNING.shockBossMult), `boss ${boss.st.stunT}`);
   assert.ok(near(lt.st.stunT, shockStun(p, 1) * TUNING.shockLieutenantMult), `lieutenant ${lt.st.stunT}`);
   assert.equal(immune.st.stunT, 0, 'a stun-immune enemy is not stunned');
-  // A long stun rolls like any SHOCK hit (30% at rank 1, more with Stun Coils).
+  // A long stun rolls like any SHOCK hit (20% at rank 1, more with Stun Coils).
   const long = fieldGame({ foes: [{ d: 50 }] });
   withRandom(() => tick(long.g), 0.1);
   assert.equal(long.g.enemyManager.enemies[0].st.stunLong, true);

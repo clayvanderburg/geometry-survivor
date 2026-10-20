@@ -1,7 +1,9 @@
 import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
-import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
+import { drawPlayerShield, drawCrabShip, shieldTouches, updateShipAnimation, kickShipRecoil, drawShipWake } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
+import { DeathSequence, DEATH_TIMING } from './death-sequence.js';
+import { ReplayRecorder, ReplayPlayer, REPLAY_SETTINGS } from './replay.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
@@ -32,16 +34,17 @@ import {
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
-import { WEAPONS, STARTING_WEAPONS, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
+import { WEAPONS, STARTING_WEAPONS, START_WEAPON_CHOICES, readStartWeapon, writeStartWeapon, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
-  DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects
+  DOT_SOURCES, damageTakenMult as statusTakenMult, isAfflicted, applyOnHitStatuses, updateStatusEffects, drawStatusEffects,
+  shockCritBonus, clearStatusArcs
 } from './status-effects.js';
 import {
   describeUpgrade, describeNewWeapon, describeWeaponPick, describeBreakthrough, renderUpgradeCard, COMPACT_MAX_ROWS, bonusLevels, bonusText,
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
-import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue, armorySpent } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -97,6 +100,7 @@ export function radarSize(width, height, shortShare = 0.55) {
   return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
 }
 
+const ARMORY_REFUND_CONFIRM_MS = 4000; // REFUND ALL disarms if the confirming click doesn't come in time
 const MAX_LOOSE_GEOMS = 400; // loose XP geoms on the field before the oldest start merging (see mergeLooseGeoms)
 
 // Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
@@ -129,7 +133,7 @@ const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 290;
 // Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
-const ROCKET_CONVERGE = 320;
+const ROCKET_CONVERGE = 480; // 320 before v0.39.8: the wingtip streams stay apart from the Autocannon longer
 // `from` eased by `rate` of the shortest turn toward `to` (radians), for smoothly turning headings.
 function turnToward(from, to, rate) {
   let d = to - from;
@@ -259,6 +263,7 @@ export class Game {
     this.postGlobal = readPostGlobal(defaultStatsStorage()); // title-screen checkbox: post runs to the GLOBAL board
     // Game mode (js/modes.js): the title-screen choice (remembered) and the mode of the run being flown.
     this.selectedMode = readStoredMode(defaultStatsStorage());
+    this.startWeapon = readStartWeapon(defaultStatsStorage()); // the run-start pick, remembered (js/loadout.js)
     this.mode = DEFAULT_MODE;
     this.globalBoard.setMode(this.selectedMode);
     this.statsUpload = null;
@@ -313,7 +318,6 @@ export class Game {
     this.overview = new RunOverview(this);
     this.titleShip = new ShipPreview(document.getElementById('title-ship-canvas'), { tuning: TUNING });
     this.hudHidden = false; // [H]: hide every HUD overlay for this session (not saved)
-    this.watchXpBarWidth();
     this.quitConfirm = false; // pause menu MAIN MENU asks before abandoning the run
     this.bindEvents();
     this.resetRun();
@@ -332,7 +336,8 @@ export class Game {
 
   // A fresh run in `mode` (NORMAL unless startGame passes the title choice): its TUNING overlay goes on
   // before anything reads TUNING, and the mode's Void Armory bonuses (HARDCORE drops the shield bonus).
-  resetRun(mode = DEFAULT_MODE) {
+  // `startWeapon`: the weapon picked after LAUNCH (START_WEAPON_CHOICES); none = the default kit.
+  resetRun(mode = DEFAULT_MODE, startWeapon = null) {
     this.resetInput();
     this.mode = normalizeMode(mode);
     applyTuningOverlay(modeRules(this.mode).tuning);
@@ -427,6 +432,8 @@ export class Game {
         grenades: 0,
         gas: 0,
         flamethrower: 0,
+        cryospray: 0,
+        acidspray: 0,
         shockfield: 0,
         siegeBattery: 0,
         empGrenades: 0,
@@ -434,9 +441,9 @@ export class Game {
       }
     };
 
-    // Run-start snapshot (discards rebuild from it), then the ship's starting weapons at LV 1.
+    // Run-start snapshot (discards rebuild from it), then the ship's starting weapon(s) at LV 1.
     snapshotBase(this.player);
-    for (const id of STARTING_WEAPONS) acquireWeapon(this.player, id);
+    for (const id of START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS) acquireWeapon(this.player, id);
     this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
@@ -454,6 +461,8 @@ export class Game {
     (this.grenades ||= new Grenades()).clear();
     (this.gasTrail ||= new GasTrail()).clear();
     (this.flamethrower ||= new Flamethrower()).clear();
+    (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
+    (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
@@ -475,6 +484,7 @@ export class Game {
     this.bladeFlingTimer = this.bladeNovaTimer = undefined;
     this.bladeNovaHide = 0;
     this.statusStamp = 0;
+    clearStatusArcs();
 
     this.bullets = [];
     this.missiles = [];
@@ -500,17 +510,6 @@ export class Game {
     this.renderScale = this.viewScale * dpr;
     this.canvas.width = Math.round(vw * dpr);
     this.canvas.height = Math.round(vh * dpr);
-  }
-
-  // The desktop shield bar is exactly half the XP bar's length: keep --xp-bar-width on #hud in step with it.
-  watchXpBarWidth() {
-    const xp = document.querySelector?.('.xp-bar-container');
-    const hud = document.getElementById('hud');
-    if (!xp || !hud?.style || typeof ResizeObserver !== 'function') return;
-    new ResizeObserver(([entry]) => {
-      const w = entry.borderBoxSize?.[0]?.inlineSize ?? xp.offsetWidth;
-      if (w > 0) hud.style.setProperty('--xp-bar-width', `${w}px`);
-    }).observe(xp);
   }
 
   // Shield under LOW_SHIELD_PCT: the screen edges pulse red (only while a run is on screen).
@@ -580,6 +579,9 @@ export class Game {
       if (e.pointerType === 'touch') this.setTouchMode(true);
       else if (e.pointerType === 'mouse') this.setTouchMode(false);
     }, true);
+    document.getElementById('btn-death-continue')?.addEventListener('click', () => {
+      if (this.deathSeq?.skip()) this.revealGameOver();
+    });
 
     const titleNameInput = document.getElementById('title-pilot-name');
     const goNameInput = document.getElementById('go-pilot-name');
@@ -658,6 +660,13 @@ export class Game {
         if (!e.repeat) this.splash.dismiss();
         return;
       }
+      // The death sequence swallows keys (a held key must not relaunch behind it); a fresh Enter skips it.
+      if (this.deathSeq) {
+        if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
+        e.preventDefault();
+        if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.deathSeq.skip()) this.revealGameOver();
+        return;
+      }
       const focused = document.activeElement;
       const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
         (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
@@ -671,6 +680,10 @@ export class Game {
 
       if (this.tutorialOpen) {
         this.handleTutorialKey(e, onControl);
+        return;
+      }
+      if (this.startPickOpen) {
+        this.handleStartPickKey(e, onControl);
         return;
       }
       if (this.guideOpen) {
@@ -860,6 +873,8 @@ export class Game {
       this.sound.init();
       this.startGame();
     });
+
+    document.getElementById('btn-start-pick-back')?.addEventListener('click', () => this.cancelStartPick());
 
     document.getElementById('btn-weapon-range')?.addEventListener('click', () => {
       this.sound.init();
@@ -1200,11 +1215,13 @@ export class Game {
     tabs.className = 'armory-tabs';
     const tabDefs = [{ id: 'all', label: 'ALL', icon: '' }, ...ARMORY_CATEGORIES];
     tabs.innerHTML = tabDefs.map((c) => `<button class="armory-tab${this.armoryCat === c.id ? ' active' : ''}" data-armory-key="cat:${c.id}" aria-pressed="${this.armoryCat === c.id}">${c.icon ? c.icon + ' ' : ''}${c.label}</button>`).join('')
-      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`;
+      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`
+      + this.armoryRefundButtonHtml();
     tabs.querySelectorAll('[data-armory-key^="cat:"]').forEach((btn) => btn.addEventListener('click', () => {
       this.armoryCat = btn.dataset.armoryKey.slice(4);
       this.renderHubUI();
     }));
+    tabs.querySelector('[data-armory-key="refund"]')?.addEventListener('click', () => this.onArmoryRefund());
     container.appendChild(tabs);
 
     if (prog.data.armoryResetNotice) {
@@ -1252,6 +1269,30 @@ export class Game {
         || container.querySelector(`[data-armory-key^="cat:"].active`);
       if (again) this.menuNav.setFocus(again);
     }
+  }
+
+  // REFUND ALL: the first click arms it (the button asks to confirm and shows the refund), a second click
+  // within ARMORY_REFUND_CONFIRM_MS resets every rank and pays back every core spent on them.
+  armoryRefundButtonHtml() {
+    const refund = armorySpent(this.progression.data.ranks);
+    const armed = refund > 0 && this.armoryRefundArmed;
+    const label = armed ? `CONFIRM: REFUND ❖ ${refund.toLocaleString()}?` : '↺ REFUND ALL';
+    const title = refund > 0 ? `Reset every armory rank and get back all ${refund.toLocaleString()} Void Cores spent` : 'Nothing to refund yet';
+    return `<button class="armory-refund-btn${armed ? ' armed' : ''}" data-armory-key="refund" title="${title}" ${refund > 0 ? '' : 'disabled'}>${label}</button>`;
+  }
+
+  onArmoryRefund() {
+    this.sound.init();
+    clearTimeout(this.armoryRefundTimer);
+    if (!this.armoryRefundArmed) {
+      this.armoryRefundArmed = true;
+      this.armoryRefundTimer = setTimeout(() => { this.armoryRefundArmed = false; this.renderHubUI(); }, ARMORY_REFUND_CONFIRM_MS);
+      this.sound.playUiSelect?.();
+    } else {
+      this.armoryRefundArmed = false;
+      if (this.progression.refundAll() > 0) this.sound.playUiConfirm?.();
+    }
+    this.renderHubUI();
   }
 
   // Both board panels (title + game over) share one tab and one view.
@@ -1658,12 +1699,20 @@ export class Game {
     }
   }
 
-  startGame() {
+  // `picked`: the starting weapon was just chosen (the pop-up opens first otherwise, when enabled).
+  startGame({ picked = false } = {}) {
     this.sound.init();
+    this.deathSeq = null;
+    this.syncDeathContinue();
+    // Instant replay: the tape rolls through every run (only the death screen plays it back).
+    this.replayRec ??= new ReplayRecorder(isTouchDevice() ? REPLAY_SETTINGS.touch : REPLAY_SETTINGS.desktop);
+    this.replayRec.reset();
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
     if (this.guideOpen) this.closeGuide();
+    if (!picked && !this.range?.active && this.openStartPick()) return;
+    this.closeStartPick();
     document.getElementById('title-modal').classList.add('hidden');
     document.getElementById('gameover-modal').classList.add('hidden');
     document.getElementById('upgrade-modal').classList.add('hidden');
@@ -1681,7 +1730,7 @@ export class Game {
     this.ctx.fillRect(0, 0, this.width, this.height);
 
     // The Weapon Range ignores modes; a real run (and a restart) flies the title-screen choice.
-    this.resetRun(this.range?.active ? DEFAULT_MODE : this.selectedMode);
+    this.resetRun(this.range?.active ? DEFAULT_MODE : this.selectedMode, this.range?.active ? null : this.startWeapon);
     this.syncModeUI();
     this.state = 'PLAYING';
     this.sound.setMusicState({ intensity: 0.35, muffled: false, boss: 0 });
@@ -1840,6 +1889,10 @@ export class Game {
     if (!byElite) this.rocksMined++;
     this.sound.playExplosion(0.95);
     this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.9, rock.sides, rock.rotation, rock.hue, 0.9);
+    // The glowing core breaks up too: smaller inner shards in the crack colour, and a flash.
+    const crackHue = rock.oreType !== 'rock' ? rock.hue : 34;
+    this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.45, 3 + (rock.sides % 2), rock.rotation + 0.5, crackHue, 0.6);
+    this.particles.spawnFlash(rock.x, rock.y, rock.radius * 0.9, crackHue, 0.12);
     this.particles.spawnExplosionSparks(rock.x, rock.y, 20, rock.hue, 2, 10, 2.0);
     this.particles.spawnShockwave(rock.x, rock.y, rock.radius * 1.8, rock.hue, 2.5, 0.28);
     this.grid.applyImpulse(rock.x, rock.y, 22, 110, rock.hue);
@@ -1920,28 +1973,66 @@ export class Game {
     const p = this.player;
     if (p.dashCooldown > 0 || this.rifts?.holdsShip()) return;
 
-    p.dashTimer = 0.22;
+    // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
+    // with the invulnerability to match.
+    const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
+    p.dashTimer = W.dashDuration * reach;
     p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
     p.dashCooldownDuration = p.dashCooldown;
-    p.invuln = Math.max(p.invuln, 0.32);
+    p.invuln = Math.max(p.invuln, W.dashInvuln + W.dashDuration * (reach - 1));
 
     const moveAngle = (Math.abs(p.vx) + Math.abs(p.vy) > 0.2)
       ? Math.atan2(p.vy, p.vx)
       : p.angle;
-
-    p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * 3.1;
-    p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * 3.1;
 
     this.sound.playDash();
     this.grid.applyImpulse(p.x, p.y, 46, 180, 188);
     this.grid.ripple?.(p.x, p.y, 110, 188);
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
 
+    // Corrosive Gas Trail: every dash vents one giant cloud where the ship took off (js/gas-trail.js).
+    this.gasTrail?.dashCloud(this, p);
+
+    const blinkRank = Math.min(UPGRADE_BY_ID.blink_drive.maxLevel, p.upgradeLevels?.blink_drive || 0);
+    if (blinkRank > 0) {
+      // Blink Drive: no burst of speed, the ship is simply at the far end (the nova goes off there).
+      this.blink(p, moveAngle, W.blinkDistance(blinkRank) * reach);
+    } else {
+      p.vx = Math.cos(moveAngle) * p.stats.moveSpeed * W.dashSpeedMult;
+      p.vy = Math.sin(moveAngle) * p.stats.moveSpeed * W.dashSpeedMult;
+    }
+
     if (p.weapons.dashNova > 0) {
       const radius = novaRadius(p, p.weapons.dashNova);
       this.particles.spawnShockwave(p.x, p.y, radius, 160, 5, 0.4);
       this.damageEnemiesInRadius(p.x, p.y, radius, weaponDamage(p, 'nova', p.weapons.dashNova), 160, 'other', undefined, undefined, 'nova');
     }
+  }
+
+  // Blink Drive: teleport `dist` px along `angle`, inside the arena and short of any rock (the landing
+  // steps back until the hull is clear), leaving a trail of afterimages; the ship keeps cruising on.
+  blink(p, angle, dist) {
+    const pad = p.radius + 24;
+    const cx = Math.cos(angle), cy = Math.sin(angle);
+    const x0 = p.x, y0 = p.y;
+    let d = dist;
+    let x = x0, y = y0;
+    const rocks = this.asteroidManager?.getNearbyAsteroids?.(x0 + cx * dist * 0.5, y0 + cy * dist * 0.5, this.asteroidManager.cellsFor?.(dist * 0.5 + 80) ?? 3) || [];
+    for (; d > 0; d -= 16) {
+      x = Math.max(pad, Math.min(this.worldWidth - pad, x0 + cx * d));
+      y = Math.max(pad, Math.min(this.worldHeight - pad, y0 + cy * d));
+      if (!rocks.some((r) => r.hp > 0 && Math.hypot(r.x - x, r.y - y) < r.radius + p.radius)) break;
+    }
+    if (d <= 0) { x = x0; y = y0; }
+    for (let k = 1; k <= 5; k++) this.particles.spawnAfterimage(x0 + (x - x0) * (k / 6), y0 + (y - y0) * (k / 6), p.angle, p.radius, 188);
+    this.particles.spawnFlash?.(x0, y0, 30, 188, 0.18);
+    this.particles.spawnFlash?.(x, y, 36, 188, 0.2);
+    this.particles.spawnShockwave(x, y, 90, 188, 3, 0.25);
+    p.x = x;
+    p.y = y;
+    p.vx = cx * p.stats.moveSpeed;
+    p.vy = cy * p.stats.moveSpeed;
+    p.dashTimer = 0;
   }
 
   triggerSupernova() {
@@ -2027,9 +2118,10 @@ export class Game {
       e.hitFlash = Math.max(e.hitFlash || 0, 0.35);
       return;
     }
+    const raw = dmg; // status stacks follow the hit before armor, corrosion and crits
     dmg *= armorTakenMult(e) * statusTakenMult(e);
     const dot = DOT_SOURCES[source] === true;
-    const chance = dot || !p ? 0 : critChance(p);
+    const chance = dot || !p ? 0 : Math.min(1, critChance(p) + shockCritBonus(e));
     const crit = chance > 0 && Math.random() < chance;
     if (crit) {
       dmg *= critMultiplier(p, isAfflicted(e));
@@ -2043,6 +2135,11 @@ export class Game {
     e.hp -= dmg;
     e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
+    if (kx || ky) e.hitAng = Math.atan2(ky, kx); // the hull squashes along the shot (enemies.js draw)
+    // A hit that takes a real bite (a quarter of max HP or more) pops a hot ring on the hull.
+    if (!dot && dmg >= (e.maxHp || Infinity) * 0.25 && e.hp - dmg > 0) {
+      this.particles.spawnShockwave(e.x, e.y, e.radius * 2, crit ? 48 : e.hue, 2, 0.14);
+    }
     this.damageNumbers?.add(e, dmg, source, crit);
     if ((kx || ky) && !e.isBoss) {
       const k = (TUNING.knockbackMult ?? 1.0) * (e.knockMult ?? 1) * 100 / (e.radius * e.radius);
@@ -2057,7 +2154,7 @@ export class Game {
       e.knockY = ny;
     }
     if (e.hp <= 0) this.killEnemy(e);
-    else if (!dot && p) applyOnHitStatuses(p, e, source);
+    else if (!dot && p) applyOnHitStatuses(p, e, source, raw);
   }
 
   // Crit feedback: a gold star flare on the hull plus a bright tick (the sound is throttled in audio.js).
@@ -2102,6 +2199,9 @@ export class Game {
     if (fx.hitStop > 0) this.requestHitStop(fx.hitStop);
 
     this.particles.spawnPolygonShatter(e.x, e.y, e.radius, e.sides, e.rotation, e.hue, intensity);
+    // White-hot core flash: the hull bursts from the inside (small for swarm fodder, so a cleared
+    // swarm doesn't wash the screen out).
+    this.particles.spawnFlash(e.x, e.y, e.radius * (tier === 0 ? 1.6 : 2.4 + tier * 0.4), e.hue, tier === 0 ? 0.08 : 0.14);
     const sparkCount = fromBomb ? 18 : Math.floor(26 * intensity);
     this.particles.spawnExplosionSparks(e.x, e.y, sparkCount, e.hue, 2.5, 14 * Math.sqrt(intensity), 2.3);
     this.particles.spawnShockwave(e.x, e.y, 48 * intensity, e.hue, 3 * intensity, 0.34);
@@ -2110,7 +2210,12 @@ export class Game {
 
     // Heavier hulls stack extra layers; supernova mass-kills skip them (except elites/bosses).
     if (!fromBomb || tier >= 3) {
-      if (tier >= 1) this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+      if (tier >= 1) {
+        this.particles.spawnShockwave(e.x, e.y, e.radius * 2.4, e.hue, 2 + tier, 0.16);
+        // A wide, thin snap ring and slow embers that drift and fade after the blast.
+        this.particles.spawnShockwave(e.x, e.y, e.radius * 3.2, e.hue, 1.4, 0.12);
+        this.particles.spawnExplosionSparks(e.x, e.y, 4 + 3 * tier, e.hue, 0.4, 2.6, 3);
+      }
       if (tier >= 2) {
         this.particles.spawnPolygonShatter(e.x, e.y, e.radius * 0.55, e.sides, -e.rotation, e.hue, intensity * 0.55);
         this.particles.spawnExplosionSparks(e.x, e.y, 6 * tier, 48, 1.5, 6, 3.2);
@@ -2144,6 +2249,14 @@ export class Game {
     }
 
     if (e.type === 'blackhole') {
+      // Collapse: space snaps back in (an inward ring and a hard grid rebound), then the core blows; its
+      // infall streams are flung back out as sparks (particles.js).
+      const pullR = pullRadiusOf(e);
+      this.particles.spawnShockwave(e.x, e.y, pullR * 0.9, e.hue, 3, 0.22, true);
+      this.particles.spawnFlash(e.x, e.y, e.radius * 5, 22, 0.3);
+      this.particles.spawnExplosionSparks(e.x, e.y, 26, 22, 3, 14, 2.4);
+      this.grid.applyImpulse(e.x, e.y, 70, pullR, e.hue);
+      this.grid.ripple?.(e.x, e.y, pullR, e.hue, 1.4);
       this.particles.spawnShockwave(e.x, e.y, 190, 348, 6, 0.5);
       this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348, 'other', undefined, undefined, 'blackhole');
     }
@@ -2197,6 +2310,8 @@ export class Game {
           life: 0.45,
           source: 'other',
           stat: 'shrapnel',
+          kind: 'shard',
+          spin: Math.random() * Math.PI * 2,
           knock: KNOCKBACK.shrapnel
         });
       }
@@ -2349,11 +2464,10 @@ export class Game {
   // `by`: the enemy kind that dealt it (run stats: damage taken and cause of death).
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
-    dmg *= p.damageTakenMult ?? 1; // Void Armory: Ablative Plating
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
     p.shieldFlash = 1;
     p.hp -= dmg;
-    p.invuln = HIT_INVULN_BASE + (p.hitInvulnBonus || 0);
+    p.invuln = HIT_INVULN_BASE;
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -2370,7 +2484,7 @@ export class Game {
     if (p.hp > 0) return false;
     p.hp = 0;
     this.updateHUD();
-    this.triggerGameOver();
+    this.triggerGameOver({ dying: true });
     return true;
   }
 
@@ -2490,10 +2604,9 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 130, 560, 48);
     this.grid.ripple?.(e.x, e.y, 560, 48);
     this.sound.playBossArrival();
-    const hp = Math.round(e.maxHp).toLocaleString();
     this.logGuideEntries([e.type]);
-    const kicker = (BOSS_TIER[e.bossTier] || BOSS_TIER.minor).kicker;
-    this.showBossCard('arrival', kicker, e, `${hp} HP · ${Math.round(this.contactDamage(e))} CONTACT DMG`);
+    // The arrival card is just the name and title (no kicker or stats line).
+    this.showBossCard('arrival', '', e, '');
     // The run's first boss: remind the pilot the Supernova bombs exist (a bomb strips 40% of a boss's HP).
     if (!this.novaCalloutDone && this.player?.bombs > 0 && !this.range?.active) {
       this.novaCalloutDone = true;
@@ -2501,9 +2614,9 @@ export class Game {
     }
   }
 
-  // The first-boss bomb reminder: a big banner plus a dashed arrow curving from it to the bomb counter
-  // (the NOVA button on touch), which glows while the arrow points at it. It waits for the boss title
-  // card to clear, and on desktop sits just under the boss health bars (touch: the top-right corner, CSS).
+  // The first-boss bomb reminder: one line, "TRY A SUPERNOVA BOMB! (E)", while the SUPERNOVA gauge glows. It
+  // waits for the boss title card to clear. Desktop: just above the dock's shield bar (no arrow, the gauge is
+  // right beside it). Touch: the top-right corner (CSS), with a dashed arrow curving down to the NOVA button.
   novaCalloutShowing() {
     return this.novaCalloutTimer > 0 && !(this.bossCardTimer > 0);
   }
@@ -2519,24 +2632,28 @@ export class Game {
     const fading = this.novaCalloutTimer < 0.45;
     el.classList[fading ? 'add' : 'remove']('nova-callout-out');
     arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
-    const how = this.gpActive ? 'PRESS B' : this.touchMode ? 'TAP NOVA' : 'PRESS E';
-    const n = this.player?.bombs ?? 0;
-    const sub = `${how} · YOU HAVE ${n} · EACH ONE TEARS 40% OFF A BOSS`;
-    const subEl = document.getElementById('nova-callout-sub');
-    if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+    const key = this.gpActive ? 'B' : this.touchMode ? 'TAP NOVA' : 'E';
+    const text = `TRY A SUPERNOVA BOMB! (${key})`;
+    const titleEl = document.getElementById('nova-callout-title');
+    if (titleEl && titleEl.textContent !== text) titleEl.textContent = text;
 
     const hud = document.getElementById('hud')?.getBoundingClientRect?.();
-    const bars = document.getElementById('boss-hud')?.getBoundingClientRect?.();
-    const pill = document.getElementById('nova-indicator')?.getBoundingClientRect?.();
-    let top = '';
-    if (!this.touchMode && hud) {
-      const below = Math.max(168, pill?.height > 0 ? pill.bottom - hud.top + 40 : 0, bars?.height > 0 ? bars.bottom - hud.top + 14 : 0);
-      top = `${Math.round(below)}px`;
+    const shield = document.getElementById('shield-group')?.getBoundingClientRect?.();
+    const dock = document.getElementById('ability-dock')?.getBoundingClientRect?.();
+    let left = '', top = '';
+    if (!this.touchMode && hud && shield?.width > 0 && dock?.height > 0) {
+      // Centred over the shield bar, its bottom edge just above the dock, kept on screen.
+      const half = (el.getBoundingClientRect?.()?.width || 0) / 2;
+      const cx = Math.max(half + 12, Math.min(hud.width - half - 12, shield.left + shield.width / 2 - hud.left));
+      left = `${Math.round(cx)}px`;
+      top = `${Math.round(dock.top - hud.top - 6)}px`;
     }
+    if (el.style && el.style.left !== left) el.style.left = left;
     if (el.style && el.style.top !== top) el.style.top = top;
+    if (!this.touchMode) return;
 
     // Arrow: leaves the banner edge nearest the target and curves into the target's facing side.
-    const target = document.getElementById(this.touchMode ? 'touch-nova' : 'nova-indicator');
+    const target = document.getElementById('touch-nova');
     const t = target?.getBoundingClientRect?.();
     const c = el.getBoundingClientRect?.();
     const box = arrow.getBoundingClientRect?.();
@@ -2650,7 +2767,6 @@ export class Game {
       if (!row) continue;
       document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
       document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
-      document.getElementById(`boss-bar-hp-${i}`).textContent = `${row.hp.toLocaleString()} / ${row.maxHp.toLocaleString()}`;
       document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
     }
     const moreEl = document.getElementById('boss-bar-more');
@@ -2972,6 +3088,11 @@ export class Game {
         const travel = Math.atan2(b.vy, b.vx);
         this.particles.spawnDirectionalSparks(hx, hy, travel, 1.1, 5, e.hue, 7);
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
+        if (b.kind === 'shard') {
+          // A Volatile Shatter shard striking home: a white-gold glint and a burst of glass splinters.
+          this.particles.spawnCritFlare?.(hx, hy, 7, 0.12);
+          this.particles.spawnDirectionalSparks(hx, hy, travel, 0.7, 2, 52, 8);
+        }
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
         if (b.blastRadius) {
@@ -3233,6 +3354,7 @@ export class Game {
     }
 
     this.sound.playLaser();
+    kickShipRecoil(p);
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
   }
@@ -3254,15 +3376,16 @@ export class Game {
     // ROCKET_CONVERGE px out, so a lone target dead ahead isn't straddled by both rockets.
     const t = this.findNearestEnemy(p.x, p.y);
     const tTurn = t ? Math.abs(((Math.atan2(t.y - p.y, t.x - p.x) - aim) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI) : Infinity;
-    const converge = tTurn < 0.35 ? Math.min(600, Math.max(90, Math.hypot(t.x - p.x, t.y - p.y))) : ROCKET_CONVERGE;
+    const converge = tTurn < 0.35 ? Math.min(600, Math.max(180, Math.hypot(t.x - p.x, t.y - p.y))) : ROCKET_CONVERGE;
     const cx = p.x + Math.cos(aim) * converge, cy = p.y + Math.sin(aim) * converge;
     for (let i = 0; i < count; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const tier = Math.floor(i / 2);
       const hx = Math.cos(heading), hy = Math.sin(heading);
-      // Pod mount in hull space: (0.25r forward, 1.12r out), the tips of drawCrabShip's carapace flanks.
-      const fwd = p.radius * 0.25 - tier * 7;
-      const out = p.radius * 1.12 + tier * 3;
+      // Pod mount in hull space: out at the wingtips (ship-renderer.js: tips at -0.95r, 1.76r), well clear of
+      // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
+      const fwd = -p.radius * 0.5 - tier * 7;
+      const out = p.radius * 1.7 + tier * 4;
       const wx = p.x + hx * fwd - hy * side * out;
       const wy = p.y + hy * fwd + hx * side * out;
       const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
@@ -3274,7 +3397,7 @@ export class Game {
         vy: fy * W.wingRocketSpeed,
         damage,
         pierce: 1,
-        hue: 28,
+        hue: 354,
         radius: 4.5,
         life: W.wingRocketLife,
         source: 'rocket',
@@ -3720,7 +3843,7 @@ export class Game {
       if (w.dead) continue;
       const r = pullRadiusOf(w);
       this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, r, w.hue, 0.22);
-      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, r * 0.9, w.hue, 1);
+      if (onScreen(w.x, w.y)) this.particles.spawnInfall(w, r * 0.9, w.hue, Math.random() < 0.3 ? 2 : 1);
     }
     for (let i = 0; i < this.singularities.length; i++) {
       const sg = this.singularities[i];
@@ -4606,7 +4729,8 @@ export class Game {
     this.updateHUD();
   }
 
-  triggerGameOver() {
+  // dying: the shield just collapsed, so the death sequence plays before the results open.
+  triggerGameOver({ dying = false } = {}) {
     // The range ship can't die, but nothing from a range run is ever recorded: leave to the title instead.
     if (this.range?.active) {
       this.range.exit();
@@ -4700,7 +4824,47 @@ export class Game {
     `;
 
     this.renderHubUI();
-    document.getElementById('gameover-modal').classList.remove('hidden');
+    const cause = this.lastRunSummary?.cause;
+    if (dying) this.replayRec?.markDeath();
+    this.deathSeq = dying && this.player ? new DeathSequence(this.player, {
+      killer: cause && cause !== 'unknown' ? hostileEntry(cause)?.name || String(cause).toUpperCase() : null
+    }) : null;
+    if (!this.deathSeq) this.revealGameOver();
+  }
+
+  revealGameOver() {
+    if (this.deathSeq) this.deathSeq.revealed = true;
+    this.deathSeq = null;
+    this.syncDeathContinue();
+    if (this.state === 'GAMEOVER') document.getElementById('gameover-modal').classList.remove('hidden');
+  }
+
+  // The death sequence's CONTINUE button: shown once the headline lands, labelled for the input in use.
+  syncDeathContinue() {
+    const btn = document.getElementById('btn-death-continue');
+    if (!btn) return;
+    const show = !!this.deathSeq && this.deathSeq.t >= DEATH_TIMING.headline;
+    const label = this.gpActive ? 'Ⓐ CONTINUE' : this.touchMode ? 'CONTINUE ▶' : 'CONTINUE ⏎';
+    if (btn.textContent !== label) btn.textContent = label;
+    if (show) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
+    // The HUD and touch controls step aside while the death screen is up.
+    const body = globalThis.document?.body;
+    if (body && !!this.deathSeq !== body.classList.contains('death-screen')) {
+      if (this.deathSeq) body.classList.add('death-screen');
+      else body.classList.remove('death-screen');
+    }
+  }
+
+  // Shared effects the death sequence drives.
+  deathFx() {
+    return this._deathFx ||= {
+      particles: this.particles,
+      grid: this.grid,
+      sound: this.sound,
+      addShake: (amount) => this.addShake(amount),
+      flash: () => { this.chromaFlash = Math.max(this.chromaFlash || 0, 0.3); }
+    };
   }
 
   pollGamepad() {
@@ -4728,6 +4892,10 @@ export class Game {
     }
     if (this.tutorialOpen) {
       this.updateTutorialController(gp, dt);
+      return;
+    }
+    if (this.startPickOpen) {
+      this.updateStartPickController(gp, dt);
       return;
     }
     if (this.guideOpen) {
@@ -4830,10 +4998,25 @@ export class Game {
     if (this.notesOpen && !NOTES_STATES.includes(this.state)) this.closeNotes();
     if (this.tutorialOpen && !TUTORIAL_STATES.includes(this.state)) this.closeTutorial();
     const gp = this.pollGamepad();
+    if (this.deathSeq) {
+      const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
+      this.deathSeq.update(dt, this.deathFx());
+      // The tape stops when the headline lands: the last seconds of play plus the blast.
+      if (this.deathSeq.landed && !this.deathSeq.tapeTaken) {
+        this.deathSeq.tapeTaken = true;
+        const clip = this.replayRec?.takeClip();
+        if (clip) this.deathSeq.replay = new ReplayPlayer(clip);
+      }
+      if (skip) this.revealGameOver();
+      else this.syncDeathContinue();
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
-      if (this.flamethrower?.firing) this.flamethrower.silence(this); // no roar under menus or game over
+      for (const sp of [this.flamethrower, this.cryoSprayer, this.acidSprayer]) if (sp?.firing) sp.silence(this); // no roar under menus or game over
       // A button held through a menu must not fire a dash or nova (or re-pause) as play starts.
       this.gpDashLatch = !!gp?.dash;
       this.gpBombLatch = !!gp?.bomb;
@@ -5024,20 +5207,21 @@ export class Game {
     } // On a controller with the right stick released, the turret holds its last heading.
 
     // The hull (and its wings and rocket pods) faces where the ship flies; only the drill arms swing round
-    // to the rock being drilled, and otherwise point along the hull.
+    // to rock. Each claw swings on its own (clawTargets): both onto a rock dead ahead, else port to the
+    // nearest rock on the left and starboard to the nearest on the right; otherwise along the hull.
     const speedMag = Math.hypot(p.vx, p.vy);
     if (speedMag > 0.35) p.hullAngle = turnToward(p.hullAngle ?? p.angle, Math.atan2(p.vy, p.vx), 0.22);
     p.hullAngle ??= p.angle;
-    let targetDrillAngle = p.hullAngle;
-    if (this.asteroidManager.isDrilling && this.asteroidManager.drillingRocks.length > 0) {
-      const rk = this.asteroidManager.drillingRocks[0];
-      targetDrillAngle = Math.atan2(rk.y - p.y, rk.x - p.x);
-    }
-    p.drillAngle = turnToward(p.drillAngle ?? p.hullAngle, targetDrillAngle, 0.22);
+    const clawAims = this.asteroidManager.clawAims?.(p) ?? [p.hullAngle, p.hullAngle];
+    p.clawAngles ??= [p.hullAngle, p.hullAngle];
+    for (let k = 0; k < 2; k++) p.clawAngles[k] = turnToward(p.clawAngles[k], clawAims[k], 0.22);
+    // Shared heading (older callers and previews): halfway between the two arms.
+    p.drillAngle = Math.atan2(Math.sin(p.clawAngles[0]) + Math.sin(p.clawAngles[1]), Math.cos(p.clawAngles[0]) + Math.cos(p.clawAngles[1]));
 
     // Spin the Twin Rotary Claw Drills
     const rpm = this.asteroidManager.isDrilling ? 34 : 11;
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
+    updateShipAnimation(p, dt);
 
     // 3. Primary Weapon Firing
     const shouldFire = !jumping && (this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)));
@@ -5056,8 +5240,10 @@ export class Game {
         this.rocketTimer = W.wingRocketCooldown(b);
       }
     }
-    // Flamethrower: a cone of fire along the aim while firing (js/flamethrower.js).
+    // Flamethrower, Cryo Sprayer, Acid Sprayer: spinning cones of fire / frost / acid (js/flamethrower.js).
     this.flamethrower?.update(dt, this, shouldFire);
+    this.cryoSprayer?.update(dt, this, shouldFire);
+    this.acidSprayer?.update(dt, this, shouldFire);
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -5356,19 +5542,29 @@ export class Game {
     document.getElementById('level-display').textContent = `LVL ${p.level}`;
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-    const hpFill = document.getElementById('hp-bar-fill');
-    hpFill.style.width = `${hpPct}%`;
-    hpFill.style.background = hpPct < 35
-      ? 'linear-gradient(90deg, #ff2a55, #ff7700)'
-      : hpPct < 70
-      ? 'linear-gradient(90deg, #ffcc00, #00ff88)'
-      : 'linear-gradient(90deg, #00f3ff, #00ffaa)';
+    document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
+    // The ghost trails the fill (CSS transition delay), so a hit leaves a fading chunk behind.
+    const ghost = document.getElementById('hp-bar-ghost');
+    if (ghost) ghost.style.width = `${hpPct}%`;
+    const shieldLevel = hpPct < 35 ? 'low' : hpPct < 70 ? 'mid' : 'high'; // colours the bar (CSS)
+    const shieldGroup = document.getElementById('shield-group');
+    if (shieldGroup?.getAttribute?.('data-level') !== shieldLevel) shieldGroup?.setAttribute?.('data-level', shieldLevel);
     document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
     this.updateLowShieldVignette();
 
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
-    document.getElementById('dash-cd').style.width = `${dashReadyPct}%`;
+    const dashEl = document.getElementById('dash-indicator');
+    dashEl?.style?.setProperty?.('--ready', (dashReadyPct / 100).toFixed(3));
+    dashEl?.classList?.[dashReadyPct >= 100 ? 'add' : 'remove']('ready');
     document.getElementById('bombs-count').textContent = p.bombs;
+    document.getElementById('nova-indicator')?.classList?.[p.bombs > 0 ? 'remove' : 'add']('empty');
+    // The bottom dock centres itself in the space left of the radar (bottom-right) on narrow windows.
+    const radarReserve = this.radarVisible && !this.touchMode
+      ? Math.round((radarSize(this.width, this.height) + 18) * (this.viewScale || 1)) : 0;
+    if (radarReserve !== this.radarReserve) {
+      this.radarReserve = radarReserve;
+      document.getElementById('hud')?.style?.setProperty?.('--radar-reserve', `${radarReserve}px`);
+    }
     if (this.touchMode) this.touch?.setStatus(dashReadyPct / 100, p.bombs);
 
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
@@ -5653,11 +5849,14 @@ export class Game {
 
   // --- Tutorial ------------------------------------------------------------------------------------
 
-  // The browser boot shows the splash on every load; the title waits behind it.
+  // The browser boot shows the splash on every load; the title waits behind it. The page paints it
+  // visible before this runs (no title flash), so hide it again if it doesn't open.
   showSplash() {
     if (this.state === 'TITLE' && this.splash?.show()) {
       this.splashOpen = true;
       this.resetInput();
+    } else {
+      globalThis.document?.getElementById('splash-screen')?.classList.add('hidden');
     }
     return this;
   }
@@ -5669,6 +5868,131 @@ export class Game {
     this.sound?.init?.();
     this.menuState = null;
     this.menuNav?.clear();
+  }
+
+  // --- Starting weapon pick (pops up after LAUNCH / RESTART) ---------------------------------------
+
+  // The browser boot switches this on; headless tests and tools start with the default kit.
+  enableStartPick() {
+    this.startPickEnabled = true;
+    return this;
+  }
+
+  // Show the pick: the NEW WEAPON pick cards of START_WEAPON_CHOICES with their LV 1 numbers, the last
+  // pick lit. Returns false when it can't open (headless, already open), so the run starts at once.
+  openStartPick() {
+    const doc = globalThis.document;
+    const modal = doc?.getElementById?.('start-pick-modal');
+    const grid = doc?.getElementById?.('start-pick-options');
+    if (!this.startPickEnabled || this.startPickOpen || !modal || !grid) return false;
+    const preview = this.startPreviewPlayer();
+    const shownAt = performance.now();
+    grid.innerHTML = '';
+    this.startPickCards = START_WEAPON_CHOICES.map((id, idx) => {
+      const d = { ...describeWeaponPick(preview, id), rarityLabel: 'STARTING WEAPON', levelHtml: 'START // LV 1' };
+      const view = renderUpgradeCard(d, `[${idx + 1}]`);
+      const card = doc.createElement('div');
+      card.className = view.className;
+      card.innerHTML = view.html;
+      card.addEventListener('click', () => {
+        if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+        this.chooseStartWeapon(id);
+      });
+      grid.appendChild(card);
+      return card;
+    });
+    this.startPickIndex = Math.max(0, START_WEAPON_CHOICES.indexOf(this.startWeapon));
+    this.highlightStartPick();
+    this.startPickReturnFocus = doc.activeElement;
+    this.closeMobileWindows?.();
+    modal.classList.remove('hidden');
+    this.startPickOpen = true;
+    this.resetInput();
+    this.menuNav?.clear();
+    doc.activeElement?.blur?.();
+    return true;
+  }
+
+  closeStartPick() {
+    if (!this.startPickOpen) return;
+    this.startPickOpen = false;
+    globalThis.document?.getElementById?.('start-pick-modal')?.classList.add('hidden');
+    this.menuNav?.clear();
+    this.menuState = null;
+  }
+
+  // BACK / Esc / B: return to the screen that launched (title, game over or pause), nothing changed.
+  cancelStartPick() {
+    if (!this.startPickOpen) return;
+    this.closeStartPick();
+    this.startPickReturnFocus?.focus?.();
+  }
+
+  chooseStartWeapon(id) {
+    if (!this.startPickOpen || !START_WEAPON_CHOICES.includes(id)) return;
+    this.startWeapon = id;
+    writeStartWeapon(defaultStatsStorage(), id);
+    this.sound.playUiSelect?.();
+    this.startGame({ picked: true });
+  }
+
+  highlightStartPick() {
+    (this.startPickCards || []).forEach((c, i) => c.classList.toggle('picked', i === this.startPickIndex));
+  }
+
+  // A fresh run's ship (this run's base stats, nothing equipped), so the cards show LV 1 numbers.
+  startPreviewPlayer() {
+    if (!this.player) this.resetRun(this.selectedMode); // no ship yet (the browser boot always builds one)
+    const p = this.player;
+    const base = p?.base;
+    return {
+      ...p,
+      stats: structuredClone(base?.stats ?? p.stats),
+      weapons: structuredClone(base?.weapons ?? p.weapons),
+      upgradeLevels: {},
+      breakthroughs: {},
+      banished: {},
+      loadout: []
+    };
+  }
+
+  // Keyboard: [1-4] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  handleStartPickKey(e, onControl) {
+    const code = e.code;
+    if (e.repeat) return;
+    const n = START_WEAPON_CHOICES.length;
+    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+    if (digit && Number(digit[1]) <= n) {
+      e.preventDefault();
+      this.chooseStartWeapon(START_WEAPON_CHOICES[Number(digit[1]) - 1]);
+    } else if (code === 'ArrowRight' || code === 'KeyD' || code === 'ArrowLeft' || code === 'KeyA') {
+      e.preventDefault();
+      this.startPickIndex = (this.startPickIndex + (code === 'ArrowRight' || code === 'KeyD' ? 1 : -1) + n) % n;
+      this.highlightStartPick();
+      this.sound.playUiSelect?.();
+    } else if ((code === 'Enter' || code === 'NumpadEnter' || code === 'Space') && !onControl) {
+      e.preventDefault();
+      this.chooseStartWeapon(START_WEAPON_CHOICES[this.startPickIndex]);
+    } else if (code === 'Escape' || code === 'Backspace') {
+      e.preventDefault();
+      this.cancelStartPick();
+    }
+  }
+
+  // Controller: D-pad between the cards (focus starts on the last pick), A launches, B goes back.
+  updateStartPickController(gp, dt) {
+    const root = globalThis.document?.getElementById?.('start-pick-modal');
+    if (this.menuState !== 'START_PICK') {
+      this.menuState = 'START_PICK';
+      this.menuGrace = 0.3;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !root) return;
+    this.menuNav.update(root, gp, dt, this.startPickCards?.[this.startPickIndex] || null);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B)) this.cancelStartPick();
+    else if (gp.pressed(PAD.A) || gp.pressed(PAD.START)) this.menuNav.activate();
   }
 
   // The browser boot switches this on: the first LAUNCH on a device (the tutorial was never skipped or
@@ -5768,28 +6092,80 @@ export class Game {
     }
   }
 
-  // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
-  drawWingRocket(ctx, b) {
+  // Volatile Shatter shard: a small spinning pale-gold sliver of glass with a faint wake, so the chain
+  // reaction reads apart from ordinary bolts without drowning the screen at high levels.
+  drawShard(ctx, b) {
+    const spin = (b.spin += 0.35);
+    const len = 5.5, wid = 2 + 1.2 * Math.abs(Math.sin(spin));
     const a = Math.atan2(b.vy, b.vx);
-    const c = Math.cos(a), s = Math.sin(a);
-    const flame = 9 + Math.random() * 7;
-    ctx.strokeStyle = 'hsla(32, 100%, 58%, 0.75)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(b.x - c * 6, b.y - s * 6);
-    ctx.lineTo(b.x - c * (6 + flame), b.y - s * (6 + flame));
-    ctx.stroke();
-    ctx.fillStyle = '#ffd9a8';
-    ctx.strokeStyle = 'hsla(22, 100%, 60%, 1)';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'hsla(48, 100%, 62%, 0.3)';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(b.x + c * 7, b.y + s * 7);
-    ctx.lineTo(b.x - c * 5 - s * 3.5, b.y - s * 5 + c * 3.5);
-    ctx.lineTo(b.x - c * 3, b.y - s * 3);
-    ctx.lineTo(b.x - c * 5 + s * 3.5, b.y - s * 5 - c * 3.5);
+    ctx.moveTo(b.x - b.vx * 1.8, b.y - b.vy * 1.8);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(a);
+    ctx.fillStyle = 'hsla(48, 100%, 86%, 0.8)';
+    ctx.strokeStyle = 'hsla(46, 100%, 62%, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(len, 0);
+    ctx.lineTo(0, -wid);
+    ctx.lineTo(-len * 0.6, 0);
+    ctx.lineTo(0, wid);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
+  // Rocket Pod rocket: a crimson finned body (not the amber of Swarm Missiles or the cyan Autocannon),
+  // a white-hot engine core inside a red flame, and a fading grey smoke streak behind it.
+  drawWingRocket(ctx, b) {
+    const a = Math.atan2(b.vy, b.vx);
+    const c = Math.cos(a), s = Math.sin(a);
+    const smoke = 26;
+    ctx.strokeStyle = 'rgba(190, 190, 205, 0.18)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(b.x - c * 8, b.y - s * 8);
+    ctx.lineTo(b.x - c * (8 + smoke), b.y - s * (8 + smoke));
+    ctx.stroke();
+    const flame = 10 + Math.random() * 8;
+    ctx.strokeStyle = 'hsla(356, 100%, 58%, 0.8)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(b.x - c * 7, b.y - s * 7);
+    ctx.lineTo(b.x - c * (7 + flame), b.y - s * (7 + flame));
+    ctx.stroke();
+    ctx.strokeStyle = '#fff6e0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(b.x - c * 7, b.y - s * 7);
+    ctx.lineTo(b.x - c * (7 + flame * 0.55), b.y - s * (7 + flame * 0.55));
+    ctx.stroke();
+    // Body: a long nose, swept fins at the tail.
+    ctx.fillStyle = '#ff3a52';
+    ctx.strokeStyle = '#ffd0d6';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(b.x + c * 10, b.y + s * 10);
+    ctx.lineTo(b.x - c * 4 - s * 2.6, b.y - s * 4 + c * 2.6);
+    ctx.lineTo(b.x - c * 8 - s * 5, b.y - s * 8 + c * 5);
+    ctx.lineTo(b.x - c * 6, b.y - s * 6);
+    ctx.lineTo(b.x - c * 8 + s * 5, b.y - s * 8 - c * 5);
+    ctx.lineTo(b.x - c * 4 + s * 2.6, b.y - s * 4 - c * 2.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(b.x + c * 6.5, b.y + s * 6.5, 1.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Swarm micro-missile: a soft exhaust glow under a tapered core trail (drawn in four chunks), then
@@ -6228,6 +6604,10 @@ export class Game {
         this.drawWingRocket(ctx, b);
         continue;
       }
+      if (b.kind === 'shard') {
+        this.drawShard(ctx, b);
+        continue;
+      }
       const tailX = b.x - b.vx * 1.4;
       const tailY = b.y - b.vy * 1.4;
 
@@ -6258,11 +6638,15 @@ export class Game {
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
+    this.cryoSprayer?.draw(ctx, this);
+    this.acidSprayer?.draw(ctx, this);
+    this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
       this.drawGravityTethers(ctx, p);
+      drawShipWake(ctx, p, TUNING);
       // Mid rift-jump the ship spins and shrinks into the rift, then pops back out of the exit.
       const pose = this.rifts?.shipPose() ?? { scale: 1, spin: 0 };
       const posed = pose.scale !== 1 || pose.spin !== 0;
@@ -6282,6 +6666,8 @@ export class Game {
         this.drawCrabShip(ctx, p);
       }
       if (posed) ctx.restore();
+    } else {
+      this.deathSeq?.drawWorld(ctx, TUNING);
     }
 
     ctx.restore();
@@ -6314,6 +6700,12 @@ export class Game {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
+
+    // Instant-replay tape: the finished frame (minus the death overlay) while playing and through the blast.
+    if (this.replayRec && !this.range?.active && (this.state === 'PLAYING' || (this.deathSeq && !this.deathSeq.landed))) {
+      this.replayRec.record(this.canvas, this.frameSeconds ?? 1 / 60);
+    }
+    this.deathSeq?.drawOverlay(ctx, this.width, this.height, this.canvas, this.renderScale ?? 1);
   }
 
   singularityCoreRadius(sg) {
@@ -6432,5 +6824,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().showSplash());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableStartPick().showSplash());
 }

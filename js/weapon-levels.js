@@ -110,7 +110,26 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
     card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Spin Rotor', 'flameTurn', 'Flamethrower: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burnMax', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4))
+    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4)),
+    card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', cap(3))
+  ],
+  cryospray: [
+    card('cryospray', 'cryospray_damage', 'damage', 'Cryo Sprayer Supercooled Mix', 'cryoDamage', 'Cryo Sprayer: colder coolant. Only spray damage.'),
+    card('cryospray', 'cryospray_rate', 'rate', 'Cryo Sprayer Coolant Pump', 'cryoTickRate', 'Cryo Sprayer: pumps more coolant, so the spray hits more often. Only spray rate.', cap(8)),
+    card('cryospray', 'cryospray_range', 'range', 'Cryo Sprayer Nozzle Pressure', 'cryoRange', 'Cryo Sprayer: the spray reaches further. Only spray length.', cap(8)),
+    card('cryospray', 'cryospray_cone', 'cone', 'Cryo Sprayer Wide Nozzle', 'cryoCone', 'Cryo Sprayer: a wider cone of frost. Only cone width.', cap(8)),
+    card('cryospray', 'cryospray_turn', 'turn', 'Cryo Sprayer Spin Rotor', 'cryoTurn', 'Cryo Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
+    card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', cap(4)),
+    card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', cap(3))
+  ],
+  acidspray: [
+    card('acidspray', 'acidspray_damage', 'damage', 'Acid Sprayer Concentrate', 'acidDamage', 'Acid Sprayer: a stronger acid. Only spray damage.'),
+    card('acidspray', 'acidspray_rate', 'rate', 'Acid Sprayer Pump', 'acidTickRate', 'Acid Sprayer: pumps more acid, so the spray hits more often. Only spray rate.', cap(8)),
+    card('acidspray', 'acidspray_range', 'range', 'Acid Sprayer Nozzle Pressure', 'acidRange', 'Acid Sprayer: the spray reaches further. Only spray length.', cap(8)),
+    card('acidspray', 'acidspray_cone', 'cone', 'Acid Sprayer Wide Nozzle', 'acidCone', 'Acid Sprayer: a wider cone of acid. Only cone width.', cap(8)),
+    card('acidspray', 'acidspray_turn', 'turn', 'Acid Sprayer Spin Rotor', 'acidTurn', 'Acid Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
+    card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', cap(4)),
+    card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', cap(3))
   ],
   shockfield: [
     card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),
@@ -154,14 +173,15 @@ const ELEMENT_WEAPON_TEXT = {
   lightning: 'Tesla arcs', grenades: 'Plasma Grenade blasts, bomblets and clouds'
 };
 const ELEMENT_EFFECT_TEXT = {
-  fire: 'set targets on FIRE: every hit adds a burn stack. More ranks burn hotter and stack higher.',
-  frost: 'CHILL targets, slowing them (bosses resist most of it). More ranks slow harder and longer.',
-  corrode: 'CORRODE targets: every stack makes them take more damage from everything. More ranks stack higher.',
-  shock: 'SHOCK targets: a short stun, sometimes a long one. More ranks stun longer and more often.'
+  fire: 'set targets on FIRE: hits pile on burn stacks that tick hard and spread to enemies beside them. More ranks add more stacks.',
+  frost: 'build COLD: targets slow as it builds, then FREEZE solid and take extra damage. More ranks freeze faster, longer and slow harder.',
+  corrode: 'CORRODE targets: acid ticks, and every stack makes them take more damage from everything. More ranks stack faster and cap higher.',
+  shock: 'SHOCK targets: a quick zap stun, sometimes a long one, and shock arcs between enemies that touch. More ranks stun longer and more often.'
 };
 export const ELEMENT_WEAPON_LABEL = {
   blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades',
-  flamethrower: 'Flamethrower' // built-in FIRE (FIXED_ELEMENTS): no element cards, but the same status rows
+  // Built-in elements (FIXED_ELEMENTS): no element cards, but the same status rows.
+  flamethrower: 'Flamethrower', cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer', gas: 'Gas Trail'
 };
 // player.weapons / upgradeLevels key of a weapon's element card.
 export const elementKey = (weapon, element) => `${weapon}_${element}`;
@@ -186,17 +206,22 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // The Flamethrower always burns: its FIRE rank is 1 + its Sticky Gel ('burn' stat) ranks instead
 // (ACROSS THE BOARD's free utility rank included), up to ELEMENT_MAX_RANKS (FIXED_ELEMENT_RANK).
 // The Electric Shield Field is always SHOCK: its rank is 1 + its Stun Coils ('stun' stat) ranks the same way.
-export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', shockfield: 'shock' };
+// The Cryo Sprayer (FROST) and Acid Sprayer (CORROSIVE) rank theirs like the Flamethrower, from Deep Freeze / Etching Agent.
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
-export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || 0));
-// Flamethrower FIRE rank read straight from the card ranks and Breakthroughs (no build allocated:
-// status-effects.js asks on every flame hit). Equals flameBurnRank(weaponBuild(p, 'flamethrower')).
-export function flameElementRank(p) {
-  const bt = p?.breakthroughs?.flamethrower;
+// Sprayer element rank from a build: 1 + its element stat ranks (burn / chill / acid; one per sprayer).
+export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || b?.r?.chill || b?.r?.acid || 0));
+// A sprayer's element rank read straight from its element card ranks and Breakthroughs (no build
+// allocated: status-effects.js asks on every hit). Equals flameBurnRank(weaponBuild(p, weapon)).
+const sprayElementRank = (weapon, cardId) => (p) => {
+  const bt = p?.breakthroughs?.[weapon];
   let atb = 0;
   if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
-  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.flamethrower_burn || 0) + atb * BT_BOOST_RANKS);
-}
+  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.[cardId] || 0) + atb * BT_BOOST_RANKS);
+};
+export const flameElementRank = sprayElementRank('flamethrower', 'flamethrower_burn');
+export const cryoElementRank = sprayElementRank('cryospray', 'cryospray_chill');
+export const acidElementRank = sprayElementRank('acidspray', 'acidspray_etch');
 // Electric Shield Field SHOCK rank, the same way from its Stun Coils ranks (equals W.fieldStunRank of its build).
 export function fieldElementRank(p) {
   const bt = p?.breakthroughs?.shockfield;
@@ -205,7 +230,7 @@ export function fieldElementRank(p) {
   return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.shockfield_stun || 0) + atb * BT_BOOST_RANKS);
 }
 // Fixed-element weapons whose rank does not follow the level rule above.
-const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank, shockfield: fieldElementRank };
+const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank, cryospray: cryoElementRank, acidspray: acidElementRank, shockfield: fieldElementRank };
 
 // A weapon's element and its rank ({ element, rank }), or null when it has none. Reads player.weapons
 // (kept in step with the card ranks by the cards' apply()).
@@ -239,7 +264,7 @@ export function elementsOf(p, weapons = [...ELEMENT_WEAPONS, ...Object.keys(FIXE
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', shockfield: 'SHOCK FIELD'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -301,9 +326,19 @@ export const TRANSFORMS = {
     18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
   },
   flamethrower: {
-    6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle on the opposite side: two identical streams spin round your ship.'),
+    6: tf('fireballs', 'Fireballs', 'Every second each Flamethrower nozzle lobs a fireball that bursts at the tip of its flames, scorching and igniting everything around it.'),
     12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
+  },
+  cryospray: {
+    6: tf('shatter', 'Shatter', 'When the Cryo Sprayer hits a FROZEN enemy it shatters in a burst of ice shards that hits and chills everything around it.'),
+    12: tf('slicks', 'Frost Slicks', 'Cryo Sprayer coolant splashes down at the tip of the spray as freezing slicks that keep chilling whatever crosses them.'),
+    18: tf('blizzard', 'Blizzard Ring', 'Every few seconds the Cryo Sprayer vents a ring of frost that rolls out all around you, chilling and shoving back everything it passes.')
+  },
+  acidspray: {
+    6: tf('meltdown', 'Meltdown', 'Corroded enemies the Acid Sprayer kills melt down in an acid splash that hits and corrodes everything around them.'),
+    12: tf('pools', 'Acid Pools', 'Acid Sprayer acid splashes down at the tip of the spray as caustic pools that keep eating whatever crosses them.'),
+    18: tf('caustic', 'Caustic Ring', 'Every few seconds the Acid Sprayer vents a ring of acid that rolls out all around you, corroding and shoving back everything it passes.')
   },
   shockfield: {
     6: tf('lash', 'Arc Lash', 'Every Electric Shield Field discharge also lashes arcs out at the 3 nearest enemies beyond the field, stunning them too.'),
@@ -316,7 +351,7 @@ export const TRANSFORMS = {
 // A longer-lived singularity grinds longer, so its lifetime is POWER too. Everything else (size, radius,
 // pull, reach, range, spin, pierce, capacity, fuse, turret lifetime and recharge: turret DPS is counted
 // with every turret out) is UTILITY.
-export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration']);
+export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;

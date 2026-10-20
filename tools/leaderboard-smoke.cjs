@@ -61,7 +61,7 @@ async function openGame(browser, api) {
 // Ends a believable run (200 s, wave 10) straight away.
 const endRun = (page) => page.evaluate(() => {
   const g = __game;
-  g.startGame();
+  g.startGame({ picked: true }); // past the starting-weapon pick
   Object.assign(g, { score: 123456, elapsedTime: 200.4, wave: 10, kills: 900, multiplier: 12.3 });
   g.player.level = 14;
   g.triggerGameOver();
@@ -93,6 +93,8 @@ const text = (page, sel) => page.locator(sel).innerText();
       await page.locator('#btn-start-game').waitFor();
       if (!/SYNCING/.test(await text(page, '#highscore-note'))) throw Error('Board should say SYNCING while waiting');
       await page.keyboard.press('Space');
+      await page.locator('#start-pick-modal').waitFor({ state: 'visible' });
+      await page.keyboard.press('Space'); // the starting-weapon pick: launch the lit weapon
       if (await page.evaluate(() => __game.state) !== 'PLAYING') throw Error('A slow API must not block launching a run');
       await page.evaluate(() => __game.togglePause());
       await page.waitForFunction(() => /NOT RESPONDING/.test(document.getElementById('highscore-note').textContent), null, { timeout: 8000 });
@@ -258,6 +260,9 @@ const text = (page, sel) => page.locator(sel).innerText();
       await page.waitForTimeout(250);
       await page.screenshot({ path: 'leaderboard-hardcore-smoke.png' });
       await page.locator('#btn-restart-game').click();
+      await page.locator('#start-pick-modal').waitFor({ state: 'visible' });
+      await page.keyboard.press('Enter'); // the starting-weapon pick: launch the lit weapon
+      if (await page.evaluate(() => __game.state) !== 'PLAYING') throw Error('RELAUNCH should start a run after the starting-weapon pick');
       if (await page.evaluate(() => __game.mode) !== 'hardcore') throw Error('RELAUNCH should keep the mode');
       if (!await page.locator('#mode-hud-badge').isVisible()) throw Error('A HARDCORE run wears its HUD badge');
       await page.evaluate(() => __game.returnToTitle());

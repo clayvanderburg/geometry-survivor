@@ -130,7 +130,9 @@ function installInstrumentation(game, metrics) {
 
   game.hitEnemy = function (e, dmg, source = 'blaster', kx = 0, ky = 0, flash = 1, stat = source) {
     const before = Math.max(0, e.hp);
-    const src = attribute(source);
+    // A generic 'other' hit that names its stat (e.g. Autocannon flak bursts: source 'other', stat
+    // 'blaster') books under that stat, like the run-stats tracker; call-site contexts still win.
+    const src = attribute(source === 'other' && stat && stat !== 'other' && !ctxStack.length ? stat : source);
     if (e.firstHitAt === undefined) e.firstHitAt = game.elapsedTime;
     e.hitsTaken = (e.hitsTaken || 0) + 1;
     hitDepth++;

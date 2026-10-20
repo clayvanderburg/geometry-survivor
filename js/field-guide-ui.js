@@ -5,6 +5,7 @@ import {
   GUIDE_GROUPS, HOSTILE_ENTRIES, MECHANIC_ENTRIES, hostileStatRows, hostileStats, lieutenantModifierRows, resolveText, weaponGuide
 } from './field-guide.js';
 import { GuidePreview, drawSilhouette, PREVIEW_DT } from './field-guide-scenes.js';
+import { clipHTML, weaponClip } from './weapon-media.js';
 
 export const GUIDE_TABS = [
   { id: 'hostiles', label: 'HOSTILES' },
@@ -62,9 +63,10 @@ export function mechanicsHTML() {
   return `<section class="guide-section"><div class="guide-grid">${cards}</div></section>`;
 }
 
-// Shared card markup for the WEAPONS and UPGRADES tabs.
+// Shared card markup for the WEAPONS and UPGRADES tabs. Weapons lead with their Weapon Range clip.
 function upgradeCardHTML(u, category) {
   return `<article class="guide-entry guide-weapon${u.evolution ? ' evolution' : ''}${u.owned ? ' owned' : ''}" data-entry="${esc(u.id)}" data-gp-nav tabindex="0">
+      ${u.weapon ? clipHTML(weaponClip(u.id), `${u.name} in action`) : ''}
       <div class="guide-entry-head"><h3>${esc(u.name.replace(/^SYNERGY:\s*/, ''))}</h3></div>
       <div class="guide-weapon-meta">${esc(category)} · ${u.owned ? `<b>OWNED LV ${u.owned}</b>` : u.evolution ? 'ONE-SHOT' : `MAX LV ${u.maxLevel}`}</div>
       ${u.tags.length ? `<div class="guide-chips">${u.tags.map(chipHTML).join('')}</div>` : ''}
@@ -83,6 +85,7 @@ const allCards = (g) => g.categories.flatMap(c => c.items.map(u => ({ u, categor
 export function weaponsHTML(levels = null) {
   const g = weaponGuide(levels);
   const kit = g.kit.map(k => `<article class="guide-entry guide-weapon kit" data-entry="kit-${esc(k.key)}" data-gp-nav tabindex="0">
+    ${clipHTML(weaponClip(k.key), `${k.name} in action`)}
     <div class="guide-entry-head"><h3>${esc(k.name)}</h3></div><div class="guide-weapon-meta">STARTING WEAPON</div>
     <div class="guide-chips">${k.tags.map(chipHTML).join('')}</div><p>${esc(k.text)}</p></article>`).join('');
   const arsenal = cardSection('ARSENAL', allCards(g).filter(x => x.u.weapon), 'Pick these from NEW WEAPON cards on level-up. Each takes one of your 6 weapon slots.');

@@ -9,9 +9,20 @@
 // face, so a rock shadows only the slice of the cone behind it (enemies there are safe) and the rest of
 // the cone burns on. The flames are drawn clipped the same way, so what you see is what burns.
 //
-// Breakthroughs: Twin Nozzle (an identical second nozzle sprays the opposite way), Napalm Puddles (burning
-// puddles splash down at the flames' tip, weapon-fx.js pools) and Inferno Ring (every few seconds a ring
-// of fire rolls out all round the ship and shoves enemies back).
+// Extra Nozzle cards add identical streams (up to MAX_NOZZLES), spaced evenly round the spin.
+//
+// Breakthroughs: the LV 6 burst (Fireballs: every W.flameBurstEvery s each nozzle lobs a fireball that
+// bursts at the tip of its flames), Napalm Puddles (burning puddles splash down at the flames' tip,
+// weapon-fx.js pools) and Inferno Ring (every few seconds a ring of fire rolls out all round the ship and
+// shoves enemies back).
+//
+// The same engine drives the Cryo Sprayer (FROST: Shatter, frost slicks, Blizzard Ring) and the Acid
+// Sprayer (CORROSIVE: Meltdown, acid pools, Caustic Ring): `new Flamethrower(kind)` with a SPRAY_KINDS
+// key. They share the Flamethrower's numbers (W.flame* formulas read only the build's ranks); only the
+// weapon, damage source, LV 6 burst trigger, colours, puddle look and sound differ. Shatter bursts a
+// FROZEN enemy the spray hits in ice shards, Meltdown a corroded enemy the spray kills in acid; both at
+// most once every W.flameBurstEvery / nozzles s. Bursts are run-stats sub-sources (fireball / shatter /
+// meltdown).
 //
 // Flame puffs live in a fixed pool (nothing is allocated while spraying) and are drawn in three batched
 // fills (hot core, flame, smoke-red tail), so a long spray over a 200-enemy swarm stays cheap. Everything
@@ -23,16 +34,36 @@ export const FLAME_RAYS = 9;      // rays across one nozzle's cone, each clipped
 const MAX_PUFFS = 240;
 const PUFF_LIFE = 0.32;           // s a flame puff lives (it travels the nozzle's reach in that time)
 const PUFFS_PER_TICK = 3;         // per nozzle per 60 Hz tick
+export const MAX_NOZZLES = 4;     // 1 + Extra Nozzle cards (cap 3)
 const ROCK_LICK = 6;              // px the flames lick into a rock face
-const FLAME_HUE = 28;
+
+// Per-weapon look and identity. phase: starting heading offset. bands: [age from, age to, puff colour, growth] for the three batched fills.
+export const SPRAY_KINDS = {
+  flamethrower: {
+    weapon: 'flamethrower', source: 'flame', burst: 'fireball', phase: 0, hue: 28, ringHue2: 46, puddleHue: 22, puddleLook: 'fire', sound: 'flame',
+    wedge: [255, 120, 30], glow: [255, 210, 110],
+    bands: [[0, 0.22, 'rgba(255, 244, 200, 0.5)', 0.7], [0.22, 0.6, 'rgba(255, 168, 46, 0.3)', 1], [0.6, 1.01, 'rgba(255, 78, 24, 0.17)', 1.25]]
+  },
+  cryospray: {
+    weapon: 'cryospray', source: 'cryo', burst: 'shatter', phase: (Math.PI * 2) / 3, hue: 192, ringHue2: 205, puddleHue: 192, puddleLook: 'frost', sound: 'cryo',
+    wedge: [120, 220, 255], glow: [215, 248, 255],
+    bands: [[0, 0.22, 'rgba(240, 253, 255, 0.5)', 0.7], [0.22, 0.6, 'rgba(140, 224, 255, 0.3)', 1], [0.6, 1.01, 'rgba(96, 156, 255, 0.17)', 1.25]]
+  },
+  acidspray: {
+    weapon: 'acidspray', source: 'acid', burst: 'meltdown', phase: (Math.PI * 4) / 3, hue: 100, ringHue2: 80, puddleHue: 100, puddleLook: 'corrode', sound: 'acid',
+    wedge: [130, 255, 60], glow: [210, 255, 150],
+    bands: [[0, 0.22, 'rgba(236, 255, 196, 0.5)', 0.7], [0.22, 0.6, 'rgba(150, 255, 60, 0.3)', 1], [0.6, 1.01, 'rgba(70, 176, 30, 0.17)', 1.25]]
+  }
+};
 
 const wrap = (a) => ((a % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
 
 export class Flamethrower {
-  constructor() {
+  constructor(kind = 'flamethrower') {
+    this.kind = SPRAY_KINDS[kind];
     this.puffs = Array.from({ length: MAX_PUFFS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 1, maxAge: 1, size: 1 }));
-    // Two nozzles (front, Twin Nozzle rear): origin, aim, half-angle, reach and the clipped reach per ray.
-    this.nozzles = [0, 1].map(() => ({ on: false, x: 0, y: 0, angle: 0, half: 0, range: 0, reach: new Float64Array(FLAME_RAYS) }));
+    // Up to MAX_NOZZLES nozzles: origin, aim, half-angle, reach and the clipped reach per ray.
+    this.nozzles = Array.from({ length: MAX_NOZZLES }, () => ({ on: false, x: 0, y: 0, angle: 0, half: 0, range: 0, reach: new Float64Array(FLAME_RAYS) }));
     this.clear();
   }
 
@@ -42,6 +73,9 @@ export class Flamethrower {
     this.tickAcc = 0.6;
     this.puddleT = 0.25;
     this.ringT = 1.2;
+    this.burstT = 0.5; // Fireballs: time to the next volley; Shatter / Meltdown: cooldown before the next burst
+    this.bursts = 0;
+    this.pendingBursts = [];
     this.firing = false;
     this.heat = 0;
     this.time = 0;
@@ -58,8 +92,9 @@ export class Flamethrower {
   // `wantFire`: the player is firing this tick (Game.update's shouldFire).
   update(dt, game, wantFire) {
     const p = game.player;
-    const owned = (p.weapons.flamethrower || 0) > 0;
-    if (owned) this.swing(p, weaponBuild(p, 'flamethrower'), dt);
+    const k = this.kind;
+    const owned = (p.weapons[k.weapon] || 0) > 0;
+    if (owned) this.swing(p, weaponBuild(p, k.weapon), dt);
     // No aiming at all: the nozzle spins round the ship and sprays the whole time it's equipped.
     const firing = owned;
     if (!firing && this.count === 0 && this.heat === 0) {
@@ -69,18 +104,25 @@ export class Flamethrower {
     this.time += dt;
     if (firing !== this.firing) {
       this.firing = firing;
-      game.sound.setFlameRoar?.(firing ? 1 : 0);
+      game.sound.setFlameRoar?.(firing ? 1 : 0, k.sound);
       if (firing) this.tickAcc = Math.max(this.tickAcc, 0.6); // the first scorch lands almost at once
     }
     this.heat = firing ? Math.min(1, this.heat + dt * 10) : Math.max(0, this.heat - dt * 6);
     if (firing) {
-      const b = weaponBuild(p, 'flamethrower');
+      const b = weaponBuild(p, k.weapon);
       this.aim(game, p, b);
       this.tickAcc += dt * W.flameTickRate(b);
       if (this.tickAcc >= 1) {
         const n = Math.floor(this.tickAcc);
         this.tickAcc -= n;
         this.scorch(game, p, b, n);
+      }
+      if (b.t4) {
+        this.burstT -= dt;
+        if (k.burst === 'fireball' && this.burstT <= 0) {
+          this.burstT += W.flameBurstEvery;
+          this.fireballs(game, p, b);
+        }
       }
       if (b.t8) {
         this.puddleT -= dt;
@@ -117,12 +159,13 @@ export class Flamethrower {
   silence(game) {
     this.firing = false;
     for (const nz of this.nozzles) nz.on = false;
-    game.sound?.setFlameRoar?.(0);
+    game.sound?.setFlameRoar?.(0, this.kind.sound);
   }
 
-  // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate.
+  // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate. Each kind
+  // starts a third of a turn apart (`phase`), so two or three sprayers fan out instead of stacking.
   swing(p, b, dt) {
-    if (this.swivel === null) this.swivel = p.angle;
+    if (this.swivel === null) this.swivel = p.angle + (this.kind.phase || 0);
     this.swivel = wrap(this.swivel + W.flameTurnRate(b) * dt);
   }
 
@@ -131,13 +174,14 @@ export class Flamethrower {
     const range = flameRange(p, b);
     const half = W.flameConeHalf(b);
     const rocks = game.asteroidManager?.getNearbyAsteroids?.(p.x, p.y, game.asteroidManager.cellsFor?.(range + 20) ?? Math.ceil(range / 140) + 1) || [];
+    const count = Math.min(MAX_NOZZLES, W.flameNozzles(b));
     for (let k = 0; k < this.nozzles.length; k++) {
       const nz = this.nozzles[k];
-      nz.on = k === 0 || b.t4;
+      nz.on = k < count;
       if (!nz.on) continue;
-      nz.angle = (this.swivel ?? p.angle) + (k === 0 ? 0 : Math.PI);
+      nz.angle = (this.swivel ?? p.angle) + (k * Math.PI * 2) / count;
       nz.half = half;
-      nz.range = k === 0 ? range : range * W.flameRearRange;
+      nz.range = range;
       const muzzle = (p.radius || 15) * 0.95;
       nz.x = p.x + Math.cos(nz.angle) * muzzle;
       nz.y = p.y + Math.sin(nz.angle) * muzzle;
@@ -171,22 +215,63 @@ export class Flamethrower {
     return 1 - W.flameEdgeFalloff * Math.max(0, Math.min(1, (d - r) / nz.range));
   }
 
-  // One or more scorches: everything in a cone takes the hit once (the best nozzle's share).
+  // One or more scorches: everything in a cone takes the hit once (the best nozzle's share). With the
+  // LV 6 Breakthrough, Shatter (a FROZEN enemy hit) or Meltdown (a corroded enemy killed) bursts it,
+  // once the burst cooldown is ready; bursts go off after the sweep so no kill shifts the list mid-loop.
   scorch(game, p, b, n) {
-    const damage = weaponDamage(p, 'flame', b) * n;
+    const k = this.kind;
+    const source = k.source;
+    const damage = weaponDamage(p, source, b) * n;
     const enemies = game.enemyManager.enemies;
+    const trigger = b.t4 && k.burst !== 'fireball' ? k.burst : null;
+    const pending = this.pendingBursts;
+    pending.length = 0;
     for (let i = enemies.length - 1; i >= 0; i--) {
       if (i >= enemies.length) continue;
       const e = enemies[i];
       if (e.dead || e.invulnerable) continue;
       let share = 0;
-      for (let k = 0; k < this.nozzles.length; k++) {
-        const nz = this.nozzles[k];
+      for (let j = 0; j < this.nozzles.length; j++) {
+        const nz = this.nozzles[j];
         if (nz.on) share = Math.max(share, this.coverage(nz, e));
       }
-      if (share > 0) game.hitEnemy(e, damage * share, 'flame', 0, 0, 0.3);
+      if (share <= 0) continue;
+      const frozen = trigger === 'shatter' && e.st?.frozenT > 0;
+      const corroded = trigger === 'meltdown' && e.st?.corrode > 0;
+      game.hitEnemy(e, damage * share, source, 0, 0, 0.3);
+      if (this.burstT <= 0 && (frozen || (corroded && (e.dead || e.hp <= 0)))) {
+        pending.push(e.x, e.y);
+        this.burstT = W.flameBurstEvery / Math.max(1, W.flameNozzles(b));
+      }
     }
+    for (let j = 0; j < pending.length; j += 2) this.burst(game, p, b, pending[j], pending[j + 1], 0);
     this.scorches += n;
+  }
+
+  // Fireballs: every nozzle lobs a fireball to the tip of its (clipped) stream, bursting a moment later.
+  fireballs(game, p, b) {
+    for (const nz of this.nozzles) {
+      if (!nz.on) continue;
+      const reach = this.reachAt(nz, 0) * 0.9;
+      this.burst(game, p, b, nz.x + Math.cos(nz.angle) * reach, nz.y + Math.sin(nz.angle) * reach, W.flameBurstFlight, nz.x, nz.y);
+    }
+  }
+
+  // One LV 6 burst at (x, y): a blast through the shared damage path (so it applies the sprayer's
+  // element), after `delay` s when lobbed from (fromX, fromY), at once otherwise.
+  burst(game, p, b, x, y, delay = 0, fromX = x, fromY = y) {
+    const k = this.kind;
+    const radius = W.flameBurstRadius * areaMult(p);
+    const damage = weaponDamage(p, k.source, b) / W.flameDamageMult(b) * W.flameBurstDamageMult(b);
+    if (delay > 0 && game.weaponFx?.schedule) {
+      game.weaponFx.schedule({ x, y, fromX, fromY, delay, radius, damage, hue: k.hue, source: k.source, style: k.burst === 'fireball' ? 'fireball' : 'pop', kind: k.burst, knock: 1, size: 7 });
+    } else {
+      game.particles?.spawnShockwave?.(x, y, radius, k.hue, 4, 0.3);
+      game.particles?.spawnExplosionSparks?.(x, y, 12, k.hue, 1, 4, 3);
+      game.damageEnemiesInRadius(x, y, radius, damage, k.hue, k.source, 1, undefined, k.burst);
+    }
+    game.sound?.playFlameBurst?.(k.sound);
+    this.bursts++;
   }
 
   // Napalm Puddles: a burning puddle splashes down near the tip of the front flames.
@@ -196,19 +281,21 @@ export class Flamethrower {
     const reach = this.reachAt(nz, off) * (0.7 + Math.random() * 0.25);
     const x = nz.x + Math.cos(nz.angle + off) * reach;
     const y = nz.y + Math.sin(nz.angle + off) * reach;
-    const damage = weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b);
+    const k = this.kind;
+    const damage = weaponDamage(p, k.source, b) / W.flameDamageMult(b) * W.flamePuddleDamageMult(b);
     game.weaponFx?.addPool({ x, y, radius: W.flamePuddleRadius * areaMult(p), life: W.flamePuddleLife, tick: W.flamePuddleTick,
-      damage, hue: 22, source: 'flame', look: 'fire' });
+      damage, hue: k.puddleHue, source: k.source, look: k.puddleLook });
   }
 
   // Inferno Ring: a ring of fire rolls out round the ship, scorching and shoving everything it passes.
   ring(game, p, b) {
     const radius = flameRange(p, b) * W.flameRingRadiusMult;
-    const damage = weaponDamage(p, 'flame', b) / W.flameDamageMult(b) * W.flameRingDamageMult(b);
+    const k = this.kind;
+    const damage = weaponDamage(p, k.source, b) / W.flameDamageMult(b) * W.flameRingDamageMult(b);
     const fx = game.particles;
-    fx.spawnShockwave(p.x, p.y, radius, FLAME_HUE, 6, 0.42);
-    fx.spawnShockwave(p.x, p.y, radius * 0.7, 46, 3, 0.32);
-    fx.spawnFlash?.(p.x, p.y, 34, FLAME_HUE, 0.16);
+    fx.spawnShockwave(p.x, p.y, radius, k.hue, 6, 0.42);
+    fx.spawnShockwave(p.x, p.y, radius * 0.7, k.ringHue2, 3, 0.32);
+    fx.spawnFlash?.(p.x, p.y, 34, k.hue, 0.16);
     // A ring of puffs racing outward with the shockwave.
     const n = 30;
     for (let k = 0; k < n && this.count < MAX_PUFFS; k++) {
@@ -223,8 +310,8 @@ export class Flamethrower {
       f.life = f.maxAge = 0.4;
       f.size = 5;
     }
-    game.damageEnemiesInRadius(p.x, p.y, radius, damage, FLAME_HUE, 'flame', W.flameRingKnock);
-    game.sound.playFlameBurst?.();
+    game.damageEnemiesInRadius(p.x, p.y, radius, damage, k.hue, k.source, W.flameRingKnock);
+    game.sound.playFlameBurst?.(k.sound);
     this.rings++;
   }
 
@@ -252,9 +339,10 @@ export class Flamethrower {
   draw(ctx, game) {
     if (this.count === 0 && this.heat === 0) return;
     const camX = game.camX, camY = game.camY, w = game.width, h = game.height;
+    const k = this.kind;
     // Faint wedge of each live nozzle along its clipped rays: the exact area that burns.
     if (this.heat > 0) {
-      ctx.fillStyle = `rgba(255, 120, 30, ${0.07 * this.heat})`;
+      ctx.fillStyle = `rgba(${k.wedge.join(', ')}, ${0.07 * this.heat})`;
       ctx.beginPath();
       for (const nz of this.nozzles) {
         if (!nz.on) continue;
@@ -267,13 +355,8 @@ export class Flamethrower {
       }
       ctx.fill();
     }
-    // Three bands by age: white-hot core near the nozzle, orange flame, a red tail that fades out.
-    const BANDS = [
-      [0, 0.22, 'rgba(255, 244, 200, 0.5)', 0.7],
-      [0.22, 0.6, 'rgba(255, 168, 46, 0.3)', 1],
-      [0.6, 1.01, 'rgba(255, 78, 24, 0.17)', 1.25]
-    ];
-    for (const [lo, hi, color, grow] of BANDS) {
+    // Three bands by age: a hot core near the nozzle, the body of the spray, a tail that fades out.
+    for (const [lo, hi, color, grow] of k.bands) {
       ctx.fillStyle = color;
       ctx.beginPath();
       let any = false;
@@ -291,7 +374,7 @@ export class Flamethrower {
     }
     // Nozzle glow.
     if (this.heat > 0) {
-      ctx.fillStyle = `rgba(255, 210, 110, ${0.55 * this.heat})`;
+      ctx.fillStyle = `rgba(${k.glow.join(', ')}, ${0.55 * this.heat})`;
       ctx.beginPath();
       for (const nz of this.nozzles) {
         if (!nz.on) continue;

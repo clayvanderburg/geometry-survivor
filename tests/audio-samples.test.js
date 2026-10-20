@@ -274,3 +274,71 @@ test('a big XP cluster chimes in a capped, mid-range climb instead of stacking s
   }
   assert.ok(Math.max(...freqs) < 1200, `top chime ${Math.round(Math.max(...freqs))} Hz`);
 });
+
+// A streaming engine with two fake decks (no real media): enough to drive onTrackError.
+function streamingEngine() {
+  const engine = new SoundEngine();
+  const deck = () => ({ token: 0, gain: { gain: { value: 0, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {} } },
+    el: { attrs: { src: 'assets/music/x.mp3' }, src: 'assets/music/x.mp3', loop: false, currentTime: 0, plays: 0,
+      getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; this.src = ''; }, load() {}, pause() {},
+      play() { this.plays++; return Promise.resolve(); } } });
+  engine.ctx = { currentTime: 1 };
+  engine.decks = [deck(), deck()];
+  engine.fileMode = true;
+  engine.deckIndex = 0;
+  engine.deckSrc = ['assets/music/x.mp3', null];
+  engine.musicScene = 'run';
+  return engine;
+}
+
+test('soundtrack hiccups never swap in the old procedural score once a track has played', () => {
+  const engine = streamingEngine();
+  const deck = engine.decks[0];
+  engine.onTrackError(deck, { name: 'AbortError' });
+  engine.onTrackError(deck, { name: 'NotAllowedError' });
+  assert.equal(engine.fileMode, true, 'harmless play() rejections are ignored');
+  assert.equal(engine.playBlocked, true, 'autoplay blocked: waits for a gesture');
+  engine.resumeBlockedMusic();
+  assert.equal(deck.el.plays, 1, 'the next gesture starts the deck again');
+  engine.everStreamed = true;
+  for (let i = 0; i < 12; i++) engine.onTrackError(deck, { code: 2 });
+  clearTimeout(engine.trackRetry);
+  assert.equal(engine.fileMode, true, 'network errors are retried, never a permanent fallback');
+  assert.ok(engine.soundtrack.run.length > 0);
+  engine.onTrackError(engine.decks[1], { code: 2 });
+  assert.equal(engine.trackFailures, 12, 'errors from the deck fading out are ignored');
+});
+
+test('with no soundtrack file ever playing (missing files), the procedural score takes over after a few failures', () => {
+  const engine = streamingEngine();
+  engine.stopMusic = function () { this.fileMode = false; };
+  let started = 0;
+  engine.startMusic = () => { started++; };
+  for (let i = 0; i < 5; i++) engine.onTrackError(engine.decks[0], { code: 4 });
+  clearTimeout(engine.trackRetry);
+  assert.equal(engine.fileMode, true, 'a few failures are retried first');
+  engine.onTrackError(engine.decks[0], { code: 4 });
+  assert.equal(engine.fileMode, false);
+  assert.equal(engine.soundtrack.run.length, 0, 'procedural score');
+  assert.equal(started, 1);
+});
+
+test('a sound effect file that fails to download is fetched again instead of staying procedural', async () => {
+  const engine = new SoundEngine();
+  engine.ctx = { decodeAudioData: (data, ok) => ok({ duration: 0.2 }) };
+  let calls = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; if (calls === 1) throw new Error('offline'); return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }; };
+  const realTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn) => { fn(); return 0; };
+  try {
+    engine.loadSamples(['enemy_hit']);
+    for (let i = 0; i < 10 && !engine.samples.has('enemy_hit'); i++) await new Promise((r) => realTimeout(r, 5));
+    assert.ok(engine.samples.has('enemy_hit'), 'loaded on the retry');
+    assert.equal(engine.sampleFailures.has('enemy_hit'), false);
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = realFetch;
+    globalThis.setTimeout = realTimeout;
+  }
+});

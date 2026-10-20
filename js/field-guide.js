@@ -22,7 +22,7 @@ import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
 import { handSizeFor, slotDamageBonus } from './slot-rewards.js';
-import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, weaponTags, weaponSlots } from './loadout.js';
+import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
 
 export const GUIDE_GROUPS = [
@@ -370,25 +370,27 @@ export const MECHANIC_ENTRIES = [
     id: 'crits', icon: '✦', title: 'CRITICAL HITS',
     body: () => [
       `Every weapon hit rolls a crit: base ${pct(TUNING.baseCritChance ?? 0.05)} chance for ${TUNING.baseCritDamage ?? 1.5}× damage. Crits flash a gold star, shove harder and show a big white-gold number.`,
-      'Deadeye Targeting Lattice raises the chance, Overkill Resonator the multiplier. Burn ticks never crit.'
+      'Deadeye Targeting Lattice raises the chance, Overkill Resonator the multiplier. Status ticks (burn, acid, shock arcs) never crit.'
     ]
   },
   {
-    id: 'status', icon: '☢', title: 'ELEMENTS: BURN · CHILL · CORRODE · STUN',
+    id: 'status', icon: '☢', title: 'ELEMENTS: BURN · FREEZE · CORRODE · SHOCK',
     body: () => [
       `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by a supply cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
       `${WEAPON_BY_ID.gas.name} is born CORROSIVE (no element cards): every gas tick corrodes, its corrode rank grows by 1 at LV 6, 12 and 18, and it counts as a CORROSIVE weapon for STATUS cards and the Corrosive Amplifier.`,
       `${WEAPON_BY_ID.flamethrower.name} is born FIRE (no element cards): every scorch sets its targets burning, Sticky Gel cards raise its burn rank (up to ${ELEMENT_MAX_RANKS}), and it counts as a FIRE weapon for STATUS cards and the Fire Amplifier. It never aims: the nozzle spins slowly round the ship (faster with Spin Rotor cards) and sprays the whole time. Asteroids block its flames: a rock shadows the slice of the cone behind it.`,
+      `${WEAPON_BY_ID.cryospray.name} and ${WEAPON_BY_ID.acidspray.name} are the Flamethrower's twins: the same spinning cone (rocks block it), born FROST and CORROSIVE. Deep Freeze and Etching Agent cards raise their element rank. All three sprayers take Extra Nozzle cards (up to 4 streams). At LV 6 the Flamethrower lobs Fireballs, the Cryo Sprayer Shatters frozen enemies and the Acid Sprayer makes corroded kills Melt Down; LV 12 / 18 drop puddles / slicks / pools and roll out a ring.`,
       `${WEAPON_BY_ID.shockfield.name} is born SHOCK (no element cards): every discharge stuns through the usual SHOCK rules, its Stun Coils cards rank the stun, and it counts as a SHOCK weapon for STATUS cards and the Shock Amplifier.`,
-      `BURN (FIRE): each hit adds a stack (max 3 + rank) and refreshes the fire for ${W.burnDuration} s; stacks tick every ${W.burnTickInterval} s. CHILL (FROST): slows movement and frosts the hull; bosses feel ${pct(TUNING.chillBossMult ?? 0.4)} of the slow. CORRODE (CORROSIVE): each stack makes the target take +${pct(W.corrodePerStack)} damage from every source, burn included.`,
-      `STUN (SHOCK): a hit stuns for ${W.shockStun(1)} s, or ${pct(W.shockLongChance(1))} of the time a long ${W.shockLongStun} s stun: the hull crackles yellow, stops moving and can't attack (touching it still hurts). Then it is stun-immune for ${W.stunImmunity} s, so nothing is stunned forever. Bosses keep ${pct(TUNING.shockBossMult ?? 0.2)} of a stun (immune ${W.stunImmunityBoss} s), lieutenants ${pct(TUNING.shockLieutenantMult ?? 0.5)} (immune ${W.stunImmunityLieutenant} s).`,
-      'STATUS cards (Status Potency, Status Application, Status Duration, Shock Conductor and the FIRE / FROST / CORROSIVE / SHOCK Amplifiers) strengthen every weapon of their element and never raise a weapon\'s level. They only show up once a weapon carries a matching element. Vortexes take statuses like any enemy; invulnerable hulls are immune.'
+      `STACKS: every hit of an element weapon piles on stacks of its status (more for bigger hits and higher ranks). Every ${W.statusTick} s the stacks act, then ${pct(W.statusDecay)} of them wear off; a target you keep hitting builds them up, one you stop hitting cools off in a few seconds.`,
+      `BURN (FIRE): the big damage over time, ticking every ${W.statusTick} s; a burning enemy may set the enemy beside it alight (${pct(W.burnSpreadChance)} a tick). COLD (FROST): no damage, but the target slows as cold builds (up to ${pct(W.chillSlow(1))} at rank 1; bosses feel ${pct(TUNING.chillBossMult ?? 0.4)}) until it FREEZES solid for ${W.freezeDuration(1)} s, takes +${pct(W.frozenDamageTaken)} damage, then can't freeze for ${W.freezeImmunity} s. Tough hulls take more cold to freeze. CORRODE (CORROSIVE): a light acid tick, and every stack makes the target take more damage from every source (up to +${pct(W.corrodeCap(1))} at rank 1).`,
+      `SHOCK: every hit is a quick ${W.shockStun(1)} s zap stun, or ${pct(W.shockLongChance(1))} of the time a long ${W.shockLongStun} s stun: the hull crackles yellow, stops moving and can't attack (touching it still hurts). Then it is stun-immune for ${W.stunImmunity} s. Shock stacks arc between enemies that TOUCH: the charged one takes a zap of damage and passes ${pct(W.shockConductShare)} of its charge to the hulls it touches, stunning them too (pack them with a Vortex Singularity). Shocked targets are easier to crit. Bosses keep ${pct(TUNING.shockBossMult ?? 0.2)} of a stun or freeze (stun-immune ${W.stunImmunityBoss} s), lieutenants ${pct(TUNING.shockLieutenantMult ?? 0.5)} (${W.stunImmunityLieutenant} s).`,
+      'STATUS cards (Status Potency, Status Reactions, Status Duration, Shock Conductor and the FIRE / FROST / CORROSIVE / SHOCK Amplifiers) strengthen every weapon of their element and never raise a weapon\'s level. They only show up once a weapon carries a matching element. Vortexes take statuses like any enemy; invulnerable hulls are immune.'
     ]
   },
   {
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
-      `You carry up to ${weaponSlots()} weapons. The crab starts with ${STARTING_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(' and ')}. Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
+      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the crab's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
       `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
       `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { levelBuild } from '../js/weapon-levels.js';
 
-// Crits, weapon tags and element statuses (BURN / CHILL / CORRODE; SHOCK has its own file). Browser services are stubbed;
+// Crits, weapon tags and element statuses (BURN / COLD / CORRODE / SHOCK conduction; the SHOCK stun has its own file). Browser services are stubbed;
 // the game fixtures run the production hitEnemy / status / firing code.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
@@ -17,7 +17,7 @@ const { EnemyManager } = await import('../js/enemies.js');
 const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, WEAPON_TAGS, TAG_INFO, weaponDamage, critMultiplier } = await import('../js/weapon-scaling.js');
-const { updateStatusEffects, damageTakenMult, isAfflicted } = await import('../js/status-effects.js');
+const { updateStatusEffects, damageTakenMult, isAfflicted, shockCritBonus } = await import('../js/status-effects.js');
 
 const silent = new Proxy({}, { get: () => () => {} });
 const byId = (id) => UPGRADE_POOL.find((u) => u.id === id);
@@ -136,27 +136,29 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   assert.equal(1e6 - clean.hp, 10 * 1.75);
 });
 
-test('BURN stacks to its cap, ticks every half second as burn damage and expires on time', () => {
+test('BURN: stacks follow the hit, tick every half second, lose a fifth each tick, and deal the previewed share of the hit', () => {
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('blaster_fire'));
   const e = enemy();
   const g = game([e], p);
-  for (let i = 0; i < 10; i++) withRandom(0.99, () => g.hitEnemy(e, 1, 'blaster'));
-  assert.equal(e.st.burn, W.burnMaxStacks(1));
-  const preview = row('blaster:burnMax').get(p);
-  assert.equal(preview, p.stats.damage * W.burnStackDpsMult(1) * W.burnMaxStacks(1));
+  withRandom(0.99, () => g.hitEnemy(e, 1000, 'blaster'));
+  assert.ok(Math.abs(e.st.burn - 1000 / p.stats.damage * W.stacksPerDamage) < 1e-9, 'stacks per base damage dealt');
+  const share = row('blaster:burn').get(p);
+  assert.ok(Math.abs(share - W.stacksPerDamage * W.burnPerStack / W.statusDecay) < 1e-12, `burn share ${share}`);
 
   const hp = e.hp;
   let ticks = 0;
   const original = g.hitEnemy;
   g.hitEnemy = function (...args) { if (args[2] === 'burn') ticks++; return original.apply(this, args); };
-  for (let t = 0; t < 29; t++) updateStatusEffects(g, DT);
+  for (let t = 0; t < 29; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
   assert.equal(ticks, 0, 'first tick waits a full interval');
-  for (let t = 0; t < 31 * 6; t++) updateStatusEffects(g, DT);
-  assert.equal(ticks, W.burnDuration / W.burnTickInterval, 'one tick per interval for the whole duration');
-  assert.ok(Math.abs((hp - e.hp) - preview * W.burnDuration) < 1e-6, 'total = previewed max DPS × duration');
-  assert.equal(e.st.burn, 0, 'expired');
+  withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.equal(ticks, 1);
+  assert.ok(Math.abs(e.st.burn - 1000 / p.stats.damage * W.stacksPerDamage * (1 - W.statusDecay)) < 1e-6, 'a fifth wore off');
+  for (let t = 0; t < 60 * 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.equal(e.st.burn, 0, 'burnt out');
+  assert.ok(Math.abs((hp - e.hp) / (1000 * share) - 1) < 0.01, `total burn ${(hp - e.hp).toFixed(1)} ~ ${(1000 * share).toFixed(1)}`);
   // Burn ticks print in the burn colour.
   assert.ok(g.damageNumbers.pool.slice(0, g.damageNumbers.count).some((n) => n.source === 'burn' && !n.crit));
 });
@@ -180,15 +182,36 @@ test('BURN can kill, and a burning enemy dying mid-sweep is never ticked twice',
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('blaster_fire'));
-  const enemies = [enemy({ hp: 1 }), enemy({ hp: 1 }), enemy()];
+  const enemies = [enemy({ hp: 46, x: 1000 }), enemy({ hp: 46, x: 1400 }), enemy({ x: 1800 })];
   const g = game(enemies, p);
-  for (const e of [...enemies]) withRandom(0.99, () => g.hitEnemy(e, 0.5, 'blaster'));
+  for (const e of [...enemies]) withRandom(0.99, () => g.hitEnemy(e, 45, 'blaster'));
   for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
   assert.equal(g.enemyManager.enemies.length, 1);
   assert.equal(g.kills, 2);
 });
 
-test('CHILL from missile blasts slows movement, bosses resist, and it wears off', () => {
+test('BURN spreads: a burning enemy can set the one beside it alight with half its stacks, never one far away', () => {
+  reset();
+  const p = makePlayer();
+  applyUpgradeLevels(p, byId('blaster_fire'));
+  const lit = enemy({ x: 2000 });
+  const beside = enemy({ x: 2000 + 15 + 15 + 20 });
+  const far = enemy({ x: 2400 });
+  const g = game([lit, beside, far], p);
+  withRandom(0.99, () => g.hitEnemy(lit, 200, 'blaster'));
+  const stacks = lit.st.burn;
+  for (let t = 0; t < 30; t++) withRandom(0, () => updateStatusEffects(g, DT)); // spread roll always passes
+  assert.ok(Math.abs(beside.st.burn - stacks * W.burnSpreadShare) < 1e-6, 'half the stacks, before the tick wore any off');
+  assert.equal(beside.st.burnStat, 'burn_blaster', 'credited to the weapon that lit the first one');
+  assert.equal(far.st, undefined);
+  const cold = enemy({ x: 2050 });
+  const h = game([enemy({ x: 2000 }), cold], p);
+  withRandom(0.99, () => h.hitEnemy(h.enemyManager.enemies[0], 200, 'blaster'));
+  for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(h, DT)); // roll fails
+  assert.equal(cold.st, undefined, 'no spread on a failed roll');
+});
+
+test('COLD slows as it builds, then FREEZES solid: held still, +25% damage taken, then thaws and is immune for a while', () => {
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('missiles'));
@@ -197,48 +220,98 @@ test('CHILL from missile blasts slows movement, bosses resist, and it wears off'
   assert.equal(card.headline, '+5% CHILL SLOW');
 
   const manager = new EnemyManager();
-  const e = enemy({ vx: 2, speed: 2 });
-  const boss = enemy({ isBoss: true, type: 'boss', x: 2200, speed: 2, vx: 2 });
+  const e = enemy({ vx: 2, speed: 2, hp: 1000, maxHp: 1000 });
+  const boss = enemy({ isBoss: true, type: 'boss', x: 2200, speed: 2, vx: 2, hp: 1000, maxHp: 1000 });
   manager.enemies = [e, boss];
   const g = game(manager.enemies, p);
   g.enemyManager = manager;
-  withRandom(0.99, () => g.damageEnemiesInRadius(2150, 2000, 200, 1, 190, 'missile'));
-  const slow = W.chillSlow(1);
-  assert.equal(e.speedScale, 1 - slow);
-  assert.equal(boss.speedScale, 1 - slow * TUNING.chillBossMult);
-  assert.equal(row('missiles:chill').get(p), slow);
+  // Cold worth 10% of the hull: a third of the way to its freeze threshold.
+  const threshold = W.freezeHpShare * (1000 / p.stats.damage) * W.stacksPerDamage;
+  withRandom(0.99, () => g.hitEnemy(e, 100, 'missile'));
+  withRandom(0.99, () => g.hitEnemy(boss, 100, 'missile'));
+  assert.ok(Math.abs(e.st.coldMax - threshold) < 1e-9);
+  assert.ok(Math.abs(boss.st.coldMax - threshold * W.freezeResistBoss) < 1e-9, 'bosses need more cold');
+  const slow = W.chillSlow(1) * (1 / 3);
+  assert.ok(Math.abs(e.speedScale - (1 - slow)) < 1e-9, `slowed ${e.speedScale}`);
+  assert.ok(boss.speedScale > e.speedScale, 'bosses resist the slow');
+  assert.equal(row('missiles:chill').get(p), W.chillSlow(1));
 
   manager.update(DT, { x: 9999, y: 2000 }, [], silent, silent, 4200, 4200);
   assert.ok(Math.abs(Math.hypot(e.vx, e.vy) - 2 * (1 - slow)) < 1e-9, 'speed capped by the chill');
 
-  const ticks = Math.ceil(W.chillDuration(1) * 60) + 1;
-  for (let t = 0; t < ticks; t++) updateStatusEffects(g, DT);
+  // Past the threshold the next tick freezes it.
+  withRandom(0.99, () => g.hitEnemy(e, 300, 'missile'));
+  for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.ok(e.st.frozenT > 0 && isAfflicted(e), 'frozen');
+  assert.equal(e.speedScale, 0);
+  const hp = e.hp;
+  withRandom(0.99, () => g.hitEnemy(e, 10, 'orbital'));
+  assert.ok(Math.abs(hp - e.hp - 10 * (1 + W.frozenDamageTaken)) < 1e-9, 'frozen hulls take more damage');
+  const x = e.x;
+  for (let t = 0; t < 30; t++) manager.update(DT, { x: 9999, y: 2000 }, [], silent, silent, 4200, 4200);
+  assert.ok(Math.abs(e.x - x) < 0.5, 'a frozen enemy holds still');
+  for (let t = 0; t < Math.ceil(W.freezeDuration(1) * 60) + 1; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.equal(e.st.frozenT, 0, 'thawed');
+  assert.equal(e.st.cold, 0, 'the cold is spent');
   assert.equal(e.speedScale, 1);
-  assert.equal(e.st.chillT, 0);
+  assert.ok(e.st.freezeImmT > 0, 'immune for a while');
+  withRandom(0.99, () => g.hitEnemy(e, 400, 'missile'));
+  for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.equal(e.st.frozenT, 0, 'no refreeze while immune');
 });
 
-test('CORRODE from arcs stacks to a cap and amplifies every source, burn included', () => {
+test('CORRODE: acid ticks, and every stack amplifies every source (DoTs included) up to the rank cap', () => {
   reset();
   const p = makePlayer();
   applyUpgradeLevels(p, byId('lightning'));
   applyUpgradeLevels(p, byId('lightning_corrode'));
   const e = enemy();
   const g = game([e], p);
-  for (let i = 0; i < 12; i++) withRandom(0.99, () => g.hitEnemy(e, 1, 'lightning'));
-  assert.equal(e.st.corrode, W.corrodeMaxStacks(1));
-  const amp = 1 + W.corrodePerStack * W.corrodeMaxStacks(1);
-  assert.equal(damageTakenMult(e), amp);
+  withRandom(0.99, () => g.hitEnemy(e, 20, 'lightning'));
+  const stacks = e.st.corrode;
+  assert.ok(Math.abs(damageTakenMult(e) - (1 + stacks * W.corrodeVulnPerStack)) < 1e-12);
+  for (let i = 0; i < 50; i++) withRandom(0.99, () => g.hitEnemy(e, 100, 'lightning'));
+  const amp = 1 + W.corrodeCap(1);
+  assert.ok(Math.abs(damageTakenMult(e) - amp) < 1e-12, 'capped');
   assert.ok(Math.abs(row('lightning:corrodeMax').get(p) - (amp - 1)) < 1e-12);
 
   const hp = e.hp;
   withRandom(0.99, () => g.hitEnemy(e, 10, 'orbital'));
-  assert.equal(hp - e.hp, 10 * amp);
+  assert.ok(Math.abs(hp - e.hp - 10 * amp) < 1e-9);
   const hp2 = e.hp;
   g.hitEnemy(e, 10, 'burn');
-  assert.equal(hp2 - e.hp, 10 * amp);
+  assert.ok(Math.abs(hp2 - e.hp - 10 * amp) < 1e-9);
 
-  for (let t = 0; t < W.corrodeDuration * 60 + 1; t++) updateStatusEffects(g, DT);
-  assert.equal(damageTakenMult(e), 1);
+  let acid = 0;
+  const original = g.hitEnemy;
+  g.hitEnemy = function (...args) { if (args[2] === 'corrode') acid++; return original.apply(this, args); };
+  for (let t = 0; t < 60 * 30; t++) updateStatusEffects(g, DT);
+  assert.ok(acid > 5, 'acid ticks');
+  assert.equal(damageTakenMult(e), 1, 'and wears off');
+});
+
+test('SHOCK conducts between touching enemies: charge and zaps spread down a packed line, a lone hull takes no shock damage', () => {
+  reset();
+  const p = makePlayer();
+  applyUpgradeLevels(p, byId('lightning'));
+  applyUpgradeLevels(p, byId('lightning_shock'));
+  const touch = 15 + 15 + 3;
+  const a = enemy({ x: 2000 }), b = enemy({ x: 2000 + touch }), c = enemy({ x: 2000 + 2 * touch });
+  const lone = enemy({ x: 3000 });
+  const g = game([a, b, c, lone], p);
+  withRandom(0.99, () => { g.hitEnemy(a, 200, 'lightning'); g.hitEnemy(lone, 200, 'lightning'); });
+  assert.ok(a.st.shock > 0 && a.st.stunT > 0, 'a hit zaps and charges');
+  assert.ok(Math.abs(shockCritBonus(a) - Math.min(W.shockCritCap, a.st.shock * W.shockCritPerStack)) < 1e-12, 'shocked targets are easier to crit');
+  let shockHits = [];
+  const original = g.hitEnemy;
+  g.hitEnemy = function (...args) { if (args[2] === 'shock') shockHits.push(args[0]); return original.apply(this, args); };
+  for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.ok(b.st && b.st.shock > 0, 'conducts into the touching hull');
+  assert.ok(b.st.stunT > 0 || b.st.stunImmT > 0, 'and zaps it');
+  assert.ok(shockHits.includes(a), 'the touching hull takes shock damage');
+  assert.ok(!shockHits.includes(lone), 'a lone hull does not');
+  for (let t = 0; t < 30; t++) withRandom(0.99, () => updateStatusEffects(g, DT));
+  assert.ok(c.st && c.st.shock > 0, 'and on down the line');
 });
 
 test('vortexes take statuses like any enemy; only invulnerable hulls are immune', () => {
@@ -253,7 +326,7 @@ test('vortexes take statuses like any enemy; only invulnerable hulls are immune'
     withRandom(0.99, () => g.hitEnemy(shielded, 1, source));
   }
   assert.ok(vortex.st && vortex.st.burn > 0, 'a FIRE Autocannon ignites a vortex');
-  assert.ok(vortex.st.chillT > 0 && vortex.st.corrode > 0, 'FROST missiles chill it, CORROSIVE arcs corrode it');
+  assert.ok(vortex.st.cold > 0 && vortex.st.corrode > 0, 'FROST missiles chill it, CORROSIVE arcs corrode it');
   assert.equal(shielded.st, undefined);
 });
 

@@ -21,6 +21,12 @@ const sfxBusGain = () => VOLUME_REF.sfx * (TUNING.sfxVolume ?? 1);
 const BOSS_RIFF_STEPS = [0, 3, 6, 8, 11, 14];
 // Peak level of the looping Flamethrower roar into the SFX bus (one-shots sit around 0.2-0.5).
 const FLAME_ROAR_GAIN = 0.07;
+// Filter voices of the sprayer loops (Hz for the body low-pass and the hiss band, the flutter LFO).
+const SPRAY_VOICES = {
+  flame: { body: 420, hiss: 1500, hissGain: 0.18, flutter: 6.5, depth: 0.22 },
+  cryo: { body: 900, hiss: 4200, hissGain: 0.32, flutter: 3, depth: 0.12 },
+  acid: { body: 300, hiss: 900, hissGain: 0.2, flutter: 11, depth: 0.4 }
+};
 
 export const SFX_BASE = 'assets/sfx/';
 
@@ -101,6 +107,8 @@ export const SOUNDTRACK = Object.freeze({
 });
 const MUSIC_XFADE = 4; // seconds of overlap between playlist tracks
 const MUSIC_SWITCH_FADE = 1.6; // seconds of overlap when the scene changes (menu <-> run, boss in/out)
+const MUSIC_GIVE_UP = 6; // failures in a row, before any track ever played, that switch to the procedural score
+const SAMPLE_RETRIES = 5; // re-downloads of a sound effect file that failed (2 s, 4 s, 8 s...)
 // Beat pulse while streaming: the low band (bins up to ~170 Hz at fftSize 1024) against its running average.
 const PULSE_LOW_BINS = 4;
 
@@ -194,6 +202,7 @@ export class SoundEngine {
     // Samples
     this.samples = new Map();
     this.sampleFailures = new Set();
+    this.sampleTries = {};
     this.sampleLoadStarted = false;
 
     this.geomPitchStep = 0;
@@ -274,6 +283,7 @@ export class SoundEngine {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {});
       if (!this.isPlayingMusic) this.startMusic();
+      this.resumeBlockedMusic();
       this.loadSamples();
       return;
     }
@@ -401,8 +411,15 @@ export class SoundEngine {
       if (this.sampleRequested.has(name)) continue;
       this.sampleRequested.add(name);
       this.fetchBuffer(`${SFX_BASE}${SFX_FILE[name] ?? name}.mp3`)
-        .then(buffer => { if (this.ctx === ctx) this.samples.set(name, buffer); })
-        .catch(() => { this.sampleFailures.add(name); });
+        .then(buffer => { if (this.ctx === ctx) { this.samples.set(name, buffer); this.sampleFailures.delete(name); } })
+        .catch(() => {
+          // A failed download used to leave that sound procedural for the whole session. Retry with a
+          // growing delay (and on the next gesture, which calls loadSamples again).
+          this.sampleFailures.add(name);
+          this.sampleRequested.delete(name);
+          const tries = (this.sampleTries[name] = (this.sampleTries[name] || 0) + 1);
+          if (tries <= SAMPLE_RETRIES && this.ctx === ctx) setTimeout(() => { if (this.ctx === ctx) this.loadSamples([name]); }, 2000 * 2 ** (tries - 1));
+        });
     }
   }
 
@@ -1026,8 +1043,12 @@ export class SoundEngine {
           src.connect(gain);
           gain.connect(this.musicFilter);
           if (this.musicAnalyser) gain.connect(this.musicAnalyser);
-          el.addEventListener('error', () => this.onTrackError());
-          return { el, src, gain, token: 0 };
+          const deck = { el, src, gain, token: 0 };
+          el.addEventListener('error', () => this.onTrackError(deck, el.error));
+          // A track that actually plays proves streaming works: from then on errors are retried, never
+          // swapped for the procedural score.
+          el.addEventListener('playing', () => { this.everStreamed = true; this.trackFailures = 0; this.playBlocked = false; });
+          return deck;
         });
       }
     } catch (_e) {
@@ -1095,7 +1116,7 @@ export class SoundEngine {
     if (resume) this.resumeAt = null;
     try { deck.el.currentTime = resume; } catch (_e) {}
     const playing = deck.el.play();
-    if (playing && typeof playing.catch === 'function') playing.catch(() => this.onTrackError());
+    if (playing && typeof playing.catch === 'function') playing.catch((err) => this.onTrackError(deck, err));
     deck.gain.gain.cancelScheduledValues(t);
     deck.gain.gain.setValueAtTime(deck.gain.gain.value, t);
     deck.gain.gain.linearRampToValueAtTime(1, t + fade);
@@ -1116,12 +1137,45 @@ export class SoundEngine {
     return Math.max(0, Math.min(1, this.filePulse));
   }
 
-  // A track that cannot load or play: give up on files for this session and run the procedural score.
-  onTrackError() {
-    if (!this.fileMode) return;
-    this.stopMusic();
-    this.soundtrack = { menu: null, run: [], boss: null };
-    this.startMusic();
+  // A track that failed to load or play. Harmless rejections are ignored: AbortError (a newer play()/pause()
+  // or a src change replaced this play) and NotAllowedError (autoplay blocked until a gesture: init()
+  // retries). Real failures (network, decode) are retried with a growing delay, moving on in the playlist
+  // when a track keeps failing. Only if no track has ever played (the files are missing) does the game
+  // switch to the procedural score, which used to happen on the first hiccup and stuck for the session.
+  onTrackError(deck, err) {
+    if (!this.fileMode || !this.decks) return;
+    if (deck && deck !== this.decks[this.deckIndex]) return; // the deck fading out: nothing to fix
+    if (deck && !deck.el.getAttribute?.('src')) return;      // an emptied deck (retry reset) reports nothing real
+    if (err?.name === 'AbortError') return;
+    if (err?.name === 'NotAllowedError') { this.playBlocked = true; return; }
+    this.trackFailures = (this.trackFailures || 0) + 1;
+    if (!this.everStreamed && this.trackFailures >= MUSIC_GIVE_UP) {
+      this.stopMusic();
+      this.soundtrack = { menu: null, run: [], boss: null };
+      this.startMusic();
+      return;
+    }
+    if (this.trackFailures % 2 === 0 && !this.wantedTrack().loop) this.playIndex++; // skip a track that keeps failing
+    clearTimeout(this.trackRetry);
+    this.trackRetry = setTimeout(() => this.retryTrack(), Math.min(15000, 1000 * 2 ** Math.min(4, this.trackFailures - 1)));
+  }
+
+  // Reload the wanted track on a fresh deck slot (onTrackError's retry).
+  retryTrack() {
+    if (!this.fileMode || !this.decks) return;
+    const deck = this.decks[this.deckIndex];
+    try { deck.el.removeAttribute('src'); deck.el.load(); } catch (_e) {}
+    this.deckSrc[this.deckIndex] = null;
+    this.updateFileMusic();
+  }
+
+  // A gesture after autoplay was blocked: start the playing deck again.
+  resumeBlockedMusic() {
+    if (!this.playBlocked || !this.fileMode || !this.decks) return;
+    this.playBlocked = false;
+    const deck = this.decks[this.deckIndex];
+    const playing = deck.el.play?.();
+    if (playing && typeof playing.catch === 'function') playing.catch((err) => this.onTrackError(deck, err));
   }
 
   // =====================================================================
@@ -1931,34 +1985,38 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.7, 0.24);
   }
 
-  // Flamethrower: one soft looping roar, faded in while the nozzles spray and out when they stop
-  // (level 0..1, called every frame; only touches the graph when the target changes). Low-passed noise
-  // for the body, a quiet band of hiss on top and a slow flutter, kept well under the one-shot SFX so a
-  // long spray never tires the ear. Built on the first spray; the looped source idles at zero gain.
-  setFlameRoar(level = 0) {
+  // Sprayers: one soft looping roar per kind ('flame' Flamethrower, 'cryo' Cryo Sprayer, 'acid' Acid
+  // Sprayer), faded in while the nozzles spray and out when they stop (level 0..1, called every frame;
+  // only touches the graph when the target changes). Low-passed noise for the body, a quiet band of hiss
+  // on top and a slow flutter, kept well under the one-shot SFX so a long spray never tires the ear: the
+  // flame is a low roar, the frost a thin icy hiss, the acid a bubbling gurgle. Built on the first
+  // spray; the looped source idles at zero gain.
+  setFlameRoar(level = 0, kind = 'flame') {
     if (!this.ctx || !this.sfxGain) return;
     const target = this.enabled && level > 0 ? FLAME_ROAR_GAIN * Math.min(1, level) : 0;
-    if (!this.flameRoar) {
+    const roars = (this.sprayRoars ||= {});
+    if (!roars[kind]) {
       if (!target) return;
+      const v = SPRAY_VOICES[kind] || SPRAY_VOICES.flame;
       const ctx = this.ctx;
       const src = this.noiseSource();
       src.loop = true;
       const body = ctx.createBiquadFilter();
       body.type = 'lowpass';
-      body.frequency.value = 420;
+      body.frequency.value = v.body;
       body.Q.value = 0.8;
       const hiss = ctx.createBiquadFilter();
       hiss.type = 'bandpass';
-      hiss.frequency.value = 1500;
+      hiss.frequency.value = v.hiss;
       hiss.Q.value = 1.1;
       const hissGain = ctx.createGain();
-      hissGain.gain.value = 0.18;
+      hissGain.gain.value = v.hissGain;
       const flutter = ctx.createGain();
       flutter.gain.value = 1;
       const lfo = ctx.createOscillator();
-      lfo.frequency.value = 6.5;
+      lfo.frequency.value = v.flutter;
       const lfoDepth = ctx.createGain();
-      lfoDepth.gain.value = 0.22;
+      lfoDepth.gain.value = v.depth;
       const out = ctx.createGain();
       out.gain.value = 0;
       src.connect(body);
@@ -1972,9 +2030,9 @@ export class SoundEngine {
       out.connect(this.sfxGain);
       src.start();
       lfo.start();
-      this.flameRoar = { src, lfo, out, level: 0 };
+      roars[kind] = { src, lfo, out, level: 0 };
     }
-    const r = this.flameRoar;
+    const r = roars[kind];
     if (Math.abs(r.level - target) < 1e-4) return;
     r.level = target;
     const t = this.ctx.currentTime;
@@ -1983,22 +2041,25 @@ export class SoundEngine {
   }
 
   stopFlameRoar() {
-    const r = this.flameRoar;
-    this.flameRoar = null;
-    if (!r) return;
-    try { r.src.stop(); r.lfo.stop(); } catch (_e) {}
-    r.out.disconnect();
+    const roars = this.sprayRoars;
+    this.sprayRoars = null;
+    for (const r of Object.values(roars || {})) {
+      try { r.src.stop(); r.lfo.stop(); } catch (_e) {}
+      r.out.disconnect();
+    }
   }
 
-  // Inferno Ring: a short rising whoosh of band-passed noise.
-  playFlameBurst() {
+  // Inferno / Blizzard / Caustic Ring: a short rising whoosh of band-passed noise (higher for frost,
+  // lower for acid).
+  playFlameBurst(kind = 'flame') {
     if (!this.enabled || !this.ctx || !this.claimVoice('flameBurst', 200, 1, 0.45)) return;
+    const pitch = kind === 'cryo' ? 1.8 : kind === 'acid' ? 0.75 : 1;
     const t = this.ctx.currentTime;
     const noise = this.noiseSource();
     const band = this.ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.setValueAtTime(260, t);
-    band.frequency.exponentialRampToValueAtTime(1100, t + 0.32);
+    band.frequency.setValueAtTime(260 * pitch, t);
+    band.frequency.exponentialRampToValueAtTime(1100 * pitch, t + 0.32);
     band.Q.value = 1.4;
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0.001, t);
@@ -2008,6 +2069,35 @@ export class SoundEngine {
     band.connect(g);
     g.connect(this.sfxGain);
     noise.start(t, Math.random() * 0.5, 0.45);
+  }
+
+  // FROST freeze: a short glassy crackle (high band-passed noise plus a quick ping), heavily throttled.
+  playFreeze() {
+    if (!this.enabled || !this.ctx || !this.claimVoice('freeze', 90, 2, 0.3)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 5200;
+    band.Q.value = 2.5;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.05, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.5, 0.18);
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(2400, t);
+    osc.frequency.exponentialRampToValueAtTime(1500, t + 0.12);
+    const og = this.ctx.createGain();
+    og.gain.setValueAtTime(0.025, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(og);
+    og.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.15);
   }
 
   // Orbit blade contact: a short metallic grind tick (blades touch every tick, so heavily throttled).

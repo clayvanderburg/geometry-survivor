@@ -69,12 +69,22 @@ export const WEAPONS = [
   {
     id: 'gas', name: 'Corrosive Gas Trail', hudName: 'Gas Trail', levelId: 'gas', levelKey: 'gas', category: 'AUTONOMOUS', tagSources: ['gas'],
     color: '#5dff6e',
-    summary: 'Vents a trail of corrosive gas behind your ship. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
+    summary: 'Vents a trail of corrosive gas behind your ship, and a giant cloud every time you dash. Enemies inside take damage over time and CORRODE (they take more damage from everything). Lead packs through it. Always CORROSIVE.'
   },
   {
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
     summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+  },
+  {
+    id: 'cryospray', name: 'Cryo Sprayer', hudName: 'Cryo Sprayer', levelId: 'cryospray', levelKey: 'cryospray', category: 'PRIMARY', tagSources: ['cryo'],
+    color: '#8fe8ff',
+    summary: 'A nozzle spins round the ship spraying a cone of frost. Everything in it builds COLD: it slows, then FREEZES solid. Rocks block the spray. Always FROST.'
+  },
+  {
+    id: 'acidspray', name: 'Acid Sprayer', hudName: 'Acid Sprayer', levelId: 'acidspray', levelKey: 'acidspray', category: 'PRIMARY', tagSources: ['acid'],
+    color: '#9dff4a',
+    summary: 'A nozzle spins round the ship spraying a cone of acid. Everything in it CORRODES: acid ticks, and it takes more damage from everything. Rocks block the spray. Always CORROSIVE.'
   },
   {
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
@@ -100,8 +110,22 @@ export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
 
-// The crab's starting kit: Autocannon only; Rocket Pods join through NEW WEAPON like every other weapon.
+// The crab's default starting kit: Autocannon only (headless runs, the balance tools, the Weapon Range).
+// A real run starts with the weapon picked in the pop-up after LAUNCH (Game.openStartPick); every
+// other weapon joins through NEW WEAPON cards.
 export const STARTING_WEAPONS = ['blaster'];
+
+// The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
+// is remembered on this device and pre-selected next time.
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles'];
+export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
+export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
+export function readStartWeapon(storage) {
+  try { return normalizeStartWeapon(storage?.getItem(START_WEAPON_STORAGE_KEY)); } catch { return START_WEAPON_CHOICES[0]; }
+}
+export function writeStartWeapon(storage, id) {
+  try { storage?.setItem(START_WEAPON_STORAGE_KEY, normalizeStartWeapon(id)); } catch { /* storage blocked: the pick lasts this session */ }
+}
 
 // Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).
 export function weaponTags(id) {

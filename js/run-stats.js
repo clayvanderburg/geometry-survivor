@@ -4,7 +4,7 @@
 // the RUN REPORT draws and js/stats-client.js uploads (schema in js/stats-rules.js).
 //
 // Damage attribution: every weapon hit carries a `stat` id (normally the hitEnemy `source`; a few
-// sub-sources are split out: 'burn_<weapon>', 'helix', 'storm', 'collapse', 'siege'). Each stat id belongs to a
+// sub-sources are split out: 'burn_<weapon>', 'corrode_<weapon>', 'shock_<weapon>', 'helix', 'storm', 'collapse', 'siege'). Each stat id belongs to a
 // group: a loadout weapon (by its `tagSources`, see buildSourceGroups) or a non-weapon group such as
 // 'shrapnel', 'nova', 'supernova' or 'ram'. Unknown ids are their own group, so a new weapon shows up
 // without changes here. Damage is effective damage (overkill excluded), counted once per hit.
@@ -17,12 +17,10 @@
 // Sub-sources that belong to a weapon even though they are not one of its tagSources.
 export const SUB_SOURCES = Object.freeze({
   burn: 'blaster',        // burn ticks from before v0.34 (only Autocannon could burn)
-  burn_blaster: 'blaster',     // FIRE burn ticks, credited to the weapon that lit them (status-effects.js)
-  burn_rockets: 'rockets',
-  burn_missiles: 'missiles',
-  burn_lightning: 'lightning',
-  burn_grenades: 'grenades',
-  burn_flamethrower: 'flamethrower', // the Flamethrower's built-in FIRE
+  // Status DoT ticks (FIRE burn, CORROSIVE acid, SHOCK while touching), credited to the weapon whose
+  // hits applied the stacks (status-effects.js): burn_<weapon>, corrode_<weapon>, shock_<weapon>.
+  ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray']
+    .flatMap((id) => ['burn', 'corrode', 'shock'].map((dot) => [`${dot}_${id}`, id]))),
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse
@@ -30,6 +28,9 @@ export const SUB_SOURCES = Object.freeze({
   emp: 'grenades',        // EMP Grenades arcs, fired by Plasma Grenade blasts
   gas_pocket: 'gas',      // Corrosive Gas Trail: Volatile Pockets bursts
   gas_shroud: 'gas',      // Corrosive Gas Trail: Toxic Shroud ticks
+  fireball: 'flamethrower', // Flamethrower Fireballs (LV 6 Breakthrough)
+  shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
+  meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
   thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
 });

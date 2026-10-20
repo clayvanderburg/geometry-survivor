@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const {
   WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage,
-  flameRange, burnStackDps
+  flameRange, statusDotShare
 } = await import('../js/weapon-scaling.js');
 const {
   STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, makeBuild, levelBuild, weaponBuild, weaponElement,
@@ -51,7 +51,7 @@ function rig(p, enemies, rocks = [], { spin = false } = {}) {
     asteroidManager: { getNearbyAsteroids: () => rocks, cellsFor: () => 3 },
     sound: { setFlameRoar: (v) => roar.push(v), playFlameBurst() {} },
     weaponFx: { pools: [], addPool(x) { this.pools.push(x); } },
-    hitEnemy(e, dmg, source) { hits.push({ e, dmg, source }); applyOnHitStatuses(p, e, source); },
+    hitEnemy(e, dmg, source) { hits.push({ e, dmg, source }); applyOnHitStatuses(p, e, source, dmg); },
     damageEnemiesInRadius(x, y, radius, dmg, hue, source, knock) { blasts.push({ x, y, radius, dmg, source, knock }); }
   };
   const ft = new Flamethrower();
@@ -62,7 +62,7 @@ const enemy = (p, dx, dy, r = 10) => ({ type: 'swarmer', x: p.x + dx, y: p.y + d
 const run = (r, seconds, firing = true) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, firing); };
 const hitSet = (r) => new Set(r.hits.map((x) => x.e));
 
-test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and six single-stat cards', () => {
+test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and seven single-stat cards', () => {
   const w = WEAPON_BY_ID.flamethrower;
   assert.equal(w.name, 'Flamethrower');
   assert.equal(w.category, 'PRIMARY');
@@ -74,15 +74,15 @@ test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN t
   const groups = buildSourceGroups(WEAPONS);
   assert.equal(groups.flame, 'flamethrower');
   assert.equal(groups.burn_flamethrower, 'flamethrower', 'its burn ticks are credited to it');
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'turn', 'burn']);
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, false]);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'turn', 'burn', 'nozzles']);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, false, true]);
   for (const c of STAT_CARDS.flamethrower) assert.match(c.summary, /^Flamethrower:/);
   assert.equal(ELEMENT_CARDS.flamethrower, undefined, 'no element cards: FIRE is built in');
-  assert.deepEqual(BREAKTHROUGH_LEVELS.map((m) => TRANSFORMS.flamethrower[m].name), ['Twin Nozzle', 'Napalm Puddles', 'Inferno Ring']);
+  assert.deepEqual(BREAKTHROUGH_LEVELS.map((m) => TRANSFORMS.flamethrower[m].name), ['Fireballs', 'Napalm Puddles', 'Inferno Ring']);
 });
 
 test('every flame formula reads only its own rank; LV 1 numbers', () => {
-  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, turn: W.flameTurnRate, burn: W.flameBurnRank, damage: W.flameDamageMult };
+  const F = { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, turn: W.flameTurnRate, burn: W.flameBurnRank, nozzles: W.flameNozzles, damage: W.flameDamageMult };
   const base = levelBuild('flamethrower', 1);
   for (const card of STAT_CARDS.flamethrower) {
     const b = makeBuild('flamethrower', 5, { [card.stat]: 3 });
@@ -93,7 +93,7 @@ test('every flame formula reads only its own rank; LV 1 numbers', () => {
   }
   assert.equal(W.flameTickRate(base), 8);
   assert.equal(W.flameRange(base), 280);
-  assert.equal(W.flameConeHalf(base), 0.55);
+  assert.equal(W.flameConeHalf(base), 0.275);
   assert.equal(W.flameBurnRank(base), 1);
   assert.equal(W.flameBurnRank(makeBuild('flamethrower', 18, { burn: 4 }, { 6: 'boost', 12: 'boost' })), ELEMENT_MAX_RANKS, 'burn rank caps at 5');
 });
@@ -139,7 +139,7 @@ test('built-in FIRE: rank from Sticky Gel and ACROSS THE BOARD, STATUS cards and
   const before = weaponDamage(p, 'flame');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.fire_damage, levelJump: 1 });
   assert.ok(near(weaponDamage(p, 'flame') / before, 1 + W.elementDamageStep), 'Fire Amplifier boosts the flames');
-  assert.ok(near(burnStackDps(p, 2, 'flamethrower'), burnStackDps(p, 2) * W.flameBurnShare), 'its burn runs at flameBurnShare');
+  assert.ok(statusDotShare(p, 'fire', 4) > statusDotShare(p, 'fire', 1), 'a higher burn rank burns more of each scorch');
   assert.match(weaponChipsHtml(p), /FIRE/, 'the HUD chip wears FIRE');
   discardWeapon(p, 'flamethrower');
   assert.equal(weaponElement(p, 'flamethrower'), null);
@@ -157,10 +157,10 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
   assert.deepEqual(reach.rows.map((r) => r.id), ['flameRange']);
   assert.match(describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_cone, levelJump: 2 }).headline, /CONE WIDTH/);
   const gel = describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_burn, levelJump: 1 });
-  assert.ok(gel.rows.some((r) => r.id === 'flamethrower:burnMax'), 'Sticky Gel shows the burn it adds');
+  assert.ok(gel.rows.some((r) => r.id === 'flamethrower:burn'), 'Sticky Gel shows the burn it adds');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.flamethrower_rate, levelJump: 5 });
   const t = describeBreakthrough(p, 'flamethrower', 6, 'transform');
-  assert.equal(t.name, 'Twin Nozzle');
+  assert.equal(t.name, 'Fireballs');
   assert.equal(t.category, 'FLAMETHROWER');
   assert.match(t.headline, /\+22% DPS/);
 });
@@ -192,7 +192,7 @@ test('the cone: hits what is in front within reach and width, harder up close, a
 
 test('Nozzle Pressure and Wide Nozzle reach further and wider', () => {
   const p = flamePlayer({ cards: [['flamethrower_range', 4], ['flamethrower_cone', 4]] });
-  const far = enemy(p, 380, 0), wide = enemy(p, Math.cos(0.6) * 120, Math.sin(0.6) * 120);
+  const far = enemy(p, 380, 0), wide = enemy(p, Math.cos(0.4) * 120, Math.sin(0.4) * 120); // outside the LV 1 cone (±0.275 rad)
   const r = rig(p, [far, wide]);
   run(r, 0.5);
   assert.ok(hitSet(r).has(far) && hitSet(r).has(wide));
@@ -222,17 +222,43 @@ test('asteroids are cover: a rock shadows only the slice of the cone behind it',
   assert.ok(hitSet(r).has(hidden), 'flames spray out of a rock the claws are inside');
 });
 
-test('Twin Nozzle: a shorter rear nozzle scorches what is behind you', () => {
-  const p = flamePlayer({ bt: { 6: 'transform' } });
-  const behind = enemy(p, -120, 0), behindFar = enemy(p, -320, 0), front = enemy(p, 120, 0);
-  const r = rig(p, [behind, behindFar, front]);
+test('Extra Nozzle cards add identical streams spaced evenly round the spin, each worth flameNozzleShare of a stream', () => {
+  const p = flamePlayer({ cards: [['flamethrower_nozzles', 1]] });
+  const behind = enemy(p, -120, 0), behindFar = enemy(p, -320, 0), front = enemy(p, 120, 0), side = enemy(p, 0, 120);
+  const r = rig(p, [behind, behindFar, front, side]);
   run(r, 1);
   const hit = hitSet(r);
-  assert.ok(hit.has(behind) && hit.has(front));
-  assert.ok(!hit.has(behindFar), 'the rear stream stops at the same reach as the front one');
+  assert.ok(hit.has(behind) && hit.has(front), 'two streams: front and back');
+  assert.ok(!hit.has(behindFar) && !hit.has(side));
   assert.equal(r.ft.nozzles[1].range, r.ft.nozzles[0].range, 'both streams are the same size');
-  assert.equal(r.ft.nozzles[1].half, r.ft.nozzles[0].half);
   assert.equal(r.hits.filter((x) => x.e === front).length, r.hits.filter((x) => x.e === behind).length, 'both nozzles scorch at the same rate');
+  // Three cards: four streams a quarter turn apart.
+  const q = flamePlayer({ cards: [['flamethrower_nozzles', 3]] });
+  const four = [enemy(q, 120, 0), enemy(q, 0, 120), enemy(q, -120, 0), enemy(q, 0, -120)];
+  const rq = rig(q, four);
+  run(rq, 0.5);
+  for (const e of four) assert.ok(hitSet(rq).has(e), 'every quarter is sprayed');
+  assert.equal(rq.ft.nozzles.filter((n) => n.on).length, 4);
+  assert.equal(UPGRADE_BY_ID.flamethrower_nozzles.maxLevel, 3);
+  // Potential: each extra stream adds flameNozzleShare of one.
+  for (let n = 1; n <= 3; n++) assert.ok(near(dps(makeBuild('flamethrower', 1 + n, { nozzles: n })), dps(levelBuild('flamethrower', 1)) * (1 + W.flameNozzleShare * n)));
+});
+
+test('Fireballs: every second each nozzle lobs a fireball that bursts at the tip of its flames', () => {
+  const p = flamePlayer({ bt: { 6: 'transform' }, cards: [['flamethrower_nozzles', 1]] });
+  const r = rig(p, [enemy(p, 100, 0)]);
+  const fx = r.game.weaponFx;
+  fx.events = [];
+  fx.schedule = (e) => fx.events.push(e);
+  run(r, 1.6);
+  assert.equal(fx.events.length, 4, 'two volleys (one shortly after the spray starts), one fireball per nozzle');
+  const b = weaponBuild(p, 'flamethrower');
+  for (const e of fx.events) {
+    assert.equal(e.source, 'flame');
+    assert.equal(e.kind, 'fireball', 'run stats count them as fireballs');
+    assert.ok(near(e.damage, weaponDamage(p, 'flame') / W.flameDamageMult(b) * W.flameBurstDamageMult(b)));
+    assert.ok(Math.abs(Math.hypot(e.x - p.x, e.y - p.y) - flameRange(p) * 0.9) < 20, 'near the tip');
+  }
 });
 
 test('Napalm Puddles: burning puddles splash down at the tip of the flames', () => {
@@ -262,6 +288,14 @@ test('Inferno Ring: every few seconds a ring of fire rolls out round the ship an
 });
 
 test('live fight: the Flamethrower fires in the full game loop with every transform; the puff pool stays bounded', () => {
+  // Seeded: spawns, steering and sparks are random, and an unlucky draw used to fail this now and then.
+  const realRandom = Math.random;
+  let seed = 424242;
+  Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  try { liveFight(); } finally { Math.random = realRandom; }
+});
+
+function liveFight() {
   const g = h.createHeadlessGame();
   g.resetRun();
   g.state = 'PLAYING';
@@ -304,7 +338,7 @@ test('live fight: the Flamethrower fires in the full game loop with every transf
   g.sound = { ...silent, setFlameRoar: (v) => { roar = v; } };
   g.update(1 / 60);
   assert.equal(roar, 0, 'the roar stops under the pause menu');
-});
+}
 
 test('drawing costs a fixed handful of fills however many flames are in the air', () => {
   const p = flamePlayer({ bt: { 6: 'transform' }, cards: [['flamethrower_cone', 8]] });

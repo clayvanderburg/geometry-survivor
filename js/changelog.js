@@ -12,21 +12,137 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.41.0',
+    version: '0.43.0',
     date: '2026-10-20',
-    title: 'Bedrock',
+    title: 'Space-Time Rifts & Bedrock',
     notes: [
+      { type: 'new', text: 'Space-time rifts: about once a minute a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
+      { type: 'new', text: 'An arrow at the screen edge and a ring on the radar point to an open rift. It closes after about 9 seconds.' },
       { type: 'new', text: 'Bedrock: jagged violet slabs of rock that nothing can break, not your drills, elites or bosses. A few small formations turn up in every sector.' },
       { type: 'new', text: 'The edge of the sector is now a wall of bedrock instead of a glowing red line.' }
     ]
   },
   {
+    version: '0.42.5',
+    date: '2026-10-20',
+    title: 'Afterburner Jets',
+    notes: [
+      { type: 'new', text: 'New Void Armory upgrade, Afterburner Jets: +2% dash distance per rank (up to +50%). It stacks with Phase Dash Extender cards and stretches Blink Drive teleports too.' },
+      { type: 'balance', text: 'Ablative Plating and Phase Buffer leave the Void Armory. Every Void Core you spent on them is refunded.' }
+    ]
+  },
+  {
+    version: '0.42.4',
+    date: '2026-10-20',
+    title: 'Shatter & Sparks',
+    notes: [
+      { type: 'balance', text: 'Volatile Shatter: each level now adds 3 shards per burst instead of 1 (4 at LV 1, up to 25 at LV 8).' },
+      { type: 'new', text: 'Volatile Shatter shards are now spinning gold glass slivers that glint when they strike, so you can see the chain reaction.' },
+      { type: 'fix', text: 'Flamethrower Fireballs are visible again: a blazing ball arcs out over the flames and bursts in a real fireball.' },
+      { type: 'new', text: 'Punchier combat: hulls squash when hit, big hits pop a ring, and kills burst with a hot core flash and drifting embers.' }
+    ]
+  },
+  {
+    version: '0.42.3',
+    date: '2026-10-20',
+    title: 'Independent Drill Claws',
+    notes: [
+      { type: 'new', text: 'Your two drill claws now swing on their own: the left claw reaches for rock on your left, the right claw for rock on your right.' },
+      { type: 'balance', text: 'Rock straight ahead always comes first: both claws team up on it at full twin-claw speed. Two rocks drilled at once share that speed, so mining is no faster overall.' }
+    ]
+  },
+  {
+    version: '0.42.2',
+    date: '2026-10-20',
+    title: 'Tesla Arc Recharged',
+    notes: [
+      { type: 'balance', text: 'Tesla Arc hits about 3x harder per jump (each jump was far too soft), roughly tripling its damage. Storm Protocol chain lightning gets the same boost.' }
+    ]
+  },
+  {
+    version: '0.42.1',
+    date: '2026-10-20',
+    title: 'Tighter Sprays',
+    notes: [
+      { type: 'balance', text: 'Flamethrower, Cryo Sprayer and Acid Sprayer start with a cone half as wide. Wide Nozzle cards still widen it.' },
+      { type: 'balance', text: 'Tesla Arc is no longer a starting weapon choice (it can still turn up as a NEW WEAPON).' }
+    ]
+  },
+  {
+    version: '0.42.0',
+    date: '2026-10-20',
+    title: 'Pick Your Weapon',
+    notes: [
+      { type: 'new', text: 'Pick your starting weapon: after LAUNCH choose Autocannon, Rocket Pods, Swarm Missiles or Tesla Arc. Your last pick is remembered.' },
+      { type: 'new', text: 'New card, Phase Dash Extender: each rank dashes you 20% further (up to 5 ranks, twice as far), and you stay untouchable for the whole dash.' },
+      { type: 'new', text: 'It stretches Blink Drive teleports by the same amount.' }
+    ]
+  },
+  {
+    version: '0.41.0',
+    date: '2026-10-20',
+    title: 'Nozzles & Bursts',
+    notes: [
+      { type: 'new', text: 'Flamethrower, Cryo Sprayer and Acid Sprayer: new Extra Nozzle card. Each rank adds another stream, up to 4, spaced evenly round your ship.' },
+      { type: 'new', text: 'New LV 6 Breakthroughs replace Twin Nozzle. Flamethrower: Fireballs lobbed from every nozzle. Cryo Sprayer: Shatter, frozen enemies burst in ice shards.' },
+      { type: 'new', text: 'Acid Sprayer LV 6: Meltdown. Corroded enemies the spray kills burst in an acid splash.' }
+    ]
+  },
+  {
+    version: '0.40.1',
+    date: '2026-10-20',
+    title: 'Armory Refund',
+    notes: [
+      { type: 'new', text: 'The Void Armory has a REFUND ALL button: reset every upgrade and get back every Void Core you spent, to rebuild however you like. Click twice to confirm.' }
+    ]
+  },
+  {
     version: '0.40.0',
     date: '2026-10-20',
-    title: 'Space-Time Rifts',
+    title: 'Elements Reforged',
     notes: [
-      { type: 'new', text: 'Space-time rifts: about once a minute a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
-      { type: 'new', text: 'An arrow at the screen edge and a ring on the radar point to an open rift. It closes after about 9 seconds.' }
+      { type: 'new', text: 'Statuses now build in STACKS: bigger hits add more, they tick every half second and a fifth wears off each tick. Keep hitting to pile them on.' },
+      { type: 'new', text: 'FIRE burns hardest and can spread to the enemy beside it. CORROSIVE adds acid ticks on top of the extra damage taken.' },
+      { type: 'new', text: 'FROST builds cold that slows enemies, then FREEZES them solid. Frozen enemies take +25% damage.' },
+      { type: 'new', text: 'SHOCK zaps every hit with a very short stun, sometimes a long one, and arcs between enemies that touch. Pack them with a Vortex Singularity!' },
+      { type: 'new', text: 'Two new weapons: the Cryo Sprayer and the Acid Sprayer, spinning cones of frost and acid with three Breakthroughs each.' },
+      { type: 'new', text: 'Corrosive Gas Trail vents a giant cloud every time you dash. New card, Blink Drive: your dash becomes a teleport.' },
+      { type: 'balance', text: 'Status cards reworked: Potency adds stacks, Reactions (was Application) boosts spread, freezing and long stuns, Duration slows stack decay.' }
+    ]
+  },
+  {
+    version: '0.39.8',
+    date: '2026-10-20',
+    title: 'Rocket Pods Refit',
+    notes: [
+      { type: 'balance', text: 'Rocket Pods fire from the wingtips, clear of the Autocannon, every 0.65 s (was 1 s) with faster rockets. Same total damage.' },
+      { type: 'new', text: 'Rocket Pod rockets have their own look: crimson finned bodies, a white-hot engine and a smoke streak.' }
+    ]
+  },
+  {
+    version: '0.39.7',
+    date: '2026-10-20',
+    title: 'Wider Shock Field',
+    notes: [
+      { type: 'balance', text: 'Shock Field Radius cards are twice as big: +24 px each (was +12), so a maxed field reaches 317 px instead of 221.' }
+    ]
+  },
+  {
+    version: '0.39.6',
+    date: '2026-10-20',
+    title: 'Sound Stays Put',
+    notes: [
+      { type: 'fix', text: 'One hiccup loading a music track no longer swaps the soundtrack for the old built-in synth music for the rest of the session. It retries and keeps your music.' },
+      { type: 'fix', text: 'Sound effects that fail to load are fetched again instead of falling back to the old sounds.' }
+    ]
+  },
+  {
+    version: '0.39.5',
+    date: '2026-10-20',
+    title: 'Cleaner Boss Cards',
+    notes: [
+      { type: 'new', text: 'Boss arrival cards and boss health bars show just the boss name and title (no HP numbers or stat line).' },
+      { type: 'fix', text: 'Lieutenant names above their health bars are bigger and easier to read.' }
     ]
   },
   {
