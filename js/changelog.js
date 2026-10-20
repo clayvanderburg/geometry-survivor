@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.40.1',
+    date: '2026-10-20',
+    title: 'Armory Refund',
+    notes: [
+      { type: 'new', text: 'The Void Armory has a REFUND ALL button: reset every upgrade and get back every Void Core you spent, to rebuild however you like. Click twice to confirm.' }
+    ]
+  },
+  {
     version: '0.40.0',
     date: '2026-10-20',
     title: 'Elements Reforged',
