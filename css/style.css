@@ -4973,3 +4973,8 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8
   .hangar-feat-row { grid-template-columns: minmax(0, 1fr); }
   .hangar-feat-side { text-align: left; }
 }
+.hangar-results { margin: 8px auto 4px; max-width: 760px; padding: 8px 14px; border: 1px solid rgba(255, 204, 0, 0.45); border-radius: 8px; background: rgba(20, 14, 2, 0.6); text-align: left; }
+.hangar-results-head { font-size: 11px; font-weight: 900; letter-spacing: 3px; color: #ffcc00; }
+.hangar-results-list { margin: 4px 0 0 18px; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #fff3c4; }
+.hangar-next { margin-top: 4px; font-size: 11px; letter-spacing: 1px; color: #c8d6ea; }
+.hangar-next b { color: #ffcc00; letter-spacing: 2px; margin-right: 4px; }

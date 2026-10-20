@@ -2,7 +2,9 @@
 // entry point is a no-op unless the Hangar flag is on (js/hangar-flag.js): game.feats is null then.
 import { hangarEnabled, setHangarEnabled } from './hangar-flag.js';
 import { FeatLedger, FEATS } from './feats.js';
-import { DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook } from './ships.js';
+import { DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook, shipDef, shipFixedKit } from './ships.js';
+import { WEAPONS, START_WEAPON_CHOICES } from './loadout.js';
+import { quirkOnKill, quirkOnHit } from './ship-quirks.js';
 
 // The ship this run flies: null while the flag is off (the crab, exactly as before) or in the Weapon Range;
 // else the Hangar's pick. `game.shipOverride` (balance sim --ship, tests) wins even with the flag off.
@@ -24,6 +26,41 @@ export function shipFields(shipId) {
   return look ? { shipId, look } : { shipId };
 }
 
+// The weapons a ship run starts with: its fixed kit, else the start pick when the ship allows it, else the
+// default kit. null without a ship (the flag is off): resetRun keeps its own rule.
+export function runKit(game, startWeapon) {
+  const id = game.shipId;
+  if (!id) return null;
+  const kit = shipFixedKit(id);
+  if (kit) return kit;
+  const pick = shipDef(id).kit === 'last' ? game.startWeapon : startWeapon;
+  return startChoices(game, { forKit: true }).includes(pick) ? [pick] : ['blaster'];
+}
+
+// The run-start pick's cards for the ship about to launch. Flag off: START_WEAPON_CHOICES as always.
+// A fixed kit or MAGPIE's 'last' shows no pick ([]); SOVEREIGN's 'any' offers every weapon.
+// (Weapon locks and mastered weapons join in later PRs.) `forKit`: the weapons a 'last' ship may start with.
+export function startChoices(game, { forKit = false } = {}) {
+  const id = runShip(game); // the ship about to launch (the Hangar's pick may have changed since the title run)
+  if (!id) return START_WEAPON_CHOICES;
+  const kit = shipDef(id).kit;
+  if (kit === 'any') return WEAPONS.map((w) => w.id);
+  if (kit === 'pick' || (kit === 'last' && forKit)) return START_WEAPON_CHOICES;
+  return [];
+}
+
+// Every kill outside the Weapon Range: feats, then the ship's quirk.
+export function hangarKill(game, e) {
+  game.feats?.kill(e, game.player);
+  if (game.player?.shipId) quirkOnKill(game, e);
+}
+
+// A shield hit that has just landed (`dmg` taken): feats, then the ship's quirk (HERMIT's hold).
+export function hangarHit(game, dmg) {
+  game.feats?.shieldHit(dmg);
+  if (game.player?.shipId) quirkOnHit(game);
+}
+
 // A fresh ledger for the run resetRun just built (null: flag off, or the Weapon Range).
 export function newRunLedger(game) {
   if (!hangarEnabled() || game.range?.active || !game.progression?.hangar) return null;
@@ -40,6 +77,7 @@ export function commitFeats(game, end = false) {
   const done = ledger.commit(game.progression.hangar(), { tainted: game.runIsTainted ? game.runIsTainted() : !!game.runTainted, end });
   game.progression.save();
   if (done.length) game.onFeatsDone?.(done);
+  if (end) game.hangarUI?.showResults(ledger);
   return done;
 }
 

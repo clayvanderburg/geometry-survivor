@@ -608,7 +608,7 @@ export function applyUpgradeLevels(player, upg) {
 // (a weapon's LV 18 included), allowed by the loadout, the run's mode and their own requirements.
 // `cache: true` (supply caches) leaves out the per-weapon element cards: the element is the player's pick.
 export function eligibleUpgrades(player, { cache = false } = {}) {
-  const shieldCards = modeRules(player).shieldCards;
+  const shieldCards = modeRules(player).shieldCards && !player.hardcoreShield; // REVENANT: HARDCORE's shield rules
   return UPGRADE_POOL.filter((u) => {
     if (player.banished?.[u.id]) return false; // banished with gold: gone for the rest of the run
     if (u.shieldCard && !shieldCards) return false; // HARDCORE: nothing raises or restores the shield
@@ -780,7 +780,7 @@ export const HIT_INVULN_BASE = 0.4; // 0.65 before v0.32: ramming through whole 
 // Shield a run starts with, before Void Armory bonuses (100 before v0.29, 90 before v0.31, 85 before v0.32: harder passes).
 export const BASE_SHIELD = 75;
 
-const SHIP_KEYS = ['shieldRegenMult', 'noShieldRegen', 'weaponSlots', 'handSize', 'handSizeMin', 'primaryDamageMult', 'statusDurationMult', 'deployableBonus'];
+const SHIP_KEYS = ['shieldRegenMult', 'hardcoreShield', 'weaponSlots', 'handSize', 'handSizeMin', 'primaryDamageMult', 'statusDurationMult', 'deployableBonus'];
 const shipKeys = (bonuses) => Object.fromEntries(SHIP_KEYS.filter((k) => bonuses[k] !== undefined).map((k) => [k, bonuses[k]]));
 
 export function runStartPlayer(bonuses = {}, t = TUNING) {

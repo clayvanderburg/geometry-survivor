@@ -5,7 +5,7 @@
 // mountHangar returns null and adds nothing. HTML builders are pure so tests can check them in node.
 import { hangarEnabled } from './hangar-flag.js';
 import { SHIPS, SHIP_BY_ID, shipStatChips, shipLook, shipFixedKit, DEFAULT_SHIP } from './ships.js';
-import { FEATS, featProgress } from './feats.js';
+import { FEATS, featProgress, nextFeat } from './feats.js';
 import { WEAPON_BY_ID } from './loadout.js';
 import { ShipPreview } from './ship-preview.js';
 import { PAD } from './gamepad.js';
@@ -94,6 +94,22 @@ export function toastText({ feat, added }) {
     return 'BADGE EARNED';
   });
   return `FEAT // ${feat.name}${parts.length ? ` — ${parts.join(' · ')}` : ''}`;
+}
+
+// The results screen's strip: what this run unlocked, and the closest feat still to do.
+export function resultsStripHTML(unlocked, h) {
+  const items = unlocked.map((d) => `<li>${esc(toastText(d).replace(/^FEAT \/\/ /, ''))}</li>`).join('');
+  const next = nextFeat(h);
+  let nudge = '';
+  if (next) {
+    const { feat, value, goal } = next;
+    const r = feat.reward;
+    const prize = r.ship ? SHIP_BY_ID[r.ship]?.name || r.ship.toUpperCase() : (WEAPON_BY_ID[r.weapon]?.name || r.weapon || '').toUpperCase();
+    const need = feat.unit === 'WAVE' ? `${feat.text.toUpperCase()}` : `${num(goal - value)} ${feat.unit || ''} TO GO`;
+    nudge = `<p class="hangar-next"><b>NEXT</b> ${esc(feat.name)}: ${esc(need)} → ${esc(prize)}</p>`;
+  }
+  if (!items && !nudge) return '';
+  return `${items ? `<div class="hangar-results-head">★ NEW IN THE HANGAR</div><ul class="hangar-results-list">${items}</ul>` : ''}${nudge}`;
 }
 
 export class HangarUI {
@@ -302,6 +318,20 @@ export class HangarUI {
     if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) this.close();
     else if (gp.pressed(PAD.LB) || gp.pressed(PAD.RB)) this.cycleTab(gp.pressed(PAD.LB) ? -1 : 1);
     else if (gp.pressed(PAD.A)) g.menuNav.activate();
+  }
+
+  // Fill (or hide) the strip on the results screen once a run has ended.
+  showResults(ledger) {
+    if (!this.resultsEl) {
+      this.resultsEl = this.doc.createElement('div');
+      this.resultsEl.className = 'hangar-results';
+      const anchor = this.doc.getElementById('go-global-rank');
+      anchor?.parentNode?.insertBefore(this.resultsEl, anchor.nextSibling);
+    }
+    const html = resultsStripHTML(ledger?.unlocked || [], this.h);
+    this.resultsEl.innerHTML = html;
+    this.resultsEl.classList.toggle('hidden', !html);
+    this.syncBadges();
   }
 
   // --- Unlock toasts (FeatLedger commits arrive here through game.onFeatsDone) ---

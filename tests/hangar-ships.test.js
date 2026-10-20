@@ -45,7 +45,7 @@ test('VEXOLITH adds nothing; other ships multiply multipliers and add the rest o
 
 test('ship keys reach the player only when a ship sets them; slots, hand size and regen follow them', () => {
   const crab = runStartPlayer({});
-  for (const k of ['weaponSlots', 'handSize', 'handSizeMin', 'shieldRegenMult', 'noShieldRegen']) assert.equal(k in crab, false, k);
+  for (const k of ['weaponSlots', 'handSize', 'handSizeMin', 'shieldRegenMult', 'hardcoreShield']) assert.equal(k in crab, false, k);
   assert.equal(weaponSlots(crab), 6);
 
   const lancer = { ...runStartPlayer(shipRunBonuses({}, 'lancer')), upgradeLevels: {}, weapons: {}, loadout: [] };
@@ -63,7 +63,7 @@ test('ship keys reach the player only when a ship sets them; slots, hand size an
   const hermit = runStartPlayer(shipRunBonuses({}, 'hermit'));
   assert.equal(hermit.maxHp, crab.maxHp + 50);
   assert.equal(hermit.shieldRegenMult, 1.5);
-  assert.equal(runStartPlayer(shipRunBonuses({}, 'revenant')).noShieldRegen, true);
+  assert.equal(runStartPlayer(shipRunBonuses({}, 'revenant')).hardcoreShield, true);
 });
 
 test('stat chips read as +/- against VEXOLITH, lower dash cooldown counts as good', () => {

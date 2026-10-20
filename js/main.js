@@ -70,7 +70,7 @@ import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
 import { mountHangar } from './hangar-ui.js';
-import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields } from './hangar-run.js';
+import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields, runKit, startChoices, hangarKill, hangarHit } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -451,7 +451,7 @@ export class Game {
 
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapon(s) at LV 1.
     snapshotBase(this.player);
-    for (const id of START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS) acquireWeapon(this.player, id);
+    for (const id of runKit(this, startWeapon) ?? (START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS)) acquireWeapon(this.player, id);
     this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
     if (this.enemyManager) this.enemyManager.onSpawn = (e) => this.runStats?.enemySpawned(e, this.elapsedTime);
@@ -1868,7 +1868,7 @@ export class Game {
     }
 
     // Heal shield (not in HARDCORE) & award bonus Void Cores
-    const repairs = modeRules(this).shieldRepairs;
+    const repairs = modeRules(this).shieldRepairs && !this.player.hardcoreShield;
     if (repairs) this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
     this.sessionCores += bonusCores;
     this.progression.addCores(bonusCores);
@@ -1967,7 +1967,7 @@ export class Game {
     } else if (rock.oreType === 'shield_vein') {
       if (byElite) {
         this.particles.spawnFloatText(rock.x, rock.y - 12, 'SHIELD CRYSTAL CRUSHED', '#4a8f74', 12);
-      } else if (!modeRules(this).shieldRepairs) {
+      } else if (!modeRules(this).shieldRepairs || this.player.hardcoreShield) {
         this.particles.spawnFloatText(rock.x, rock.y - 12, 'SHIELD CRYSTAL INERT // HARDCORE', '#4a8f74', 12);
       } else {
         this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
@@ -2173,6 +2173,7 @@ export class Game {
     this.runStats?.damage(stat, Math.min(dmg, Math.max(0, e.hp)));
     if (this.range?.active) this.range.recordHit(stat, source, dmg);
     e.lastStat = stat;
+    e.lastCrit = crit;
     e.hp -= dmg;
     e.sinceHit = 0;
     e.hitFlash = Math.max(e.hitFlash || 0, crit ? 1 : flash);
@@ -2305,7 +2306,7 @@ export class Game {
     // Weapon Range dummies drop nothing (no caches, score, XP or cores); on-kill weapons still fire.
     const ranged = !!this.range?.active;
     if (ranged) this.range.onKill(e);
-    else this.feats?.kill(e, this.player);
+    else hangarKill(this, e); // Hangar feats and ship quirks
     // A split boss (Progenitor) pays out only when its last piece dies; read that before the death burst
     // queues the next generation.
     const bossPay = e.isBoss && bossDef(e.type)?.isFinalPiece?.(e, this.enemyManager) !== false;
@@ -2507,10 +2508,11 @@ export class Game {
   damagePlayer(dmg, shake = 16, by = null) {
     const p = this.player;
     this.runStats?.playerHit(by || 'unknown', Math.min(dmg, Math.max(0, p.hp)), p.hp > 0 && p.hp - dmg <= 0);
-    this.feats?.shieldHit(Math.min(dmg, Math.max(0, p.hp)));
+    const taken = Math.min(dmg, Math.max(0, p.hp));
     p.shieldFlash = 1;
     p.hp -= dmg;
     p.invuln = HIT_INVULN_BASE;
+    hangarHit(this, taken); // Hangar feats and ship quirks (HERMIT's shell)
     this.multiplier = Math.max(1.0, this.multiplier * 0.75);
     this.addShake(shake);
     this.chromaFlash = 0.5;
@@ -4079,7 +4081,7 @@ export class Game {
     this.runStats?.offered(this.currentChoices);
     this.recordHandOdds();
     if (this.currentChoices.length === 0) {
-      const repairs = modeRules(this).shieldRepairs;
+      const repairs = modeRules(this).shieldRepairs && !this.player.hardcoreShield;
       if (repairs) this.player.hp = this.player.maxHp;
       this.score += Math.round(1000 * this.multiplier);
       this.state = 'PLAYING';
@@ -5174,7 +5176,7 @@ export class Game {
     if (p.shieldFlash > 0) p.shieldFlash = Math.max(0, p.shieldFlash - dt * 2.4);
     if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
 
-    if (p.hp < p.maxHp && modeRules(this).shieldRegen && !p.noShieldRegen) {
+    if (p.hp < p.maxHp && modeRules(this).shieldRegen && !p.hardcoreShield) {
       p.hp = Math.min(p.maxHp, p.hp + dt * (TUNING.shieldRegenRate ?? 1.2) * (p.shieldRegenMult ?? 1));
     }
 
@@ -5957,10 +5959,12 @@ export class Game {
     const modal = doc?.getElementById?.('start-pick-modal');
     const grid = doc?.getElementById?.('start-pick-options');
     if (!this.startPickEnabled || this.startPickOpen || !modal || !grid) return false;
+    this.startPickChoices = startChoices(this); // the ship's choices (Hangar); START_WEAPON_CHOICES otherwise
+    if (!this.startPickChoices.length) return false; // a Hangar ship with a fixed kit launches at once
     const preview = this.startPreviewPlayer();
     const shownAt = performance.now();
     grid.innerHTML = '';
-    this.startPickCards = START_WEAPON_CHOICES.map((id, idx) => {
+    this.startPickCards = this.startPickChoices.map((id, idx) => {
       const d = { ...describeWeaponPick(preview, id), rarityLabel: 'STARTING WEAPON', levelHtml: 'START // LV 1' };
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = doc.createElement('div');
@@ -5973,7 +5977,7 @@ export class Game {
       grid.appendChild(card);
       return card;
     });
-    this.startPickIndex = Math.max(0, START_WEAPON_CHOICES.indexOf(this.startWeapon));
+    this.startPickIndex = Math.max(0, this.startPickChoices.indexOf(this.startWeapon));
     this.highlightStartPick();
     this.startPickReturnFocus = doc.activeElement;
     this.closeMobileWindows?.();
@@ -6001,7 +6005,7 @@ export class Game {
   }
 
   chooseStartWeapon(id) {
-    if (!this.startPickOpen || !START_WEAPON_CHOICES.includes(id)) return;
+    if (!this.startPickOpen || !this.startPickChoices.includes(id)) return;
     this.startWeapon = id;
     writeStartWeapon(defaultStatsStorage(), id);
     this.sound.playUiSelect?.();
@@ -6032,11 +6036,11 @@ export class Game {
   handleStartPickKey(e, onControl) {
     const code = e.code;
     if (e.repeat) return;
-    const n = START_WEAPON_CHOICES.length;
+    const n = this.startPickChoices.length;
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(code);
     if (digit && Number(digit[1]) <= n) {
       e.preventDefault();
-      this.chooseStartWeapon(START_WEAPON_CHOICES[Number(digit[1]) - 1]);
+      this.chooseStartWeapon(this.startPickChoices[Number(digit[1]) - 1]);
     } else if (code === 'ArrowRight' || code === 'KeyD' || code === 'ArrowLeft' || code === 'KeyA') {
       e.preventDefault();
       this.startPickIndex = (this.startPickIndex + (code === 'ArrowRight' || code === 'KeyD' ? 1 : -1) + n) % n;
@@ -6044,7 +6048,7 @@ export class Game {
       this.sound.playUiSelect?.();
     } else if ((code === 'Enter' || code === 'NumpadEnter' || code === 'Space') && !onControl) {
       e.preventDefault();
-      this.chooseStartWeapon(START_WEAPON_CHOICES[this.startPickIndex]);
+      this.chooseStartWeapon(this.startPickChoices[this.startPickIndex]);
     } else if (code === 'Escape' || code === 'Backspace') {
       e.preventDefault();
       this.cancelStartPick();

@@ -71,6 +71,19 @@ export function featProgress(feat, h) {
   return { value: done ? goal : Math.min(goal, value), goal: feat.kind === 'mastery' ? 1 : goal, done };
 }
 
+// The unfinished, visible feat closest to done (by share of its goal), for the results screen's nudge:
+// { feat, value, goal } or null. Mastery feats and feats with nothing to show yet come last.
+export function nextFeat(h) {
+  let best = null, bestShare = -1;
+  for (const feat of FEATS) {
+    if (h.feats[feat.id] || feat.hidden || feat.kind === 'mastery') continue;
+    const { value, goal } = featProgress(feat, h);
+    const share = goal > 0 ? value / goal : 0;
+    if (share > bestShare) { best = { feat, value, goal }; bestShare = share; }
+  }
+  return best;
+}
+
 // One run's facts and uncommitted career counts. Events arrive from main.js; commit() lands them.
 export class FeatLedger {
   constructor({ mode = 'normal', ship = 'vexolith' } = {}) {
@@ -79,6 +92,7 @@ export class FeatLedger {
     this.deltas = {};
     this.run = { mode, ship, wave: 1, waveCleared: 0, campaignCleared: false, rocks: 0, hits: 0, peakGold: 0, clutchBoss: false, soloWeapon: null };
     this.ended = false;
+    this.unlocked = []; // every { feat, added } this run completed (the results screen's NEW IN THE HANGAR)
   }
 
   count(counter, n = 1) {
@@ -136,6 +150,7 @@ export class FeatLedger {
       h.fresh.push(`feat:${feat.id}`);
       done.push({ feat, added: grantReward(h, feat.reward) });
     }
+    this.unlocked.push(...done);
     return done;
   }
 }
