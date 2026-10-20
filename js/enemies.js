@@ -12,7 +12,7 @@ import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, d
 import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerSpear, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bossRam, drawBossRam } from './boss-ram.js';
-import { BossHazards } from './boss-hazards.js';
+import { BossTelegraphs } from './boss-telegraphs.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -166,8 +166,8 @@ export class EnemyManager {
     this.discarded = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
-    // Telegraphed boss area attacks (js/boss-hazards.js): timed and drawn here, hits resolved by the game.
-    this.bossHazards = new BossHazards();
+    // Telegraphed boss area attacks (js/boss-telegraphs.js): timed and drawn here, hits resolved by the game.
+    this.bossTelegraphs = new BossTelegraphs();
     // The game's SoundEngine (null in unit tests and Field Guide previews): bosses play their cues on it.
     this.sound = null;
     // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
@@ -197,7 +197,7 @@ export class EnemyManager {
     this.doomed = [];
     this.discarded = [];
     this.enemyBullets.clear();
-    this.bossHazards.clear();
+    this.bossTelegraphs.clear();
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -763,7 +763,7 @@ export class EnemyManager {
         e.dead = true;
       }
     }
-    this.bossHazards.update(dt, env);
+    this.bossTelegraphs.update(dt, env);
   }
 
   // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
@@ -975,7 +975,7 @@ export class EnemyManager {
     }
 
     // Boss attack telegraphs, then hostile plasma orbs, ride above the hulls so a crowd never hides them.
-    this.bossHazards.draw(ctx, camX, camY, viewW, viewH);
+    this.bossTelegraphs.draw(ctx, camX, camY, viewW, viewH);
     this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);
 
     ctx.restore();

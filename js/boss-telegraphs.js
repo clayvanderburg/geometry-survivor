@@ -1,4 +1,4 @@
-// Boss hazards: pooled, telegraphed area attacks for the bosses (js/bosses.js). Each one shows its
+// Boss telegraphs: pooled, telegraphed area attacks for the bosses (js/bosses.js). Each one shows its
 // footprint first (a warning that fills in and flashes faster as it nears), then goes live for a
 // moment and hits the ship once if it is inside. Three shapes:
 //   zone(x, y, r)            a circle that detonates (Brood Queen egg clutches, the Eclipse nova)
@@ -42,7 +42,7 @@ function inGap(h, a) {
   return false;
 }
 
-export class BossHazards {
+export class BossTelegraphs {
   constructor(capacity = HAZARD.cap) {
     this.capacity = capacity;
     this.active = [];

@@ -758,7 +758,7 @@ export class GuidePreview {
     this.manager.lieutenantArrivals.length = 0;
     for (const e of this.manager.doomed.splice(0)) this.kill(e);
     this.manager.enemyBullets.update(dt, this.player, null, this.particles, this.W, this.H, this.orbHit);
-    this.manager.bossHazards.hitPlayer(this.player, this.orbHit);
+    this.manager.bossTelegraphs.hitPlayer(this.player, this.orbHit);
     this.updateBolts();
     this.updateContacts();
     this.particles.update(dt, this.W, this.H);

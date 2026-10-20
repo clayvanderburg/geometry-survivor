@@ -31,7 +31,7 @@ export function bossHp(waveScale, tier = 'minor') {
 // particles and grid the manager hands its AI each tick (m.aiEnv).
 export const BOSS_INTRO = 1.4; // s of entrance halo drawn over a minor boss after it materializes
 const cue = (m, name) => m.sound?.playBossCue?.(name);
-// Hazard damage (js/boss-hazards.js) as a share of a boss's contact hit; the game applies the wave ramp.
+// Hazard damage (js/boss-telegraphs.js) as a share of a boss's contact hit; the game applies the wave ramp.
 const hazardDamage = (share) => (TUNING.bossContactDamage ?? 48) * share;
 
 // The arrival beat: set the halo clock, a ring in the boss's own hue and its entrance sting.
@@ -229,7 +229,7 @@ function layClutch(e, m, player) {
     const d = k === 0 ? 0 : QUEEN.eggSpread;
     const x = player.x + Math.cos(a) * d + (player.vx || 0) * 12;
     const y = player.y + Math.sin(a) * d + (player.vy || 0) * 12;
-    m.bossHazards?.zone(x, y, QUEEN.eggR, {
+    m.bossTelegraphs?.zone(x, y, QUEEN.eggR, {
       warn: QUEEN.eggWarn + k * 0.12, hue: 335, damage: hazardDamage(QUEEN.eggDamage), from: e.type,
       onFire: (h) => {
         cue(m, 'egg_pop');
@@ -612,7 +612,7 @@ function strikeLane(e, m, x, y, angle, delay = 0) {
   // Run the front from the end nearer the Commander, so the bombs fall the way its run will go.
   const near = (x - c * half - e.x) ** 2 + (y - s * half - e.y) ** 2 < (x + c * half - e.x) ** 2 + (y + s * half - e.y) ** 2;
   const k = near ? 1 : -1;
-  return m.bossHazards?.lane(x - c * half * k, y - s * half * k, x + c * half * k, y + s * half * k, WING.strikeWidth, {
+  return m.bossTelegraphs?.lane(x - c * half * k, y - s * half * k, x + c * half * k, y + s * half * k, WING.strikeWidth, {
     warn: WING.strikeWarn + delay, sweep: WING.strikeSweep, hue: 18, damage: hazardDamage(WING.strikeDamage), from: e.type,
     onFire: () => cue(m, 'wing_strike')
   });
@@ -883,7 +883,7 @@ export const HORIZON = {
 
 // Mark a gravity wave from the core: it shows its safe gaps for `warn` s, then rolls outward.
 function gravityWave(e, m, warn, gaps, onFire) {
-  return m.bossHazards?.wave(e.x, e.y, {
+  return m.bossTelegraphs?.wave(e.x, e.y, {
     r0: e.radius * 1.15, speed: HORIZON.waveSpeed, rMax: HORIZON.waveReach, w: HORIZON.waveWidth,
     gaps, gapWidth: HORIZON.waveGap, warn, hue: e.hue, damage: hazardDamage(HORIZON.waveDamage), from: e.type, onFire, follow: e
   });
@@ -1215,7 +1215,7 @@ function markLash(e, m, player) {
   for (const a of e.lashA) {
     const c = Math.cos(a);
     const s = Math.sin(a);
-    m.bossHazards?.lane(e.x + c * e.radius * 0.9, e.y + s * e.radius * 0.9, e.x + c * (e.radius + g.reach), e.y + s * (e.radius + g.reach), g.width, {
+    m.bossTelegraphs?.lane(e.x + c * e.radius * 0.9, e.y + s * e.radius * 0.9, e.x + c * (e.radius + g.reach), e.y + s * (e.radius + g.reach), g.width, {
       warn: g.warn, hue: 95, damage: hazardDamage(PROG.lashDamage), from: e.type, onFire: () => cue(m, 'prog_crack')
     });
   }
@@ -1526,7 +1526,7 @@ function startEclipse(root, e, m, player) {
   root.centerX = player.x + (player.vx || 0) * 8;
   root.centerY = player.y + (player.vy || 0) * 8;
   root.eclipseT = TWINS.novaWarn + TWINS.novaHold; // the rush and the warning, then a beat in the nova
-  m.bossHazards?.zone(root.centerX, root.centerY, TWINS.novaR, {
+  m.bossTelegraphs?.zone(root.centerX, root.centerY, TWINS.novaR, {
     warn: TWINS.novaWarn, hue: 40, damage: hazardDamage(TWINS.novaDamage), from: e.type,
     onFire: (h) => {
       cue(m, 'twins_nova');

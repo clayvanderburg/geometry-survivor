@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 // The minor bosses' signature attacks (js/bosses.js) and the telegraphed hazards they use
-// (js/boss-hazards.js): Swarm Spear and Egg Clutch, Airstrike and Crossfire, Gravity Wave, Pseudopod
+// (js/boss-telegraphs.js): Swarm Spear and Egg Clutch, Airstrike and Crossfire, Gravity Wave, Pseudopod
 // Lash, Eclipse nova. Plus their presence (size) and the boss sound cues (js/boss-sfx.js).
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
@@ -11,7 +11,7 @@ globalThis.BroadcastChannel = undefined;
 
 const { EnemyManager, waveScaleAt } = await import('../js/enemies.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
-const { BossHazards } = await import('../js/boss-hazards.js');
+const { BossTelegraphs } = await import('../js/boss-telegraphs.js');
 const { BOSS_DEFS, QUEEN, WING, HORIZON, PROG, TWINS } = await import('../js/bosses.js');
 const { BOSS_SFX, playBossCue } = await import('../js/boss-sfx.js');
 const silent = new Proxy({}, { get: () => () => {} });
@@ -36,7 +36,7 @@ const spawnBoss = (id, wave, at = { x: 2000, y: 2000 }) => {
 const bossOf = (m, id) => m.enemies.find(e => e.type === id);
 
 test('hazards: a zone warns, then hits a ship inside it once; a ship outside is never hit', () => {
-  const pool = new BossHazards();
+  const pool = new BossTelegraphs();
   const hits = [];
   const onHit = (b) => { hits.push(b); return true; };
   pool.zone(100, 100, 60, { warn: 0.5, damage: 30, from: 'brood_queen' });
@@ -62,7 +62,7 @@ test('hazards: a zone warns, then hits a ship inside it once; a ship outside is 
 });
 
 test('hazards: a swept lane only hurts at its blast front; a wave ring spares its gaps', () => {
-  const pool = new BossHazards();
+  const pool = new BossTelegraphs();
   const onHit = () => true;
   pool.lane(0, 0, 1000, 0, 80, { warn: 0.2, sweep: 0.6 });
   pool.update(0.21);
@@ -116,8 +116,8 @@ test('Brood Queen: the swarm spear lines her brood up on a locked lane, then hur
   q.hp = q.maxHp * 0.49;
   step(m, player, 1);
   assert.equal(q.enraged, true);
-  assert.ok(until(m, player, () => m.bossHazards.count >= QUEEN.eggs, 60 * 3));
-  const eggs = m.bossHazards.active.filter(h => h.kind === 'zone');
+  assert.ok(until(m, player, () => m.bossTelegraphs.count >= QUEEN.eggs, 60 * 3));
+  const eggs = m.bossTelegraphs.active.filter(h => h.kind === 'zone');
   assert.ok(eggs.some(h => Math.hypot(h.x - player.x, h.y - player.y) < 30), 'one lands on the ship');
   const swarmers = () => m.enemies.filter(o => o.type === 'swarmer').length + m.spawnIndicators.filter(s => s.type === 'swarmer').length;
   const before = swarmers();
@@ -131,19 +131,19 @@ test('Wing Commander: an airstrike lane through the ship; crossfire is two cross
   const player = { x: 2400, y: 2000, radius: 15 };
   step(m, player, 4);
   const c = bossOf(m, 'wing_commander');
-  assert.ok(until(m, player, () => m.bossHazards.count > 0, 60 * 8), 'an airstrike is called');
-  const [lane] = m.bossHazards.active;
+  assert.ok(until(m, player, () => m.bossTelegraphs.count > 0, 60 * 8), 'an airstrike is called');
+  const [lane] = m.bossTelegraphs.active;
   assert.equal(lane.kind, 'lane');
   assert.ok(lane.sweep > 0);
   const mx = (lane.x + lane.x2) / 2;
   const my = (lane.y + lane.y2) / 2;
   assert.ok(Math.hypot(mx - player.x, my - player.y) < 40, 'centred on the ship');
-  m.bossHazards.clear();
+  m.bossTelegraphs.clear();
   c.hp = c.maxHp * 0.49;
   step(m, player, 1);
   assert.equal(c.enraged, true);
-  assert.ok(until(m, player, () => m.bossHazards.count >= 2, 60 * 4), 'crossfire');
-  const [a, b] = m.bossHazards.active;
+  assert.ok(until(m, player, () => m.bossTelegraphs.count >= 2, 60 * 4), 'crossfire');
+  const [a, b] = m.bossTelegraphs.active;
   const angle = (h) => Math.atan2(h.y2 - h.y, h.x2 - h.x);
   const d = Math.abs(Math.sin(angle(a) - angle(b)));
   assert.ok(d > 0.9, 'the two lanes cross near right angles');
@@ -157,7 +157,7 @@ test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a
   const h = bossOf(m, 'event_horizon');
   h.ramT = 99;
   assert.ok(until(m, player, () => h.inhaleT > 0, 60 * 8));
-  const waves = () => m.bossHazards.active.filter(z => z.kind === 'wave');
+  const waves = () => m.bossTelegraphs.active.filter(z => z.kind === 'wave');
   assert.equal(waves().length, 1);
   assert.equal(waves()[0].gaps.length, HORIZON.gaps);
   step(m, player, Math.ceil(HORIZON.inhaleTime * 60) + 2);
@@ -167,7 +167,7 @@ test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a
     const a = Math.atan2(b.vy, b.vx);
     for (const g of waves()[0].gaps) assert.ok(Math.abs(Math.sin((a - g) / 2)) > Math.sin(HORIZON.waveGap / 4), 'no orb in a gap');
   }
-  m.bossHazards.clear();
+  m.bossTelegraphs.clear();
   h.hp = h.maxHp * 0.49;
   step(m, player, 2);
   assert.equal(h.enraged, true);
@@ -185,7 +185,7 @@ test('Progenitor: a cell stops and marks pseudopod spokes, one on the ship; ever
   const p = bossOf(m, 'progenitor');
   p.ramT = 99;
   assert.ok(until(m, player, () => p.lashHold > 0, 60 * 6));
-  const lanes = m.bossHazards.active.filter(h => h.kind === 'lane');
+  const lanes = m.bossTelegraphs.active.filter(h => h.kind === 'lane');
   assert.equal(lanes.length, PROG.gens[0].spokes);
   const aim = Math.atan2(player.y - p.y, player.x - p.x);
   assert.ok(lanes.some(l => Math.abs(Math.sin(Math.atan2(l.y2 - l.y, l.x2 - l.x) - aim)) < 0.1), 'one spoke on the ship');
@@ -201,8 +201,8 @@ test('Eclipse Twins: the eclipse jumps onto the ship, marks the nova disc and fi
   step(m, player, 5);
   const sol = m.enemies.find(e => e.twinRole === 'sol');
   const luna = m.enemies.find(e => e.twinRole === 'luna');
-  assert.ok(until(m, player, () => m.bossHazards.count > 0, 60 * 8), 'an eclipse starts');
-  const [disc] = m.bossHazards.active;
+  assert.ok(until(m, player, () => m.bossTelegraphs.count > 0, 60 * 8), 'an eclipse starts');
+  const [disc] = m.bossTelegraphs.active;
   assert.ok(Math.hypot(disc.x - player.x, disc.y - player.y) < 30, 'on the ship');
   assert.equal(disc.r, TWINS.novaR);
   step(m, player, Math.ceil(TWINS.novaWarn * 60) - 6);

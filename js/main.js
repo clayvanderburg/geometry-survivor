@@ -2522,7 +2522,7 @@ export class Game {
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
-    this.enemyManager.bossHazards?.hitPlayer(this.player, this.enemyBulletHit); // telegraphed boss attacks hit like orbs
+    this.enemyManager.bossTelegraphs?.hitPlayer(this.player, this.enemyBulletHit); // telegraphed boss attacks hit like orbs
     return this.endRunIfDead();
   }
 
