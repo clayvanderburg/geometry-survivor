@@ -301,7 +301,7 @@ export const TRANSFORMS = {
     18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
   },
   flamethrower: {
-    6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle that sprays fire straight behind you, a little shorter than the front one.'),
+    6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle on the opposite side: two identical streams spin round your ship.'),
     12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
   },

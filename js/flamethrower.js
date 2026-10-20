@@ -9,7 +9,7 @@
 // face, so a rock shadows only the slice of the cone behind it (enemies there are safe) and the rest of
 // the cone burns on. The flames are drawn clipped the same way, so what you see is what burns.
 //
-// Breakthroughs: Twin Nozzle (a second, shorter nozzle sprays straight behind), Napalm Puddles (burning
+// Breakthroughs: Twin Nozzle (an identical second nozzle sprays the opposite way), Napalm Puddles (burning
 // puddles splash down at the flames' tip, weapon-fx.js pools) and Inferno Ring (every few seconds a ring
 // of fire rolls out all round the ship and shoves enemies back).
 //

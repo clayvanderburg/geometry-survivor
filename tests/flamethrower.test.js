@@ -92,7 +92,7 @@ test('every flame formula reads only its own rank; LV 1 numbers', () => {
     }
   }
   assert.equal(W.flameTickRate(base), 8);
-  assert.equal(W.flameRange(base), 254);
+  assert.equal(W.flameRange(base), 280);
   assert.equal(W.flameConeHalf(base), 0.55);
   assert.equal(W.flameBurnRank(base), 1);
   assert.equal(W.flameBurnRank(makeBuild('flamethrower', 18, { burn: 4 }, { 6: 'boost', 12: 'boost' })), ELEMENT_MAX_RANKS, 'burn rank caps at 5');
@@ -168,7 +168,7 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
 test('the cone: hits what is in front within reach and width, harder up close, always on while equipped, and roars', () => {
   const p = flamePlayer();
   const close = enemy(p, 60, 0), tip = enemy(p, 245, 0), edge = enemy(p, Math.cos(0.28) * 120, Math.sin(0.28) * 120);
-  const beyond = enemy(p, 300, 0), behind = enemy(p, -80, 0), side = enemy(p, 0, 100), wide = enemy(p, Math.cos(0.9) * 120, Math.sin(0.9) * 120);
+  const beyond = enemy(p, 330, 0), behind = enemy(p, -80, 0), side = enemy(p, 0, 100), wide = enemy(p, Math.cos(0.9) * 120, Math.sin(0.9) * 120);
   const r = rig(p, [close, tip, edge, beyond, behind, side, wide]);
   run(r, 1, false); // no aiming or trigger: it sprays whenever it is equipped
   r.hits.length = 0;
@@ -196,7 +196,7 @@ test('Nozzle Pressure and Wide Nozzle reach further and wider', () => {
   const r = rig(p, [far, wide]);
   run(r, 0.5);
   assert.ok(hitSet(r).has(far) && hitSet(r).has(wide));
-  assert.equal(flameRange(p), 254 + 4 * 40);
+  assert.equal(flameRange(p), 280 + 4 * 40);
 });
 
 test('asteroids are cover: a rock shadows only the slice of the cone behind it', () => {
@@ -224,12 +224,14 @@ test('asteroids are cover: a rock shadows only the slice of the cone behind it',
 
 test('Twin Nozzle: a shorter rear nozzle scorches what is behind you', () => {
   const p = flamePlayer({ bt: { 6: 'transform' } });
-  const behind = enemy(p, -120, 0), behindFar = enemy(p, -230, 0), front = enemy(p, 120, 0);
+  const behind = enemy(p, -120, 0), behindFar = enemy(p, -320, 0), front = enemy(p, 120, 0);
   const r = rig(p, [behind, behindFar, front]);
   run(r, 1);
   const hit = hitSet(r);
   assert.ok(hit.has(behind) && hit.has(front));
-  assert.ok(!hit.has(behindFar), `the rear nozzle reaches ${W.flameRearRange * 100}% as far`);
+  assert.ok(!hit.has(behindFar), 'the rear stream stops at the same reach as the front one');
+  assert.equal(r.ft.nozzles[1].range, r.ft.nozzles[0].range, 'both streams are the same size');
+  assert.equal(r.ft.nozzles[1].half, r.ft.nozzles[0].half);
   assert.equal(r.hits.filter((x) => x.e === front).length, r.hits.filter((x) => x.e === behind).length, 'both nozzles scorch at the same rate');
 });
 
@@ -242,7 +244,7 @@ test('Napalm Puddles: burning puddles splash down at the tip of the flames', () 
   for (const pool of pools) {
     assert.equal(pool.source, 'flame');
     assert.equal(pool.look, 'fire');
-    assert.ok(pool.x > p.x + 60 && pool.x < p.x + 270 && Math.abs(pool.y - p.y) < 80, 'in front, near the tip');
+    assert.ok(pool.x > p.x + 60 && pool.x < p.x + 300 && Math.abs(pool.y - p.y) < 80, 'in front, near the tip');
     assert.ok(near(pool.damage, weaponDamage(p, 'flame') / W.flameDamageMult(weaponBuild(p, 'flamethrower')) * W.flamePuddleDamageMult(weaponBuild(p, 'flamethrower'))));
   }
 });
