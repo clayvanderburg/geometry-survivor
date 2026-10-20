@@ -35,12 +35,16 @@ const ZOOM = 1.5;
 // The ship sits still in a close ring of still targets (wave HP, so they break and come back) and lets the
 // weapon work. Per-weapon tweaks: `drift` flies the ship in a slow loop (trails and dash effects need it),
 // `dash` dashes every N ticks (dash-triggered effects), `dummies` overrides the targets (CHASERS follow),
-// `frames` lengthens the loop, `warmup` the lead-in before it.
+// `orbit` circles the start point at that radius, `fixedCam` holds the camera on the start point, `release`
+// turns still targets into chasers at that frame, `frames` lengthens the loop, `warmup` the lead-in before
+// it, `zoom` frames closer.
 const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that follow a moving ship
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
   shockfield: { drift: true, dash: 60, dummies: CHASERS },
-  mines: { warmup: 600, frames: 60, dummies: CHASERS }, // one mine per 2 s: lay a field first, then let targets walk in
+  // Mines drop behind the ship: it circles outside a ring of still targets under a fixed camera, laying a
+  // ring of armed mines in shot; a second in, the targets are released and charge through them.
+  mines: { orbit: 170, fixedCam: true, zoom: 1.4, warmup: 360, frames: 60, release: 15, dummies: { count: 10 } },
   lightning: { frames: 60 } // strikes are spaced out: a longer loop catches more of them
 };
 
@@ -151,17 +155,30 @@ async function capture(browser, clip, tmp) {
       g.toggleHud();
       document.querySelectorAll('[class*="hint"]').forEach((el) => { if (/SHOW HUD/.test(el.textContent)) el.remove(); });
       g.viewScale *= zoom; g.renderScale *= zoom; g.width /= zoom; g.height /= zoom;
-    }, { zoom: ZOOM });
+    }, { zoom: tweak.zoom || ZOOM });
 
     // `drift`: a slow square loop, as in the tutorial's fly clip.
+    // `orbit`: steer round the start point (tangent plus a pull back onto the circle), held as WASD keys.
     const step = (ticks, t0) => page.evaluate(({ ticks, t0, tweak }) => {
       const g = window.__cap;
+      const p = g.player;
+      g.capHome ||= { x: p.x, y: p.y };
       for (let k = 0; k < ticks; k++) {
         const t = t0 + k;
         const phase = Math.floor(t / 45) % 4;
-        g.keys = tweak.drift ? { KeyD: phase === 0 || phase === 1, KeyS: phase === 1 || phase === 2, KeyA: phase === 2 || phase === 3, KeyW: phase === 3 || phase === 0 } : {};
+        if (tweak.orbit) {
+          const at = Math.hypot(p.x - g.capHome.x, p.y - g.capHome.y) > 1;
+          const dx = at ? p.x - g.capHome.x : 1, dy = at ? p.y - g.capHome.y : 0; // from the centre: head out east
+          const d = Math.hypot(dx, dy) || 1;
+          const pull = (tweak.orbit - d) / tweak.orbit * 2;
+          const vx = -dy / d + (dx / d) * pull, vy = dx / d + (dy / d) * pull;
+          g.keys = { KeyD: vx > 0.38, KeyA: vx < -0.38, KeyS: vy > 0.38, KeyW: vy < -0.38 };
+        } else {
+          g.keys = tweak.drift ? { KeyD: phase === 0 || phase === 1, KeyS: phase === 1 || phase === 2, KeyA: phase === 2 || phase === 3, KeyW: phase === 3 || phase === 0 } : {};
+        }
         if (tweak.dash && t % tweak.dash === tweak.dash - 1) g.triggerDash?.();
         g.update(1 / 60);
+        if (tweak.fixedCam) { g.camX = g.capHome.x - g.width / 2; g.camY = g.capHome.y - g.height / 2; }
       }
       g.player.invuln = 1e9;
       g.draw();
@@ -173,6 +190,13 @@ async function capture(browser, clip, tmp) {
     await step(warmup, 0);
     const frames = tweak.frames || FRAMES;
     for (let i = 0; i < frames; i++) {
+      if (i === tweak.release) {
+        await page.evaluate(() => {
+          const g = window.__cap;
+          g.range.config.dummies.move = 'ai'; // respawns chase too
+          for (const e of g.enemyManager.enemies) if (e.tag?.range) e.speed = e.tag.speed;
+        });
+      }
       if (i > 0) await step(EVERY, warmup + i * EVERY);
       await page.screenshot({ path: path.join(frameDir, `frame-${String(i).padStart(3, '0')}.png`) });
     }
