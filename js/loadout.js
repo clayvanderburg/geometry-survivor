@@ -147,7 +147,9 @@ export function ownedWeapons(p) {
 
 export const ownsWeapon = (p, id) => ownedWeapons(p).includes(id);
 export const freeSlots = (p) => Math.max(0, weaponSlots(p) - ownedWeapons(p).length);
-export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id)).map((w) => w.id);
+// Weapons that could still join: not equipped and not locked (Hangar weapon locks: p.lockedWeapons, set
+// only while the Hangar flag is on, js/weapon-unlocks.js).
+export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id) && !p.lockedWeapons?.includes(w.id)).map((w) => w.id);
 
 // Weapon level shown on slots, HUD and cards: LV 1 for equipping it plus every rank of its stat cards
 // and its element card (0 when not equipped). Evolution bonus levels (Storm Protocol) are shown separately.

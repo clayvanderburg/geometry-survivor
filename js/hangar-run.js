@@ -5,6 +5,7 @@ import { FeatLedger, FEATS } from './feats.js';
 import { SHIPS, DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook, shipDef, shipFixedKit } from './ships.js';
 import { WEAPONS, START_WEAPON_CHOICES } from './loadout.js';
 import { quirkOnKill, quirkOnHit } from './ship-quirks.js';
+import { lockedWeapons } from './weapon-unlocks.js';
 
 // The ship this run flies: null while the flag is off (the crab, exactly as before) or in the Weapon Range;
 // else the Hangar's pick. `game.shipOverride` (balance sim --ship, tests) wins even with the flag off.
@@ -26,6 +27,13 @@ export function shipFields(shipId) {
   return look ? { shipId, look } : { shipId };
 }
 
+// The run's locked weapons while the Hangar flag is on (js/weapon-unlocks.js); {} otherwise, so the
+// player carries no lock list and every weapon can join, as before.
+export function lockFields(game) {
+  if (!hangarEnabled() || game.range?.active || !game.progression?.hangar) return {};
+  return { lockedWeapons: lockedWeapons(game.progression.hangar()) };
+}
+
 // The weapons a ship run starts with: its fixed kit, else the start pick when the ship allows it, else the
 // default kit. null without a ship (the flag is off): resetRun keeps its own rule.
 export function runKit(game, startWeapon) {
@@ -44,8 +52,10 @@ export function startChoices(game, { forKit = false } = {}) {
   const id = runShip(game); // the ship about to launch (the Hangar's pick may have changed since the title run)
   if (!id) return START_WEAPON_CHOICES;
   const kit = shipDef(id).kit;
-  if (kit === 'any') return WEAPONS.map((w) => w.id);
-  if (kit === 'pick' || (kit === 'last' && forKit)) return START_WEAPON_CHOICES;
+  const locked = hangarEnabled() && game.progression?.hangar ? lockedWeapons(game.progression.hangar()) : [];
+  const open = (ids) => ids.filter((w) => !locked.includes(w));
+  if (kit === 'any') return open(WEAPONS.map((w) => w.id));
+  if (kit === 'pick' || (kit === 'last' && forKit)) return open(START_WEAPON_CHOICES);
   return [];
 }
 
@@ -76,6 +86,12 @@ export function commitFeats(game, end = false) {
   ledger.waveReached(game.wave, !!game.campaignWon);
   const done = ledger.commit(game.progression.hangar(), { tainted: game.runIsTainted ? game.runIsTainted() : !!game.runTainted, end });
   game.progression.save();
+  // A weapon unlocked mid-run can join this run's NEW WEAPON picks right away.
+  const p = game.player;
+  if (p?.lockedWeapons) {
+    const freed = done.flatMap((d) => d.added).filter((a) => a.startsWith('weapon:')).map((a) => a.slice(7));
+    if (freed.length) p.lockedWeapons = p.lockedWeapons.filter((id) => !freed.includes(id));
+  }
   if (done.length) game.onFeatsDone?.(done);
   if (end) game.hangarUI?.showResults(ledger);
   return done;

@@ -6,13 +6,15 @@
 import { hangarEnabled } from './hangar-flag.js';
 import { SHIPS, SHIP_BY_ID, shipStatChips, shipLook, shipFixedKit, DEFAULT_SHIP } from './ships.js';
 import { FEATS, featProgress, nextFeat } from './feats.js';
-import { WEAPON_BY_ID } from './loadout.js';
+import { WEAPONS, WEAPON_BY_ID } from './loadout.js';
+import { isWeaponUnlocked, isLockable, WEAPON_UNLOCK_FEATS, GRANDFATHERED } from './weapon-unlocks.js';
 import { ShipPreview } from './ship-preview.js';
 import { PAD } from './gamepad.js';
 import { TUNING } from './config.js';
 
 export const HANGAR_TABS = [
   { id: 'ships', label: 'SHIPS' },
+  { id: 'arsenal', label: 'ARSENAL' },
   { id: 'feats', label: 'FEATS' }
 ];
 export const TOAST_TIME = 3.2; // s on screen per unlock toast
@@ -67,6 +69,32 @@ export function shipsHTML(h) {
   return `<div class="hangar-grid">${SHIPS.map((s) => shipCardHTML(s.id, h)).join('')}</div>`;
 }
 
+// ARSENAL: every weapon with its lock state, the feat(s) that unlock it and its mastery stars.
+const STARS = ['', '★', '★★', '★★★', '✦'];
+export function arsenalRowHTML(w, h) {
+  const unlocked = isWeaponUnlocked(h, w.id);
+  const fresh = h.fresh.includes(`weapon:${w.id}`);
+  const tier = h.mastery[w.id] || 0;
+  const feats = (WEAPON_UNLOCK_FEATS[w.id] || []).map((id) => FEATS.find((f) => f.id === id)).filter(Boolean);
+  let how = 'Unlocked from the start';
+  if (isLockable(w.id)) {
+    if (h.weapons.includes(w.id)) how = `Unlocked by ${feats.map((f) => f.name).join(' / ')}`;
+    else if (unlocked) how = 'Unlocked (you flew before the Hangar)';
+    else how = feats.map((f) => `${f.name}: ${f.text}`).join(' · or ');
+  }
+  const bar = !unlocked && feats[0] ? progressBarHTML(feats[0], h) : '';
+  return `<article class="hangar-arsenal-row${unlocked ? '' : ' locked'}${fresh ? ' fresh' : ''}" style="--wpn:${w.color}" data-weapon="${esc(w.id)}" data-gp-nav tabindex="0">
+    <div class="hangar-feat-main"><h3>${unlocked ? '' : '🔒 '}${esc(w.name)}${fresh ? ' <span class="guide-new">NEW</span>' : ''} <span class="hangar-stars" title="Mastery">${STARS[tier] || ''}</span></h3>
+    <p>${esc(how)}</p></div><div class="hangar-feat-side"><span class="hangar-reward">${esc(w.category)}</span>${bar}</div></article>`;
+}
+
+export function arsenalHTML(h) {
+  const open = WEAPONS.filter((w) => isWeaponUnlocked(h, w.id)).length;
+  const vet = h.veteran ? ' · VETERAN: the weapons you already had stay unlocked' : '';
+  return `<p class="hangar-summary">${open} / ${WEAPONS.length} WEAPONS UNLOCKED${esc(vet)}</p>
+    <div class="hangar-feat-list">${WEAPONS.map((w) => arsenalRowHTML(w, h)).join('')}</div>`;
+}
+
 export function featRowHTML(feat, h) {
   const done = !!h.feats[feat.id];
   const fresh = h.fresh.includes(`feat:${feat.id}`);
@@ -111,6 +139,13 @@ export function resultsStripHTML(unlocked, h) {
   if (!items && !nudge) return '';
   return `${items ? `<div class="hangar-results-head">★ NEW IN THE HANGAR</div><ul class="hangar-results-list">${items}</ul>` : ''}${nudge}`;
 }
+
+// Which NEW ids each tab shows (and clears once viewed).
+const TAB_FRESH = {
+  ships: (f) => f.startsWith('ship:'),
+  arsenal: (f) => f.startsWith('weapon:'),
+  feats: (f) => f.startsWith('feat:') || f.startsWith('badge:')
+};
 
 export class HangarUI {
   constructor(game, doc = globalThis.document) {
@@ -199,7 +234,7 @@ export class HangarUI {
     g.resetInput?.();
     g.menuNav?.clear();
     this.root.classList.remove('hidden');
-    this.setTab(this.h.fresh.some((f) => f.startsWith('ship:')) || !this.h.fresh.length ? 'ships' : 'feats');
+    this.setTab(HANGAR_TABS.find((t) => this.h.fresh.some(TAB_FRESH[t.id]))?.id || 'ships');
     this.body?.focus?.({ preventScroll: true });
     this.tick();
     return true;
@@ -239,19 +274,18 @@ export class HangarUI {
     const sub = this.root.querySelector('[data-hangar-sub]');
     if (sub) sub.textContent = `FLYING ${SHIP_BY_ID[h.ship]?.name || 'VEXOLITH'} · ${h.ships.length} / ${SHIPS.length} SHIPS · ${Object.keys(h.feats).length} / ${FEATS.length} FEATS`;
     for (const t of HANGAR_TABS) {
-      const prefix = t.id === 'ships' ? 'ship:' : 'feat:';
-      const n = h.fresh.filter((f) => f.startsWith(prefix) || (t.id === 'feats' && f.startsWith('badge:'))).length;
+      const n = t.id === this.tab ? 0 : h.fresh.filter(TAB_FRESH[t.id]).length; // the open tab's NEW ids are seen now
       const el = this.root.querySelector(`[data-hangar-tab-new="${t.id}"]`);
       if (el) el.textContent = n ? `${n} NEW` : '';
     }
-    this.body.innerHTML = this.tab === 'ships' ? shipsHTML(h) : featsHTML(h);
+    this.body.innerHTML = this.tab === 'ships' ? shipsHTML(h) : this.tab === 'arsenal' ? arsenalHTML(h) : featsHTML(h);
     this.previews = [...this.body.querySelectorAll('[data-ship-canvas]')].map((c) => {
       const id = c.dataset.shipCanvas;
       const look = shipLook(id);
       return { id, locked: !h.ships.includes(id), preview: new ShipPreview(c, { getPlayer: () => (look ? { look } : null), tuning: TUNING }) };
     });
     // What's on screen now has been seen: the NEW badges go next time.
-    const seen = this.tab === 'ships' ? (f) => f.startsWith('ship:') : (f) => f.startsWith('feat:') || f.startsWith('badge:');
+    const seen = TAB_FRESH[this.tab];
     if (h.fresh.some(seen)) {
       h.fresh = h.fresh.filter((f) => !seen(f));
       this.game.progression.save();

@@ -4978,3 +4978,12 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8
 .hangar-results-list { margin: 4px 0 0 18px; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #fff3c4; }
 .hangar-next { margin-top: 4px; font-size: 11px; letter-spacing: 1px; color: #c8d6ea; }
 .hangar-next b { color: #ffcc00; letter-spacing: 2px; margin-right: 4px; }
+.hangar-arsenal-row { --wpn: #00f3ff; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: center; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--wpn) 35%, transparent); border-radius: 8px; background: rgba(4, 10, 24, 0.7); outline: none; }
+.hangar-arsenal-row h3 { font-size: 13px; font-weight: 900; letter-spacing: 2px; color: var(--wpn); }
+.hangar-arsenal-row p { font-size: 11px; color: #c8d6ea; }
+.hangar-arsenal-row.locked { border-color: rgba(120, 140, 170, 0.25); }
+.hangar-arsenal-row.locked h3 { color: #8592a8; }
+.hangar-arsenal-row:focus-visible { box-shadow: 0 0 0 2px var(--wpn); }
+.hangar-arsenal-row .guide-new { position: static; margin-left: 6px; vertical-align: middle; }
+.hangar-stars { color: #ffcc00; letter-spacing: 1px; text-shadow: 0 0 8px rgba(255, 204, 0, 0.7); }
+@media (max-width: 640px) { .hangar-arsenal-row { grid-template-columns: minmax(0, 1fr); } }

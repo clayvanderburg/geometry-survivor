@@ -70,7 +70,7 @@ import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
 import { ShipPreview } from './ship-preview.js';
 import { mountHangar } from './hangar-ui.js';
-import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields, runKit, startChoices, hangarKill, hangarHit } from './hangar-run.js';
+import { newRunLedger, commitFeats, hangarTunerRow, runShip, runBonuses, shipFields, runKit, startChoices, hangarKill, hangarHit, lockFields } from './hangar-run.js';
 import {
   TUNING,
   DEFAULT_TUNING,
@@ -412,6 +412,7 @@ export class Game {
       ...runStartPlayer(bonuses),
       mode: this.mode, // card pools read the mode's rules off the player (upgrades.js eligibleUpgrades)
       ...shipFields(this.shipId), // Hangar ship id and silhouette (none for the crab)
+      ...lockFields(this), // Hangar weapon locks (none while the flag is off)
       level: 1,
       xp: 0,
       xpToNext: xpToNextLevel(1),
