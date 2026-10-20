@@ -462,15 +462,22 @@ export function drawArchetypeOverlay(ctx, e, r) {
   else if (e.type === 'gunner' && e.state === 'aim') drawGunnerAim(ctx, e);
   else if (e.type === 'blinker' && e.state === 'telegraph') drawBlinkTarget(ctx, e);
   if (e.shieldArc) drawShieldPlates(ctx, e);
-  if (HP_RING_TYPES.has(e.type) && !e.isLieutenant && e.sinceHit < 2 && e.hp < e.maxHp) {
+  // The HP ring stays up while the hull is damaged: bright for 2 s after a hit, then a dimmer steady ring.
+  if (HP_RING_TYPES.has(e.type) && !e.isLieutenant && e.hp < e.maxHp) {
     const pct = Math.max(0, e.hp / e.maxHp);
-    ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.75 * (1 - e.sinceHit / 2)})`;
+    ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${hpRingAlpha(e)})`;
     ctx.lineWidth = 2.2;
     ctx.beginPath();
     const ringR = e.shieldArc ? e.shieldRadius + 8 : r * 1.45 + 6; // clear of the shield plates
     ctx.arc(e.x, e.y, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
     ctx.stroke();
   }
+}
+
+// HP ring opacity: 0.75 right after a hit, easing to a steady 0.35 two seconds later.
+export function hpRingAlpha(e) {
+  const fresh = Math.max(0, 1 - (e.sinceHit ?? 2) / 2);
+  return 0.35 + 0.4 * fresh;
 }
 
 function drawChargeLane(ctx, e) {

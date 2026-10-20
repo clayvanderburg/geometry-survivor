@@ -17,6 +17,7 @@ import { KESTREL, updateKestrel, traceKestrel } from './squadrons.js';
 import { turnToward } from './serpents.js';
 import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
 import { LANCE, lanceCycle, traceLancer, drawLanceAim, drawBeam } from './lancers.js';
+import { hpRingAlpha } from './archetypes.js';
 
 export const CARRIER = { range: 430, band: 70, launchEvery: 3.2, launch: 2, maxDrones: 6 };
 export const DRONE = { speed: 4.3, turnRate: 2.6, life: 7, launchKick: 3.5 };
@@ -374,9 +375,9 @@ export function drawHostileOverlay(ctx, e, r) {
     drawGateBeam(ctx, e);
     return;
   }
-  if (e.type !== 'hulk' || e.isLieutenant || !(e.sinceHit < 2) || e.hp >= e.maxHp) return;
+  if (e.type !== 'hulk' || e.isLieutenant || e.hp >= e.maxHp) return;
   const pct = Math.max(0, e.hp / e.maxHp);
-  ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.75 * (1 - e.sinceHit / 2)})`;
+  ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${hpRingAlpha(e)})`;
   ctx.lineWidth = 2.6;
   ctx.beginPath();
   ctx.arc(e.x, e.y, r * 1.3 + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
