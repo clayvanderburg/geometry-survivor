@@ -20,6 +20,7 @@
 - Sharper projectile impacts, selective screen shake/hit-stop, ship banking/recoil and thruster trails.
   - **Implemented (`js/ship-renderer.js`):** thruster plume that stretches with throttle and flares on dashes, a fading engine wake, wings that bank into turns, and turret recoil on every blaster shot (visual only, `updateShipAnimation`).
 - Animate drilling sparks, fractures and debris; protect readability amid visual spectacle.
+  - **Implemented (`js/asteroids.js`):** glowing, branching cracks spread from where the drill bites as the rock loses HP, a white-hot contact spot, a rock shudder while ground, chunks chipping off at 2/3 and 1/3 HP, grinding embers, and a core-shard burst on the final break (visual only).
 - HUD and upgrade cards: headline benefit enlarged (e.g. **+2 PROJECTILES**), clear summary and optional detailed explanation, **before → after** numerical stats.
 - **Rarity = rolled level jump (decided):** +1 common (white/gray), +2 uncommon (green), +3 rare (blue), +4 epic (purple), +5 legendary (gold). Evolutions/synergies are their own magenta tier. Odds are tunable (`doubleLevelChance` … `pentaLevelChance`) and scale with Luck.
 - **Weapon balance target (decided):** every weapon should have about the same potential DPS at the same level; difficulty of use is tuned separately later.

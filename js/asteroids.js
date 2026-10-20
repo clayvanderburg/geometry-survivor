@@ -48,6 +48,72 @@ function rockLook(a) {
   return a.look;
 }
 
+// Crack network (visual only), in the rock's local frame: 3-4 jagged branches that start where the
+// drill bit in and wander across the rock, some forking. Each segment opens at a damage fraction
+// (`at`, 0..1) along its branch, so the cracks visibly spread as the rock is ground down.
+export function rockCracks(a, originX, originY) {
+  if (a.cracks) return a.cracks;
+  const r = a.radius;
+  let ox = originX, oy = originY;
+  const od = Math.hypot(ox, oy);
+  if (!(od > 0)) { const v = a.verts[0]; ox = v.x; oy = v.y; }
+  else if (od > r * 0.9) { ox *= (r * 0.9) / od; oy *= (r * 0.9) / od; }
+  const segs = [];
+  const inward = Math.atan2(-oy, -ox);
+  const branches = 3 + (Math.random() < 0.5 ? 1 : 0);
+  const walk = (x, y, heading, len, start, span, depth) => {
+    const steps = 3 + Math.floor(Math.random() * 2);
+    const step = len / steps;
+    for (let i = 0; i < steps; i++) {
+      heading += (Math.random() - 0.5) * 0.9;
+      let nx = x + Math.cos(heading) * step;
+      let ny = y + Math.sin(heading) * step;
+      const d = Math.hypot(nx, ny);
+      if (d > r * 0.92) { nx *= (r * 0.92) / d; ny *= (r * 0.92) / d; }
+      const at = start + (span * (i + 1)) / steps;
+      segs.push({ x1: x, y1: y, x2: nx, y2: ny, at0: start + (span * i) / steps, at, depth });
+      if (depth === 0 && i === 1 && Math.random() < 0.7) {
+        walk(nx, ny, heading + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.5), len * 0.5, at, Math.min(span * 0.6, 0.98 - at), 1);
+      }
+      x = nx; y = ny;
+    }
+  };
+  for (let b = 0; b < branches; b++) {
+    const heading = inward + ((b - (branches - 1) / 2) * 1.1) + (Math.random() - 0.5) * 0.4;
+    walk(ox, oy, heading, r * (1.1 + Math.random() * 0.5), 0.04 + b * 0.05, 0.75, 0);
+  }
+  a.cracks = { ox, oy, segs };
+  return a.cracks;
+}
+
+// World point -> the rock's local frame (where its outline and cracks live).
+function toLocal(a, wx, wy) {
+  const look = rockLook(a);
+  const dx = wx - a.x, dy = wy - a.y;
+  return { x: dx * look.cos + dy * look.sin, y: -dx * look.sin + dy * look.cos };
+}
+
+// Damage stages that knock a chunk off a rock while it is ground down (fractions of max HP left).
+const CHIP_STAGES = [0.66, 0.33];
+
+// Drill/grind bookkeeping shared by the ship's claws and elites: contact point, heat, and a chunk
+// breaking off at each CHIP_STAGES threshold.
+function grindFx(rock, cx, cy, hue, particles) {
+  rock.lastGrindX = cx;
+  rock.lastGrindY = cy;
+  rock.heat = Math.min(1, (rock.heat || 0) + 0.12);
+  const stage = rock.chipStage || 0;
+  if (stage < CHIP_STAGES.length && rock.hp > 0 && rock.hp / rock.maxHp <= CHIP_STAGES[stage]) {
+    rock.chipStage = stage + 1;
+    if (particles) {
+      const out = Math.atan2(cy - rock.y, cx - rock.x);
+      particles.spawnPolygonShatter(cx, cy, rock.radius * 0.32, 3, out, hue, 0.55);
+      particles.spawnDirectionalSparks(cx, cy, out, 1.2, 5, hue, 6);
+      particles.spawnFlash?.(cx, cy, rock.radius * 0.5, hue, 0.1);
+    }
+  }
+}
+
 export class AsteroidManager {
   constructor(worldWidth, worldHeight) {
     this.worldWidth = worldWidth;
@@ -245,6 +311,7 @@ export class AsteroidManager {
       if (this.asteroids[i].hitFlash > 0) {
         this.asteroids[i].hitFlash = Math.max(0, this.asteroids[i].hitFlash - dt * 6);
       }
+      if (this.asteroids[i].heat > 0) this.asteroids[i].heat = Math.max(0, this.asteroids[i].heat - dt * 1.6);
     }
 
     const miningDps = player.stats.miningSpeed || 75;
@@ -287,6 +354,18 @@ export class AsteroidManager {
         const dualBonus = (distLeft <= drillReach && distRight <= drillReach) ? (TUNING.dualClawBonus ?? 1.25) : 1.0;
         rock.hp -= miningDps * dualBonus * dt;
         rock.hitFlash = 0.85;
+        {
+          // Contact point: the rock face toward the nearer claw.
+          const cx0 = distLeft < distRight ? leftClawX : rightClawX;
+          const cy0 = distLeft < distRight ? leftClawY : rightClawY;
+          const cd = Math.hypot(cx0 - rock.x, cy0 - rock.y) || 1;
+          const gx = rock.x + ((cx0 - rock.x) / cd) * rock.radius, gy = rock.y + ((cy0 - rock.y) / cd) * rock.radius;
+          const ghue = rock.oreType !== 'rock' ? rock.hue : 42;
+          grindFx(rock, gx, gy, ghue, particles);
+          // Grinding embers: slow glowing chips and a flicker of light at the bite.
+          if (Math.random() < 0.25) particles.spawnExplosionSparks(gx, gy, 1, ghue, 0.5, 2.4, 3);
+          if (Math.random() < 0.05) particles.spawnFlash?.(gx, gy, 8, ghue, 0.07);
+        }
 
         // Spray high-velocity rock-grinding sparks off the drill claws!
         if (Math.random() < 0.75) {
@@ -438,11 +517,10 @@ export class AsteroidManager {
     ny /= d;
     const cx = rock.x + nx * rock.radius;
     const cy = rock.y + ny * rock.radius;
-    rock.lastGrindX = cx;
-    rock.lastGrindY = cy;
     rock.hp -= dps * dt;
     rock.hitFlash = 0.85;
     const hue = rock.oreType && rock.oreType !== 'rock' ? rock.hue : 32;
+    grindFx(rock, cx, cy, hue, particles);
     const vfx = typeof particles?.intensity === 'number' ? particles.intensity : 1;
     if (particles && Math.random() < 0.55) {
       // Sparks spray back off the face along the rock's normal, either side of the elite's hull.
@@ -490,15 +568,19 @@ export class AsteroidManager {
   drawRock(ctx, a, base) {
     const look = rockLook(a);
     const { cos, sin } = look;
+    // A rock being ground shudders a pixel or so.
+    const jit = a.hitFlash > 0.4 ? 1.3 : 0;
+    const px = a.x + (jit ? (Math.random() - 0.5) * jit * 2 : 0);
+    const py = a.y + (jit ? (Math.random() - 0.5) * jit * 2 : 0);
     if (base) {
       ctx.setTransform(
         base.a * cos + base.c * sin, base.b * cos + base.d * sin,
         base.c * cos - base.a * sin, base.d * cos - base.b * sin,
-        base.a * a.x + base.c * a.y + base.e, base.b * a.x + base.d * a.y + base.f
+        base.a * px + base.c * py + base.e, base.b * px + base.d * py + base.f
       );
     } else {
       ctx.save();
-      ctx.translate(a.x, a.y);
+      ctx.translate(px, py);
       ctx.rotate(a.rotation);
     }
     const hpRatio = Math.max(0, a.hp / a.maxHp);
@@ -537,18 +619,44 @@ export class AsteroidManager {
       ctx.stroke();
     }
 
-    if (hpRatio < 0.9) {
-      const crackAlpha = Math.min(1, (1 - hpRatio) * 1.25);
-      ctx.strokeStyle = `hsla(${isRich ? a.hue : 42}, 100%, 82%, ${crackAlpha})`;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      const crackCount = hpRatio < 0.45 ? 4 : 2;
-      for (let c = 0; c < crackCount; c++) {
-        const pt = a.verts[(c * 2) % a.verts.length];
-        ctx.moveTo(0, 0);
-        ctx.lineTo(pt.x * (1 - hpRatio * 0.45), pt.y * (1 - hpRatio * 0.45));
+    // Cracks spread from where the drill bit in, glowing hotter as the rock nears breaking; a
+    // white-hot spot marks the contact while it is being ground.
+    const dmg = 1 - hpRatio;
+    if (dmg > 0.03) {
+      let cracks = a.cracks;
+      if (!cracks) {
+        const o = a.lastGrindX != null ? toLocal(a, a.lastGrindX, a.lastGrindY) : { x: 0, y: 0 };
+        cracks = rockCracks(a, o.x, o.y);
       }
+      const hue = isRich ? a.hue : 34;
+      const open = Math.min(1, dmg * 1.15);
+      ctx.beginPath();
+      for (let i = 0; i < cracks.segs.length; i++) {
+        const s = cracks.segs[i];
+        if (s.at0 >= open) continue;
+        const k = Math.min(1, (open - s.at0) / (s.at - s.at0));
+        ctx.moveTo(s.x1, s.y1);
+        ctx.lineTo(s.x1 + (s.x2 - s.x1) * k, s.y1 + (s.y2 - s.y1) * k);
+      }
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `hsla(${hue}, 100%, 55%, ${0.25 + 0.35 * dmg})`;
+      ctx.lineWidth = 3.4 + 2 * dmg;
       ctx.stroke();
+      ctx.strokeStyle = `hsla(${hue}, 100%, ${78 + 18 * dmg}%, ${0.55 + 0.45 * dmg})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      const heat = a.heat || 0;
+      if (heat > 0.05 && a.lastGrindX != null) {
+        const hot = toLocal(a, a.lastGrindX, a.lastGrindY);
+        ctx.fillStyle = `hsla(${hue}, 100%, 55%, ${0.25 * heat})`;
+        ctx.beginPath();
+        ctx.arc(hot.x, hot.y, 4 + 5 * heat, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255, 250, 235, ${0.6 * heat})`;
+        ctx.beginPath();
+        ctx.arc(hot.x, hot.y, 1.5 + 2 * heat, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     if (!base) ctx.restore();
   }
