@@ -10,6 +10,7 @@
 //   intensity and cross-fades track to track, a boss theme), and the procedural score is the fallback.
 // Everything no-ops safely without an AudioContext (node tests, very old browsers).
 import { TUNING, VOLUME_REF } from './config.js';
+import { playBossCue } from './boss-sfx.js';
 
 const MASTER_VOL_KEY = 'vexolith_master_vol';
 const LEGACY_MASTER_VOL_KEY = 'vectra_master_vol';
@@ -1589,6 +1590,12 @@ export class SoundEngine {
       osc.start(start);
       osc.stop(start + dur + 0.02);
     });
+  }
+
+  // Named-boss entrance stings and attack tells (procedural, js/boss-sfx.js).
+  playBossCue(name) {
+    if (!this.enabled || !this.ctx) return false;
+    return playBossCue(this, name);
   }
 
   // Lieutenant arrival: a short rising two-tone brass sweep over a sub thump (smaller than the boss sting).

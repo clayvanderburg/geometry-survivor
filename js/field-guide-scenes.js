@@ -232,6 +232,8 @@ const SCENES = {
   },
   brood_queen: {
     w: 680, loop: 12,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'brood_queen') e.spearCd = 2.2; },
     setup(s) {
       s.home(0.82, 0.5);
       s.manager.queueSpawn('brood_queen', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -285,6 +287,8 @@ const SCENES = {
   },
   wing_commander: {
     w: 900, loop: 13,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'wing_commander') e.strikeT = 2.4; },
     setup(s) {
       s.home(0.55, 0.5);
       s.manager.queueSpawn('wing_commander', s.W * 0.15, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -337,6 +341,8 @@ const SCENES = {
   },
   event_horizon: {
     w: 900, loop: 12,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'event_horizon') e.aiTimer = 1.6; },
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('event_horizon', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -398,6 +404,8 @@ const SCENES = {
   },
   progenitor: {
     w: 900, loop: 14,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'progenitor' && !e.gen) e.lashT = 2; },
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('progenitor', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -471,6 +479,8 @@ const SCENES = {
   },
   eclipse_twins: {
     w: 900, loop: 14,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'eclipse_twins' && e.twinRole === 'sol') e.eclipseCd = 2.6; },
     setup(s) {
       s.home(0.5, 0.5);
       s.manager.queueSpawn('eclipse_twins', s.W * 0.2, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -748,6 +758,7 @@ export class GuidePreview {
     this.manager.lieutenantArrivals.length = 0;
     for (const e of this.manager.doomed.splice(0)) this.kill(e);
     this.manager.enemyBullets.update(dt, this.player, null, this.particles, this.W, this.H, this.orbHit);
+    this.manager.bossHazards.hitPlayer(this.player, this.orbHit);
     this.updateBolts();
     this.updateContacts();
     this.particles.update(dt, this.W, this.H);

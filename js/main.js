@@ -236,6 +236,7 @@ export class Game {
     this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
     this.radarVisible = loadRadarVisible(); // sector radar minimap, toggled with [R] / controller Back
     this.enemyManager = new EnemyManager();
+    this.enemyManager.sound = this.sound; // boss entrance cues and attack tells (js/boss-sfx.js)
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
     this.enemyManager.terrain = this.asteroidManager;
@@ -2521,6 +2522,7 @@ export class Game {
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
+    this.enemyManager.bossHazards?.hitPlayer(this.player, this.enemyBulletHit); // telegraphed boss attacks hit like orbs
     return this.endRunIfDead();
   }
 

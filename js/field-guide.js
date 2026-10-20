@@ -187,8 +187,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
-    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${ramText('brood_queen')}${bossGrindText()}`,
-    tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
+    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant winged swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. SWARM SPEAR: every ${secs(QUEEN.spearEvery)} she screeches, holds still and lines up to ${QUEEN.spearCount} of her brood behind a red lane aimed at you, then hurls the whole line down it. At ${pct(QUEEN.rageAt)} HP the brood scatters, she speeds up, births divers and lobs EGG CLUTCHES: ${QUEEN.eggs} marked circles round you (one under you) that burst after ${secs(QUEEN.eggWarn)} and hatch a swarmer each. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${ramText('brood_queen')}${bossGrindText()}`,
+    tip: 'When she screeches, step sideways off the red lane: the spear flies straight. At half HP keep moving, the egg circles always land where you are.'
   },
   {
     id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
@@ -197,8 +197,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'wing_commander', name: BOSS_DEFS.wing_commander.name, group: 'boss', boss: true, unlockWave: bossWave('wing_commander'),
-    what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad amber delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, and the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
-    tip: 'Do not stand in its lane: sidestep the run, then cross its mine lines through the gaps. Thin the escort between passes so it has fewer wingmen to call back.'
+    what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad afterburning delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. AIRSTRIKE: every ${secs(WING.strikeEvery)} a siren sounds and a ${WING.strikeLen} px bombing lane is marked through you; ${secs(WING.strikeWarn)} later a blast front carpet-bombs it end to end. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan, and its strikes come as CROSSFIRE: two lanes crossing on you in an X. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
+    tip: 'Hear the siren, leave the marked lane sideways (in a crossfire, get out of the X diagonally). Thin the escort between passes so it has fewer wingmen to call back.'
   },
   {
     id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
@@ -207,8 +207,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
-    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
-    tip: 'Fight it from the edge of its pull and kill things away from it so it cannot feed. Shoot from close range so the bend has less time to steer your shots off.'
+    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. GRAVITY WAVE: every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) while green spokes mark ${HORIZON.gaps} safe gaps, then exhales an expanding ring that hits anything it crosses outside the gaps, with ${HORIZON.ring} orbs riding it. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes, breathes faster, and each wave is a double ripple whose second ring turns its gaps. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
+    tip: 'When it inhales, slide onto a green spoke and let the wave pass round you, or dash through the ring. Kill things away from it so it cannot feed.'
   },
   {
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
@@ -217,8 +217,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
-    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${ramText('progenitor', ' of any piece')}${bossGrindText()}`,
-    tip: 'Keep up the pressure on every piece: one left alone heals and finds a partner. Finish the smallest ones before they merge.'
+    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. PSEUDOPOD LASH: a cell stops, its cilia bristle, and ${PROG.gens[0].spokes} green spokes are marked out of its membrane (one always on you); a moment later they whip out. Every piece lashes on its own clock with fewer, shorter spokes. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${ramText('progenitor', ' of any piece')}${bossGrindText()}`,
+    tip: 'When a cell bristles, step between its spokes. Keep up the pressure on every piece: one left alone heals and finds a partner.'
   },
   {
     id: 'conductor', name: BOSS_DEFS.conductor.name, group: 'boss', boss: true, unlockWave: bossWave('conductor'),
@@ -227,8 +227,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'eclipse_twins', name: BOSS_DEFS.eclipse_twins.name, group: 'boss', boss: true, unlockWave: bossWave('eclipse_twins'),
-    what: () => `SOL and LUNA, a sun and a crescent, circle a point that trails after you, ${TWINS.orbitR} px out and roughly opposite each other, joined by a burning tether that sweeps back and forth across the ring. Kill one and the survivor enrages, spinning faster and firing lancer beams, and unless it dies within ${secs(TWINS.reviveTime)} its twin returns at ${pct(TWINS.reviveHp)} HP. Beaten when both are down.${bossGrindText()}`,
-    tip: 'Keep moving so the ring\'s centre never sits on you, and cross the tether where it is far from both twins. Bring both down to low HP, then finish them back to back.'
+    what: () => `SOL and LUNA, a sun and a crescent, circle a point that trails after you, ${TWINS.orbitR} px out and roughly opposite each other, joined by a burning tether that sweeps back and forth across the ring. ECLIPSE: every ${secs(TWINS.eclipseEvery)} the point jumps onto you, the twins rush together over it and a ${TWINS.novaR} px disc is marked; ${secs(TWINS.novaWarn)} later it bursts in a nova with a ring of ${TWINS.novaOrbs} orbs. At ${pct(TWINS.phaseAt)} of their combined HP the ring tightens and spins faster, eclipses come every ${secs(TWINS.phaseEclipseEvery)} and each nova fires two rings. Kill one and the survivor enrages, spinning faster and firing lancer beams, and unless it dies within ${secs(TWINS.reviveTime)} its twin returns at ${pct(TWINS.reviveHp)} HP. Beaten when both are down.${bossGrindText()}`,
+    tip: 'When the twins converge, run straight out of the disc. Cross the tether where it is far from both twins, and bring both low before finishing them back to back.'
   },
   {
     id: 'prism', name: BOSS_DEFS.prism.name, group: 'boss', boss: true, unlockWave: bossWave('prism'),
