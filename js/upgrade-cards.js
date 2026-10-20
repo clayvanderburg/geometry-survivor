@@ -284,7 +284,8 @@ export const STAT_ROWS = [
   ...ELEMENT_WEAPONS.flatMap(elementRows),
   ...elementRows('flamethrower'),
   ...elementRows('cryospray'),
-  ...elementRows('acidspray')
+  ...elementRows('acidspray'),
+  ...elementRows('lightning') // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));

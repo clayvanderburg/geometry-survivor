@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.1',
+    date: '2026-10-20',
+    title: 'Stun Arcs Built In',
+    notes: [
+      { type: 'balance', text: "Tesla Arc is always SHOCK: from LV 1 its arcs zap-stun enemies and shock arcs jump between enemies that touch. It's lightning." },
+      { type: 'balance', text: 'Its shock grows stronger at LV 6, 12 and 18. The Tesla Arc element cards (Stun Arcs, Searing Arcs, Cryo Arcs, Nanite Swarm) are gone.' },
+      { type: 'balance', text: 'It counts as a SHOCK weapon for status cards, the Shock Amplifier and Supercritical.' }
+    ]
+  },
+  {
     version: '0.43.0',
     date: '2026-10-20',
     title: 'Victory, Rifts & Bedrock',
