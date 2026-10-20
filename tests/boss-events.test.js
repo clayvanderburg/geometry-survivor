@@ -388,7 +388,9 @@ test('wave 50 FINAL STAND: no timer, a surge then no spawns, SECTOR CLEAR, VICTO
   assert.ok(ticks >= 2.4 * 60, 'the SECTOR CLEAR beat plays out first');
   assert.equal(g.campaignWon, true);
   assert.ok(!hidden('victory-modal'));
-  assert.match(document.getElementById('victory-stats').innerHTML, /98,765/);
+  const { VICTORY_BONUS, waveBonus } = await import('../js/score-bonus.js');
+  assert.equal(g.score, 98765 + waveBonus(CAMPAIGN_WAVES) + VICTORY_BONUS, 'SECTOR CLEAR pays wave 50, VICTORY the bonus');
+  assert.match(document.getElementById('victory-stats').innerHTML, /VICTORY BONUS/);
   const t = g.elapsedTime;
   tick(g, 30);
   assert.equal(g.elapsedTime, t, 'the run is paused behind the screen');
@@ -400,6 +402,7 @@ test('wave 50 FINAL STAND: no timer, a surge then no spawns, SECTOR CLEAR, VICTO
   packs = 0;
   tick(g, 60 * 4);
   assert.equal(g.wave, CAMPAIGN_WAVES + 1);
+  assert.equal(g.waveBonus, waveBonus(CAMPAIGN_WAVES), 'wave 50 is not paid twice on the way to 51');
   assert.ok(packs > 0, 'regular spawning restarts');
   assert.equal(g.finalStand, null);
   g.onBossDefeated(finalBoss, 2600, 0);

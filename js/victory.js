@@ -6,6 +6,7 @@
 import { CAMPAIGN_WAVES, FINAL_BOSS } from './wave-plan.js';
 import { bossDef } from './bosses.js';
 import { TUNING } from './config.js';
+import { awardVictoryBonus, VICTORY_BONUS } from './score-bonus.js';
 
 export const ENDLESS_LEAD_IN = 3; // s of calm after CONTINUE before wave 51 (and its packs) arrive
 
@@ -40,6 +41,7 @@ export function showVictory(game) {
   if (game.state !== 'PLAYING') return;
   game.state = 'VICTORY';
   game.campaignWon = true;
+  awardVictoryBonus(game);
   game.victoryShownAt = Date.now();
   for (const sp of [game.flamethrower, game.cryoSprayer, game.acidSprayer]) if (sp?.firing) sp.silence(game);
   game.sound?.setMusicState?.({ intensity: 0.4, muffled: true, boss: 0 });
@@ -50,7 +52,7 @@ export function showVictory(game) {
   const stats = el('victory-stats');
   if (stats) {
     stats.innerHTML = [
-      ['SCORE', game.score.toLocaleString(), 'var(--cyan)'],
+      ['SCORE', `${game.score.toLocaleString()}<div class="go-stat-sub">incl. +${VICTORY_BONUS.toLocaleString()} VICTORY BONUS</div>`, 'var(--cyan)'],
       ['TIME', `${mins}:${secs}`, 'var(--emerald)'],
       ['KILLS', game.kills.toLocaleString(), 'var(--magenta)'],
       ['LEVEL', String(game.player?.level ?? 1), 'var(--gold)']

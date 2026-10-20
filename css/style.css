@@ -1512,6 +1512,15 @@ html, body {
   color: #fff;
 }
 
+/* Where the score came from: combat + wave bonus (+ victory bonus), js/score-bonus.js. */
+.go-stat-sub {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #7dffb0;
+  margin-top: 3px;
+}
+
 
 /* Pilot Name Input Bar */
 .name-entry-bar {
@@ -4667,6 +4676,7 @@ body.touch-mode .gameover-stats { gap: 6px; margin-bottom: 4px; }
 body.touch-mode .go-stat-box { padding: 5px 8px; }
 body.touch-mode .go-stat-label { font-size: 8px; letter-spacing: 1px; }
 body.touch-mode .go-stat-val { font-size: 15px; }
+body.touch-mode .go-stat-sub { font-size: 8px; }
 body.touch-mode .go-global-rank { min-height: 0; margin: 0 0 2px; font-size: 11px; letter-spacing: 1.5px; }
 body.touch-mode #gameover-modal .title-actions { display: flex; flex-direction: row; flex-wrap: nowrap; }
 body.touch-mode #gameover-modal .title-actions .neon-btn { flex: 1; margin: 0; padding: 12px 8px; font-size: 14px; }
