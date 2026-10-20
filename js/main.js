@@ -1,7 +1,8 @@
 import { SpatialIndex } from './spatial-index.js';
 import { FixedStepClock } from './clock.js';
-import { drawPlayerShield, drawCrabShip, shieldTouches } from './ship-renderer.js';
+import { drawPlayerShield, drawCrabShip, shieldTouches, updateShipAnimation, kickShipRecoil, drawShipWake } from './ship-renderer.js';
 import { WarpGrid } from './grid.js';
+import { DeathSequence } from './death-sequence.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
@@ -583,6 +584,7 @@ export class Game {
     window.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') this.setTouchMode(true);
       else if (e.pointerType === 'mouse') this.setTouchMode(false);
+      if (this.deathSeq?.skip()) this.revealGameOver();
     }, true);
 
     const titleNameInput = document.getElementById('title-pilot-name');
@@ -660,6 +662,13 @@ export class Game {
         if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return; // browser shortcuts still work
         if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
         if (!e.repeat) this.splash.dismiss();
+        return;
+      }
+      // The death sequence swallows keys (a held key must not relaunch behind it); a fresh one skips it.
+      if (this.deathSeq) {
+        if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
+        e.preventDefault();
+        if (!e.repeat && this.deathSeq.skip()) this.revealGameOver();
         return;
       }
       const focused = document.activeElement;
@@ -1662,6 +1671,7 @@ export class Game {
 
   startGame() {
     this.sound.init();
+    this.deathSeq = null;
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
@@ -2408,7 +2418,7 @@ export class Game {
     if (p.hp > 0) return false;
     p.hp = 0;
     this.updateHUD();
-    this.triggerGameOver();
+    this.triggerGameOver({ dying: true });
     return true;
   }
 
@@ -3269,6 +3279,7 @@ export class Game {
     }
 
     this.sound.playLaser();
+    kickShipRecoil(p);
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
   }
@@ -4643,7 +4654,8 @@ export class Game {
     this.updateHUD();
   }
 
-  triggerGameOver() {
+  // dying: the shield just collapsed, so the death sequence plays before the results open.
+  triggerGameOver({ dying = false } = {}) {
     // The range ship can't die, but nothing from a range run is ever recorded: leave to the title instead.
     if (this.range?.active) {
       this.range.exit();
@@ -4737,7 +4749,28 @@ export class Game {
     `;
 
     this.renderHubUI();
-    document.getElementById('gameover-modal').classList.remove('hidden');
+    const cause = this.lastRunSummary?.cause;
+    this.deathSeq = dying && this.player ? new DeathSequence(this.player, {
+      killer: cause && cause !== 'unknown' ? hostileEntry(cause)?.name || String(cause).toUpperCase() : null
+    }) : null;
+    if (!this.deathSeq) this.revealGameOver();
+  }
+
+  revealGameOver() {
+    if (this.deathSeq) this.deathSeq.revealed = true;
+    this.deathSeq = null;
+    if (this.state === 'GAMEOVER') document.getElementById('gameover-modal').classList.remove('hidden');
+  }
+
+  // Shared effects the death sequence drives.
+  deathFx() {
+    return this._deathFx ||= {
+      particles: this.particles,
+      grid: this.grid,
+      sound: this.sound,
+      addShake: (amount) => this.addShake(amount),
+      flash: () => { this.chromaFlash = Math.max(this.chromaFlash || 0, 0.3); }
+    };
   }
 
   pollGamepad() {
@@ -4867,6 +4900,13 @@ export class Game {
     if (this.notesOpen && !NOTES_STATES.includes(this.state)) this.closeNotes();
     if (this.tutorialOpen && !TUTORIAL_STATES.includes(this.state)) this.closeTutorial();
     const gp = this.pollGamepad();
+    if (this.deathSeq) {
+      const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
+      if (this.deathSeq.update(dt, this.deathFx()) || skip) this.revealGameOver();
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
@@ -5068,6 +5108,7 @@ export class Game {
     // Spin the Twin Rotary Claw Drills
     const rpm = this.asteroidManager.isDrilling ? 34 : 11;
     p.drillSpin = (p.drillSpin || 0) + dt * rpm;
+    updateShipAnimation(p, dt);
 
     // 3. Primary Weapon Firing
     const shouldFire = this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0));
@@ -6313,12 +6354,15 @@ export class Game {
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
       this.drawGravityTethers(ctx, p);
+      drawShipWake(ctx, p, TUNING);
       this.drawPlayerShield(ctx, p, beatPulse);
 
       if (p.weapons.orbitals > 0) this.drawOrbitBlades(ctx, p);
 
       this.deployables?.drawEscorts(ctx, this);
       this.drawCrabShip(ctx, p);
+    } else {
+      this.deathSeq?.drawWorld(ctx, TUNING);
     }
 
     ctx.restore();
@@ -6351,6 +6395,8 @@ export class Game {
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
+
+    this.deathSeq?.drawOverlay(ctx, this.width, this.height, this.canvas, this.renderScale ?? 1, this.touchMode);
   }
 
   singularityCoreRadius(sg) {
