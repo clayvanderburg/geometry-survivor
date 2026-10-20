@@ -135,6 +135,9 @@ const STATUS_CARDS = [
 // while any of them is equipped, removed when the last one is discarded); evolutions also name
 // `ownersAll`. Lines without owners are general upgrades (passives such as Volatile Shatter included).
 // Tag cards need an equipped weapon or an owned passive with the tag.
+export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
+export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
+
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
@@ -196,6 +199,8 @@ export const UPGRADE_POOL = [
       player.weapons.shrapnel = (player.weapons.shrapnel || 0) + 1;
     }
   },
+  // Geom Attractor Field, per level (compounding): LV 5 is half the old pickup radius (6.1x base, was 12.2x)
+  // and exactly 2x XP (was 3.05x). Armory Vacuum Array / Geom Resonator stack on top.
   {
     id: 'magnet',
     name: 'Geom Attractor Field',
@@ -204,8 +209,8 @@ export const UPGRADE_POOL = [
     headline: 'magnetRadius',
     summary: 'Wider Geom vacuum, more XP per Geom, and a spare Supernova Bomb.',
     apply(player) {
-      player.stats.magnetRadius *= 1.65;
-      player.stats.xpMultiplier *= 1.25;
+      player.stats.magnetRadius *= MAGNET_RADIUS_STEP;
+      player.stats.xpMultiplier *= MAGNET_XP_STEP;
       player.bombs = Math.min(9, player.bombs + 1);
     }
   },

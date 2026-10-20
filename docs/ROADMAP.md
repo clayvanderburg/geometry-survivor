@@ -18,6 +18,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Hangar / weapon locks / mastery are one big later update**, designed in full (its own discussion with Clay) before anything ships, so we don't take things away again after launch. `docs/HANGAR_DESIGN.md` is a draft. When weapons get locked, the first unlocks are easy. |
 | 2026-10-20 | **Weapon balance target:** offensive weapons (Autocannon, Rocket Pods, Swarm Missiles, …) sit at about the same DPS. Close-range defensive weapons (Shock Field, Orbit Blades) may sit a bit lower: they are the last line of defense. Buff the others up to the Autocannon rather than nerfing it. |
 | 2026-10-20 | **The balance sim under-rates Rocket Pods and Swarm Missiles** (Clay has long runs with them). Treat sim numbers as relative until the bot is calibrated against real play. |
+| 2026-10-20 | **Geom Attractor Field maxes at 2x XP** (armory XP stacks on top) and half its old pickup radius (6x base, was 12x: most of the map). |
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 
 ## Priorities (in order)
