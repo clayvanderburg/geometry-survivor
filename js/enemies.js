@@ -50,8 +50,9 @@ export function waveScaleAt(wave, { light = false } = {}) {
   return (start + (wave - 1) * perWave) * Math.pow(growth, easeIn(wave - from, TUNING.waveHpGrowthRamp ?? 0)) * lateHpScaleAt(wave);
 }
 
-// The late-campaign squeeze: a second compounding stage from waveHpLateFrom (eased in over
-// waveHpLateRamp waves), so the back half of the campaign outgrows a build that coasted through the front.
+// The late-campaign stage: a second compounding factor from waveHpLateFrom (eased in over waveHpLateRamp
+// waves) on top of the main one. Below 1 it softens the back half of the campaign so the Void Armory's
+// power can carry a pilot to wave 50; above 1 it steepens it.
 export function lateHpScaleAt(wave) {
   const from = TUNING.waveHpLateFrom ?? 30;
   return Math.pow(TUNING.waveHpLateGrowth ?? 1, easeIn(wave - from, TUNING.waveHpLateRamp ?? 0));

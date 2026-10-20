@@ -537,7 +537,7 @@ export const TUNING_SCHEMA = [
       { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
       { key: 'waveHpGrowthRamp', label: 'Enemy HP: Waves to Reach Full Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'waveHpLateFrom', label: 'Enemy HP: Late Compounding From Wave', type: 'range', min: 1, max: 100, step: 1, unit: '' },
-      { key: 'waveHpLateGrowth', label: 'Enemy HP: Late Compound Growth / Wave (on top)', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
+      { key: 'waveHpLateGrowth', label: 'Enemy HP: Late Compound Growth / Wave (on top; < 1 softens)', type: 'range', min: 0.85, max: 1.2, step: 0.002, unit: 'x' },
       { key: 'waveHpLateRamp', label: 'Enemy HP: Waves to Reach Full Late Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
       { key: 'spawnIntervalTau', label: 'Pack Spawn Interval: Waves to Close 63% of the Gap', type: 'range', min: 1, max: 30, step: 0.5, unit: '' },
