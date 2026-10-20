@@ -345,6 +345,10 @@ export function createMetrics() {
 export function botControls(game, pilot, state) {
   const p = game.player;
   const enemies = game.enemyManager.enemies;
+  // Anticipation: controls land `lead` ticks after they are decided (the reaction latency), so the
+  // pilot judges threats where they will be by then, the way a player leads a pack that chases them.
+  const lead = state.lead || 0;
+  const px = p.x + p.vx * lead, py = p.y + p.vy * lead;
   let fx = 0, fy = 0;
   let nearest = Infinity;
   let crowd = 0;
@@ -352,7 +356,7 @@ export function botControls(game, pilot, state) {
   let bossNear = false;
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    const dx = p.x - e.x, dy = p.y - e.y;
+    const dx = px - (e.x + (e.vx || 0) * lead), dy = py - (e.y + (e.vy || 0) * lead);
     const d = Math.hypot(dx, dy) || 1;
     const R = e.isBoss ? 460 : e.type === 'blackhole' ? 340 : 270;
     const gap = d - e.radius - p.radius;
@@ -524,13 +528,17 @@ export function pickCard(choices, strategy) {
 }
 
 // Pilot skill is reaction latency: the controls applied each tick were decided this many ticks ago.
+// With `anticipate` (the default) the pilot leads enemy and ship motion by that latency when it
+// decides (see botControls), as players do; without it, a crowd closing in is judged 200 ms late,
+// which made weak-opening builds (Rocket Pods / Swarm Missiles starts) die in wave 1-2 (calibration,
+// docs/BALANCE_REPORT.md).
 export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 
 // --- One simulated run ------------------------------------------------------------------------
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal' }) {
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true }) {
   return withSeed(seed, { tuning, weapons }, () => {
     const game = createHeadlessGame({ metaRank, mode });
     const metrics = createMetrics();
@@ -543,6 +551,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
     const pilot = { mineBias: 0, ...(strategy.pilot || {}) };
     const botState = { orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTimer: 0 };
     const latency = PILOT_SKILLS[skill] ?? (Math.max(1, Math.round(Number(skill))) || 1);
+    if (anticipate) botState.lead = latency - 1;
     const pipeline = [];
     let controls = { moveX: 0, moveY: 0, dash: false, bomb: false };
     game.pollGamepad = () => ({
