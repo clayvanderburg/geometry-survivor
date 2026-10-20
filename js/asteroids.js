@@ -20,10 +20,15 @@ export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer
 // Bedrock: unbreakable rock for level design (permanent walls and boundaries). Nothing breaks it: not the
 // drill-claws, elite grinding, boss portals or blasts. It blocks ships, enemies and shots like any rock,
 // elites steer round it instead of plowing through, and new clusters are never placed on it.
-// Lay it with addBedrock / addBedrockWall, then rebuildSpatialHash(). TUNING.bedrockFormations scatters
-// a few random walls and arcs through the generated sector (0 in the standard sector).
-export const BEDROCK_RADIUS = 38;
-export const BEDROCK_SPACING = 1.15; // piece spacing along a wall, in piece radii (under 2, so no gaps)
+// A formation is one SLAB: a single big faceted shape (an outer rim, a raised bevelled top face) with a few
+// rubble chunks hugging its edge. Under it, invisible overlapping collision circles (`slab` pieces) do
+// the physics, so every rock system (shots, pushout, pathing, spawns) treats it as rock with no changes.
+// Lay it with addBedrockWall (along a polyline) or addBedrockMonolith (one big block), then
+// rebuildSpatialHash(). TUNING.bedrockFormations scatters random formations through the generated sector
+// (0 in the standard sector).
+export const BEDROCK_SIZES = Object.freeze({ thin: 26, standard: 40, massive: 58 }); // wall half-thickness, px
+export const BEDROCK_RADIUS = BEDROCK_SIZES.standard;
+export const BEDROCK_SPACING = 0.7; // collision circles along a wall, in half-thicknesses (the edge dips < 6% between them)
 export const BEDROCK_HP = 1e9; // never drained; finite so every `hp > 0` check treats it as solid
 export const BEDROCK_HUE = 268;
 export const isBedrock = (rock) => !!rock?.unbreakable;
@@ -31,6 +36,151 @@ export const isBedrock = (rock) => !!rock?.unbreakable;
 // Numeric spatial-hash key (no string building per query: ~1000 rocks are probed many times a tick).
 // Unique for cell coordinates in [-1024, 3071], far beyond the arena.
 const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
+
+// --- Bedrock slab geometry --------------------------------------------------------------------------
+const SLAB_TOP = 0.6; // the raised top face sits at this share of the rim's distance from the spine
+const SLAB_JITTER = 0.06; // rim vertices wander ± this share in and out, for a hewn, faceted edge
+const SLAB_ROUND_TURN = 0.45; // rad: outer corners sharper than this get a rounded (two-facet) rim
+
+const newSlab = (kind) => ({ kind, outline: [], chunks: [], pieces: [], minX: 0, maxX: 0, minY: 0, maxY: 0, look: null });
+
+// Rim vertex `r` px from (cx, cy) along unit (dx, dy), with its top-face partner and outward direction.
+function facetVertex(cx, cy, dx, dy, r) {
+  return { x: cx + dx * r, y: cy + dy * r, ix: cx + dx * r * SLAB_TOP, iy: cy + dy * r * SLAB_TOP, ox: dx, oy: dy };
+}
+
+function pathLength(points) {
+  let len = 0;
+  for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  return len;
+}
+
+// Points evenly spaced along a polyline, never more than `step` apart, both ends and every corner included.
+function resamplePath(points, step) {
+  const out = [{ x: points[0].x, y: points[0].y }];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+    for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
+
+// Rim of a wall: the left face along the spine, a rounded cap at the end, the right face back, a rounded
+// cap at the start. Faces sit `w` px off the spine (jittered); inner corners are mitered, outer corners
+// rounded, so the rim follows the collision circles' outline.
+function wallOutline(points, w) {
+  const spine = resamplePath(points, w * 1.7);
+  if (spine.length < 2) {
+    const out = [];
+    for (let k = 0; k < 8; k++) out.push(facetVertex(spine[0].x, spine[0].y, Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4), w));
+    return out;
+  }
+  const jit = () => w * (1 - SLAB_JITTER + Math.random() * SLAB_JITTER * 2);
+  const dir = (a, b) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
+  const left = [];
+  const right = [];
+  for (let i = 0; i < spine.length; i++) {
+    const p = spine[i];
+    const tIn = dir(spine[Math.max(0, i - 1)], spine[Math.max(1, i)]);
+    const tOut = dir(spine[Math.min(spine.length - 2, i)], spine[Math.min(spine.length - 1, i + 1)]);
+    const nIn = { x: -tIn.y, y: tIn.x };
+    const nOut = { x: -tOut.y, y: tOut.x };
+    const cross = tIn.x * tOut.y - tIn.y * tOut.x;
+    const turn = Math.acos(Math.max(-1, Math.min(1, tIn.x * tOut.x + tIn.y * tOut.y)));
+    let mx = nIn.x + nOut.x;
+    let my = nIn.y + nOut.y;
+    const ml = Math.hypot(mx, my) || 1;
+    mx /= ml;
+    my /= ml;
+    const miter = 1 / Math.max(0.5, mx * nIn.x + my * nIn.y);
+    // Inner side: one mitered vertex. Outer side: one vertex per face when the corner is sharp.
+    const leftInner = cross > 0;
+    const sharp = turn > SLAB_ROUND_TURN;
+    const side = (arr, sign, inner) => {
+      if (!sharp || inner) {
+        const r = jit() * (inner ? miter : 1);
+        arr.push(facetVertex(p.x, p.y, mx * sign, my * sign, r));
+      } else {
+        arr.push(facetVertex(p.x, p.y, nIn.x * sign, nIn.y * sign, jit()));
+        arr.push(facetVertex(p.x, p.y, mx * sign, my * sign, jit()));
+        arr.push(facetVertex(p.x, p.y, nOut.x * sign, nOut.y * sign, jit()));
+      }
+    };
+    side(left, 1, leftInner);
+    side(right, -1, !leftInner);
+  }
+  // Caps: two facets round each end.
+  const cap = (p, n, from, sweep) => {
+    const out = [];
+    const base = Math.atan2(n.y, n.x);
+    for (let k = 1; k <= 2; k++) {
+      const a = base + from + (sweep * k) / 3;
+      out.push(facetVertex(p.x, p.y, Math.cos(a), Math.sin(a), jit()));
+    }
+    return out;
+  };
+  const end = spine[spine.length - 1];
+  const tEnd = dir(spine[spine.length - 2], end);
+  const start = spine[0];
+  const tStart = dir(start, spine[1]);
+  return [
+    ...left,
+    ...cap(end, { x: -tEnd.y, y: tEnd.x }, 0, -Math.PI),
+    ...right.reverse(),
+    ...cap(start, { x: -tStart.y, y: tStart.x }, Math.PI, -Math.PI)
+  ];
+}
+
+function finishSlab(slab) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const grow = (v) => { minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); };
+  slab.outline.forEach(grow);
+  for (const ch of slab.chunks) ch.verts.forEach(grow);
+  Object.assign(slab, { minX, maxX, minY, maxY });
+}
+
+function polyPath(verts, kx, ky) {
+  const path = new Path2D();
+  for (let i = 0; i < verts.length; i++) {
+    if (i === 0) path.moveTo(verts[i][kx], verts[i][ky]);
+    else path.lineTo(verts[i][kx], verts[i][ky]);
+  }
+  path.closePath();
+  return path;
+}
+
+// Cached Path2Ds for a slab (browser only; without Path2D the slab is traced each frame).
+function slabLook(sl) {
+  if (sl.look) return sl.look;
+  const has = typeof Path2D !== 'undefined';
+  let ridges = null;
+  if (has) {
+    ridges = new Path2D();
+    for (const v of sl.outline) { ridges.moveTo(v.x, v.y); ridges.lineTo(v.ix, v.iy); }
+  }
+  sl.look = {
+    rim: has ? polyPath(sl.outline, 'x', 'y') : null,
+    top: has ? polyPath(sl.outline, 'ix', 'iy') : null,
+    ridges,
+    chunks: sl.chunks.map((ch) => ({ verts: ch.verts, path: has ? polyPath(ch.verts, 'x', 'y') : null }))
+  };
+  return sl.look;
+}
+
+function fillOrStroke(ctx, path, verts, kx, ky, op) {
+  if (!path) {
+    ctx.beginPath();
+    for (let i = 0; i < verts.length; i++) {
+      if (i === 0) ctx.moveTo(verts[i][kx], verts[i][ky]);
+      else ctx.lineTo(verts[i][kx], verts[i][ky]);
+    }
+    ctx.closePath();
+  }
+  if (op === 'fill') path ? ctx.fill(path) : ctx.fill();
+  else path ? ctx.stroke(path) : ctx.stroke();
+}
 
 // Per-rock render cache: the outline as a Path2D (browser only) and the rock's resting colors.
 function rockLook(a) {
@@ -139,11 +289,11 @@ export class AsteroidManager {
     return this.breakableCount() < (this.sectorRockCount || 0) * REPLENISH_SHARE;
   }
 
-  // One unbreakable piece. Breakable rock it lands on is cleared away (no ore drops). Returns the piece.
+  // One unbreakable piece. Breakable rock touching it is cleared away (no ore drops). Returns the piece.
   addBedrock(x, y, radius = BEDROCK_RADIUS) {
     for (let i = this.asteroids.length - 1; i >= 0; i--) {
       const r = this.asteroids[i];
-      if (!r.unbreakable && Math.hypot(r.x - x, r.y - y) < (r.radius + radius) * 0.8) this.asteroids.splice(i, 1);
+      if (!r.unbreakable && Math.hypot(r.x - x, r.y - y) < r.radius + radius) this.asteroids.splice(i, 1);
     }
     const sides = 6 + Math.floor(Math.random() * 2);
     const verts = [];
@@ -170,33 +320,76 @@ export class AsteroidManager {
     return rock;
   }
 
-  // A gapless wall of bedrock along a polyline ([{ x, y }, ...]): pieces overlap so nothing slips
-  // between them. Returns the pieces laid.
-  addBedrockWall(points, radius = BEDROCK_RADIUS) {
-    const pieces = [];
-    if (!points?.length) return pieces;
-    const step = radius * BEDROCK_SPACING;
-    pieces.push(this.addBedrock(points[0].x, points[0].y, radius));
-    let carry = 0; // distance already walked past the last piece
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1];
-      const b = points[i];
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      let d = step - carry;
-      while (d <= len) {
-        const t = d / len;
-        pieces.push(this.addBedrock(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, radius));
-        d += step;
-      }
-      carry = len - (d - step);
-    }
-    const last = points[points.length - 1];
-    const tail = pieces[pieces.length - 1];
-    if (Math.hypot(tail.x - last.x, tail.y - last.y) > step * 0.35) pieces.push(this.addBedrock(last.x, last.y, radius));
-    return pieces;
+  // Collision piece of a slab: an invisible bedrock circle (the slab draws it).
+  addSlabPiece(slab, x, y, radius, chunk = false) {
+    const piece = this.addBedrock(x, y, radius);
+    piece.slab = slab;
+    if (chunk) piece.chunk = true;
+    else slab.pieces.push(piece);
+    return piece;
   }
 
-  // A random bedrock wall, bend or arc somewhere in the arena, kept out of `avoid` ({ x, y, radius }).
+  // A bedrock wall along a polyline ([{ x, y }, ...]), `width` px from its spine to each face
+  // (BEDROCK_SIZES): one slab with a gapless chain of collision circles under it. Returns the slab
+  // ({ outline, chunks, pieces, ... }; `pieces` is the spine chain, the chunks have their own pieces).
+  addBedrockWall(points, width = BEDROCK_RADIUS) {
+    const slab = newSlab('wall');
+    if (!points?.length) return slab;
+    // Collision spine: circles every BEDROCK_SPACING x width along the line, both ends included.
+    for (const pt of resamplePath(points, width * BEDROCK_SPACING)) this.addSlabPiece(slab, pt.x, pt.y, width);
+    // Visible outline: faceted faces either side of the spine, rounded at outer corners and both ends.
+    slab.outline = wallOutline(points, width);
+    this.addSlabChunks(slab, Math.max(2, Math.round(pathLength(points) / (width * 3.2))), width);
+    finishSlab(slab);
+    return slab;
+  }
+
+  // One big block of bedrock, about `radius` px across from its centre. Returns the slab.
+  addBedrockMonolith(x, y, radius = 90) {
+    const slab = newSlab('monolith');
+    // A core circle and a ring of six cover the faceted shape (each well under the field's largest rock
+    // query radius, so spatial lookups stay cheap).
+    this.addSlabPiece(slab, x, y, radius * 0.62);
+    for (let k = 0; k < 6; k++) {
+      const a = (k * Math.PI) / 3;
+      this.addSlabPiece(slab, x + Math.cos(a) * radius * 0.48, y + Math.sin(a) * radius * 0.48, radius * 0.5);
+    }
+    const sides = 8 + Math.floor(Math.random() * 3);
+    const turn = Math.random() * Math.PI * 2;
+    for (let k = 0; k < sides; k++) {
+      const a = turn + ((k + (Math.random() - 0.5) * 0.35) * Math.PI * 2) / sides;
+      const r = radius * (0.9 + Math.random() * 0.1);
+      slab.outline.push(facetVertex(x, y, Math.cos(a), Math.sin(a), r));
+    }
+    this.addSlabChunks(slab, 3 + Math.floor(Math.random() * 3), radius * 0.55);
+    finishSlab(slab);
+    return slab;
+  }
+
+  // Rubble chunks hugging a slab's rim: small solid shards at random outline vertices, poking out.
+  addSlabChunks(slab, count, scale) {
+    const rim = slab.outline;
+    for (let c = 0; c < count && rim.length; c++) {
+      const v = rim[Math.floor(Math.random() * rim.length)];
+      const r = scale * (0.22 + Math.random() * 0.2);
+      const x = v.x + v.ox * r * 0.55;
+      const y = v.y + v.oy * r * 0.55;
+      if (x < r || y < r || x > this.worldWidth - r || y > this.worldHeight - r) continue;
+      const sides = 4 + Math.floor(Math.random() * 2);
+      const turn = Math.random() * Math.PI * 2;
+      const verts = [];
+      for (let k = 0; k < sides; k++) {
+        const a = turn + (k * Math.PI * 2) / sides + (Math.random() - 0.5) * 0.5;
+        const rr = r * (0.75 + Math.random() * 0.4);
+        verts.push({ x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr });
+      }
+      slab.chunks.push({ x, y, r, verts });
+      this.addSlabPiece(slab, x, y, r * 0.85, true);
+    }
+  }
+
+  // A random bedrock formation somewhere in the arena, kept out of `avoid` ({ x, y, radius }): a straight
+  // wall, a bend or an arc in one of the BEDROCK_SIZES, or a lone monolith. Returns the slab.
   spawnBedrockFormation(avoid = null) {
     const margin = 420;
     let cx = 0;
@@ -206,8 +399,11 @@ export class AsteroidManager {
       cy = margin + Math.random() * (this.worldHeight - margin * 2);
       if (!avoid || Math.hypot(cx - avoid.x, cy - avoid.y) > avoid.radius + 300) break;
     }
+    const kind = Math.floor(Math.random() * 4);
+    if (kind === 3) return this.addBedrockMonolith(cx, cy, 70 + Math.random() * 40);
+    const roll = Math.random();
+    const width = roll < 0.25 ? BEDROCK_SIZES.thin : roll < 0.75 ? BEDROCK_SIZES.standard : BEDROCK_SIZES.massive;
     const angle = Math.random() * Math.PI * 2;
-    const kind = Math.floor(Math.random() * 3);
     const points = [];
     if (kind === 0) {
       // Straight wall
@@ -226,18 +422,18 @@ export class AsteroidManager {
       // Arc: part of a ring, open on one side
       const r = 190 + Math.random() * 140;
       const sweep = Math.PI * (0.55 + Math.random() * 0.6);
-      const steps = 10;
-      for (let s = 0; s <= steps; s++) {
-        const a = angle - sweep / 2 + (sweep * s) / steps;
+      const steps = 8;
+      for (let k = 0; k <= steps; k++) {
+        const a = angle - sweep / 2 + (sweep * k) / steps;
         points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
       }
     }
-    const pad = BEDROCK_RADIUS + 40;
+    const pad = width + 50;
     for (const pt of points) {
       pt.x = Math.max(pad, Math.min(this.worldWidth - pad, pt.x));
       pt.y = Math.max(pad, Math.min(this.worldHeight - pad, pt.y));
     }
-    return this.addBedrockWall(points);
+    return this.addBedrockWall(points, width);
   }
 
   // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
@@ -361,6 +557,10 @@ export class AsteroidManager {
   rebuildSpatialHash() {
     this.spatialGrid.clear();
     this.maxRockRadius = this.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
+    // Slabs to draw: the ones whose pieces are still in the field (callers may swap `asteroids` out).
+    const slabs = new Set();
+    for (let i = 0; i < this.asteroids.length; i++) if (this.asteroids[i].slab) slabs.add(this.asteroids[i].slab);
+    this.slabs = [...slabs];
     for (let i = 0; i < this.asteroids.length; i++) {
       const a = this.asteroids[i];
       const gx = Math.floor(a.x / this.cellSize);
@@ -630,13 +830,20 @@ export class AsteroidManager {
     const gx0 = Math.floor(minX / cs) - 1, gx1 = Math.floor(maxX / cs) + 1;
     const gy0 = Math.floor(minY / cs) - 1, gy1 = Math.floor(maxY / cs) + 1;
 
+    const slabs = this.slabs || [];
+    for (let i = 0; i < slabs.length; i++) {
+      const sl = slabs[i];
+      if (sl.maxX < minX || sl.minX > maxX || sl.maxY < minY || sl.minY > maxY) continue;
+      this.drawSlab(ctx, sl);
+    }
+
     for (let gx = gx0; gx <= gx1; gx++) {
       for (let gy = gy0; gy <= gy1; gy++) {
         const cell = this.spatialGrid.get(cellKey(gx, gy));
         if (!cell) continue;
         for (let i = 0; i < cell.length; i++) {
           const a = cell[i];
-          if (a.hp <= 0 || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
+          if (a.hp <= 0 || a.slab || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
           this.drawRock(ctx, a, base);
         }
       }
@@ -716,7 +923,39 @@ export class AsteroidManager {
     if (!base) ctx.restore();
   }
 
-  // Bedrock: a near-black slab with a bright pale-violet rim and an inset facet. No cracks or flashes.
+  // A bedrock slab (world coordinates, under the camera transform): a near-black body, a raised top face
+  // a shade lighter, faint bevel ridges joining the two, a dim inner edge and a bright pale-violet rim.
+  // Rubble chunks get the body and rim. No cracks or flashes: it never takes damage.
+  drawSlab(ctx, sl) {
+    const look = slabLook(sl);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(13, 9, 24, 0.98)';
+    fillOrStroke(ctx, look.rim, sl.outline, 'x', 'y', 'fill');
+    ctx.fillStyle = 'rgba(30, 22, 50, 0.98)';
+    fillOrStroke(ctx, look.top, sl.outline, 'ix', 'iy', 'fill');
+    for (const ch of look.chunks) fillOrStroke(ctx, ch.path, ch.verts, 'x', 'y', 'fill');
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 40%, 62%, 0.22)`;
+    ctx.lineWidth = 1.2;
+    if (look.ridges) ctx.stroke(look.ridges);
+    else {
+      ctx.beginPath();
+      for (const v of sl.outline) { ctx.moveTo(v.x, v.y); ctx.lineTo(v.ix, v.iy); }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 55%, 64%, 0.42)`;
+    ctx.lineWidth = 1.4;
+    fillOrStroke(ctx, look.top, sl.outline, 'ix', 'iy', 'stroke');
+    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 45%, 76%, 0.95)`;
+    ctx.lineWidth = 3;
+    fillOrStroke(ctx, look.rim, sl.outline, 'x', 'y', 'stroke');
+    ctx.lineWidth = 2;
+    for (const ch of look.chunks) fillOrStroke(ctx, ch.path, ch.verts, 'x', 'y', 'stroke');
+  }
+
+  // A lone bedrock piece (addBedrock without a slab): a near-black slab with a bright pale-violet rim
+  // and an inset facet. No cracks or flashes.
   drawBedrockPiece(ctx, a, look) {
     const path = look.path;
     ctx.globalCompositeOperation = 'source-over';

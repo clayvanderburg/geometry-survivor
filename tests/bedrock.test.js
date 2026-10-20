@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Bedrock (js/asteroids.js): unbreakable rock for level design. Walls are gapless, nothing breaks it
+// Bedrock (js/asteroids.js): unbreakable rock for level design. Walls and monoliths are slabs drawn as one
+// shape over gapless collision that matches the rim. Nothing breaks it
 // (drill-claws, elite grinding, boss portal blasts), it blocks the ship, it never counts toward
 // replenishing the sector, clusters fill in round it, and elites steer round it instead of plowing.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
-const { AsteroidManager, BEDROCK_RADIUS, BEDROCK_SPACING, isBedrock } = await import('../js/asteroids.js');
+const { AsteroidManager, BEDROCK_RADIUS, BEDROCK_SIZES, BEDROCK_SPACING, isBedrock } = await import('../js/asteroids.js');
 const { steerAroundRocks } = await import('../js/pursuit.js');
 
 const DT = 1 / 60;
@@ -19,16 +20,42 @@ function ship(x, y, angle = 0) {
   return { x, y, vx: 0, vy: 0, radius: 15, angle, drillAngle: angle, stats: { miningSpeed: 9999, miningRange: 60 } };
 }
 
-test('a bedrock wall has no gaps a ship could slip through', () => {
+test('a bedrock wall is one slab over a gapless chain of collision circles that matches its rim', () => {
   const am = new AsteroidManager(4200, 4200);
-  const pieces = am.addBedrockWall([{ x: 1000, y: 1000 }, { x: 1600, y: 1000 }, { x: 1600, y: 1500 }]);
-  assert.ok(pieces.length > 10);
-  assert.ok(pieces.every(isBedrock));
-  for (let i = 1; i < pieces.length; i++) {
-    const gap = Math.hypot(pieces[i].x - pieces[i - 1].x, pieces[i].y - pieces[i - 1].y);
-    assert.ok(gap <= BEDROCK_RADIUS * BEDROCK_SPACING + 1e-6, `gap ${gap}`);
+  for (const width of Object.values(BEDROCK_SIZES)) {
+    const slab = am.addBedrockWall([{ x: 1000, y: 1000 }, { x: 1600, y: 1000 }, { x: 1600, y: 1500 }], width);
+    const pieces = slab.pieces;
+    assert.ok(pieces.length > 10);
+    assert.ok(pieces.every((r) => isBedrock(r) && r.slab === slab));
+    for (let i = 1; i < pieces.length; i++) {
+      const gap = Math.hypot(pieces[i].x - pieces[i - 1].x, pieces[i].y - pieces[i - 1].y);
+      assert.ok(gap <= width * BEDROCK_SPACING + 1e-6, `gap ${gap}`);
+    }
+    assert.ok(Math.hypot(pieces.at(-1).x - 1600, pieces.at(-1).y - 1500) < 1e-6, 'reaches the end point');
+    // What you see is what you hit: every rim vertex sits close to the edge of the collision.
+    const solid = [...pieces, ...am.asteroids.filter((r) => r.chunk && r.slab === slab)];
+    for (const v of slab.outline) {
+      const edge = Math.min(...solid.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
+      assert.ok(Math.abs(edge) < width * 0.16, `rim vertex ${edge.toFixed(1)} px off the collision edge (width ${width})`);
+    }
+    assert.ok(slab.chunks.length >= 2, 'rubble chunks round the rim');
   }
-  assert.ok(Math.hypot(pieces.at(-1).x - 1600, pieces.at(-1).y - 1500) < BEDROCK_RADIUS, 'reaches the end point');
+});
+
+test('a monolith is one big slab covered by a few collision circles', () => {
+  const am = new AsteroidManager(4200, 4200);
+  const slab = am.addBedrockMonolith(2000, 2000, 100);
+  assert.equal(slab.pieces.length, 7);
+  assert.ok(slab.pieces.every((r) => r.radius <= 70), 'pieces stay small for the spatial hash');
+  for (const v of slab.outline) {
+    const edge = Math.min(...slab.pieces.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
+    assert.ok(Math.abs(edge) < 12, `rim vertex ${edge.toFixed(1)} px off the collision edge`);
+  }
+  am.rebuildSpatialHash();
+  assert.deepEqual(am.slabs, [slab]);
+  am.asteroids = [];
+  am.rebuildSpatialHash();
+  assert.deepEqual(am.slabs, [], 'a cleared field draws no slabs');
 });
 
 test('the drill-claws, elites and boss portals never break bedrock', () => {
