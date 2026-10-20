@@ -53,6 +53,8 @@ import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
 import { SplashScreen } from './splash.js';
+import { CutsceneStage } from './cutscene-stage.js';
+import { OPENING_SCENE, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -312,6 +314,11 @@ export class Game {
       onClose: (reason) => this.onTutorialClosed(reason),
       onGuide: () => this.openGuide()
     });
+    // Opening cutscene (js/story.js, played by js/cutscene-stage.js): on the first LAUNCH on a device
+    // (enableFirstLaunchIntro, browser boot only) before the tutorial, and from 🎬 INTRO on the title.
+    this.cutscene = new CutsceneStage(this);
+    this.introOnLaunch = false;
+    this.introSeen = readIntroSeen(defaultIntroStorage());
     this.renderVersionTags();
     // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
     this.range = new WeaponRange(this);
@@ -672,6 +679,10 @@ export class Game {
         if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.deathSeq.skip()) this.revealGameOver();
         return;
       }
+      if (this.state === 'CUTSCENE') {
+        this.cutscene.handleKey(e);
+        return;
+      }
       const focused = document.activeElement;
       const editingText = focused && (focused.isContentEditable || focused.tagName === 'TEXTAREA' ||
         (focused.tagName === 'INPUT' && !['range', 'color', 'button', 'checkbox', 'radio'].includes(focused.type)));
@@ -941,6 +952,7 @@ export class Game {
     for (const id of ['btn-title-tutorial', 'btn-pause-tutorial']) {
       document.getElementById(id)?.addEventListener('click', () => this.openTutorial());
     }
+    document.getElementById('btn-title-intro')?.addEventListener('click', () => this.playIntro());
     this.syncDamageNumbersButton();
     this.syncRadarButton();
     this.syncShareStatsButton();
@@ -1731,6 +1743,9 @@ export class Game {
     // Instant replay: the tape rolls through every run (only the death screen plays it back).
     this.replayRec ??= new ReplayRecorder(isTouchDevice() ? REPLAY_SETTINGS.touch : REPLAY_SETTINGS.desktop);
     this.replayRec.reset();
+    // First LAUNCH on this device: the opening cutscene, then the tutorial; the run starts after them.
+    if (this.introOnLaunch && !this.introSeen && this.state === 'TITLE' && !this.range?.active
+      && this.playIntro({ launchAfter: true })) return;
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
@@ -5055,6 +5070,12 @@ export class Game {
       this.gpBombLatch = !!gp?.bomb;
       return;
     }
+    if (this.state === 'CUTSCENE') {
+      this.cutscene.update(dt, gp);
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
@@ -6046,6 +6067,42 @@ export class Game {
     return this;
   }
 
+  // --- Opening cutscene (js/story.js, js/cutscene-stage.js) -----------------------------------------
+
+  // The browser boot switches this on: the first LAUNCH on a device plays the opening before the
+  // tutorial. Headless tests, tools and the balance harness leave it off.
+  enableFirstLaunchIntro() {
+    this.introOnLaunch = true;
+    return this;
+  }
+
+  // Plays over a fresh, untouched sector (nothing is recorded); `launchAfter` hard-cuts into the run
+  // (tutorial and weapon pick first, when they're due) instead of going back to the title.
+  playIntro({ launchAfter = false } = {}) {
+    if (this.state !== 'TITLE' || this.cutscene.active || this.guideOpen || this.notesOpen || this.tutorialOpen || this.startPickOpen) return false;
+    this.sound.init();
+    this.closeMobileWindows();
+    this.resetRun();
+    const title = globalThis.document?.getElementById('title-modal');
+    title?.classList.add('hidden');
+    this.state = 'CUTSCENE';
+    this.resetInput();
+    globalThis.document?.activeElement?.blur?.();
+    if (this.cutscene.play(OPENING_SCENE, { onEnd: (reason) => this.onIntroEnded(reason, launchAfter) })) return true;
+    this.state = 'TITLE';
+    title?.classList.remove('hidden');
+    return false;
+  }
+
+  onIntroEnded(_reason, launchAfter) {
+    this.introSeen = true;
+    writeIntroSeen(defaultIntroStorage());
+    if (!launchAfter) return this.returnToTitle();
+    this.state = 'TITLE';
+    globalThis.document?.getElementById('title-modal')?.classList.remove('hidden');
+    this.startGame();
+  }
+
   openTutorial({ launchAfter = false } = {}) {
     if (this.tutorialOpen || this.guideOpen || this.notesOpen || !TUTORIAL_STATES.includes(this.state) || !this.tutorial) return false;
     this.tutorialReturnFocus = document.activeElement;
@@ -6681,6 +6738,7 @@ export class Game {
     this.rifts?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawBossWarps(ctx, this);
+    this.cutscene?.drawWorld(ctx);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
@@ -6869,5 +6927,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableStartPick().showSplash());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableFirstLaunchIntro().enableStartPick().showSplash());
 }

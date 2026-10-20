@@ -4,7 +4,8 @@
 //
 //   node tools/frame-capture.cjs <playwright module path> [options]
 //
-//   --scene fly|blast|supernova|vortex|range   what to set up (default fly; see SCENES below)
+//   --scene fly|blast|supernova|vortex|range|intro   what to set up (default fly; see SCENES below);
+//                     intro plays the opening cutscene from the title (e.g. --frames 72 --every 30)
 //   --frames N        frames to capture (default 30)
 //   --every K         sim ticks (1/60 s) between frames (default 2)
 //   --warmup K        ticks to run after the setup before the first frame (default 0)
@@ -50,7 +51,9 @@ const SCENES = {
   // A Vortex (gravity well enemy) parked beside the ship.
   vortex: (g, p) => { g.enemyManager.queueSpawn('blackhole', p.x + 260, p.y, 1, { instant: true }); },
   // The Weapon Range with a given config (dummies, weapons): enter() starts the run.
-  range: () => {}
+  range: () => {},
+  // The opening cutscene (js/story.js), played from the title screen.
+  intro: (g) => { g.playIntro(); }
 };
 
 (async () => {
@@ -70,13 +73,13 @@ const SCENES = {
       catch { await route.fulfill({ status: 404, body: 'Not found' }); }
     });
     const range = opt('range', null);
-    await context.addInitScript(({ range }) => {
+    await context.addInitScript(({ range, intro }) => {
       // Seeded randomness, so the same command captures the same frames.
       let s = 1234567;
       Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
       if (range) try { localStorage.setItem('vexolith_weapon_range', range); } catch {}
-      try { localStorage.setItem('vexolith_tutorial_seen', '1'); localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {}
-    }, { range });
+      try { localStorage.setItem('vexolith_tutorial_seen', '1'); if (!intro) localStorage.setItem('vexolith_intro_seen', '1'); localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {}
+    }, { range, intro: scene === 'intro' });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -84,7 +87,7 @@ const SCENES = {
     await page.locator('#splash-screen').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape'); // past the splash screen
     await page.locator('#splash-screen').waitFor({ state: 'hidden' });
-    await page.locator(scene === 'range' ? '#btn-weapon-range' : '#btn-start-game').click();
+    if (scene !== 'intro') await page.locator(scene === 'range' ? '#btn-weapon-range' : '#btn-start-game').click();
     await page.waitForTimeout(400);
     // LAUNCH opens the starting-weapon pick: take the first card (Autocannon).
     if (await page.locator('#start-pick-modal:not(.hidden)').count()) {

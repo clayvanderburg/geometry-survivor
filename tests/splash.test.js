@@ -75,5 +75,5 @@ test('the page has the splash art and the browser boot shows it', () => {
   const html = readFileSync(new URL('index.html', root), 'utf8');
   assert.match(html, /id="splash-screen"[\s\S]*?src="assets\/splash\.webp"/);
   const main = readFileSync(new URL('js/main.js', root), 'utf8');
-  assert.match(main, /new Game\(\)\.enableFirstLaunchTutorial\(\)\.enableStartPick\(\)\.showSplash\(\)/);
+  assert.match(main, /new Game\(\)\.enableFirstLaunchTutorial\(\)\.enableFirstLaunchIntro\(\)\.enableStartPick\(\)\.showSplash\(\)/);
 });

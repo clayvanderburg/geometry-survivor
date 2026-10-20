@@ -245,6 +245,7 @@ export class SoundEngine {
     this.fileMode = false;
     this.filePulse = 0;
     this.lowAvg = 0;
+    this.musicDuck = 1; // cutscene dialogue ducks the music bus (setMusicDuck)
   }
 
   getMasterGainValue() {
@@ -268,7 +269,7 @@ export class SoundEngine {
     this.bpm = this.baseBpm + (SONGS[this.songIndex]?.bpmOffset || 0);
     if (this.ctx) {
       if (this.musicGain) {
-        this.musicGain.gain.setTargetAtTime(musicBusGain(), this.ctx.currentTime, 0.03);
+        this.musicGain.gain.setTargetAtTime(musicBusGain() * this.musicDuck, this.ctx.currentTime, 0.03);
       }
       if (this.sfxGain) {
         this.sfxGain.gain.setTargetAtTime(sfxBusGain(), this.ctx.currentTime, 0.03);
@@ -332,7 +333,7 @@ export class SoundEngine {
     this.musicFilter.Q.value = 0.8;
 
     this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = musicBusGain();
+    this.musicGain.gain.value = musicBusGain() * this.musicDuck;
     this.musicFilter.connect(this.musicGain);
     this.musicGain.connect(this.masterGain);
 
@@ -382,6 +383,12 @@ export class SoundEngine {
     }
     this.musicScene = scene;
     this.updateFileMusic();
+  }
+
+  // Cutscenes duck the soundtrack under dialogue: 1 = full volume, 0.35 = well under the voices.
+  setMusicDuck(level = 1) {
+    this.musicDuck = Math.max(0, Math.min(1, Number(level) || 0));
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(musicBusGain() * this.musicDuck, this.ctx.currentTime, 0.25);
   }
 
   getBeatPulse() {
@@ -2194,6 +2201,50 @@ export class SoundEngine {
     gain.connect(this.sfxGain);
     osc.start(t);
     osc.stop(t + dur + 0.02);
+  }
+
+  // Dialogue typewriter blip in a speaker's voice ({ wave, freq, jitter, vol, dur, glide }): one short
+  // tone per couple of letters, pitch wobbling a little so speech reads as speech.
+  playDialogueBlip(voice = {}) {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const t = this.ctx.currentTime;
+    const dur = voice.dur ?? 0.045;
+    const f = (voice.freq ?? 300) * (1 + ((Math.random() * 2 - 1) * (voice.jitter ?? 0.1)));
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = voice.wave || 'square';
+    osc.frequency.setValueAtTime(f, t);
+    if (voice.glide) osc.frequency.exponentialRampToValueAtTime(f * voice.glide, t + dur);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(voice.vol ?? 0.05, t + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  // Warp-in sting: a dissonant brass stab (D minor over an E-flat) on a sub drop and a rising rift tear.
+  playWarpSting() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const t = this.ctx.currentTime;
+    [146.83, 174.61, 220, 155.56, 311.13].forEach((f, k) => {
+      [1, 1.006].forEach((det) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f * det, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.045 - k * 0.004, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(t);
+        osc.stop(t + 1.65);
+      });
+    });
+    this.tone(70, 0, 1.1, 0.35, 'sine', 28);
+    this.playRiftOpen();
   }
 
   // Quick high pings on top of a fanfare.

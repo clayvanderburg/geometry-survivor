@@ -4896,3 +4896,63 @@ body.touch-mode .start-pick-title { font-size: 18px; }
 }
 .scope-global .upg-scope { background: #dfe8f5; color: #0b1020; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8px; padding: 0 6px; letter-spacing: 1px; bottom: -8px; left: 8px; }
+
+/* Cutscenes (js/cutscene-stage.js) and the talking-head dialogue box (js/dialogue.js). The game world
+   plays behind; the HUD and touch controls step aside while it runs. */
+body.cutscene-on #hud,
+body.cutscene-on #touch-controls,
+body.cutscene-on #center-banner,
+body.cutscene-on #low-shield-vignette { display: none !important; }
+.cutscene-layer { position: absolute; inset: 0; z-index: 40; overflow: hidden; cursor: pointer; font-family: Consolas, 'Courier New', monospace; }
+.cs-bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.7s ease; pointer-events: none; }
+.cs-bar-top { top: 0; }
+.cs-bar-bottom { bottom: 0; }
+.cutscene-layer.letterboxed .cs-bar { height: 8vh; }
+.cs-fade { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; }
+.cs-skip {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
+  z-index: 3; padding: 6px 14px; font-size: 13px; opacity: 0.75;
+}
+.cs-skip:hover, .cs-skip:focus-visible { opacity: 1; }
+body.touch-mode .cs-skip-key { display: none; }
+.cs-card {
+  position: absolute; top: calc(8vh + 18px); left: max(24px, env(safe-area-inset-left)); pointer-events: none;
+  border-left: 3px solid var(--cyan); padding: 4px 0 4px 12px; animation: cs-card-in 0.5s ease-out;
+}
+.cs-card.cs-card-out { animation: cs-card-out 0.4s ease-in forwards; }
+.cs-card-title { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.7); }
+.cs-card-sub { font-size: 13px; letter-spacing: 2px; color: var(--text-dim); margin-top: 4px; }
+@keyframes cs-card-in { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes cs-card-out { to { opacity: 0; transform: translateX(-16px); } }
+
+.dialogue-box {
+  --speaker: var(--cyan);
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(920px, calc(100% - 32px)); z-index: 2;
+  display: flex; gap: 14px; align-items: stretch;
+  padding: 10px; background: rgba(4, 6, 16, 0.94);
+  border: 3px solid #eef6ff; outline: 3px solid #000; box-shadow: 0 0 0 6px var(--speaker), 0 0 28px color-mix(in srgb, var(--speaker) 45%, transparent);
+  image-rendering: pixelated;
+  animation: dialogue-in 0.18s steps(3);
+}
+@keyframes dialogue-in { from { transform: translateX(-50%) scaleY(0.2); } to { transform: translateX(-50%); } }
+.dialogue-frame { flex: none; padding: 3px; background: #000; border: 3px solid var(--speaker); line-height: 0; }
+.dialogue-portrait { width: 144px; height: 144px; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.dialogue-body { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 6px 18px 2px; }
+.dialogue-name {
+  align-self: flex-start; padding: 2px 10px; background: var(--speaker); color: #05060f;
+  font-weight: 800; font-size: 15px; letter-spacing: 2px;
+}
+.dialogue-text { font-size: 21px; line-height: 1.4; font-weight: 700; color: #f4f7ff; text-shadow: 2px 2px 0 #000; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialogue-next { position: absolute; right: 6px; bottom: 0; color: var(--speaker); font-size: 16px; opacity: 0; }
+.dialogue-box.dialogue-ready .dialogue-next { opacity: 1; animation: dialogue-next 0.6s steps(2) infinite; }
+@keyframes dialogue-next { 50% { transform: translateY(4px); } }
+
+@media (max-width: 700px), (max-height: 520px) {
+  .dialogue-portrait { width: 88px; height: 88px; }
+  .dialogue-text { font-size: 16px; }
+  .dialogue-name { font-size: 12px; }
+  .dialogue-box { gap: 10px; padding: 8px; }
+  .cs-card-title { font-size: 15px; }
+}
