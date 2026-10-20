@@ -833,6 +833,7 @@ html, body {
   letter-spacing: 1px;
   cursor: pointer;
 }
+.armory-early { grid-column: 1 / -1; font-size: 10px; color: #7f93b3; line-height: 1.3; }
 .armory-value { font-size: 11px; color: #a9bcd8; margin-bottom: 5px; }
 .armory-value b { color: #fff; }
 .armory-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-bottom: 6px; overflow: hidden; }
@@ -1453,6 +1454,34 @@ html, body {
   .upg-headline {
     font-size: 19px;
   }
+}
+
+/* Campaign victory: gold where the game-over screen is red (the VICTORY modal and a won run's results). */
+.victory-text {
+  color: var(--gold);
+  text-shadow: 0 0 10px var(--gold);
+}
+
+.victory-glow {
+  text-shadow: 0 0 18px var(--gold), 0 0 40px rgba(255, 204, 0, 0.6);
+}
+
+.victory-title {
+  font-size: clamp(40px, 9vw, 72px);
+  letter-spacing: clamp(4px, 1.4vw, 12px);
+  color: #fff;
+  text-shadow: 0 0 22px var(--gold), 0 0 48px rgba(255, 204, 0, 0.65);
+  animation: victoryPulse 1.1s ease-in-out infinite alternate;
+}
+
+.victory-card { border-color: rgba(255, 204, 0, 0.6); box-shadow: 0 0 40px rgba(255, 204, 0, 0.25); }
+
+@keyframes victoryPulse {
+  to { text-shadow: 0 0 30px var(--gold), 0 0 70px rgba(255, 204, 0, 0.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .victory-title { animation: none; }
 }
 
 /* Game Over Stats Row */

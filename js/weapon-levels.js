@@ -143,7 +143,7 @@ export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
 export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.id, c]));
 
 // --- Element infusion (v0.34) ----------------------------------------------------------------------
-// Five weapons can carry an ELEMENT: FIRE (burn), FROST (chill), CORROSIVE (corrode) or SHOCK (stun).
+// Four weapons can carry an ELEMENT: FIRE (burn), FROST (chill), CORROSIVE (corrode) or SHOCK (stun).
 // Each has one element card per element ("Autocannon: Thermite Rounds"), offered only in level-up hands
 // (never in supply caches). The first one taken LOCKS that weapon's element for the run: the other three
 // are never offered again, and more cards of the same element are rank-ups (stronger status). Like stat
@@ -151,7 +151,7 @@ export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.i
 // Rank state lives in player.weapons under the card id (`blaster_fire`), so status-effects.js reads it
 // per hit with plain property lookups. The numbers per rank live in weapon-scaling.js.
 export const ELEMENTS = ['fire', 'frost', 'corrode', 'shock'];
-export const ELEMENT_WEAPONS = ['blaster', 'rockets', 'missiles', 'lightning', 'grenades'];
+export const ELEMENT_WEAPONS = ['blaster', 'rockets', 'missiles', 'grenades'];
 export const ELEMENT_MAX_RANKS = 5;
 // label: what cards and the HUD say; status: the status effect (TAG_INFO key, weapon-scaling.js).
 export const ELEMENT_INFO = {
@@ -165,12 +165,11 @@ const ELEMENT_NAMES = {
   blaster: { fire: 'Thermite Rounds', frost: 'Cryo Rounds', corrode: 'Nanite Rounds', shock: 'Shock Rounds' },
   rockets: { fire: 'Incendiary Warheads', frost: 'Cryo Warheads', corrode: 'Nanite Warheads', shock: 'Shock Warheads' },
   missiles: { fire: 'Thermite Payload', frost: 'Cryo Payload', corrode: 'Nanite Payload', shock: 'Shock Payload' },
-  lightning: { fire: 'Searing Arcs', frost: 'Cryo Arcs', corrode: 'Nanite Swarm', shock: 'Stun Arcs' },
   grenades: { fire: 'Thermite Charge', frost: 'Cryo Charge', corrode: 'Nanite Charge', shock: 'Shock Charge' }
 };
 const ELEMENT_WEAPON_TEXT = {
   blaster: 'Autocannon bolts (Pulsar Helix too)', rockets: 'Rocket Pod hits and blasts', missiles: 'Swarm Missile blasts',
-  lightning: 'Tesla arcs', grenades: 'Plasma Grenade blasts, bomblets and clouds'
+  grenades: 'Plasma Grenade blasts, bomblets and clouds'
 };
 const ELEMENT_EFFECT_TEXT = {
   fire: 'set targets on FIRE: hits pile on burn stacks that tick hard and spread to enemies beside them. More ranks add more stacks.',
@@ -207,7 +206,9 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // (ACROSS THE BOARD's free utility rank included), up to ELEMENT_MAX_RANKS (FIXED_ELEMENT_RANK).
 // The Electric Shield Field is always SHOCK: its rank is 1 + its Stun Coils ('stun' stat) ranks the same way.
 // The Cryo Sprayer (FROST) and Acid Sprayer (CORROSIVE) rank theirs like the Flamethrower, from Deep Freeze / Etching Agent.
-export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock' };
+// The Tesla Arc is lightning, so it is always SHOCK (Clay, v0.43.1; it took Stun Arcs and the other element
+// cards before): its rank follows its level like the Gas Trail's, so it needs no extra card.
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock', lightning: 'shock' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
 // Sprayer element rank from a build: 1 + its element stat ranks (burn / chill / acid; one per sprayer).
 export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || b?.r?.chill || b?.r?.acid || 0));

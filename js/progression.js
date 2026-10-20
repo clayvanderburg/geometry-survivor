@@ -59,6 +59,13 @@ export const META_UPGRADES = BASE_META_UPGRADES.map((u) => ({ ...u, growth: topC
 
 export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u]));
 
+// Armory revisions: CHANGING AN UPGRADE'S EFFECT OR COST CURVE BUMPS ITS REVISION HERE (`id: next number`;
+// an upgrade not listed is revision 1). A save remembers the revision each upgrade was bought at; when the
+// build's is newer, the cores the player actually paid for that upgrade (`paid`, whatever the price curve
+// was then) are refunded in full and its ranks reset. Removing an upgrade adds it to RETIRED_UPGRADES instead.
+export const ARMORY_REVISIONS = Object.freeze({});
+const MAX_REFUND_NOTES = 24;
+
 // Cost of buying rank `rank` + 1 (rank is the current rank).
 export function armoryCost(upg, rank) {
   return Math.round(upg.baseCost * Math.pow(upg.growth, Math.max(0, rank)));
@@ -153,22 +160,47 @@ export function normalizeGuide(value) {
 // Buffer (post-hit invulnerability) made way for Afterburner Jets (dash distance) in v0.42.5; they were
 // priced on the ARMORY_TOP_COST curve, so their refund is too.
 export const RETIRED_UPGRADES = Object.freeze({
-  fireRate: { baseCost: 12, growth: 1.13, maxRank: 30 },
-  armor: { baseCost: 18, growth: topCostGrowth({ baseCost: 18, growth: 1.14, maxRank: 30 }), maxRank: 30 },
-  phase: { baseCost: 22, growth: topCostGrowth({ baseCost: 22, growth: 1.18, maxRank: 15 }), maxRank: 15 }
+  fireRate: { name: 'Chronos Capacitor', baseCost: 12, growth: 1.13, maxRank: 30 },
+  armor: { name: 'Ablative Plating', baseCost: 18, growth: topCostGrowth({ baseCost: 18, growth: 1.14, maxRank: 30 }), maxRank: 30 },
+  phase: { name: 'Phase Buffer', baseCost: 22, growth: topCostGrowth({ baseCost: 22, growth: 1.18, maxRank: 15 }), maxRank: 15 }
 });
 
 // Cores spent on ranks of retired upgrades in a save's `ranks`.
 export function retiredRefund(sourceRanks = {}) {
-  let cores = 0;
-  for (const [id, upg] of Object.entries(RETIRED_UPGRADES)) {
-    const rank = boundedInteger(sourceRanks[id], 0, 0, upg.maxRank);
-    for (let n = 0; n < rank; n++) cores += armoryCost(upg, n);
-  }
-  return cores;
+  return retiredRefunds(sourceRanks).reduce((cores, r) => cores + r.cores, 0);
 }
 
-export function normalizeSave(value) {
+function retiredRefunds(sourceRanks = {}) {
+  const out = [];
+  for (const [id, upg] of Object.entries(RETIRED_UPGRADES)) {
+    const rank = boundedInteger(sourceRanks[id], 0, 0, upg.maxRank);
+    let cores = 0;
+    for (let n = 0; n < rank; n++) cores += armoryCost(upg, n);
+    if (cores > 0) out.push({ id, name: upg.name || id, cores });
+  }
+  return out;
+}
+
+// Pending "Armory update" refund notes: [{ id, name, cores }] shown until the player dismisses them.
+function normalizeRefundNotes(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((n) => n && typeof n === 'object' && typeof n.id === 'string')
+    .map((n) => ({ id: n.id.slice(0, 40), name: typeof n.name === 'string' ? n.name.slice(0, 40) : n.id.slice(0, 40), cores: boundedInteger(n.cores, 0) }))
+    .filter((n) => n.cores > 0).slice(0, MAX_REFUND_NOTES);
+}
+
+// Cores the save actually paid per upgrade. Saves from before this field are priced on the current curve.
+function normalizePaid(sourcePaid, ranks) {
+  const paid = sourcePaid && typeof sourcePaid === 'object' && !Array.isArray(sourcePaid) ? sourcePaid : {};
+  return Object.fromEntries(META_UPGRADES.map((u) => {
+    if (!ranks[u.id]) return [u.id, 0];
+    let curve = 0;
+    for (let n = 0; n < ranks[u.id]; n++) curve += armoryCost(u, n);
+    return [u.id, boundedInteger(paid[u.id], curve)];
+  }));
+}
+
+export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const sourceRanks = source.ranks && typeof source.ranks === 'object' ? source.ranks : {};
   const ranks = Object.fromEntries(META_UPGRADES.map(upgrade => [upgrade.id,
@@ -190,11 +222,36 @@ export function normalizeSave(value) {
   const legacyArmory = Object.keys(source).length > 0 && source.armory !== ARMORY_VERSION;
   const devWipe = source.devWipe !== DEV_WIPE.id && typeof source.pilotName === 'string' && DEV_WIPE.names.includes(normalizePilotName(source.pilotName));
   const keptScores = devWipe ? savedScores.filter((e) => !DEV_WIPE.names.includes(e.name)) : savedScores;
+  const reset = legacyArmory || devWipe;
+
+  const paid = reset ? normalizePaid({}, {}) : normalizePaid(source.paid, ranks);
+  let cores = reset ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES);
+  const notes = reset ? [] : normalizeRefundNotes(source.refundNotes);
+  const hasRevs = source.armoryRevs && typeof source.armoryRevs === 'object' && !Array.isArray(source.armoryRevs);
+  const armoryRevs = {};
+  for (const u of META_UPGRADES) {
+    const current = revisions[u.id] || 1;
+    // A save from before revisions existed (or an upgrade new to it) is already at the current revision.
+    const saved = hasRevs ? boundedInteger(source.armoryRevs[u.id], current, 1) : current;
+    armoryRevs[u.id] = current;
+    if (!reset && saved < current && paid[u.id] > 0) {
+      cores = Math.min(Number.MAX_SAFE_INTEGER, cores + paid[u.id]);
+      notes.push({ id: u.id, name: u.name, cores: paid[u.id] });
+      paid[u.id] = 0;
+      ranks[u.id] = 0;
+    }
+  }
+  if (!reset) {
+    for (const r of retiredRefunds(sourceRanks)) { cores = Math.min(Number.MAX_SAFE_INTEGER, cores + r.cores); notes.push(r); }
+  }
   return {
     pilotName: normalizePilotName(source.pilotName),
-    cores: legacyArmory || devWipe ? STARTING_CORES : boundedInteger(source.cores, STARTING_CORES) + retiredRefund(sourceRanks),
+    cores,
     totalRuns: boundedInteger(source.totalRuns, 0),
-    ranks: legacyArmory || devWipe ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
+    ranks: reset ? Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0])) : ranks,
+    paid,
+    armoryRevs,
+    refundNotes: normalizeRefundNotes(notes),
     armory: ARMORY_VERSION,
     devWipe: DEV_WIPE.id, // the wipe check has run for this save (see DEV_WIPE)
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
@@ -209,7 +266,9 @@ export class ProgressionManager {
     // Persist a one-time armory reset or developer-pilot wipe right away.
     let wipeCheckPending = false;
     try { wipeCheckPending = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')?.devWipe !== DEV_WIPE.id; } catch { /* unreadable: load() already fell back */ }
-    if (this.data.armoryResetNotice || wipeCheckPending) this.save();
+    let revsChanged = false;
+    try { revsChanged = JSON.stringify(JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')?.armoryRevs) !== JSON.stringify(this.data.armoryRevs); } catch { /* unreadable */ }
+    if (this.data.armoryResetNotice || wipeCheckPending || revsChanged) this.save();
     this.onExternalChange = null;
     // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
     globalThis.addEventListener?.('storage', (e) => {
@@ -264,18 +323,31 @@ export class ProgressionManager {
     const cost = this.getUpgradeCost(upg);
     this.data.cores -= cost;
     this.data.ranks[id] = this.getRank(id) + 1;
+    this.data.paid[id] = (this.data.paid[id] || 0) + cost;
     this.save();
     return true;
   }
 
   // REFUND ALL: every rank back to 0 and every core spent on them back in the wallet. Returns the refund.
   refundAll() {
-    const refund = armorySpent(this.data.ranks);
+    const refund = this.armorySpent();
     if (refund <= 0) return 0;
     this.data.ranks = Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0]));
+    this.data.paid = Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0]));
     this.data.cores = Math.min(Number.MAX_SAFE_INTEGER, this.data.cores + refund);
     this.save();
     return refund;
+  }
+
+  // Cores actually paid for the current ranks (what REFUND ALL returns).
+  armorySpent() {
+    return Object.values(this.data.paid).reduce((a, c) => a + c, 0);
+  }
+
+  dismissRefundNotes() {
+    if (!this.data.refundNotes.length) return;
+    this.data.refundNotes = [];
+    this.save();
   }
 
   dismissArmoryNotice() {

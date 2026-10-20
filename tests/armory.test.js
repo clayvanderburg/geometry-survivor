@@ -207,3 +207,57 @@ test('the developer\'s test pilots (NOX, MADKING) lose cores, ranks and their lo
   assert.equal(other.cores, 5000, 'other pilots keep everything');
   assert.equal(other.ranks.damage, 20);
 });
+
+test('a bumped upgrade revision refunds what was actually paid (even after a cost-curve change), once', () => {
+  const paidDamage = 1234; // bought on an older, pricier curve than today's
+  const base = { armory: ARMORY_VERSION, cores: 100, ranks: { damage: 5, luck: 2 }, paid: { damage: paidDamage, luck: 30 }, armoryRevs: { damage: 1, luck: 1 } };
+  const save = normalizeSave(base, { damage: 2 });
+  assert.equal(save.cores, 100 + paidDamage);
+  assert.equal(save.ranks.damage, 0);
+  assert.equal(save.paid.damage, 0);
+  assert.equal(save.ranks.luck, 2, 'untouched upgrades keep their ranks');
+  assert.equal(save.armoryRevs.damage, 2);
+  assert.deepEqual(save.refundNotes, [{ id: 'damage', name: META_BY_ID.damage.name, cores: paidDamage }]);
+  const again = normalizeSave(JSON.parse(JSON.stringify(save)), { damage: 2 });
+  assert.equal(again.cores, 100 + paidDamage, 'a reload does not refund again');
+  assert.equal(again.refundNotes.length, 1, 'the note stays until dismissed');
+});
+
+test('saves from before revisions are the baseline: no refund, paid is priced on the current curve', () => {
+  const save = normalizeSave({ armory: ARMORY_VERSION, cores: 10, ranks: { damage: 3 } });
+  assert.equal(save.cores, 10);
+  assert.equal(save.ranks.damage, 3);
+  assert.equal(save.paid.damage, [0, 1, 2].reduce((n, r) => n + armoryCost(META_BY_ID.damage, r), 0));
+  assert.deepEqual(save.refundNotes, []);
+  const bumped = normalizeSave(save, { damage: 2 });
+  assert.equal(bumped.cores, 10 + save.paid.damage, 'the first bump after baseline refunds');
+});
+
+test('buying tracks cores paid, a revision refund shows a dismissable note, retired refunds are noted', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  store.set('vectra_survivor_save_v2', JSON.stringify({ armory: ARMORY_VERSION, cores: 500, ranks: { armor: 2 } }));
+  const prog = new ProgressionManager();
+  assert.ok(prog.data.cores > 500, 'retired armor refunded');
+  assert.equal(prog.data.refundNotes[0].name, 'Ablative Plating');
+  assert.equal(JSON.parse(store.get('vectra_survivor_save_v2')).ranks.armor, undefined, 'persisted at once');
+  const before = prog.data.cores;
+  prog.buyUpgrade('damage'); prog.buyUpgrade('damage');
+  assert.equal(prog.data.paid.damage, before - prog.data.cores);
+  assert.equal(prog.armorySpent(), prog.data.paid.damage);
+  prog.dismissRefundNotes();
+  assert.deepEqual(JSON.parse(store.get('vectra_survivor_save_v2')).refundNotes, []);
+  const spent = prog.armorySpent();
+  assert.equal(prog.refundAll(), spent);
+  assert.equal(prog.data.cores, before, 'every paid core back');
+});
+
+test('malformed revision, paid and note data stays safe', () => {
+  for (const bad of [null, 'x', [], { armoryRevs: 'no', paid: [], refundNotes: 'no', ranks: { damage: 'a' } },
+    { armory: ARMORY_VERSION, armoryRevs: { damage: -5, luck: NaN }, paid: { damage: 'x', luck: Infinity }, ranks: { damage: 3, luck: 2 }, refundNotes: [null, 5, { id: 1 }, { id: 'a', cores: -3 }, { id: 'ok', name: 'Ok', cores: 9 }] }]) {
+    const s = normalizeSave(bad, { damage: 2 });
+    assert.ok(Number.isFinite(s.cores) && s.cores >= 0);
+    assert.ok(META_UPGRADES.every((u) => Number.isInteger(s.paid[u.id]) && s.paid[u.id] >= 0));
+    assert.ok(s.refundNotes.every((n) => typeof n.id === 'string' && n.cores > 0));
+  }
+});
