@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.6',
+    date: '2026-10-20',
+    title: 'Attractor Retune',
+    notes: [
+      { type: 'balance', text: 'Geom Attractor Field: +44% pickup radius and +15% XP per level (was +65% / +25%). Maxed: 2x XP and 6x pickup radius (was 3x and 12x, most of the map).' }
+    ]
+  },
+  {
     version: '0.42.5',
     date: '2026-10-20',
     title: 'Afterburner Jets',

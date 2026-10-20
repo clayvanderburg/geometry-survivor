@@ -328,9 +328,17 @@ test('cards that do several separate things name all of them in the headline, no
   assert.equal(headline('status_application'), 'ALL 4 STATUS REACTIONS STRONGER');
   assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
   assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
-  assert.equal(headline('magnet'), '+65% PICKUP · +25% XP · +1 BOMB');
+  assert.equal(headline('magnet'), '+44% PICKUP · +15% XP · +1 BOMB');
   assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH + SHOCKWAVE');
   applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
   assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH, BIGGER SHOCKWAVE');
   assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
+});
+
+test('Geom Attractor Field maxes at 2x XP and half its old pickup radius (6.1x base)', () => {
+  const p = makePlayer();
+  const card = UPGRADE_POOL.find((u) => u.id === 'magnet');
+  for (let i = 0; i < card.maxLevel; i++) applyUpgradeLevels(p, card);
+  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
+  assert.ok(Math.abs(p.stats.magnetRadius / TUNING.magnetRadius - Math.pow(1.65, 5) / 2) < 1e-9, 'LV 5 = half the old 12.2x radius');
 });

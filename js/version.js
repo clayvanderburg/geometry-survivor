@@ -7,7 +7,7 @@
 // tests/changelog.test.js fails if the two disagree.
 // A minor bump also re-checks the first-run tutorial slides (js/tutorial.js, TUTORIAL_REVIEWED_FOR).
 
-export const GAME_VERSION = '0.42.5';
+export const GAME_VERSION = '0.42.6';
 
 // First release whose runs carry a version. Runs from before it live only on the all-time board,
 // where they are labelled LEGACY_VERSION_LABEL ("pre-0.9").
