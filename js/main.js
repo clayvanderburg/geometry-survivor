@@ -128,7 +128,7 @@ const SINGULARITY_IMPLODE_TIME = 0.35;
 // Grid funnel depth (px at the core) for enemy black holes and player singularities.
 const BLACKHOLE_GRID_DEPTH = 290;
 // Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
-const ROCKET_CONVERGE = 320;
+const ROCKET_CONVERGE = 480; // 320 before v0.39.8: the wingtip streams stay apart from the Autocannon longer
 // `from` eased by `rate` of the shortest turn toward `to` (radians), for smoothly turning headings.
 function turnToward(from, to, rate) {
   let d = to - from;
@@ -3248,15 +3248,16 @@ export class Game {
     // ROCKET_CONVERGE px out, so a lone target dead ahead isn't straddled by both rockets.
     const t = this.findNearestEnemy(p.x, p.y);
     const tTurn = t ? Math.abs(((Math.atan2(t.y - p.y, t.x - p.x) - aim) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI) : Infinity;
-    const converge = tTurn < 0.35 ? Math.min(600, Math.max(90, Math.hypot(t.x - p.x, t.y - p.y))) : ROCKET_CONVERGE;
+    const converge = tTurn < 0.35 ? Math.min(600, Math.max(180, Math.hypot(t.x - p.x, t.y - p.y))) : ROCKET_CONVERGE;
     const cx = p.x + Math.cos(aim) * converge, cy = p.y + Math.sin(aim) * converge;
     for (let i = 0; i < count; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const tier = Math.floor(i / 2);
       const hx = Math.cos(heading), hy = Math.sin(heading);
-      // Pod mount in hull space: (0.25r forward, 1.12r out), the tips of drawCrabShip's carapace flanks.
-      const fwd = p.radius * 0.25 - tier * 7;
-      const out = p.radius * 1.12 + tier * 3;
+      // Pod mount in hull space: out at the wingtips (ship-renderer.js: tips at -0.95r, 1.76r), well clear of
+      // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
+      const fwd = -p.radius * 0.5 - tier * 7;
+      const out = p.radius * 1.7 + tier * 4;
       const wx = p.x + hx * fwd - hy * side * out;
       const wy = p.y + hy * fwd + hx * side * out;
       const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
@@ -3268,7 +3269,7 @@ export class Game {
         vy: fy * W.wingRocketSpeed,
         damage,
         pierce: 1,
-        hue: 28,
+        hue: 354,
         radius: 4.5,
         life: W.wingRocketLife,
         source: 'rocket',
@@ -5759,27 +5760,49 @@ export class Game {
   }
 
   // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
+  // Rocket Pod rocket: a crimson finned body (not the amber of Swarm Missiles or the cyan Autocannon),
+  // a white-hot engine core inside a red flame, and a fading grey smoke streak behind it.
   drawWingRocket(ctx, b) {
     const a = Math.atan2(b.vy, b.vx);
     const c = Math.cos(a), s = Math.sin(a);
-    const flame = 9 + Math.random() * 7;
-    ctx.strokeStyle = 'hsla(32, 100%, 58%, 0.75)';
-    ctx.lineWidth = 4;
+    const smoke = 26;
+    ctx.strokeStyle = 'rgba(190, 190, 205, 0.18)';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(b.x - c * 6, b.y - s * 6);
-    ctx.lineTo(b.x - c * (6 + flame), b.y - s * (6 + flame));
+    ctx.moveTo(b.x - c * 8, b.y - s * 8);
+    ctx.lineTo(b.x - c * (8 + smoke), b.y - s * (8 + smoke));
     ctx.stroke();
-    ctx.fillStyle = '#ffd9a8';
-    ctx.strokeStyle = 'hsla(22, 100%, 60%, 1)';
-    ctx.lineWidth = 1.6;
+    const flame = 10 + Math.random() * 8;
+    ctx.strokeStyle = 'hsla(356, 100%, 58%, 0.8)';
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(b.x + c * 7, b.y + s * 7);
-    ctx.lineTo(b.x - c * 5 - s * 3.5, b.y - s * 5 + c * 3.5);
-    ctx.lineTo(b.x - c * 3, b.y - s * 3);
-    ctx.lineTo(b.x - c * 5 + s * 3.5, b.y - s * 5 - c * 3.5);
+    ctx.moveTo(b.x - c * 7, b.y - s * 7);
+    ctx.lineTo(b.x - c * (7 + flame), b.y - s * (7 + flame));
+    ctx.stroke();
+    ctx.strokeStyle = '#fff6e0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(b.x - c * 7, b.y - s * 7);
+    ctx.lineTo(b.x - c * (7 + flame * 0.55), b.y - s * (7 + flame * 0.55));
+    ctx.stroke();
+    // Body: a long nose, swept fins at the tail.
+    ctx.fillStyle = '#ff3a52';
+    ctx.strokeStyle = '#ffd0d6';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(b.x + c * 10, b.y + s * 10);
+    ctx.lineTo(b.x - c * 4 - s * 2.6, b.y - s * 4 + c * 2.6);
+    ctx.lineTo(b.x - c * 8 - s * 5, b.y - s * 8 + c * 5);
+    ctx.lineTo(b.x - c * 6, b.y - s * 6);
+    ctx.lineTo(b.x - c * 8 + s * 5, b.y - s * 8 - c * 5);
+    ctx.lineTo(b.x - c * 4 + s * 2.6, b.y - s * 4 - c * 2.6);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(b.x + c * 6.5, b.y + s * 6.5, 1.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Swarm micro-missile: a soft exhaust glow under a tapered core trail (drawn in four chunks), then

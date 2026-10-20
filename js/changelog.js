@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.8',
+    date: '2026-10-20',
+    title: 'Rocket Pods Refit',
+    notes: [
+      { type: 'balance', text: 'Rocket Pods fire from the wingtips, clear of the Autocannon, every 0.65 s (was 1 s) with faster rockets. Same total damage.' },
+      { type: 'new', text: 'Rocket Pod rockets have their own look: crimson finned bodies, a white-hot engine and a smoke streak.' }
+    ]
+  },
+  {
     version: '0.39.7',
     date: '2026-10-20',
     title: 'Wider Shock Field',
