@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.2',
+    date: '2026-10-20',
+    title: 'Tesla Arc Recharged',
+    notes: [
+      { type: 'balance', text: 'Tesla Arc hits about 3x harder per jump (each jump was far too soft), roughly tripling its damage. Storm Protocol chain lightning gets the same boost.' }
+    ]
+  },
+  {
     version: '0.42.1',
     date: '2026-10-20',
     title: 'Tighter Sprays',
