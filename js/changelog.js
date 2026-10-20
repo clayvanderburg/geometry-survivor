@@ -18,7 +18,8 @@ export const CHANGELOG = Object.freeze([
     notes: [
       { type: 'balance', text: "Tesla Arc is always SHOCK: from LV 1 its arcs zap-stun enemies and shock arcs jump between enemies that touch. It's lightning." },
       { type: 'balance', text: 'Its shock grows stronger at LV 6, 12 and 18. The Tesla Arc element cards (Stun Arcs, Searing Arcs, Cryo Arcs, Nanite Swarm) are gone.' },
-      { type: 'balance', text: 'It counts as a SHOCK weapon for status cards, the Shock Amplifier and Supercritical.' }
+      { type: 'balance', text: 'It counts as a SHOCK weapon for status cards, the Shock Amplifier and Supercritical.' },
+      { type: 'balance', text: 'Escort Drones hit 2.7x as hard and Sentry Turret bolts 4.2x as hard: self-aiming guns now deal about 85% of the Autocannon at the same level.' }
     ]
   },
   {

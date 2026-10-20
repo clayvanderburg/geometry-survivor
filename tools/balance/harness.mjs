@@ -672,7 +672,8 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
 // uses the same seed (common random numbers), so the gain over the no-card baseline is the card's.
 export const BENCH = { targets: 50, innerRadius: 70, outerRadius: 420, seconds: 15, targetWave: 6, orbitRadius: 260, mix: ['swarmer', 'swarmer', 'pinwheel', 'weaver', 'splitter'] };
 
-export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH }) {
+// `setup(player)` runs after the install (e.g. a whole build, or dropping the Autocannon to bench a weapon alone).
+export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH, setup = null }) {
   const chase = scenario === 'chase';
   return withSeed(`${seed}:bench:${scenario}:${seedIndex}`, { tuning, weapons }, () => {
     const game = createHeadlessGame();
@@ -693,6 +694,7 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
       const jump = level - (p.upgradeLevels[upgradeId] || 0);
       if (jump > 0) applyUpgradeLevels(p, { ...upg, levelJump: jump });
     }
+    setup?.(p);
     const scale = game.getWaveScale();
     const em = game.enemyManager;
     const cx = game.worldWidth / 2, cy = game.worldHeight / 2;

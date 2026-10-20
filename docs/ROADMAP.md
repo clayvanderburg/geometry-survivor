@@ -21,6 +21,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Geom Attractor Field maxes at 2x XP** (armory XP stacks on top) and half its old pickup radius (6x base, was 12x: most of the map). |
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 | 2026-10-20 | **Tesla Arc is always SHOCK** ("it's friggin lightning"): stun arcs are its baseline, like the Flamethrower's FIRE. It has no element cards; its SHOCK rank follows its level (+1 at LV 6/12/18). |
+| 2026-10-20 | **Class-based weapon balance** (replaces "all offensive weapons equal" for realized damage): per target at equal level vs the Autocannon (100%): automatic single-target (Drones, Turret) ~85%; area weapons 60–70% per target, about even in total against packs; close-range defensive (Shock Field, Orbit Blades) lower by design. Encoded as `WEAPON_CLASS` / `CLASS_TARGET`; area targets enforced once enemies-hit-per-blast is measured. |
 
 ## Priorities (in order)
 
