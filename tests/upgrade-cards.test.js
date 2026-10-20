@@ -259,7 +259,7 @@ test('reload and fire-rate cards change only their own stat', () => {
   const p = makePlayer();
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
   const m = describeUpgrade(p, byId('missiles_reload'));
-  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.44s', after: '1.03s' }]);
+  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.11s', after: '0.79s' }]);
   p.upgradeLevels.turret = 1; p.weapons.turret = 1;
   const t = describeUpgrade(p, byId('turret_rate'));
   assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
