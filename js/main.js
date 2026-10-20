@@ -1885,6 +1885,10 @@ export class Game {
     if (!byElite) this.rocksMined++;
     this.sound.playExplosion(0.95);
     this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.9, rock.sides, rock.rotation, rock.hue, 0.9);
+    // The glowing core breaks up too: smaller inner shards in the crack colour, and a flash.
+    const crackHue = rock.oreType !== 'rock' ? rock.hue : 34;
+    this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.45, 3 + (rock.sides % 2), rock.rotation + 0.5, crackHue, 0.6);
+    this.particles.spawnFlash(rock.x, rock.y, rock.radius * 0.9, crackHue, 0.12);
     this.particles.spawnExplosionSparks(rock.x, rock.y, 20, rock.hue, 2, 10, 2.0);
     this.particles.spawnShockwave(rock.x, rock.y, rock.radius * 1.8, rock.hue, 2.5, 0.28);
     this.grid.applyImpulse(rock.x, rock.y, 22, 110, rock.hue);
