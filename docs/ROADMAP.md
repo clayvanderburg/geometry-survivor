@@ -22,6 +22,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 | 2026-10-20 | **Tesla Arc is always SHOCK** ("it's friggin lightning"): stun arcs are its baseline, like the Flamethrower's FIRE. It has no element cards; its SHOCK rank follows its level (+1 at LV 6/12/18). |
 | 2026-10-20 | **Class-based weapon balance** (replaces "all offensive weapons equal" for realized damage): per target at equal level vs the Autocannon (100%): automatic single-target (Drones, Turret) ~85%; area weapons 60–70% per target, about even in total against packs; close-range defensive (Shock Field, Orbit Blades) lower by design. Encoded as `WEAPON_CLASS` / `CLASS_TARGET`; area targets enforced once enemies-hit-per-blast is measured. |
+| 2026-10-20 | **Weapon floor:** by player LV 6 / 12 / 18 / 24 / 30 you must carry 2 / 3 / 4 / 5 / 6 weapons; a level-up below it is a forced, rerollable CHOOSE A WEAPON pick (`js/weapon-floor.js`, step tunable, may tighten to every 5 levels). Fixes the "two LV 18 weapons + stacked global cards" dominant strategy. Per-run flag so a single-weapon mastery mode can turn it off. Global crit/status/utility stacking was measured, not changed (numbers in the PR). |
 
 ## Priorities (in order)
 
