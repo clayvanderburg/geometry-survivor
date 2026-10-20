@@ -45,7 +45,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The ship kiting a crowd of enemies',
       lines: [
         'Your **SHIELD** is your life. Hits drain it and it slowly recharges.',
-        'Enemies come in **waves** that keep getting tougher. Keep moving and don\'t get boxed in.'
+        'Enemies come in **waves** that keep getting tougher. Packs **block** your ship: don\'t ram them, **DASH** through.'
       ]
     },
     {
@@ -69,7 +69,8 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'A boss warping in next to the ship',
       lines: [
         `From wave ${ltWave}, a named **LIEUTENANT** elite hunts you.`,
-        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Beat the wave **50** boss to win.'
+        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Beat the wave **50** boss to win.',
+        'A **red lane** means a boss is about to **charge** down it.'
       ]
     },
     {
