@@ -395,7 +395,7 @@ export const WEAPON_SCALING = {
   pocketDamageMult: (b) => W.pocketShare * W.gasDamageMult(b) * W.pocketEvery / W.gasTick(b),
   shroudDamageMult: (b) => W.shroudShare * W.gasDamageMult(b),
 
-  // --- Flamethrower (stats: damage, rate, range, cone, burn) -------------------------------------
+  // --- Flamethrower (stats: damage, rate, range, cone, turn, burn, nozzles) ------------------------
   // A continuous cone of fire along the turret aim (like the Autocannon), sprayed while firing. Every
   // scorch (flameTickRate per second) hits everything inside the cone, near hits full and the tip at
   // 1 - flameEdgeFalloff, and sets it on FIRE (its built-in element: weapon-levels.js FIXED_ELEMENTS,
@@ -412,14 +412,27 @@ export const WEAPON_SCALING = {
   flameTurnRate: (b) => 1.2 * (1 + 0.35 * (b?.r?.turn || 0)),
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
-  // Transforms: Twin Nozzle (a rear nozzle at flameRearRange of the reach (the same stream), scorching like the front one,
-  // valued at flameRearHitShare: fewer enemies sit behind you), Napalm Puddles (a burning puddle at the
+  // Extra Nozzle cards (POWER, like Prism Split): flameNozzles(b) identical streams spaced evenly round
+  // the spin, each extra one valued at flameNozzleShare of a stream (cones that sweep past each other
+  // catch fewer fresh enemies).
+  flameNozzles: (b) => 1 + (b?.r?.nozzles || 0),
+  flameNozzleShare: 0.6,
+  flameNozzleMult: (b) => 1 + W.flameNozzleShare * (W.flameNozzles(b) - 1),
+  // Transforms: the LV 6 burst (one per sprayer: Fireballs lobbed from every nozzle to the tip of its
+  // stream every flameBurstEvery s; Shatter, a frozen enemy the spray hits bursts in ice shards;
+  // Meltdown, a corroded enemy the spray kills bursts in acid; the last two at most once every
+  // flameBurstEvery / nozzles s), each burst a flameBurstRadius blast worth flameBurstShare of a
+  // nozzle's one-target stream DPS over flameBurstEvery, valued at flameBurstHitShare and scaled with
+  // the nozzles), Napalm Puddles (a burning puddle at the
   // flames' tip every flamePuddleEvery s, worth flamePuddleShare of the stream's one-target DPS per
   // target over its life), Inferno Ring (every flameRingEvery s a ring of fire of flameRingRadiusMult x
   // the reach, worth flameRingShare of the stream's one-target DPS over that interval, valued at
   // flameRingHitShare: it hits the whole pack around you).
-  flameRearRange: 1, // the rear stream matches the front one (0.75 before v0.39.3 looked lopsided)
-  flameRearHitShare: 0.7,
+  flameBurstEvery: 1,
+  flameBurstShare: 0.12,
+  flameBurstHitShare: 1.5,
+  flameBurstRadius: 70,
+  flameBurstFlight: 0.3, // s a fireball flies before it bursts
   flamePuddleEvery: 0.5,
   flamePuddleLife: 2.5,
   flamePuddleTick: 0.25,
@@ -431,12 +444,13 @@ export const WEAPON_SCALING = {
   flameRingShare: 0.25,
   flameRingHitShare: 2,
   flameRingKnock: 2.4,
-  flameUnits: (b) => W.flameHitShare * (1 + (b.t4 ? W.flameRearHitShare : 0))
+  flameUnits: (b) => W.flameNozzleMult(b) * (W.flameHitShare + (b.t4 ? W.flameBurstShare * W.flameBurstHitShare : 0))
     + (b.t8 ? W.flamePuddleShare * W.flamePuddleHitShare : 0) + (b.t12 ? W.flameRingShare * W.flameRingHitShare : 0),
   // Damage of one scorch on one target.
   flameDamageMult: (b) => lv1('flamethrower', 'flamethrower', (b0) => DPS_TARGET(1) / (W.flameTickRate(b0) * W.flameUnits(b0))) * hitMult(b) * tfScale(b, W.flameUnits),
   // One target's damage per second from the stream (the unit puddles and the ring are measured in).
   flameStreamDps: (b) => W.flameTickRate(b) * W.flameDamageMult(b),
+  flameBurstDamageMult: (b) => W.flameBurstShare * W.flameStreamDps(b) * W.flameBurstEvery,
   flamePuddleDamageMult: (b) => W.flamePuddleShare * W.flameStreamDps(b) * W.flamePuddleEvery / (W.flamePuddleLife / W.flamePuddleTick),
   flameRingDamageMult: (b) => W.flameRingShare * W.flameStreamDps(b) * W.flameRingEvery,
 
@@ -675,10 +689,11 @@ export const POTENTIAL_DPS = {
   gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
     + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0),
   flamethrower: (b) => {
-    const stream = W.flameStreamDps(b) * W.flameHitShare * (1 + (b.t4 ? W.flameRearHitShare : 0)); // front (+ rear) nozzle
+    const stream = W.flameStreamDps(b) * W.flameHitShare * W.flameNozzleMult(b); // every nozzle
+    const bursts = b.t4 ? W.flameBurstDamageMult(b) / W.flameBurstEvery * W.flameBurstHitShare * W.flameNozzleMult(b) : 0;
     const puddles = b.t8 ? W.flamePuddleDamageMult(b) * (W.flamePuddleLife / W.flamePuddleTick) / W.flamePuddleEvery * W.flamePuddleHitShare : 0;
     const ring = b.t12 ? W.flameRingDamageMult(b) / W.flameRingEvery * W.flameRingHitShare : 0;
-    return stream + puddles + ring;
+    return stream + bursts + puddles + ring;
   },
   // The Cryo Sprayer and Acid Sprayer are the Flamethrower's twins: the same cone, numbers and
   // Breakthrough shapes (W.flame* formulas read only the build's ranks), with FROST / CORROSIVE built in.

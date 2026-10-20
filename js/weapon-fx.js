@@ -380,12 +380,12 @@ export class WeaponEffects {
           ctx.fill();
         }
       } else if (e.style === 'pop' && e.fromX !== undefined) {
-        // Bomblet in flight from its parent blast to where it pops.
+        // Bomblet (or a Flamethrower fireball, `size`) in flight from where it was thrown to where it pops.
         const bx = e.fromX + (e.x - e.fromX) * Math.min(1, k * 1.6);
         const by = e.fromY + (e.y - e.fromY) * Math.min(1, k * 1.6);
         ctx.fillStyle = `hsla(${e.hue}, 100%, ${70 + 25 * k}%, 0.95)`;
         ctx.beginPath();
-        ctx.arc(bx, by, (2.6 + 1.6 * Math.sin(t * 30)) * vfx, 0, Math.PI * 2);
+        ctx.arc(bx, by, ((e.size ?? 2.6) + 1.6 * Math.sin(t * 30)) * vfx, 0, Math.PI * 2);
         ctx.fill();
       }
     }

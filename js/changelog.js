@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.41.0',
+    date: '2026-10-20',
+    title: 'Nozzles & Bursts',
+    notes: [
+      { type: 'new', text: 'Flamethrower, Cryo Sprayer and Acid Sprayer: new Extra Nozzle card. Each rank adds another stream, up to 4, spaced evenly round your ship.' },
+      { type: 'new', text: 'New LV 6 Breakthroughs replace Twin Nozzle. Flamethrower: Fireballs lobbed from every nozzle. Cryo Sprayer: Shatter, frozen enemies burst in ice shards.' },
+      { type: 'new', text: 'Acid Sprayer LV 6: Meltdown. Corroded enemies the spray kills burst in an acid splash.' }
+    ]
+  },
+  {
     version: '0.40.1',
     date: '2026-10-20',
     title: 'Armory Refund',
