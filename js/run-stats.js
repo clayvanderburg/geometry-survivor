@@ -37,7 +37,11 @@ export const SUB_SOURCES = Object.freeze({
   overload: 'raillance',      // Overload Shot beams (Rail Lance Breakthrough)
   glaive_recall: 'glaive',   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
   nanite_fission: 'nanites', // Nanite Swarm: Fission Bloom daughter swarms
-  nanite_plague: 'nanites'   // Nanite Swarm: Nanite Plague swarms
+  nanite_plague: 'nanites',   // Nanite Swarm: Nanite Plague swarms
+  harpooncrush: 'harpoon',  // Claw Harpoon: a reeled-in catch crushed in the other claw
+  harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
+  harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
+  harpoonchain: 'harpoon'   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
 });
 
 // Damage that is not a loadout weapon's.

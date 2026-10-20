@@ -159,6 +159,13 @@ export const STAT_CARDS = {
     card('nanites', 'nanites_radius', 'radius', 'Nanite Swarm Cloud Size', 'naniteRadius', 'Nanite Swarm: wider swarms. Only swarm size.', cap(8)),
     card('nanites', 'nanites_duration', 'duration', 'Nanite Swarm Endurance', 'naniteLife', 'Nanite Swarm: each swarm holds together longer before it disperses. Only lifetime.', cap(8)),
     card('nanites', 'nanites_launch', 'cooldown', 'Nanite Swarm Fabricator', 'naniteCooldown', 'Nanite Swarm: a fresh swarm launches sooner. Only launch rate.', cap(6))
+  ],
+  harpoon: [
+    card('harpoon', 'harpoon_damage', 'damage', 'Claw Harpoon Tungsten Bit', 'harpoonDamage', 'Claw Harpoon: a harder drill bit. Only damage per hit.'),
+    card('harpoon', 'harpoon_rate', 'rate', 'Claw Harpoon Winch Motor', 'harpoonRate', 'Claw Harpoon: a faster winch throws and reels in the claw more often. Only throw rate.', cap(8)),
+    card('harpoon', 'harpoon_range', 'range', 'Claw Harpoon Tether Length', 'harpoonRange', 'Claw Harpoon: a longer tether, so the claw flies further. Only reach.', cap(8)),
+    card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', cap(6)),
+    card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
   ]
 };
 
@@ -298,7 +305,8 @@ export const WEAPON_BADGE = {
   grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
   raillance: 'RAIL LANCE',
   glaive: 'GLAIVE DISCS',
-  nanites: 'NANITE SWARM'
+  nanites: 'NANITE SWARM',
+  harpoon: 'CLAW HARPOON'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -393,6 +401,11 @@ export const TRANSFORMS = {
     6: tf('fission', 'Fission Bloom', 'Every few kills a Nanite Swarm buds off a daughter swarm that flies to the next pack and eats it too.'),
     12: tf('goo', 'Gray Goo', 'Nanite Swarms feed on what they kill: every kill keeps the swarm alive longer and lets it swell far past its usual size.'),
     18: tf('plague', 'Nanite Plague', 'Enemies a Nanite Swarm bites carry the plague: when one dies to anything, a small swarm bursts from the wreck and keeps eating.')
+  },
+  harpoon: {
+    6: tf('slam', 'Seismic Slam', 'Every time the Claw Harpoon reels in, your claws snap shut in a seismic slam that hits everything round your nose.'),
+    12: tf('spin', 'Drill Spin', 'At the end of every throw the Claw Harpoon spins in place, grinding every enemy and rock round its tip before it reels back.'),
+    18: tf('chain', 'Chain Harpoon', 'At the end of every throw the Claw Harpoon leaps on to up to 3 more enemies near its tip, skewering each one before it reels back.')
   }
 };
 

@@ -1930,6 +1930,240 @@ export class SoundEngine {
     }
   }
 
+  // Claw Harpoon throw: a metal "chunk" as the claw kicks out of its socket, a cable zip falling in pitch
+  // and a short band-passed whoosh.
+  playHarpoonLaunch() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('harpoonLaunch', 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const chunk = this.ctx.createOscillator();
+    const chunkGain = this.ctx.createGain();
+    chunk.type = 'square';
+    chunk.frequency.setValueAtTime(190 * (0.92 + Math.random() * 0.16), t); // a little pitch variety per throw
+    chunk.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+    chunkGain.gain.setValueAtTime(0.05, t);
+    chunkGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    chunk.connect(chunkGain);
+    chunkGain.connect(this.sfxGain);
+    chunk.start(t);
+    chunk.stop(t + 0.08);
+
+    const zip = this.ctx.createOscillator();
+    const zipGain = this.ctx.createGain();
+    zip.type = 'sawtooth';
+    zip.frequency.setValueAtTime(1500 + Math.random() * 150, t + 0.01);
+    zip.frequency.exponentialRampToValueAtTime(420, t + dur);
+    zipGain.gain.setValueAtTime(0.0001, t);
+    zipGain.gain.exponentialRampToValueAtTime(0.022, t + 0.02);
+    zipGain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    zip.connect(zipGain);
+    zipGain.connect(this.sfxGain);
+    zip.start(t);
+    zip.stop(t + dur + 0.01);
+
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(900, t);
+    band.frequency.exponentialRampToValueAtTime(2600, t + dur);
+    band.Q.value = 1.2;
+    const whoosh = this.ctx.createGain();
+    whoosh.gain.setValueAtTime(0.0001, t);
+    whoosh.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
+    whoosh.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(whoosh);
+    whoosh.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.6, dur + 0.02);
+  }
+
+  // Claw Harpoon impacts: 'enemy' a dull thunk, 'hook' a thunk with a bright clamp click, 'rock' a short
+  // gritty crunch as the bit bites in, 'bedrock' a ringing metal clang.
+  playHarpoonHit(kind = 'enemy') {
+    if (!this.enabled || !this.ctx) return;
+    const dur = kind === 'bedrock' ? 0.35 : 0.14;
+    if (!this.claimVoice(`harpoon_${kind}`, kind === 'enemy' ? 45 : 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const tone = (type, f0, f1, vol, len, at = 0) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t + at);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + at + len);
+      g.gain.setValueAtTime(vol, t + at);
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + len);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + len + 0.01);
+    };
+    if (kind === 'bedrock') {
+      tone('triangle', 920, 900, 0.05, 0.32);
+      tone('triangle', 1385, 1370, 0.035, 0.26);
+      tone('sine', 240, 120, 0.05, 0.08);
+      return;
+    }
+    if (kind === 'rock') {
+      const noise = this.noiseSource();
+      const low = this.ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.setValueAtTime(1800, t);
+      low.frequency.exponentialRampToValueAtTime(300, t + dur);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.09, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      noise.connect(low);
+      low.connect(g);
+      g.connect(this.sfxGain);
+      noise.start(t, Math.random() * 0.6, dur + 0.02);
+      tone('square', 110, 60, 0.03, 0.08);
+      return;
+    }
+    tone('sine', 230, 70, 0.08, 0.1);
+    if (kind === 'hook') tone('square', 2400, 1700, 0.018, 0.03, 0.01);
+  }
+
+  // Claw Harpoon tether whipping taut: a plucked steel-cable twang (a falling triangle with its octave) and
+  // a bright tick. Heavier and lower with a catch on the line.
+  playHarpoonSnap(loaded = false) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('harpoonSnap', 60, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const f = (loaded ? 150 : 210) * (0.94 + Math.random() * 0.12);
+    for (const [mult, vol] of [[1, 0.06], [2.02, 0.025]]) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f * mult * 1.25, t);
+      o.frequency.exponentialRampToValueAtTime(f * mult, t + 0.03);
+      g.gain.setValueAtTime(vol * (loaded ? 1.3 : 1), t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + dur + 0.01);
+    }
+    const tick = this.ctx.createOscillator();
+    const tg = this.ctx.createGain();
+    tick.type = 'square';
+    tick.frequency.setValueAtTime(3100, t);
+    tg.gain.setValueAtTime(0.015, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    tick.connect(tg);
+    tg.connect(this.sfxGain);
+    tick.start(t);
+    tick.stop(t + 0.03);
+  }
+
+  // Claw Harpoon winch: one ratchet click (the reel calls it every ~60 ms while it winds in).
+  playHarpoonReel() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.025;
+    if (!this.claimVoice('harpoonReel', 40, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 3200 + Math.random() * 600;
+    band.Q.value = 3;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, dur + 0.01);
+  }
+
+  // A reeled-in catch crushed in the other claw: a heavy low crunch.
+  playHarpoonCrush() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.2;
+    if (!this.claimVoice('harpoonCrush', 80, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(2400, t);
+    low.frequency.exponentialRampToValueAtTime(220, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.6, dur + 0.02);
+    const o = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(130 * (0.9 + Math.random() * 0.2), t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.15);
+    og.gain.setValueAtTime(0.05, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(og);
+    og.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.17);
+  }
+
+  // Seismic Slam: the claws snap shut in a thud (sub drop under a clack).
+  playHarpoonSlam() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.3;
+    if (!this.claimVoice('harpoonSlam', 120, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(120, t);
+    sub.frequency.exponentialRampToValueAtTime(34, t + 0.26);
+    subGain.gain.setValueAtTime(0.14, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.3);
+    const clack = this.ctx.createOscillator();
+    const clackGain = this.ctx.createGain();
+    clack.type = 'square';
+    clack.frequency.setValueAtTime(700, t);
+    clack.frequency.exponentialRampToValueAtTime(240, t + 0.04);
+    clackGain.gain.setValueAtTime(0.04, t);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    clack.connect(clackGain);
+    clackGain.connect(this.sfxGain);
+    clack.start(t);
+    clack.stop(t + 0.06);
+  }
+
+  // Drill Spin: a rising drill whine with a gritty buzz for the length of the spin.
+  playHarpoonSpin(len = 0.12) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = Math.max(0.06, Math.min(0.4, len));
+    if (!this.claimVoice('harpoonSpin', 60, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(380, t);
+    o.frequency.exponentialRampToValueAtTime(900, t + dur);
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 1400;
+    band.Q.value = 0.9;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.04, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + dur + 0.01);
+  }
+
   // Missile salvo: a band-swept noise whoosh with a soft thump, plus a quick "fft" per extra
   // missile (up to 3) so the volley sounds like several launches.
   playMissileLaunch(count = 1) {

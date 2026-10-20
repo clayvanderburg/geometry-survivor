@@ -25,6 +25,7 @@ import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
 import { GlaiveDiscs } from './glaive.js';
+import { ClawHarpoon } from './claw-harpoon.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
@@ -457,6 +458,7 @@ export class Game {
         raillance: 0,
         glaive: 0,
         nanites: 0,
+        harpoon: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -489,6 +491,7 @@ export class Game {
     (this.railLance ||= new RailLance()).clear();
     (this.glaive ||= new GlaiveDiscs()).clear();
     (this.nanites ||= new NaniteSwarm()).clear();
+    (this.clawHarpoon ||= new ClawHarpoon()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -5340,6 +5343,7 @@ export class Game {
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
     this.railLance?.update(dt, this, shouldFire); // Rail Lance: charge, then a piercing line (js/rail-lance.js)
+    this.clawHarpoon?.update(dt, this, shouldFire); // js/claw-harpoon.js
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -6756,6 +6760,7 @@ export class Game {
     this.acidSprayer?.draw(ctx, this);
     this.railLance?.draw(ctx, this);
     this.glaive?.draw(ctx, this);
+    if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 

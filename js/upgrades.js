@@ -56,7 +56,8 @@ const CORE_INFO = {
   shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' },
   raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
   glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
-  nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' }
+  nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
+  harpoon: { headline: 'harpoonRange', summary: 'Fires one of your drill-claws on a tether where you aim: it pierces every enemy on its line, drills through rock (mining it as it goes) and yanks small enemies back into your other claw, which crushes them.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
@@ -190,6 +191,7 @@ export const UPGRADE_POOL = [
   ...weaponGroup('raillance'),
   ...weaponGroup('glaive'),
   ...weaponGroup('nanites'),
+  ...weaponGroup('harpoon'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
