@@ -414,7 +414,7 @@ export const WEAPON_SCALING = {
   // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
   flameTickRate: (b) => 8 * rateMult(b.r.rate),
   flameRange: (b) => 280 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1, 254 base before v0.39.3
-  flameConeHalf: (b) => 0.55 + 0.04 * (b?.r?.cone || 0), // radians either side of the nozzle (~63 deg wide at LV 1; 0.3 before it spun); +0.09 per rank before v0.39.3
+  flameConeHalf: (b) => 0.275 + 0.04 * (b?.r?.cone || 0), // radians either side of the nozzle (~32 deg wide at LV 1; 0.55 before v0.42.1, 0.3 before it spun); +0.09 per rank before v0.39.3
   flameBurnRank,
   // The nozzle never aims: it spins round the ship at this many radians per second (one turn every
   // ~5 s at LV 1), +35% per Spin Rotor rank.

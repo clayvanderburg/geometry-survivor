@@ -4808,7 +4808,7 @@ body.touch-mode .splash-tap { display: inline; }
 
 /* Starting weapon pick (pops up after LAUNCH): the NEW WEAPON pick cards, with the last pick lit. */
 .start-pick-overlay { z-index: 45; }
-.start-pick-card { max-width: 1280px; width: min(96vw, 1280px); text-align: center; }
+.start-pick-card { max-width: 1100px; width: min(96vw, 1100px); text-align: center; }
 .start-pick-title { margin: 4px 0 2px; font-size: 26px; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.6); }
 .start-pick-sub { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
 #start-pick-options .upgrade-option.picked { transform: translateY(-5px); box-shadow: 0 8px 30px var(--rarity-soft), 0 0 0 2px #fff, 0 0 26px var(--rarity-soft); }
