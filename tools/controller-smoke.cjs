@@ -1,4 +1,4 @@
-// Controller-only browser check: a simulated standard gamepad drives title, level-up (incl. gold reroll / lock and a NEW WEAPON pick),
+// Controller-only browser check: a simulated standard gamepad drives title, the starting-weapon pick, level-up (incl. gold reroll / lock and a NEW WEAPON pick),
 // pause (tabs, sliders, toggles, loadout discard with confirm, MAIN MENU with its abandon confirm), Field Guide, Patch Notes, chest and game over.
 // Usage: node tools/controller-smoke.cjs <playwright-module-path>   (set BROWSER_EXECUTABLE to choose Chromium)
 const { chromium } = require(process.argv[2] || 'playwright');
@@ -52,6 +52,18 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
       const got = await state();
       if (got !== want) throw Error(`${step}: expected ${want}, got ${got}`);
     };
+    // The starting-weapon pick opens on every launch: focus starts on the last pick, the d-pad moves it,
+    // A launches with the focused weapon. Checks the run starts with that weapon alone.
+    const throughStartPick = async (step, { right = 0, weapon } = {}) => {
+      await page.locator('#start-pick-modal').waitFor({ state: 'visible' });
+      if (await state() === 'PLAYING') throw Error(`${step}: the run should wait for the starting-weapon pick`);
+      await page.waitForTimeout(400); // past the menu grace
+      for (let i = 0; i < right; i++) await press(RIGHT);
+      await press(A);
+      await expect('PLAYING', step);
+      const loadout = await page.evaluate(() => __game.player.loadout);
+      if (weapon && JSON.stringify(loadout) !== JSON.stringify([weapon])) throw Error(`${step}: the run should start with ${weapon} alone, got ${loadout}`);
+    };
 
     // Splash: START continues to the title (no run, no tutorial yet).
     if (!await page.locator('#splash-screen').isVisible()) throw Error('The splash should show when the game opens');
@@ -68,7 +80,11 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     if (await page.evaluate(() => __game.tutorial.index) !== 1) throw Error('RB should show tutorial slide 2');
     await press(B);
     if (await page.locator('#tutorial-modal').isVisible()) throw Error('B should skip the tutorial');
-    await expect('PLAYING', 'B skips the first-launch tutorial into the run');
+    // Then the starting-weapon pick: focus on the first card (BLASTER), Right + A launches with ROCKETS.
+    await page.locator('#start-pick-modal').waitFor({ state: 'visible' });
+    await page.waitForTimeout(400);
+    if (await page.evaluate(() => __game.menuNav.focused !== __game.startPickCards[0])) throw Error('Focus should start on the default starting weapon');
+    await throughStartPick('B skips the first-launch tutorial into the starting-weapon pick, A launches', { right: 1, weapon: 'rockets' });
     await page.evaluate(() => { __game.player.invuln = 1e9; });
     await page.waitForTimeout(400);
 
@@ -334,8 +350,16 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     await page.evaluate(() => __game.triggerGameOver());
     await expect('GAMEOVER', 'run ends');
     await page.waitForTimeout(400);
+    // START relaunches into the starting-weapon pick (the last pick, ROCKETS, focused); B goes back to the game over screen.
     await press(START);
-    await expect('PLAYING', 'Start relaunches from game over');
+    await page.locator('#start-pick-modal').waitFor({ state: 'visible' });
+    await page.waitForTimeout(400);
+    await press(B);
+    if (await page.locator('#start-pick-modal').isVisible()) throw Error('B should close the starting-weapon pick');
+    await expect('GAMEOVER', 'B on the pick goes back to the game over screen');
+    await page.waitForTimeout(400);
+    await press(START);
+    await throughStartPick('Start relaunches from game over', { weapon: 'rockets' });
     await page.waitForTimeout(1500);
     await page.screenshot({ path: 'controller-gameplay.png' });
 
@@ -363,7 +387,7 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     // MAIN MENU after a game over: Right from RELAUNCH reaches it, A goes to the title.
     await page.waitForTimeout(400);
     await press(A);
-    await expect('PLAYING', 'A on title launches another run');
+    await throughStartPick('A on title launches another run');
     await page.evaluate(() => __game.triggerGameOver());
     await expect('GAMEOVER', 'second run ends');
     await page.waitForTimeout(400);
@@ -387,10 +411,10 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, START = 9, UP = 12, DOWN = 13,
     if (await checked() !== 'blitz') throw Error('A on BLITZ should pick it');
     await page.evaluate(() => __game.menuNav.setFocus(document.getElementById('btn-start-game')));
     await press(A);
-    await expect('PLAYING', 'A on LAUNCH starts the BLITZ run');
+    await throughStartPick('A on LAUNCH starts the BLITZ run');
     if (await page.evaluate(() => __game.mode) !== 'blitz') throw Error('The run should fly BLITZ');
 
     if (errors.length) throw Error(errors.join('\n'));
-    console.log('Controller smoke PASS: splash (START continues), first-launch tutorial (A launch, RB next, B skip into the run), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
+    console.log('Controller smoke PASS: splash (START continues), first-launch tutorial (A launch, RB next, B skip into the starting-weapon pick), starting-weapon pick (focus on the last pick, d-pad + A launch with that weapon, B back to game over), title launch, level-up navigation + select, gold lock (Y) + reroll (X and REROLL button) + carried lock, NEW WEAPON pick, pause tabs (LB/RB) + slider + damage-number and HUD toggles + resume, loadout discard + confirm, MAIN MENU abandon (confirm/cancel) and from game over, Field Guide open + tab switch + browse + back, Patch Notes open + browse + expand + back, chest claim, game-over relaunch, title game mode (RB + d-pad + A); no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

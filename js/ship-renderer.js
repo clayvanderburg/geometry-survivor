@@ -369,16 +369,19 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
 
     ctx.restore(); // End hull orientation
 
-    // 1d. Twin Pincer Arms + Spinning Conical Rotary Drills, on their own heading (p.drillAngle): they
-    // swing round the hull toward the rock being drilled.
+    // 1d. Twin Pincer Arms + Spinning Conical Rotary Drills. Each arm swings round the hull on its own
+    // heading toward its own rock (p.clawAngles: [port, starboard]; else the shared p.drillAngle), and
+    // lights up only while it bites (p.clawDrilling, else the shared `drilling`).
     ctx.save();
-    ctx.rotate(p.drillAngle ?? hullHeading(p));
     const drillSpin = p.drillSpin || 0;
-    const drillColor = drilling ? drillActiveCol : drillIdleCol;
-    const drillCoreColor = drilling ? '#ffffff' : '#b8fff0';
 
     for (let side = -1; side <= 1; side += 2) {
       ctx.save();
+      const arm = side > 0 ? 1 : 0;
+      ctx.rotate(p.clawAngles?.[arm] ?? p.drillAngle ?? hullHeading(p));
+      const armDrilling = p.clawDrilling ? !!p.clawDrilling[arm] : drilling;
+      const drillColor = armDrilling ? drillActiveCol : drillIdleCol;
+      const drillCoreColor = armDrilling ? '#ffffff' : '#b8fff0';
       // Shoulder joint at front corners of the crab carapace
       const shoulderX = r * 0.62;
       const shoulderY = side * r * 0.76;
@@ -394,19 +397,19 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.stroke();
 
       // Translate to the Claw's Rotary Drill Mount at the front pincer position
-      const vibrateX = drilling ? (Math.random() - 0.5) * 2.4 : 0;
-      const vibrateY = drilling ? (Math.random() - 0.5) * 2.4 : 0;
+      const vibrateX = armDrilling ? (Math.random() - 0.5) * 2.4 : 0;
+      const vibrateY = armDrilling ? (Math.random() - 0.5) * 2.4 : 0;
       const clawX = r * 1.42 + vibrateX;
       const clawY = side * r * 0.78 + vibrateY;
 
       ctx.translate(clawX, clawY);
-      // Angle the two crab drill-claws slightly inward like pincers (pinching tighter when drilling!)
-      const pinchAngle = -side * (drilling ? 0.28 : 0.16);
+      // Angle the two crab drill-claws slightly inward like pincers (pinching tighter while it bites)
+      const pinchAngle = -side * (armDrilling ? 0.28 : 0.16);
       ctx.rotate(pinchAngle);
       ctx.scale(drillScale, drillScale);
 
       // Outer Crab Pincer Jaw Brackets framing the drill
-      ctx.strokeStyle = drilling ? drillJawCol : innerCol;
+      ctx.strokeStyle = armDrilling ? drillJawCol : innerCol;
       ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.moveTo(-4, -7.5);
@@ -432,7 +435,7 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       }
 
       // Animated Spinning Helical Drill Threads inside the cone!
-      ctx.strokeStyle = drilling ? drillJawCol : innerCol;
+      ctx.strokeStyle = armDrilling ? drillJawCol : innerCol;
       ctx.lineWidth = 1.7;
       ctx.beginPath();
       for (let t = 0; t < 3; t++) {
