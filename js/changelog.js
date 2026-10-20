@@ -12,7 +12,7 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
-    version: '0.39.4',
+    version: '0.39.6',
     date: '2026-10-20',
     title: 'Sound Stays Put',
     notes: [
