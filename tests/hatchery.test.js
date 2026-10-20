@@ -120,7 +120,7 @@ test('hatchlings circle, flare, then dive straight through the ship', () => {
   assert.ok(c.contactMult < 0.5 && !c.sturdy, 'a light sting that pops on impact');
 });
 
-test('killing the hatchery withers its whole brood in a quick cascade', () => {
+test('killing the hatchery bursts its pods and withers its brood in a ripple outward', () => {
   resetTuning();
   const { m, step, hive } = nest();
   step(HATCHERY.hatchEvery * 4);
@@ -131,6 +131,11 @@ test('killing the hatchery withers its whole brood in a quick cascade', () => {
   m.enemies.splice(m.enemies.indexOf(h), 1);
   step(HATCHLING.witherMin * 0.5);
   assert.ok(hatchlings(m).length > 0, 'not all on the same tick: a cascade');
+  assert.ok(h.podsBurst, 'the dead hive pops its pods');
+  // A ripple: the hatchling nearest the hive withers no later than the farthest one.
+  const reach = (c) => Math.hypot(c.x - h.x, c.y - h.y);
+  const byReach = [...brood].sort((p, q) => reach(p) - reach(q));
+  assert.ok(byReach[0].witherT <= byReach.at(-1).witherT, 'nearest first');
   step(HATCHLING.witherMax + 0.1);
   assert.equal(hatchlings(m).length, 0, 'the brood is gone');
   assert.equal(HOSTILE_DEATH_TIER.hatchery, 3, 'the hive dies big');

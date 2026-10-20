@@ -5,7 +5,8 @@
 //   CAPS     — at most `maxBrood` of its hatchlings alive at once and `broodTotal` over its life (the
 //              pods on its rim show how many are left); it never hatches into the last `headroom` slots
 //              of the enemy budget, and every hatchling counts toward that budget like any other hull.
-//   ORPHANS  — kill the hatchery and its whole brood withers with it, popping in a quick cascade.
+//   ORPHANS  — kill the hatchery and its unhatched pods burst, then its whole brood withers in a ripple
+//              that runs outward from the hive (nearest first).
 // HATCHLINGS circle the ship, brake and flare (`cue`), then dive straight through where you are; one
 // that connects pops on impact. Timers are seconds; speeds are px per fixed 60 Hz tick.
 import { turnToward } from './serpents.js';
@@ -17,7 +18,7 @@ export const HATCHERY = {
 };
 export const HATCHLING = {
   orbit: 125, orbitJitter: 35, spin: 1.7, circleMin: 1.3, circleMax: 2.6, cue: 0.4, dive: 0.45, diveSpeed: 7,
-  launchKick: 3.2, witherMin: 0.08, witherMax: 0.5
+  launchKick: 3.2, witherMin: 0.08, witherMax: 0.5, rippleRange: 600
 };
 
 // Hatchlings of this hatchery still alive or on their way in.
@@ -81,11 +82,30 @@ function hatch(e, m, env) {
   if (n > 0) env.grid?.applyImpulse(e.x, e.y, 16, 90, e.hue);
 }
 
+// The dead hive's unhatched pods pop: a ring of small bursts round where it stood and a grid shove.
+function burstPods(h, env) {
+  h.podsBurst = true;
+  const n = Math.max(2, Math.min(HATCHERY.pods, broodLeft(h)));
+  for (let k = 0; k < n; k++) {
+    const a = podAngle(h, (h.podCursor || 0) + k);
+    const x = h.x + Math.cos(a) * h.radius * 1.1;
+    const y = h.y + Math.sin(a) * h.radius * 1.1;
+    env.particles?.spawnShockwave?.(x, y, 34, h.hue, 3, 0.3);
+    env.particles?.spawnExplosionSparks?.(x, y, 6, h.hue, 2, 8, 2.4);
+  }
+  env.grid?.applyImpulse?.(h.x, h.y, 40, 240, h.hue);
+}
+
 export function updateHatchling(e, m, env) {
   const { dirX, dirY, dist, dt } = env;
-  // Orphaned: its hatchery is dead, so it withers a moment later (the brood pops in a cascade).
+  // Orphaned: its hatchery is dead. The first orphan to notice bursts the hive's pods; each one then
+  // withers after a delay that grows with its distance from the hive, so the brood pops in a ripple.
   if (e.parent?.dead) {
-    e.witherT ??= HATCHLING.witherMin + Math.random() * (HATCHLING.witherMax - HATCHLING.witherMin);
+    if (!e.parent.podsBurst) burstPods(e.parent, env);
+    if (e.witherT === undefined) {
+      const reach = Math.min(1, Math.hypot(e.x - e.parent.x, e.y - e.parent.y) / HATCHLING.rippleRange);
+      e.witherT = HATCHLING.witherMin + reach * (HATCHLING.witherMax - HATCHLING.witherMin);
+    }
     e.witherT -= dt;
     if (e.witherT <= 0 && !e.doomQueued) {
       e.doomQueued = true;
