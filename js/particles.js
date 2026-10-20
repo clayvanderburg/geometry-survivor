@@ -350,6 +350,13 @@ export class ParticleSystem {
       f.x = f.well.x + Math.cos(f.ang) * f.r;
       f.y = f.well.y + Math.sin(f.ang) * f.r;
       if (f.life <= 0 || f.well.dead || f.r < 7) {
+        // A collapsing well spits out what it was swallowing: the stream flies off as sparks.
+        if (f.well.dead && f.life > 0) {
+          const out = Math.atan2(f.y - f.well.y, f.x - f.well.x);
+          const speed = 5 + Math.random() * 7;
+          const life = 0.4 + Math.random() * 0.4;
+          this.sparks.push({ x: f.x, y: f.y, vx: Math.cos(out) * speed, vy: Math.sin(out) * speed, hue: f.hue, life, maxLife: life, size: 2.2, drag: 0.93 });
+        }
         this.infall[i] = this.infall[this.infall.length - 1];
         this.infall.pop();
       }
@@ -513,7 +520,8 @@ export class ParticleSystem {
         for (let i = 0; i < this.infall.length; i++) {
           const f = this.infall[i];
           if (f.hue !== hues[h] || (f.r < f.r0 * 0.45 ? 1 : 0) !== band || !visible(f.x, f.y, 24)) continue;
-          ctx.moveTo(f.x - (f.x - f.lx) * 2.6, f.y - (f.y - f.ly) * 2.6);
+          const tail = band === 0 ? 4.5 : 2.6; // outer streams trail long arcs, the hot inner ones stay tight
+          ctx.moveTo(f.x - (f.x - f.lx) * tail, f.y - (f.y - f.ly) * tail);
           ctx.lineTo(f.x, f.y);
           any = true;
         }

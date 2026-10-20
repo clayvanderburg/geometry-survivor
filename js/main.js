@@ -2231,6 +2231,14 @@ export class Game {
     }
 
     if (e.type === 'blackhole') {
+      // Collapse: space snaps back in (an inward ring and a hard grid rebound), then the core blows; its
+      // infall streams are flung back out as sparks (particles.js).
+      const pullR = pullRadiusOf(e);
+      this.particles.spawnShockwave(e.x, e.y, pullR * 0.9, e.hue, 3, 0.22, true);
+      this.particles.spawnFlash(e.x, e.y, e.radius * 5, 22, 0.3);
+      this.particles.spawnExplosionSparks(e.x, e.y, 26, 22, 3, 14, 2.4);
+      this.grid.applyImpulse(e.x, e.y, 70, pullR, e.hue);
+      this.grid.ripple?.(e.x, e.y, pullR, e.hue, 1.4);
       this.particles.spawnShockwave(e.x, e.y, 190, 348, 6, 0.5);
       this.damageEnemiesInRadius(e.x, e.y, 175, 65 * this.getWaveScale() * 0.4, 348, 'other', undefined, undefined, 'blackhole');
     }
@@ -3811,7 +3819,7 @@ export class Game {
       if (w.dead) continue;
       const r = pullRadiusOf(w);
       this.grid.applyWell(w.x, w.y, BLACKHOLE_GRID_DEPTH, r, w.hue, 0.22);
-      if (onScreen(w.x, w.y) && Math.random() < 0.6) this.particles.spawnInfall(w, r * 0.9, w.hue, 1);
+      if (onScreen(w.x, w.y)) this.particles.spawnInfall(w, r * 0.9, w.hue, Math.random() < 0.3 ? 2 : 1);
     }
     for (let i = 0; i < this.singularities.length; i++) {
       const sg = this.singularities[i];
