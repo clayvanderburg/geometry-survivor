@@ -42,7 +42,7 @@ import {
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
-import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
+import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue, armorySpent } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -98,6 +98,7 @@ export function radarSize(width, height, shortShare = 0.55) {
   return Math.round(Math.min(RADAR_BASE_SIZE * RADAR_SCALE, shortShare * Math.min(width, height)));
 }
 
+const ARMORY_REFUND_CONFIRM_MS = 4000; // REFUND ALL disarms if the confirming click doesn't come in time
 const MAX_LOOSE_GEOMS = 400; // loose XP geoms on the field before the oldest start merging (see mergeLooseGeoms)
 
 // Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
@@ -1199,11 +1200,13 @@ export class Game {
     tabs.className = 'armory-tabs';
     const tabDefs = [{ id: 'all', label: 'ALL', icon: '' }, ...ARMORY_CATEGORIES];
     tabs.innerHTML = tabDefs.map((c) => `<button class="armory-tab${this.armoryCat === c.id ? ' active' : ''}" data-armory-key="cat:${c.id}" aria-pressed="${this.armoryCat === c.id}">${c.icon ? c.icon + ' ' : ''}${c.label}</button>`).join('')
-      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`;
+      + `<span class="armory-progress" title="Armory ranks owned">${((owned / total) * 100).toFixed(1)}% COMPLETE</span>`
+      + this.armoryRefundButtonHtml();
     tabs.querySelectorAll('[data-armory-key^="cat:"]').forEach((btn) => btn.addEventListener('click', () => {
       this.armoryCat = btn.dataset.armoryKey.slice(4);
       this.renderHubUI();
     }));
+    tabs.querySelector('[data-armory-key="refund"]')?.addEventListener('click', () => this.onArmoryRefund());
     container.appendChild(tabs);
 
     if (prog.data.armoryResetNotice) {
@@ -1251,6 +1254,30 @@ export class Game {
         || container.querySelector(`[data-armory-key^="cat:"].active`);
       if (again) this.menuNav.setFocus(again);
     }
+  }
+
+  // REFUND ALL: the first click arms it (the button asks to confirm and shows the refund), a second click
+  // within ARMORY_REFUND_CONFIRM_MS resets every rank and pays back every core spent on them.
+  armoryRefundButtonHtml() {
+    const refund = armorySpent(this.progression.data.ranks);
+    const armed = refund > 0 && this.armoryRefundArmed;
+    const label = armed ? `CONFIRM: REFUND ❖ ${refund.toLocaleString()}?` : '↺ REFUND ALL';
+    const title = refund > 0 ? `Reset every armory rank and get back all ${refund.toLocaleString()} Void Cores spent` : 'Nothing to refund yet';
+    return `<button class="armory-refund-btn${armed ? ' armed' : ''}" data-armory-key="refund" title="${title}" ${refund > 0 ? '' : 'disabled'}>${label}</button>`;
+  }
+
+  onArmoryRefund() {
+    this.sound.init();
+    clearTimeout(this.armoryRefundTimer);
+    if (!this.armoryRefundArmed) {
+      this.armoryRefundArmed = true;
+      this.armoryRefundTimer = setTimeout(() => { this.armoryRefundArmed = false; this.renderHubUI(); }, ARMORY_REFUND_CONFIRM_MS);
+      this.sound.playUiSelect?.();
+    } else {
+      this.armoryRefundArmed = false;
+      if (this.progression.refundAll() > 0) this.sound.playUiConfirm?.();
+    }
+    this.renderHubUI();
   }
 
   // Both board panels (title + game over) share one tab and one view.

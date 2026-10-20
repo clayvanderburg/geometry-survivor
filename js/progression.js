@@ -66,6 +66,15 @@ export function armoryCost(upg, rank) {
   return Math.round(upg.baseCost * Math.pow(upg.growth, Math.max(0, rank)));
 }
 
+// Cores spent to reach the ranks in `ranks` (an { id: rank } map): what REFUND ALL pays back.
+export function armorySpent(ranks = {}) {
+  let cores = 0;
+  for (const upg of META_UPGRADES) {
+    for (let n = 0; n < (ranks[upg.id] || 0); n++) cores += armoryCost(upg, n);
+  }
+  return cores;
+}
+
 // Total effect at `rank` as card text: "+15.0%", "+2.0% pts", "+40", "+0.20 s", "-7.5%".
 export function formatArmoryValue(upg, rank) {
   const v = upg.per * rank;
@@ -256,6 +265,16 @@ export class ProgressionManager {
     this.data.ranks[id] = this.getRank(id) + 1;
     this.save();
     return true;
+  }
+
+  // REFUND ALL: every rank back to 0 and every core spent on them back in the wallet. Returns the refund.
+  refundAll() {
+    const refund = armorySpent(this.data.ranks);
+    if (refund <= 0) return 0;
+    this.data.ranks = Object.fromEntries(META_UPGRADES.map((u) => [u.id, 0]));
+    this.data.cores = Math.min(Number.MAX_SAFE_INTEGER, this.data.cores + refund);
+    this.save();
+    return refund;
   }
 
   dismissArmoryNotice() {
