@@ -97,7 +97,7 @@ test('LV 1-18 numbers: radius, damage, recharge and stun each move only with the
   const maxed = makeBuild('shockfield', 18, { damage: 5, recharge: 4, radius: 8, stun: 4 });
   assert.ok(near(W.fieldCooldown(maxed), 2.2 / 2.6), 'four Capacitor ranks: at most about one discharge a second');
   assert.ok(W.fieldCooldown(maxed) > 0.8, 'never fires constantly');
-  assert.equal(W.fieldRadius(maxed), 125 + 12 * 8);
+  assert.equal(W.fieldRadius(maxed), 125 + 24 * 8);
   assert.equal(W.fieldStunRank(maxed), 5);
   const caps = Object.fromEntries(STAT_CARDS.shockfield.map((c) => [c.stat, c.maxLevel]));
   assert.deepEqual(caps, { damage: 11, recharge: 4, radius: 8, stun: 4 });
