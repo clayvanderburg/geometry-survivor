@@ -17,7 +17,7 @@ const { applyOnHitStatuses, damageTakenMult } = await import('../js/status-effec
 
 const silent = new Proxy({}, { get: () => () => {} });
 const near = (a, b, tol = 1e-9) => Math.abs(a / b - 1) < tol;
-const SPRAYERS = { cryospray: { source: 'cryo', element: 'frost', card: 'cryospray_chill', look: 'frost' }, acidspray: { source: 'acid', element: 'corrode', card: 'acidspray_etch', look: 'corrode' } };
+const SPRAYERS = { cryospray: { source: 'cryo', element: 'frost', card: 'cryospray_chill', look: 'frost', burst: 'shatter' }, acidspray: { source: 'acid', element: 'corrode', card: 'acidspray_etch', look: 'corrode', burst: 'meltdown' } };
 
 function sprayPlayer(id, { cards = [], bt = {} } = {}) {
   const g = h.createHeadlessGame();
@@ -50,7 +50,7 @@ function rig(p, kind, enemies) {
 const enemy = (p, dx, dy) => ({ type: 'swarmer', x: p.x + dx, y: p.y + dy, radius: 10, hp: 1e6, maxHp: 1e6 });
 const run = (r, seconds) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, true); };
 
-test('two new PRIMARY weapons with their own source, tags, colour, run-stats group and six cards', () => {
+test('two new PRIMARY weapons with their own source, tags, colour, run-stats group and seven cards', () => {
   const groups = buildSourceGroups(WEAPONS);
   for (const [id, s] of Object.entries(SPRAYERS)) {
     const w = WEAPON_BY_ID[id];
@@ -62,7 +62,9 @@ test('two new PRIMARY weapons with their own source, tags, colour, run-stats gro
     assert.ok(DAMAGE_SOURCE_COLORS[s.source]);
     for (const t of WEAPON_TAGS[s.source]) assert.ok(TAG_INFO[t], t);
     assert.ok(weaponTags(id).includes('area'));
-    assert.equal(STAT_CARDS[id].length, 6);
+    assert.equal(STAT_CARDS[id].length, 7);
+    assert.ok(STAT_CARDS[id].some((c) => c.stat === 'nozzles'), 'an Extra Nozzle card');
+    assert.equal(groups[s.burst], id, 'its LV 6 burst counts as its damage');
     assert.equal(SPRAY_KINDS[id].source, s.source);
     for (const m of [6, 12, 18]) assert.ok(TRANSFORMS[id][m].summary.includes(w.name));
     assert.equal(describeWeaponPick(sprayPlayer('blaster'), id).headline, w.name.toUpperCase());
@@ -157,4 +159,52 @@ test('three sprayers run side by side in a live game without errors', () => {
   assert.ok(es.some((e) => e.st && (e.st.cold > 0 || e.st.frozenT > 0 || e.st.freezeImmT > 0)), 'something got cold');
   assert.ok(es.some((e) => e.st && e.st.corrode > 0), 'something corroded');
   assert.ok(es.some((e) => e.st && e.st.burn > 0), 'something burns');
+});
+
+test('Shatter: a FROZEN enemy the Cryo Sprayer hits bursts in ice shards, at most once per burst cooldown', () => {
+  const p = sprayPlayer('cryospray', { bt: { 6: 'transform' } });
+  const frozen = enemy(p, 80, 0);
+  frozen.st = { tickT: 0, stamp: -1, burn: 0, cold: 0, coldMax: 1, coldRank: 0, slow: 1, frozenT: 5, frozenMax: 5, freezeImmT: 0,
+    corrode: 0, corrodeCap: 0, shock: 0, shockRank: 0, stunT: 0, stunMax: 0, stunLong: false, stunImmT: 0 };
+  const plain = enemy(p, 150, 0);
+  const r = rig(p, 'cryospray', [frozen, plain]);
+  r.ft.burstT = 0;
+  run(r, 0.4);
+  const shatters = r.blasts.filter((b) => b.source === 'cryo');
+  assert.equal(shatters.length, 1, 'one shatter within the cooldown');
+  assert.ok(Math.abs(shatters[0].x - frozen.x) < 1e-9, 'centred on the frozen enemy');
+  const b = weaponBuild(p, 'cryospray');
+  assert.ok(near(shatters[0].dmg, weaponDamage(p, 'cryo') / W.flameDamageMult(b) * W.flameBurstDamageMult(b)));
+  // No Breakthrough, no shatter.
+  const q = sprayPlayer('cryospray');
+  const f2 = enemy(q, 80, 0);
+  f2.st = { ...frozen.st };
+  const rq = rig(q, 'cryospray', [f2]);
+  rq.ft.burstT = 0;
+  run(rq, 0.4);
+  assert.equal(rq.blasts.length, 0);
+});
+
+test('Meltdown: a corroded enemy the Acid Sprayer kills splashes acid; an uncorroded kill does not', () => {
+  const p = sprayPlayer('acidspray', { bt: { 6: 'transform' } });
+  const weak = enemy(p, 80, 0);
+  const r = rig(p, 'acidspray', [weak]);
+  // The rig's hitEnemy only records: let hits take hp and flag kills like Game.hitEnemy.
+  const record = r.game.hitEnemy;
+  r.game.hitEnemy = (e, dmg, source) => { record(e, dmg, source); e.hp -= dmg; if (e.hp <= 0) e.dead = true; };
+  run(r, 0.2);
+  assert.ok(weak.st?.corrode > 0, 'corroded by the spray');
+  weak.hp = 1; // the next scorch kills it
+  r.ft.burstT = 0;
+  run(r, 0.3);
+  const splashes = r.blasts.filter((b) => b.source === 'acid');
+  assert.equal(splashes.length, 1, 'one acid splash where it died');
+  assert.ok(Math.abs(splashes[0].x - weak.x) < 1e-9);
+  const clean = enemy(p, 80, 0);
+  clean.hp = 1;
+  const r2 = rig(p, 'acidspray', [clean]);
+  r2.game.hitEnemy = (e, dmg) => { e.hp -= dmg; if (e.hp <= 0) e.dead = true; }; // no statuses: never corroded
+  r2.ft.burstT = 0;
+  run(r2, 0.3);
+  assert.equal(r2.blasts.length, 0, 'no corrosion, no meltdown');
 });

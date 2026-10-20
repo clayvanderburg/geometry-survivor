@@ -17,7 +17,7 @@ const STAT_NAMES = {
   damage: 'Damage', prism: 'Prism Split', rate: 'Fire rate', pierce: 'Pierce', count: 'Count', reload: 'Reload', radius: 'Blast size',
   salvo: 'Salvo', chain: 'Chain', recharge: 'Recharge', reach: 'Reach', pull: 'Pull', duration: 'Lifetime', cooldown: 'Cooldown',
   core: 'Core size', spin: 'Spin', size: 'Blade size', capacity: 'Capacity', fuse: 'Fuse', lifetime: 'Lifetime', redeploy: 'Redeploy',
-  wingmen: 'Wingmen', range: 'Range', linger: 'Linger', cone: 'Cone width', burn: 'Burn', chill: 'Deep Freeze', acid: 'Etching'
+  wingmen: 'Wingmen', range: 'Range', linger: 'Linger', cone: 'Cone width', burn: 'Burn', chill: 'Deep Freeze', acid: 'Etching', nozzles: 'Nozzles'
 };
 const TABS = [['loadout', 'LOADOUT'], ['mods', 'MODS'], ['dummies', 'DUMMIES']];
 const NARROW = 760; // px: the panel starts collapsed on screens this narrow

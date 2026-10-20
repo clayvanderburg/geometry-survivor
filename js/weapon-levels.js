@@ -110,7 +110,8 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
     card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Spin Rotor', 'flameTurn', 'Flamethrower: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4))
+    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4)),
+    card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', cap(3))
   ],
   cryospray: [
     card('cryospray', 'cryospray_damage', 'damage', 'Cryo Sprayer Supercooled Mix', 'cryoDamage', 'Cryo Sprayer: colder coolant. Only spray damage.'),
@@ -118,7 +119,8 @@ export const STAT_CARDS = {
     card('cryospray', 'cryospray_range', 'range', 'Cryo Sprayer Nozzle Pressure', 'cryoRange', 'Cryo Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('cryospray', 'cryospray_cone', 'cone', 'Cryo Sprayer Wide Nozzle', 'cryoCone', 'Cryo Sprayer: a wider cone of frost. Only cone width.', cap(8)),
     card('cryospray', 'cryospray_turn', 'turn', 'Cryo Sprayer Spin Rotor', 'cryoTurn', 'Cryo Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', cap(4))
+    card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', cap(4)),
+    card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', cap(3))
   ],
   acidspray: [
     card('acidspray', 'acidspray_damage', 'damage', 'Acid Sprayer Concentrate', 'acidDamage', 'Acid Sprayer: a stronger acid. Only spray damage.'),
@@ -126,7 +128,8 @@ export const STAT_CARDS = {
     card('acidspray', 'acidspray_range', 'range', 'Acid Sprayer Nozzle Pressure', 'acidRange', 'Acid Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('acidspray', 'acidspray_cone', 'cone', 'Acid Sprayer Wide Nozzle', 'acidCone', 'Acid Sprayer: a wider cone of acid. Only cone width.', cap(8)),
     card('acidspray', 'acidspray_turn', 'turn', 'Acid Sprayer Spin Rotor', 'acidTurn', 'Acid Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', cap(4))
+    card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', cap(4)),
+    card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', cap(3))
   ],
   shockfield: [
     card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),
@@ -323,17 +326,17 @@ export const TRANSFORMS = {
     18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
   },
   flamethrower: {
-    6: tf('twin', 'Twin Nozzle', 'The Flamethrower grows a second nozzle on the opposite side: two identical streams spin round your ship.'),
+    6: tf('fireballs', 'Fireballs', 'Every second each Flamethrower nozzle lobs a fireball that bursts at the tip of its flames, scorching and igniting everything around it.'),
     12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
   },
   cryospray: {
-    6: tf('twin', 'Twin Nozzle', 'The Cryo Sprayer grows a second nozzle on the opposite side: two identical streams of frost spin round your ship.'),
+    6: tf('shatter', 'Shatter', 'When the Cryo Sprayer hits a FROZEN enemy it shatters in a burst of ice shards that hits and chills everything around it.'),
     12: tf('slicks', 'Frost Slicks', 'Cryo Sprayer coolant splashes down at the tip of the spray as freezing slicks that keep chilling whatever crosses them.'),
     18: tf('blizzard', 'Blizzard Ring', 'Every few seconds the Cryo Sprayer vents a ring of frost that rolls out all around you, chilling and shoving back everything it passes.')
   },
   acidspray: {
-    6: tf('twin', 'Twin Nozzle', 'The Acid Sprayer grows a second nozzle on the opposite side: two identical streams of acid spin round your ship.'),
+    6: tf('meltdown', 'Meltdown', 'Corroded enemies the Acid Sprayer kills melt down in an acid splash that hits and corrodes everything around them.'),
     12: tf('pools', 'Acid Pools', 'Acid Sprayer acid splashes down at the tip of the spray as caustic pools that keep eating whatever crosses them.'),
     18: tf('caustic', 'Caustic Ring', 'Every few seconds the Acid Sprayer vents a ring of acid that rolls out all around you, corroding and shoving back everything it passes.')
   },
@@ -348,7 +351,7 @@ export const TRANSFORMS = {
 // A longer-lived singularity grinds longer, so its lifetime is POWER too. Everything else (size, radius,
 // pull, reach, range, spin, pierce, capacity, fuse, turret lifetime and recharge: turret DPS is counted
 // with every turret out) is UTILITY.
-export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration']);
+export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
