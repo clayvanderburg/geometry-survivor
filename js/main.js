@@ -47,7 +47,6 @@ import {
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { tryLastStand } from './last-stand.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
@@ -1272,9 +1271,8 @@ export class Game {
           <span class="armory-name">${upg.icon} ${upg.name}</span>
           <span class="armory-rank">${rank}/${upg.maxRank}</span>
         </div>
-        <div class="armory-desc">${upg.desc || `${formatArmoryValue(upg, 1)} ${upg.stat} per rank`}</div>
-        <div class="armory-value">${upg.maxRank === 1 ? (isMax ? '<b>INSTALLED</b>' : 'ONE-TIME UPGRADE')
-          : isMax ? `<b>${formatArmoryValue(upg, rank)}</b> · MAXED` : `${formatArmoryValue(upg, rank)} → <b>${formatArmoryValue(upg, rank + 1)}</b>`}</div>
+        <div class="armory-desc">${formatArmoryValue(upg, 1)} ${upg.stat} per rank</div>
+        <div class="armory-value">${isMax ? `<b>${formatArmoryValue(upg, rank)}</b> · MAXED` : `${formatArmoryValue(upg, rank)} → <b>${formatArmoryValue(upg, rank + 1)}</b>`}</div>
         <div class="armory-bar"><i style="width:${(rank / upg.maxRank) * 100}%"></i></div>
         <button class="armory-buy-btn" data-armory-key="buy:${upg.id}" ${!canBuy ? 'disabled' : ''}>${isMax ? 'MAX RANK' : `❖ ${cost.toLocaleString()}`}</button>`;
       if (canBuy) {
@@ -2506,7 +2504,7 @@ export class Game {
 
   endRunIfDead() {
     const p = this.player;
-    if (p.hp > 0 || tryLastStand(this)) return false;
+    if (p.hp > 0) return false;
     p.hp = 0;
     this.updateHUD();
     this.triggerGameOver({ dying: true });

@@ -30,16 +30,12 @@ export const ARMORY_TOP_COST = 1000;
 
 const BASE_META_UPGRADES = [
   // OFFENSE
-  { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.0125, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
+  { id: 'damage', cat: 'offense', name: 'Plasma Overcharge', icon: '✦', color: '#ff007f', stat: 'weapon damage', per: 0.015, fmt: 'pct', maxRank: 40, baseCost: 9, growth: 1.12 },
   { id: 'critChance', cat: 'offense', name: 'Deadeye Lattice', icon: '◎', color: '#ffcc00', stat: 'crit chance', per: 0.004, fmt: 'pts', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'critDamage', cat: 'offense', name: 'Fracture Rounds', icon: '✶', color: '#ff9b3d', stat: 'crit damage', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
   // DEFENSE
-  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 1.5, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
-  // One big late buy (js/last-stand.js): once per run a broken shield comes back at `per` of max with a free
-  // Supernova. Not in HARDCORE (no repairs). `desc` replaces the per-rank line on its card.
-  { id: 'lastStand', cat: 'defense', name: 'Last Stand Protocol', icon: '✚', color: '#ff4d6d', stat: 'Last Stand shield restore', per: 0.25, fmt: 'pct', maxRank: 1, baseCost: 2000, growth: 1,
-    desc: 'Once per run, when your shield breaks it comes back at 25% and a free Supernova clears the field. Not in HARDCORE.' },
+  { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 2, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
   // MOBILITY
   { id: 'moveSpeed', cat: 'mobility', name: 'Vector Thrusters', icon: '➤', color: '#00ff88', stat: 'move speed', per: 0.008, fmt: 'pct', maxRank: 25, baseCost: 12, growth: 1.14 },
   { id: 'dash', cat: 'mobility', name: 'Blink Coils', icon: '⇢', color: '#5aa8ff', stat: 'dash cooldown', per: -0.01, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },
@@ -68,7 +64,9 @@ export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u])
 // build's is newer, the cores the player actually paid for that upgrade (`paid`, whatever the price curve
 // was then) are refunded in full and its ranks reset. Removing an upgrade adds it to RETIRED_UPGRADES instead.
 export const ARMORY_REVISIONS = Object.freeze({
-  damage: 2 // v0.43.3: +1.25% per rank (was +1%), toward a full Armory of ~3x power (see armoryPower)
+  // v0.43.3, toward a full Armory of ~3x power (see armoryPower):
+  damage: 2, // +1.5% per rank (was +1%)
+  maxHp: 2 // +2 shield per rank (was +1.5)
 });
 const MAX_REFUND_NOTES = 24;
 
@@ -121,15 +119,14 @@ export function armoryBonuses(ranks = {}) {
     magnetMult: 1 + step('magnet'),
     rerollCostMult: Math.max(0.5, 1 + step('reroll')),
     miningRangeMult: 1 + step('miningReach'),
-    extraBombs: r('bombs'),
-    lastStand: step('lastStand') // shield share restored by Last Stand Protocol (0 = not owned)
+    extraBombs: r('bombs')
   };
 }
 
 // Total power of a set of ranks against a bare ship: offense × defense, the number the Armory is sized by
 // (a full Armory is about 3x; tests/armory.test.js pins it). Offense is expected damage per hit (damage ×
 // crits); defense is effective shield on a mid-campaign ship (POWER_REF: 75 base + one Shield Capacitor,
-// passive regen over a 30 s fight) plus what Last Stand restores. Utility (speed, dash, area, XP, economy,
+// plus passive regen over a 30 s fight). Utility (speed, dash, area, XP, economy,
 // starting bombs) is left out: it helps, but by how much depends on the build and the pilot.
 export const POWER_REF = Object.freeze({ shield: 95, regen: 0.6, window: 30, critChance: 0.05, critDamage: 1.5 });
 
@@ -138,7 +135,7 @@ export function armoryPower(ranks = {}, ref = POWER_REF) {
   const crit = (chance, dmg) => 1 + chance * (dmg - 1);
   const offense = b.damageMult * crit(ref.critChance + b.critChanceBonus, ref.critDamage + b.critDamageBonus) / crit(ref.critChance, ref.critDamage);
   const shield = ref.shield + b.bonusHp;
-  const defense = (shield * (1 + b.lastStand) + ref.regen * ref.window) / (ref.shield + ref.regen * ref.window);
+  const defense = (shield + ref.regen * ref.window) / (ref.shield + ref.regen * ref.window);
   return { offense, defense, total: offense * defense };
 }
 

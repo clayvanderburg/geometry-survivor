@@ -27,8 +27,8 @@ test('every armory upgrade is a single stat with many small, escalating ranks', 
     assert.ok(ARMORY_CATEGORIES.some((c) => c.id === u.cat), `${u.id} has a category`);
     assert.equal(typeof u.stat, 'string');
     assert.ok(Number.isFinite(u.per) && u.per !== 0);
-    if (u.maxRank > 1) assert.ok(u.growth > 1, `${u.id} costs escalate`);
-    if (u.id !== 'bombs' && u.id !== 'lastStand') assert.ok(u.maxRank >= 15, `${u.id} goes far`);
+    assert.ok(u.growth > 1, `${u.id} costs escalate`);
+    if (u.id !== 'bombs') assert.ok(u.maxRank >= 15, `${u.id} goes far`);
     for (let r = 1; r < u.maxRank; r++) assert.ok(armoryCost(u, r) >= armoryCost(u, r - 1));
   }
   // Early ranks are cheap (a first run buys something); maxing everything is a long grind.
@@ -42,19 +42,22 @@ test('bonuses: each rank adds its single step; reductions are capped', () => {
   assert.equal(none.damageMult, 1);
   assert.equal(none.extraBombs, 0);
   const b = armoryBonuses({ damage: 10, dashDistance: 25, dash: 25, maxHp: 5, critChance: 5, startGold: 3, bombs: 2 });
-  assert.ok(Math.abs(b.damageMult - 1.125) < 1e-9, '10 ranks of Plasma Overcharge: +12.5%');
+  assert.ok(Math.abs(b.damageMult - 1.15) < 1e-9, '10 ranks of Plasma Overcharge: +15%');
   assert.ok(Math.abs(b.dashDistanceMult - 1.5) < 1e-9, '25 ranks of Afterburner Jets: +50% dash distance');
   assert.ok(Math.abs(b.dashCooldownMult - 0.75) < 1e-9);
-  assert.equal(b.bonusHp, 7.5);
+  assert.equal(b.bonusHp, 10);
   assert.ok(Math.abs(b.critChanceBonus - 0.02) < 1e-9);
   assert.equal(b.startGold, 6);
   assert.equal(b.extraBombs, 2);
-  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+12.5%');
-  assert.equal(formatArmoryValue(META_BY_ID.damage, 1), '+1.25%');
-  assert.equal(formatArmoryValue(META_BY_ID.damage, 40), '+50%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 10), '+15%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 1), '+1.5%');
+  assert.equal(formatArmoryValue(META_BY_ID.damage, 40), '+60%');
+  assert.equal(formatArmoryValue(META_BY_ID.area, 25) , '+25%');
+  assert.equal(formatArmoryValue({ per: 0.0125, fmt: 'pct' }, 1), '+1.25%', 'two decimals when needed');
+  assert.equal(formatArmoryValue({ per: 0.0125, fmt: 'pct' }, 10), '+12.5%');
   assert.equal(formatArmoryValue(META_BY_ID.critChance, 25), '+10% pts');
   assert.equal(formatArmoryValue(META_BY_ID.dash, 4), '-4.0%');
-  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+5');
+  assert.equal(formatArmoryValue(META_BY_ID.maxHp, 3), '+6');
 });
 
 test('an old save is reset once (ranks + cores), keeping callsign, high scores and the Field Guide', () => {
@@ -128,11 +131,11 @@ test('every armory stat reaches the run', () => {
     moveSpeed: 10, dash: 20, dashDistance: 10, coreYield: 10, xpGain: 10, goldGain: 10, startGold: 5, mining: 10, luck: 10, magnet: 10, reroll: 10, miningReach: 10, bombs: 1 });
   const p = g.player, b = base.player;
   const near = (a, e, msg) => assert.ok(Math.abs(a - e) < 1e-6, `${msg}: ${a} vs ${e}`);
-  near(p.stats.damage, b.stats.damage * 1.125, 'damage');
+  near(p.stats.damage, b.stats.damage * 1.15, 'damage');
   near(p.stats.critChance, b.stats.critChance + 0.04, 'crit chance');
   near(p.stats.critDamage, b.stats.critDamage + 0.2, 'crit damage');
   near(p.stats.areaMult, 1.1, 'area');
-  near(p.maxHp, b.maxHp + 15, 'max shield');
+  near(p.maxHp, b.maxHp + 20, 'max shield');
   near(p.stats.moveSpeed, b.stats.moveSpeed * 1.08, 'move speed');
   near(p.stats.coreDropMult, b.stats.coreDropMult * 1.2, 'core gain');
   near(p.stats.xpMultiplier, b.stats.xpMultiplier * 1.1, 'xp');
@@ -268,6 +271,7 @@ test('malformed revision, paid and note data stays safe', () => {
 test('a full Armory is about 3x total power (offense x defense), with front-loaded ranks', async () => {
   const { BASE_SHIELD } = await import('../js/upgrades.js');
   // The power reference is the real ship: base shield plus one Shield Capacitor, passive regen, base crits.
+  assert.equal(META_UPGRADES.length, 18, 'existing upgrades buffed, no new ones (Clay, 2026-10-20)');
   assert.equal(POWER_REF.shield, BASE_SHIELD + 20);
   assert.equal(POWER_REF.regen, TUNING.shieldRegenRate);
   assert.equal(POWER_REF.critChance, TUNING.baseCritChance ?? 0.05);
@@ -283,41 +287,14 @@ test('a full Armory is about 3x total power (offense x defense), with front-load
   assert.ok(armoryPower(half).total > 1.5, `half ranks: ${armoryPower(half).total.toFixed(2)}x`);
 });
 
-test('the v0.43.3 rework refunds Plasma Overcharge ranks bought before it', () => {
-  assert.ok((ARMORY_REVISIONS.damage || 1) >= 2);
-  const old = { armory: ARMORY_VERSION, cores: 0, ranks: { damage: 6, maxHp: 4 }, paid: { damage: 120, maxHp: 50 }, armoryRevs: { damage: 1, maxHp: 1 } };
+test('the v0.43.3 rework refunds Plasma Overcharge and Aegis Shield Matrix ranks bought before it', () => {
+  assert.ok((ARMORY_REVISIONS.damage || 1) >= 2 && (ARMORY_REVISIONS.maxHp || 1) >= 2);
+  const old = { armory: ARMORY_VERSION, cores: 0, ranks: { damage: 6, maxHp: 4, luck: 2 }, paid: { damage: 120, maxHp: 50, luck: 30 }, armoryRevs: { damage: 1, maxHp: 1, luck: 1 } };
   const save = normalizeSave(old);
-  assert.equal(save.cores, 120);
+  assert.equal(save.cores, 170);
   assert.equal(save.ranks.damage, 0);
-  assert.equal(save.ranks.maxHp, 4, 'unchanged upgrades keep their ranks');
-  assert.deepEqual(save.refundNotes.map((n) => n.id), ['damage']);
-  assert.equal(save.ranks.lastStand, 0, 'the new upgrade starts at rank 0');
+  assert.equal(save.ranks.maxHp, 0);
+  assert.equal(save.ranks.luck, 2, 'unchanged upgrades keep their ranks');
+  assert.deepEqual(save.refundNotes.map((n) => n.id).sort(), ['damage', 'maxHp']);
 });
 
-test('Last Stand Protocol: once per run a broken shield comes back at 25% with a free Supernova', () => {
-  const g = gameWithRanks({ lastStand: 1 });
-  const p = g.player;
-  assert.equal(p.lastStand, 0.25);
-  const bombs = p.bombs;
-  g.damagePlayer(p.hp + 50);
-  assert.equal(g.endRunIfDead(), false, 'the first break is survived');
-  assert.notEqual(g.state, 'GAMEOVER');
-  assert.equal(p.hp, Math.round(p.maxHp * 0.25));
-  assert.equal(p.bombs, bombs, 'the Supernova is free');
-  assert.ok(p.invuln >= 2);
-  p.invuln = 0;
-  g.damagePlayer(p.hp + 50);
-  assert.equal(g.endRunIfDead(), true, 'only once per run');
-
-  const none = gameWithRanks({});
-  none.damagePlayer(none.player.hp + 50);
-  assert.equal(none.endRunIfDead(), true, 'not owned: the run ends');
-
-  const hc = h.createHeadlessGame({ mode: 'hardcore' });
-  hc.progression.data.ranks.lastStand = 1;
-  hc.resetRun(hc.selectedMode);
-  hc.state = 'PLAYING';
-  assert.equal(hc.mode, 'hardcore');
-  hc.damagePlayer(hc.player.hp + 50);
-  assert.equal(hc.endRunIfDead(), true, 'HARDCORE has no repairs');
-});
