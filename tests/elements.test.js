@@ -10,7 +10,7 @@ const {
   pendingBreakthroughs, cardWeight, upgradeKind
 } = await import('../js/upgrades.js');
 const {
-  ELEMENTS, ELEMENT_WEAPONS, ELEMENT_CARDS, ELEMENT_CARD_LIST, ELEMENT_MAX_RANKS, WEAPON_MAX_LEVEL, weaponElement, levelCardWeapon
+  ELEMENTS, ELEMENT_WEAPONS, ELEMENT_CARDS, ELEMENT_CARD_LIST, ELEMENT_MAX_RANKS, WEAPON_MAX_LEVEL, weaponElement, levelCardWeapon, FIXED_ELEMENTS
 } = await import('../js/weapon-levels.js');
 const { weaponLevel } = await import('../js/loadout.js');
 const { WEAPON_SCALING: W, weaponDamage, dotPerStack, shockStun, shockLongChance, burnSpreadChance, statusDecay } = await import('../js/weapon-scaling.js');
@@ -42,10 +42,10 @@ const enemy = (extra = {}) => ({
   score: 1, xp: 1, sides: 3, rotation: 0, vRot: 0.05, pulsePhase: 0, hitFlash: 0, knockX: 0, knockY: 0, trail: [], ...extra
 });
 
-test('five weapons x four elements: named per weapon, level-up cards of their weapon', () => {
-  assert.deepEqual(ELEMENT_WEAPONS, ['blaster', 'rockets', 'missiles', 'lightning', 'grenades']);
+test('four weapons x four elements: named per weapon, level-up cards of their weapon', () => {
+  assert.deepEqual(ELEMENT_WEAPONS, ['blaster', 'rockets', 'missiles', 'grenades']);
   assert.deepEqual(ELEMENTS, ['fire', 'frost', 'corrode', 'shock']);
-  assert.equal(ELEMENT_CARD_LIST.length, 20);
+  assert.equal(ELEMENT_CARD_LIST.length, 16);
   for (const c of ELEMENT_CARD_LIST) {
     const u = UPGRADE_BY_ID[c.id];
     assert.ok(u && u.elementCard, c.id);
@@ -53,10 +53,26 @@ test('five weapons x four elements: named per weapon, level-up cards of their we
     assert.deepEqual(u.owners, [c.weapon]);
     assert.equal(levelCardWeapon(c.id), c.weapon);
     assert.equal(u.maxLevel, ELEMENT_MAX_RANKS);
-    assert.match(u.name, /^(Autocannon|Rocket Pods|Swarm Missiles|Tesla Arc|Plasma Grenades): /);
+    assert.match(u.name, /^(Autocannon|Rocket Pods|Swarm Missiles|Plasma Grenades): /);
   }
   assert.equal(UPGRADE_BY_ID.blaster_fire.name, 'Autocannon: Thermite Rounds');
   for (const id of ['thermite', 'cryo', 'nanite']) assert.equal(UPGRADE_BY_ID[id], undefined, `${id} replaced by per-weapon cards`);
+});
+
+test('the Tesla Arc is always SHOCK: no element cards, rank 1 at LV 1 and +1 at each Breakthrough level', () => {
+  for (const el of ELEMENTS) assert.equal(UPGRADE_BY_ID[`lightning_${el}`], undefined, `no lightning_${el} card`);
+  assert.equal(FIXED_ELEMENTS.lightning, 'shock');
+  const { p } = freshPlayer();
+  assert.equal(weaponElement(p, 'lightning'), null, 'not owned, no element');
+  acquireWeapon(p, 'lightning');
+  assert.deepEqual(weaponElement(p, 'lightning'), { element: 'shock', rank: 1, fixed: true });
+  assert.ok(!elementCardsOffered(p).some((id) => id.startsWith('lightning_')));
+  install(p, 'lightning_damage', 5); // LV 6
+  assert.equal(weaponElement(p, 'lightning').rank, 2);
+  // Its arcs SHOCK on every hit, from LV 1, and the DoT is credited to the Tesla Arc.
+  const e = enemy();
+  withRandom(() => applyOnHitStatuses(p, e, 'lightning', 10), 0.99);
+  assert.ok(e.st.shock > 0);
 });
 
 test('element lock: the first pick fixes the weapon\'s element; only its own rank-ups stay on offer until maxed', () => {
@@ -152,7 +168,6 @@ test('global STATUS cards never raise a weapon\'s level', () => {
   const { p } = freshPlayer();
   for (const id of ['rockets', 'missiles', 'lightning', 'grenades']) acquireWeapon(p, id);
   install(p, 'blaster_fire');
-  install(p, 'lightning_shock');
   const levels = Object.fromEntries(ELEMENT_WEAPONS.map((id) => [id, weaponLevel(p, id)]));
   for (const id of STATUS_IDS) {
     const u = UPGRADE_BY_ID[id];
@@ -170,8 +185,7 @@ test('STATUS cards are offered only with a matching element on an equipped weapo
   install(p, 'blaster_frost');
   assert.deepEqual(offered(), ['status_potency', 'status_application', 'status_duration', 'frost_damage']);
   assert.deepEqual(offered({ cache: true }), ['status_potency', 'status_application', 'status_duration', 'frost_damage'], 'caches may offer the global ones');
-  acquireWeapon(p, 'lightning');
-  install(p, 'lightning_shock');
+  acquireWeapon(p, 'lightning'); // always SHOCK
   assert.deepEqual(offered(), ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'frost_damage', 'shock_damage']);
   // Discarding the SHOCK weapon takes SHOCK's cards off the table (cards already installed stay).
   install(p, 'shock_conductor', 2);
@@ -318,9 +332,9 @@ test('element Amplifiers boost only their element\'s weapons (and their DoT tick
 });
 
 test('Status Potency, Reactions and Duration change stacks, spread, freezing, caps, decay and stuns as their cards say', () => {
-  const p = { stats: { damage: 10 }, weapons: { blaster_fire: 1, missiles_frost: 1, lightning_corrode: 1, grenades_shock: 1 } };
+  const p = { stats: { damage: 10 }, weapons: { blaster_fire: 1, missiles_frost: 1, rockets_corrode: 1, grenades_shock: 1 } };
   const hitAll = (pl, e) => withRandom(() => {
-    for (const src of ['blaster', 'missile', 'lightning', 'grenade']) applyOnHitStatuses(pl, e, src, 10);
+    for (const src of ['blaster', 'missile', 'rocket', 'grenade']) applyOnHitStatuses(pl, e, src, 10);
   }, 0.99);
   const e = enemy({ maxHp: 1000, hp: 1000 });
   hitAll(p, e);
@@ -338,6 +352,6 @@ test('Status Potency, Reactions and Duration change stacks, spread, freezing, ca
   assert.ok(f.st.stunT > base.stunT, 'duration: longer stuns');
   // DoT ticks are credited to the weapon that applied the stacks.
   assert.equal(f.st.burnStat, 'burn_blaster');
-  assert.equal(f.st.corrodeStat, 'corrode_lightning');
+  assert.equal(f.st.corrodeStat, 'corrode_rockets');
   assert.equal(f.st.shockStat, 'shock_grenades');
 });
