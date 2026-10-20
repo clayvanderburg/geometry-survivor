@@ -1803,7 +1803,7 @@ export class SoundEngine {
     const chunk = this.ctx.createOscillator();
     const chunkGain = this.ctx.createGain();
     chunk.type = 'square';
-    chunk.frequency.setValueAtTime(190, t);
+    chunk.frequency.setValueAtTime(190 * (0.92 + Math.random() * 0.16), t); // a little pitch variety per throw
     chunk.frequency.exponentialRampToValueAtTime(70, t + 0.06);
     chunkGain.gain.setValueAtTime(0.05, t);
     chunkGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
@@ -1887,6 +1887,39 @@ export class SoundEngine {
     if (kind === 'hook') tone('square', 2400, 1700, 0.018, 0.03, 0.01);
   }
 
+  // Claw Harpoon tether whipping taut: a plucked steel-cable twang (a falling triangle with its octave) and
+  // a bright tick. Heavier and lower with a catch on the line.
+  playHarpoonSnap(loaded = false) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('harpoonSnap', 60, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const f = (loaded ? 150 : 210) * (0.94 + Math.random() * 0.12);
+    for (const [mult, vol] of [[1, 0.06], [2.02, 0.025]]) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f * mult * 1.25, t);
+      o.frequency.exponentialRampToValueAtTime(f * mult, t + 0.03);
+      g.gain.setValueAtTime(vol * (loaded ? 1.3 : 1), t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + dur + 0.01);
+    }
+    const tick = this.ctx.createOscillator();
+    const tg = this.ctx.createGain();
+    tick.type = 'square';
+    tick.frequency.setValueAtTime(3100, t);
+    tg.gain.setValueAtTime(0.015, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    tick.connect(tg);
+    tg.connect(this.sfxGain);
+    tick.start(t);
+    tick.stop(t + 0.03);
+  }
+
   // Claw Harpoon winch: one ratchet click (the reel calls it every ~60 ms while it winds in).
   playHarpoonReel() {
     if (!this.enabled || !this.ctx) return;
@@ -1929,7 +1962,7 @@ export class SoundEngine {
     const o = this.ctx.createOscillator();
     const og = this.ctx.createGain();
     o.type = 'square';
-    o.frequency.setValueAtTime(130, t);
+    o.frequency.setValueAtTime(130 * (0.9 + Math.random() * 0.2), t);
     o.frequency.exponentialRampToValueAtTime(38, t + 0.15);
     og.gain.setValueAtTime(0.05, t);
     og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);

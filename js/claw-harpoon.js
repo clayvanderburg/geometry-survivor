@@ -18,6 +18,7 @@
 import { TUNING } from './config.js';
 import { WEAPON_SCALING as W, weaponDamage, areaMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import { kickShipRecoil } from './ship-renderer.js';
 
 export const HARPOON_HUE = 48;       // drill-jaw gold (the crab's drillJawColor)
 const CLAW_COLOR = '#00ffaa';        // the crab's drill colour while it bites (drillActiveColor)
@@ -81,6 +82,7 @@ export class ClawHarpoon {
     this.spinTick = 0;
     this.biteFlash = 0;
     this.slamFlash = 0;
+    this.snapFlash = 0; // the tether whipping taut (full reach, a bite or a hook)
     this.sweep.length = 0;
   }
 
@@ -93,6 +95,7 @@ export class ClawHarpoon {
     this.time += dt;
     if (this.biteFlash > 0) this.biteFlash = Math.max(0, this.biteFlash - dt);
     if (this.slamFlash > 0) this.slamFlash = Math.max(0, this.slamFlash - dt);
+    if (this.snapFlash > 0) this.snapFlash = Math.max(0, this.snapFlash - dt);
     if (!((p?.weapons?.harpoon || 0) > 0)) {
       if (this.out || this.catch) this.clear();
       if (p) p.harpoonOut = false;
@@ -115,6 +118,7 @@ export class ClawHarpoon {
 
   launch(game, b) {
     const p = game.player;
+    this.game = game;
     const cycle = W.harpoonCooldown(b);
     this.cycle = cycle;
     this.cd = cycle;
@@ -136,8 +140,19 @@ export class ClawHarpoon {
     this.dist = 0;
     this.catch = null;
     this.setPhase('out');
-    game.particles.spawnDirectionalSparks?.(s.x, s.y, p.angle, 0.5, 4, HARPOON_HUE, 6);
+    // Launch kick: the turret recoils, a gold muzzle flash and spark spray at the nose, a nudge of shake.
+    kickShipRecoil(p, 1);
+    game.particles.spawnFlash?.(this.tipX, this.tipY, 16, HARPOON_HUE, 0.08);
+    game.particles.spawnDirectionalSparks?.(this.tipX, this.tipY, p.angle, 0.45, 6, HARPOON_HUE, 8);
+    game.grid?.applyImpulse?.(this.tipX, this.tipY, 10, 60, HARPOON_HUE);
+    game.addShake?.(1.2);
     game.sound.playHarpoonLaunch?.();
+  }
+
+  // The tether whips taut: a bright flash along the cable and a plucked twang.
+  snap(game = this.game) {
+    this.snapFlash = 0.14;
+    game?.sound.playHarpoonSnap?.(!!this.catch);
   }
 
   setPhase(phase) {
@@ -152,6 +167,7 @@ export class ClawHarpoon {
 
   // End of the outward flight (full reach or a bite): spin, leap, or reel back.
   endOfThrow(b) {
+    this.snap();
     if (b.t8 && this.phase === 'out') {
       this.setPhase('spin');
       this.spinTick = 0;
@@ -227,7 +243,9 @@ export class ClawHarpoon {
     this.catch = e;
     this.hooks++;
     this.biteFlash = 0.18;
-    game.particles.spawnFlash?.(e.x, e.y, (e.radius || 10) * 1.4, HARPOON_HUE, 0.1);
+    this.snapFlash = 0.14;
+    game.particles.spawnFlash?.(e.x, e.y, (e.radius || 10) * 1.6, HARPOON_HUE, 0.12);
+    game.particles.spawnShockwave?.(e.x, e.y, (e.radius || 10) * 2.2, HARPOON_HUE, 2, 0.16);
     game.sound.playHarpoonHit?.('hook');
   }
 
@@ -416,7 +434,8 @@ export class ClawHarpoon {
     const p = game.player;
     const total = this.cycle * W.harpoonBackShare;
     const k = Math.min(1, this.phaseT / total);
-    const ease = k * k * (3 - 2 * k);
+    // With a catch the winch YANKS (fast out of the gate, settling into the socket); empty, it eases both ends.
+    const ease = this.catch ? 1 - (1 - k) ** 3 : k * k * (3 - 2 * k);
     const s = clawSocket(p, this.socket);
     this.tipX = this.backX + (s.x - this.backX) * ease;
     this.tipY = this.backY + (s.y - this.backY) * ease;
@@ -438,7 +457,11 @@ export class ClawHarpoon {
       game.hitEnemy(e, this.dmg * W.harpoonCrushShare, 'harpoon', nx * 4, ny * 4, 1, 'harpooncrush');
       this.crushes++;
       game.particles.spawnPolygonShatter?.(e.x, e.y, (e.radius || 10) * 0.7, 3, Math.atan2(ny, nx), HARPOON_HUE, 0.5);
-      game.particles.spawnExplosionSparks?.(e.x, e.y, 6, HARPOON_HUE, 1.4, 6, 2);
+      game.particles.spawnExplosionSparks?.(e.x, e.y, 10, HARPOON_HUE, 1.6, 7, 2);
+      game.particles.spawnFlash?.(e.x, e.y, (e.radius || 10) * 1.8, 50, 0.1);
+      game.particles.spawnShockwave?.(e.x, e.y, (e.radius || 10) * 2.6, HARPOON_HUE, 2.5, 0.2);
+      game.addShake?.(2.5);
+      kickShipRecoil(p, 0.8);
       game.sound.playHarpoonCrush?.();
     }
     this.catch = null;
@@ -490,7 +513,9 @@ export class ClawHarpoon {
     const dx = tx - s.x, dy = ty - s.y;
     const len = Math.hypot(dx, dy);
     const t = this.time;
-    const slack = this.phase === 'back' ? 1 : this.phase === 'out' ? 0.25 : 0.5;
+    // A hooked catch pulls the tether taut; an empty reel lets it go slack. A snap straightens it with a flash.
+    const snap = this.snapFlash > 0 ? this.snapFlash / 0.14 : 0;
+    const slack = (this.catch ? 0.15 : this.phase === 'back' ? 1 : this.phase === 'out' ? 0.25 : 0.5) * (1 - snap);
     const ux = len > 1e-6 ? dx / len : this.dirX, uy = len > 1e-6 ? dy / len : this.dirY;
     const px = -uy, py = ux;
 
@@ -499,9 +524,9 @@ export class ClawHarpoon {
       const n = Math.max(2, Math.min(24, Math.round(len / 18)));
       ctx.lineCap = 'round';
       for (let pass = 0; pass < 2; pass++) {
-        ctx.strokeStyle = pass === 0 ? 'rgba(4, 18, 34, 0.9)' : CABLE_COLOR;
+        ctx.strokeStyle = pass === 0 ? 'rgba(4, 18, 34, 0.9)' : snap > 0 ? '#ffffff' : this.catch ? JAW_COLOR : CABLE_COLOR;
         ctx.globalAlpha = pass === 0 ? 1 : 0.85;
-        ctx.lineWidth = pass === 0 ? 4.5 : 1.8;
+        ctx.lineWidth = pass === 0 ? 4.5 : 1.8 + 1.6 * snap + (this.catch ? 0.6 : 0);
         ctx.beginPath();
         for (let i = 0; i <= n; i++) {
           const f = i / n;
