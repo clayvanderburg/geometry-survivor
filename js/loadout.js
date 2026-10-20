@@ -110,8 +110,22 @@ export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
 
-// The crab's starting kit: Autocannon only; Rocket Pods join through NEW WEAPON like every other weapon.
+// The crab's default starting kit: Autocannon only (headless runs, the balance tools, the Weapon Range).
+// A real run starts with the weapon picked in the pop-up after LAUNCH (Game.openStartPick); every
+// other weapon joins through NEW WEAPON cards.
 export const STARTING_WEAPONS = ['blaster'];
+
+// The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
+// is remembered on this device and pre-selected next time.
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'lightning'];
+export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
+export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
+export function readStartWeapon(storage) {
+  try { return normalizeStartWeapon(storage?.getItem(START_WEAPON_STORAGE_KEY)); } catch { return START_WEAPON_CHOICES[0]; }
+}
+export function writeStartWeapon(storage, id) {
+  try { storage?.setItem(START_WEAPON_STORAGE_KEY, normalizeStartWeapon(id)); } catch { /* storage blocked: the pick lasts this session */ }
+}
 
 // Union of the weapon's (or passive's) tags (chips on its cards and loadout slot).
 export function weaponTags(id) {

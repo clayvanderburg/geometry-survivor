@@ -12,6 +12,16 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.0',
+    date: '2026-10-20',
+    title: 'Pick Your Weapon',
+    notes: [
+      { type: 'new', text: 'Pick your starting weapon: after LAUNCH choose Autocannon, Rocket Pods, Swarm Missiles or Tesla Arc. Your last pick is remembered.' },
+      { type: 'new', text: 'New card, Phase Dash Extender: each rank dashes you 20% further (up to 5 ranks, twice as far), and you stay untouchable for the whole dash.' },
+      { type: 'new', text: 'It stretches Blink Drive teleports by the same amount.' }
+    ]
+  },
+  {
     version: '0.41.0',
     date: '2026-10-20',
     title: 'Nozzles & Bursts',
