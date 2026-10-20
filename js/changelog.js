@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.39.7',
+    date: '2026-10-20',
+    title: 'Wider Shock Field',
+    notes: [
+      { type: 'balance', text: 'Shock Field Radius cards are twice as big: +24 px each (was +12), so a maxed field reaches 317 px instead of 221.' }
+    ]
+  },
+  {
     version: '0.39.6',
     date: '2026-10-20',
     title: 'Sound Stays Put',

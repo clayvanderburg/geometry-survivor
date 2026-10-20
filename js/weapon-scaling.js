@@ -440,7 +440,7 @@ export const WEAPON_SCALING = {
   // fieldCooldown s. It never touches the ship's shield. Potential counts one discharge per cooldown
   // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
   // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
-  fieldRadius: (b) => 125 + 12 * (b?.r?.radius || 0),
+  fieldRadius: (b) => 125 + 24 * (b?.r?.radius || 0), // +12 per rank before v0.39.7
   fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge),
   fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
   fieldHitShare: 1,
