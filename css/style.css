@@ -4991,3 +4991,9 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8
 .hangar-arsenal-row .guide-new { position: static; margin-left: 6px; vertical-align: middle; }
 .hangar-stars { color: #ffcc00; letter-spacing: 1px; text-shadow: 0 0 8px rgba(255, 204, 0, 0.7); }
 @media (max-width: 640px) { .hangar-arsenal-row { grid-template-columns: minmax(0, 1fr); } }
+.hangar-head-btns { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+.hangar-solo-btn { padding: 10px 14px; font-size: 11px; letter-spacing: 1.5px; }
+.hangar-solo-btn.on { border-color: #ffcc00; color: #ffcc00; box-shadow: 0 0 14px rgba(255, 204, 0, 0.35); }
+.hangar-solo-btn:disabled { opacity: 0.5; cursor: default; }
+.hangar-mastery { color: #ffcc00; font-weight: 800; letter-spacing: 1px; }
+.hangar-solo-chip { position: absolute; top: 132px; left: 22px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255, 204, 0, 0.6); background: rgba(20, 14, 2, 0.75); font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: #ffcc00; pointer-events: none; }

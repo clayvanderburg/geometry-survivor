@@ -830,10 +830,14 @@ export function sourceBuild(p, weapon, b) {
 // Base damage of every weapon: the damage stat times the slot reward for weapons equipped (slot-rewards.js).
 export const baseDamage = (p) => p.stats.damage * loadoutDamageMult(p);
 
+// Weapon mastery (Hangar, js/mastery.js): +8% per tier from VETERAN with that weapon. Players without a
+// masteryDamage table (every run while the Hangar flag is off) get 1.
+export const masteryDamageMult = (p, id) => p.masteryDamage?.[id] ?? 1;
+
 // Per-hit damage (before crits and status modifiers) for every weapon. `b` is the weapon's build (or
 // a level number for a build without stat ranks; omitted = the player's own build).
 export function weaponDamage(p, weapon, b) {
-  const d = baseDamage(p);
+  const d = baseDamage(p) * masteryDamageMult(p, SOURCE_WEAPON[weapon]);
   let base;
   switch (weapon) {
     case 'blaster': base = d * W.blasterDamageMult(sourceBuild(p, weapon, b)); break;

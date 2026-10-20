@@ -66,7 +66,7 @@ export const SHIPS = Object.freeze([
     quirk: 'Level-up hands always show at least 3 cards.'
   },
   {
-    id: 'brood', name: 'BROOD', tier: 'mid', color: '#b6ff4a', kit: ['drones', 'turret'], weaponSlots: 5,
+    id: 'brood', name: 'BROOD', tier: 'mid', color: '#b6ff4a', kit: ['drones', 'turret'], weaponSlots: 5, noMastery: true,
     blurb: 'A wide carapace with launch-bay hatches.',
     bonuses: { primaryDamageMult: 0.85, deployableBonus: 1 },
     look: { carapace: { w: 1.18, l: 0.95 }, wings: { span: 0.8, sweep: 0.9 }, claws: [0.9, 0.9], extras: ['hatches'] },
@@ -128,6 +128,9 @@ export function shipRunBonuses(armory = {}, id = DEFAULT_SHIP) {
 // The ship's fixed starting kit, or null when the ship takes a start pick ('pick', 'last', 'any').
 // The silhouette a run's player carries (null for VEXOLITH), with the ship colour for the carapace.
 export const shipLook = (id) => { const s = shipDef(id); return s.look ? { ...s.look, color: s.color } : null; };
+
+// Can this ship fly a solo run (and earn mastery)? Not with a two-weapon kit (BROOD).
+export const shipCanSolo = (id) => !shipDef(id).noMastery && (shipFixedKit(id)?.length ?? 1) === 1;
 
 export const shipFixedKit = (id) => (Array.isArray(shipDef(id).kit) ? [...shipDef(id).kit] : null);
 

@@ -4656,6 +4656,7 @@ export class Game {
     }
     if (upg.isWeaponPick) {
       acquireWeapon(p, upg.weaponId);
+      this.feats?.weaponAdded(upg.weaponId); // a second weapon ends a solo (mastery) run
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);

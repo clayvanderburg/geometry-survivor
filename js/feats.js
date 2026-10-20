@@ -7,10 +7,12 @@
 // kind 'career':  a lifetime counter (hangar-save.js CAREER_COUNTERS) reaches `goal`.
 // kind 'run':     `test(run)` over this run's facts (FeatLedger.run). `progress(career)` is the best so far
 //                 toward `goal`, for the Hangar's progress bar.
-// kind 'mastery': any weapon (or `weapon`) reaches mastery `tier` (js/mastery.js, a later PR).
+// kind 'mastery': any weapon (or `weapon`) reaches mastery `tier` (js/mastery.js). A career feat with
+//                 `orMastery` also completes when that weapon reaches mastery I (a second path).
 // `hidden: true` shows "???" and the `hint` until it's done. Every reward appears in exactly one feat.
 // Reward ids for ships and weapons that don't exist yet are inert: they unlock once the thing ships.
 import { CAREER_COUNTERS, grantReward, today } from './hangar-save.js';
+import { masteryTierFor } from './mastery.js';
 
 // Modes whose runs count for career counters, mastery and the run feats that don't name `modes`.
 export const COUNTING_MODES = Object.freeze(['normal', 'hardcore']);
@@ -34,10 +36,15 @@ export const FEATS = Object.freeze([
   { id: 'wave_10', kind: 'run', goal: 10, unit: 'WAVE', progress: (c) => bestOf(c), test: (r) => r.waveCleared >= 10, name: 'FIRST LIGHT', text: 'Clear wave 10', reward: { weapon: 'flamethrower' } },
   { id: 'frozen_200', kind: 'career', counter: 'frozen', goal: 200, unit: 'ENEMIES', name: 'DEEP FREEZE', text: 'Destroy 200 enemies that were FROZEN', reward: { weapon: 'cryospray' } },
   { id: 'dashes_750', kind: 'career', counter: 'dashes', goal: 750, unit: 'DASHES', name: 'AFTERBURNER', text: 'Dash 750 times', reward: { weapon: 'gas' } },
-  { id: 'bosses_5', kind: 'career', counter: 'bossKills', goal: 5, unit: 'BOSSES', name: 'EVENT HORIZON', text: 'Defeat 5 bosses', reward: { weapon: 'singularity' } },
+  { id: 'bosses_5', kind: 'career', counter: 'bossKills', goal: 5, unit: 'BOSSES', orMastery: 'missiles', name: 'EVENT HORIZON', text: 'Defeat 5 bosses (or master Swarm Missiles ★)', reward: { weapon: 'singularity' } },
   { id: 'mastery_flamethrower', kind: 'mastery', weapon: 'flamethrower', tier: 1, name: 'SPRAYER KIN', text: 'Master the Flamethrower (★)', reward: { weapon: 'acidspray' } },
   { id: 'mastery_lightning', kind: 'mastery', weapon: 'lightning', tier: 1, name: 'STORM KIN', text: 'Master the Tesla Arc (★)', reward: { weapon: 'shockfield' } },
   { id: 'rocks_run_150', kind: 'run', goal: 150, unit: 'ROCKS', progress: (c) => c.bestRocksRun || 0, test: (r) => r.rocks >= 150, name: 'STRIP MINER', text: 'Mine 150 rocks in one run', reward: { weapon: 'harpoon' } },
+  // Kin of the new weapons (Weapons lane; inert until a weapon with that id ships):
+  { id: 'mastery_blaster', kind: 'mastery', weapon: 'blaster', tier: 1, name: 'RAIL KIN', text: 'Master the Autocannon (★)', reward: { weapon: 'raillance' } },
+  { id: 'mastery_orbitals', kind: 'mastery', weapon: 'orbitals', tier: 1, name: 'BLADE KIN', text: 'Master the Orbit Blades (★)', reward: { weapon: 'glaive' } },
+  { id: 'mastery_rockets', kind: 'mastery', weapon: 'rockets', tier: 1, name: 'SHELL KIN', text: 'Master the Rocket Pods (★)', reward: { weapon: 'quake' } },
+  { id: 'mastery_drones', kind: 'mastery', weapon: 'drones', tier: 1, name: 'SWARM KIN', text: 'Master the Escort Drones (★)', reward: { weapon: 'nanites' } },
   // --- Hidden badges ---
   { id: 'untouchable', kind: 'run', hidden: true, hint: 'Some pilots are never touched.', test: (r) => r.waveCleared >= 10 && r.hits === 0, name: 'UNTOUCHABLE', text: 'Clear wave 10 without a single shield hit', reward: { badge: 'untouchable' } },
   { id: 'hoarder', kind: 'run', hidden: true, hint: 'A full vault is its own reward.', test: (r) => r.peakGold >= 500, name: 'DRAGON HOARD', text: 'Hold 500 gold at once', reward: { badge: 'hoarder' } },
@@ -51,7 +58,7 @@ for (const f of FEATS) if (f.kind === 'career' && !CAREER_COUNTERS.includes(f.co
 export const featCountsIn = (feat, mode) => (feat.modes || COUNTING_MODES).includes(mode);
 
 export function featComplete(feat, career, mastery = {}, run = null) {
-  if (feat.kind === 'career') return (career[feat.counter] || 0) >= feat.goal;
+  if (feat.kind === 'career') return (career[feat.counter] || 0) >= feat.goal || (!!feat.orMastery && (mastery[feat.orMastery] || 0) >= 1);
   if (feat.kind === 'mastery') {
     const tiers = feat.weapon ? [mastery[feat.weapon] || 0] : Object.values(mastery);
     return tiers.some((t) => t >= feat.tier);
@@ -86,11 +93,15 @@ export function nextFeat(h) {
 
 // One run's facts and uncommitted career counts. Events arrive from main.js; commit() lands them.
 export class FeatLedger {
-  constructor({ mode = 'normal', ship = 'vexolith' } = {}) {
+  // `loadout`: the weapons the run started with; `canMaster`: false for ships that can't master (BROOD).
+  constructor({ mode = 'normal', ship = 'vexolith', loadout = [], canMaster = true } = {}) {
     this.mode = mode;
+    this.weapons = new Set(loadout); // every slot weapon carried this run (a discard doesn't make it solo again)
+    this.canMaster = canMaster;
     this.counting = COUNTING_MODES.includes(mode);
     this.deltas = {};
     this.run = { mode, ship, wave: 1, waveCleared: 0, campaignCleared: false, rocks: 0, hits: 0, peakGold: 0, clutchBoss: false, soloWeapon: null };
+    this.syncSolo();
     this.ended = false;
     this.unlocked = []; // every { feat, added } this run completed (the results screen's NEW IN THE HANGAR)
   }
@@ -110,6 +121,16 @@ export class FeatLedger {
     this.count('bossKills');
     if (e.bossWave > 0) this.run.waveCleared = Math.max(this.run.waveCleared, e.bossWave);
     if (player && player.maxHp > 0 && player.hp > 0 && player.hp / player.maxHp < 0.1) this.run.clutchBoss = true;
+  }
+
+  // A weapon joined the loadout (NEW WEAPON pick): two different weapons end the solo run for good.
+  weaponAdded(id) {
+    this.weapons.add(id);
+    this.syncSolo();
+  }
+
+  syncSolo() {
+    this.run.soloWeapon = this.canMaster && this.weapons.size === 1 ? [...this.weapons][0] : null;
   }
 
   rockMined() { this.count('rocksMined'); this.run.rocks++; }
@@ -144,6 +165,13 @@ export class FeatLedger {
       }
     }
     const done = [];
+    // Mastery first, so the mastery feats it completes land in the same commit.
+    const solo = this.counting ? r.soloWeapon : null;
+    const tier = masteryTierFor(solo ? r : null);
+    if (solo && tier > (h.mastery[solo] || 0)) {
+      h.mastery[solo] = tier;
+      done.push({ mastery: { weapon: solo, tier }, feat: { id: `mastery_${solo}_${tier}`, name: 'MASTERY' }, added: [] });
+    }
     for (const feat of FEATS) {
       if (h.feats[feat.id] || !featComplete(feat, c, h.mastery, r)) continue;
       h.feats[feat.id] = today(now);
