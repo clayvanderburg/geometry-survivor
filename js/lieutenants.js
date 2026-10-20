@@ -202,7 +202,7 @@ export function drawLieutenantBar(ctx, e, r) {
     ctx.lineTo(cx + 3.5, y - 4);
   }
   ctx.stroke();
-  ctx.font = '800 10px system-ui, sans-serif';
+  ctx.font = '800 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.fillStyle = '#e8eef8';
