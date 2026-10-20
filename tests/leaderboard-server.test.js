@@ -227,6 +227,16 @@ test('plausibility: the envelope admits strong real runs', () => {
   assert.ok(maxScoreFor(894, 19_797) > 5 * 2_046_679_694, 'several-fold headroom over the sim best');
 });
 
+test('plausibility: a FINAL STAND win may sit on wave 50+ longer than the wave clock, never ahead of it', () => {
+  const won = { time: 1600, wave: 50, level: 70, kills: 20_000, multiplier: 60, score: 150_000_000 };
+  assert.equal(checkPlausibility(won), null, 'a long stand: wave 50 at 1600 s (the clock alone says 73)');
+  assert.equal(checkPlausibility({ ...won, wave: 55 }), null, 'endless after a long stand');
+  assert.match(checkPlausibility({ ...won, wave: 80 }), /wave does not match/, 'never ahead of the clock');
+  assert.match(checkPlausibility({ ...won, time: 900 }), /wave does not match/, 'wave 50 needs the time to get there');
+  assert.match(checkPlausibility({ ...won, wave: 40 }), /wave does not match/, 'only the stand may lag');
+  assert.equal(checkPlausibility({ ...won, time: 1100 * 14 / 22, kills: 9000 }, 'blitz'), null, 'BLITZ: its own clock');
+});
+
 test('profanity filter: offensive callsigns are censored, innocent ones pass', async () => {
   for (const name of ['FUCK', 'F U C K', 'FUUUCK', 'SH1T', 'ASS', 'A.S.S', 'BIG DICK', 'XXBITCHXX', 'N1GGA', 'NAZI SCUM', 'SEXY ACE']) {
     assert.equal(containsProfanity(name), true, name);

@@ -21,6 +21,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
+import { CAMPAIGN_WAVES } from '../../js/wave-plan.js';
 
 export const STORE_NAME = 'leaderboard';
 export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
@@ -115,8 +116,12 @@ export function maxScoreFor(time, kills) {
 // Returns null when the run looks like something the game can produce, else a short reason.
 export function checkPlausibility(run, mode = DEFAULT_MODE) {
   const P = PLAUSIBILITY;
-  const expectedWave = 1 + Math.floor(run.time / modeWaveLength(mode, P.WAVE_SECONDS));
-  if (Math.abs(run.wave - expectedWave) > P.WAVE_SLACK) return 'wave does not match time survived';
+  const waveLength = modeWaveLength(mode, P.WAVE_SECONDS);
+  const expectedWave = 1 + Math.floor(run.time / waveLength);
+  // Wave 50 (the FINAL STAND, js/final-stand.js) has no timer, so from there on a run's wave may lag its
+  // time by however long the stand took; it can never run ahead.
+  const lateWave = run.wave >= CAMPAIGN_WAVES && run.time >= (CAMPAIGN_WAVES - 1 - P.WAVE_SLACK) * waveLength;
+  if (lateWave ? run.wave > expectedWave + P.WAVE_SLACK : Math.abs(run.wave - expectedWave) > P.WAVE_SLACK) return 'wave does not match time survived';
   if (run.kills > P.KILLS_PER_SECOND * run.time + P.KILLS_SLACK) return 'too many kills for time survived';
   if (run.level > P.LEVEL_BASE + P.LEVELS_PER_SECOND * run.time) return 'level too high for time survived';
   if (run.multiplier > 1 + P.MULT_PER_KILL * run.kills) return 'multiplier too high for kills';
