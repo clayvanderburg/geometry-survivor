@@ -14,6 +14,7 @@ import {
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
+import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
   weaponBuild, levelBuild, levelCardWeapon, weaponElement, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
@@ -513,6 +514,8 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
     ? `<div class="upg-tags">${d.tags.map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('')}</div>`
     : '';
   const more = d.hiddenRows ? `<div class="upg-stat upg-stat-more">+${d.hiddenRows} more stat${d.hiddenRows > 1 ? 's' : ''} improved</div>` : '';
+  // A Breakthrough's TRANSFORM card shows it in action (the generic boost has nothing new to show).
+  const clip = d.isBreakthrough && d.kind === 'transform' ? clipHTML(breakthroughClip(d.weaponId, d.level), `${d.name} in action`) : '';
   return {
     className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}`,
     html: `
@@ -522,7 +525,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
           <span class="upg-key">${keyLabel}</span>
           <span class="upg-badge">${d.rarityLabel === d.category ? d.category : `${d.rarityLabel} · ${d.category}`}</span>
         </div>
-        <div class="upg-name">${d.name}</div>${tags}
+        <div class="upg-name">${d.name}</div>${tags}${clip}
         ${d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
         ${d.summary ? `<div class="upg-summary">${d.summary}</div>` : ''}
         ${rows || more ? `<div class="upg-stats">${rows}${more}
