@@ -29,6 +29,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **A full Void Armory is about 3× total power** vs 0 Armory (offense × defense, `armoryPower` in `js/progression.js`, pinned ±15% by `tests/armory.test.js`). v0.43.3: Plasma Overcharge +1.5%/rank (+60%), Aegis Shield Matrix +2/rank (+80), both refunded. Rank 3 everywhere ≈ 1.1×, **mid Armory = half ranks everywhere** ≈ 1.85× (under 10% of the full cost), full ≈ 3.07×. The difficulty curve is sized against these tiers. |
 | 2026-10-20 | **Wave 50 is the FINAL STAND** (Endgame lane): no timer; the final boss arrives with a last surge, then regular spawning stops. Clear every hostile → SECTOR CLEAR (silence + bass hit) → VICTORY. Stragglers are drawn in 35 s after the boss falls and wrecked at 90 s. CONTINUE resumes at wave 51. |
 | 2026-10-20 | **Scoring rewards progress** (Endgame lane): kill score is unchanged; a flat **wave bonus** of 1,000 × wave² per wave survived (42.9M over the campaign) and a **VICTORY bonus** of 100M. A win beats non-winning runs of similar skill; no-hit play still decides at equal progress. Breakdown shown on the results screen. |
+| 2026-10-20 | **Leaderboard hygiene** (Endgame lane): Deploy Previews and branch deploys write to `leaderboard-preview` / `stats-preview` stores; production stores are untouched. The plausibility envelope adds the wave and VICTORY bonuses to the score bound and lets the wave lag the clock from wave 50 on (FINAL STAND), re-checked against long Endless sim runs. |
 | 2026-10-20 | **Armory: buff existing upgrades, no new ones for now** (no revive, free reroll, extra slot, …). Power comes from bigger values per rank, a steeper top end or more ranks on existing upgrades. |
 | 2026-10-20 | **Sentry Turret works like Deep Rock Galactic: Survivor's LMG Gun Platform** (Clay, v0.43.4): 2 charges, stand still 0.5 s to drop them all, one charge back every 6 s, a reload into a full bank auto-deploys, fixed 10 s lifetime, no cap on turrets out. Cards follow DRG's upgrades (Bigger Cogs / Tighten Springs / Loosen Bolts / Add Punch); Breakthroughs follow its overclocks (Extra Capacity / Tank Tracks / LMG Overload). Stays in the auto class (~85% of the Autocannon). |
 
@@ -79,8 +80,6 @@ Stay in your lane. If you must touch another lane's files, keep it minimal and s
 
 Things found in playtesting or data that need a look. Move an item to Priorities when it's scheduled, or to Decisions when Clay decides it.
 
-- **Leaderboard: preview builds post to the live board.** Deploy previews share the production Blobs stores, so unreleased versions (e.g. a v0.43.0 preview run) show on the public all-time board. Option: previews write to a separate test board.
-- **Leaderboard plausibility envelope** was fitted to the old 30-wave sim (≈ wave 41 max, widened 3–10×). Re-check it after the difficulty retune so long 50-wave / Endless runs aren't rejected.
 - **Tesla Arc LV 18 spike:** ~1.7k DPS at LV 15 → ~14k at LV 18 in real play; 49% of all damage on v0.43.0. Watch after the fixed-SHOCK change (PR #138); if it stays dominant, trim its LV 18 Breakthrough, not the base weapon.
 - **Supernova share:** 20–31% of all damage in real runs. Decide whether bombs should be that strong.
 - **Run stats don't record the Armory** (being added by the Balance lane), so real-data balance can't yet split by Armory tier.

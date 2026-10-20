@@ -22,6 +22,7 @@ import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
 import { CAMPAIGN_WAVES } from '../../js/wave-plan.js';
+import { waveBonusTotal, VICTORY_BONUS } from '../../js/score-bonus.js';
 
 export const STORE_NAME = 'leaderboard';
 export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, so its old runs have no version)
@@ -89,7 +90,12 @@ const FIELDS = {
   time: { min: 1, max: 6 * 3600, int: false } // seconds survived
 };
 
-// Plausibility envelope. Fitted to the headless balance sim (tools/balance-sim.mjs --god --skill expert
+// Plausibility envelope. Re-checked for the 50-wave campaign, ENDLESS and the progress bonuses (2026-10-20):
+// 30-minute god-mode expert sim runs into ENDLESS (W66-72, 17-30k kills, 273-305M, the FINAL STAND holding
+// wave 50 for minutes) and the live board's best (W48, 28.2k kills, 1.13B in 1055 s) all sit 60x+ under the
+// score bound, under 30 kills/s and far under the level bound, so the coefficients stay; what changed is
+// the wave check (wave 50+ may lag the clock) and the flat bonuses added to the score bound (maxScoreFor).
+// Originally fitted to the headless balance sim (tools/balance-sim.mjs --god --skill expert
 // --meta 8, 15-minute cap): the best run reached wave 41, level 78, 19.8k kills and 2.05 billion points
 // in 894 s (score/t^2.5 ~ 86, score/kills^2 ~ 5.2, ~23 kills/s, ~5 levels/min), then widened 3-10x.
 // Waves tick every 22 s of play (main.js), or every waveLength seconds of the run's mode overlay (BLITZ:
@@ -108,9 +114,13 @@ export const PLAUSIBILITY = Object.freeze({
   MULT_PER_KILL: 8
 });
 
-export function maxScoreFor(time, kills) {
+// Combat score is bounded by time and kills; the progress bonuses (js/score-bonus.js) are flat and known from
+// the wave alone, so they are added on top: every wave below the run's own, plus the VICTORY bonus once the
+// run is past the campaign (a won run's results show its last wave, 50 or more).
+export function maxScoreFor(time, kills, wave = 0) {
   const P = PLAUSIBILITY;
-  return Math.min(P.SCORE_TIME_COEF * time ** 2.5, P.SCORE_KILL_COEF * (kills + 20) ** 2) + P.SCORE_SLACK;
+  const bonus = waveBonusTotal(wave) + (wave >= CAMPAIGN_WAVES ? VICTORY_BONUS : 0);
+  return Math.min(P.SCORE_TIME_COEF * time ** 2.5, P.SCORE_KILL_COEF * (kills + 20) ** 2) + P.SCORE_SLACK + bonus;
 }
 
 // Returns null when the run looks like something the game can produce, else a short reason.
@@ -125,7 +135,7 @@ export function checkPlausibility(run, mode = DEFAULT_MODE) {
   if (run.kills > P.KILLS_PER_SECOND * run.time + P.KILLS_SLACK) return 'too many kills for time survived';
   if (run.level > P.LEVEL_BASE + P.LEVELS_PER_SECOND * run.time) return 'level too high for time survived';
   if (run.multiplier > 1 + P.MULT_PER_KILL * run.kills) return 'multiplier too high for kills';
-  if (run.score > maxScoreFor(run.time, run.kills)) return 'score too high for time survived and kills';
+  if (run.score > maxScoreFor(run.time, run.kills, run.wave)) return 'score too high for time survived and kills';
   return null;
 }
 
@@ -291,7 +301,8 @@ export function writeConditions(current) {
   return current.etag ? { onlyIfMatch: current.etag } : {};
 }
 
-// options.store(): returns the Store (called per request, after Netlify has set up the blob context).
+// options.store(context): returns the Store (called per request with the Netlify context, after Netlify has
+// set up the blob context; production and previews get different stores, see deploy-context.mjs).
 // options.versions / currentVersion: the game versions with boards (newest first) and the live one;
 // they default to the shared changelog, tests pass their own to simulate a version bump.
 export function createScoresHandler({
@@ -471,7 +482,7 @@ export function createScoresHandler({
 
   return async function handler(req, context) {
     try {
-      const blobs = req.method === 'GET' || req.method === 'HEAD' || req.method === 'POST' ? store() : null;
+      const blobs = req.method === 'GET' || req.method === 'HEAD' || req.method === 'POST' ? store(context) : null;
       if (blobs) await runPurges(blobs);
       if (req.method === 'GET' || req.method === 'HEAD') return await handleGet(req, blobs);
       if (req.method === 'POST') return await handlePost(req, context, blobs);

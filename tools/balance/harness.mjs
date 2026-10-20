@@ -646,6 +646,8 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       // Safety: stamp any stragglers (splice order can leave unstamped entries earlier in the array).
       if ((ticks & 63) === 0) for (const e of enemies) e.bornAt ??= game.elapsedTime;
 
+      // The campaign won (js/victory.js): fly on into ENDLESS like a pilot chasing the high score.
+      if (game.state === 'VICTORY') game.continueEndless();
       // Menus: pick a card, claim a cache. Each may chain into another level-up.
       for (let guard = 0; guard < 20 && (game.state === 'UPGRADE' || game.state === 'CHEST'); guard++) {
         if (game.state === 'UPGRADE') {
