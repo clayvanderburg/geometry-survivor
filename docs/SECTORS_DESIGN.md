@@ -1,8 +1,15 @@
-# VEXOLITH // SURVIVOR — Sectors & portal travel (design)
+# VEXOLITH // SURVIVOR — Sectors, levels & story campaign (design)
 
 **Status: DRAFT for a discussion with Clay. Nothing here is built.** Written by a game-designer session for the
-Director. Once Clay decides, the answers go into the ROADMAP Decisions table and the PRs in §6 start in order.
-Numbers are starting points for the Balance lane, not tuned values.
+Director. Once Clay decides, the answers go into the ROADMAP Decisions table and the PRs in §7 start in order.
+Numbers are starting points for the Balance lane, not tuned values. About 15 minutes to read; §4 (story) can
+be read on its own.
+
+**In one paragraph:** the 50-wave run becomes a **five-chapter story campaign**. Each chapter is a **sector**
+with its own look, music, enemies, a mission objective and a boss at the end. Killing the boss opens a
+**portal** to the next sector. A short **cutscene** plays inside the portal, and **talking-head radio
+chatter** (Mega Man style) plays during the waves. The build carries through the whole run. Endless, the
+Hangar and the leaderboard sit on top of the same run.
 
 Related: [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md) §7 (wormholes) and §9 (sectors, endless, scoring),
 [HANGAR_DESIGN.md](HANGAR_DESIGN.md) (feats), [ROADMAP.md](ROADMAP.md) (50-wave campaign, difficulty targets,
@@ -38,7 +45,13 @@ exits, a boss every 10 waves to end a chapter, and a playlist ordered by intensi
 4. **Reuse before we build.** Terrain knobs, rift visuals, existing enemies, bosses and tracks first. New art,
    hazards and music are additive later PRs.
 5. **Fair, comparable runs.** Everyone on a board flew the same route; the leaderboard shows how far you got.
-6. **Transitions are short and safe.** Under ~3 s, invulnerable, safe exit, no level-up screen lost.
+6. **Transitions are short and safe.** Under ~3 s of play time, invulnerable, safe exit, no level-up screen lost.
+7. **Story rides along, it never stops the shooting.** Cutscenes only play where the game already pauses (run
+   start, inside a portal, victory). In-wave dialogue is two or three lines of radio chatter that never
+   pauses and never covers a threat. Every story beat is skippable, plays once per save by default, and can be
+   rewatched later.
+8. **80s action movie, PG.** Big one-liners, a sleazy corporate suit, a gruff hero with a heart of gold.
+   Laughs over lore dumps; no gore and no swearing stronger than "scrap".
 
 ---
 
@@ -70,7 +83,16 @@ Pick a sector from a map; each is its own 10-wave run with a fresh build (or a s
 - ❌ Breaks the 50-wave decision and the "one big build" fantasy; Armory tiers would need re-sizing.
 - ❌ Most code churn (run start, scoring, victory, save).
 
-**Recommendation: A now, built so B can come later.** Sector data is a table keyed by *tier* (1–5); B is
+### D. A separate Story Mode next to the arcade run
+Story levels with gating objectives ("escort the hauler", "defend the rig"), different from the NORMAL run.
+
+- ✅ Objectives can be real win conditions; the arcade run stays pure.
+- ❌ Two campaigns to build and balance; the story would sit apart from where players actually spend time.
+
+**Recommendation: A now, built so B can come later. The story rides on A** (§5): the NORMAL / HARDCORE run
+*is* the story campaign, and each sector is a chapter with a mission objective. Objectives are optional
+bonuses, not gates, so the run never stalls on a failed objective. D can come later as one-off "Missions"
+if objectives turn out to be the fun part. Sector data is a table keyed by *tier* (1–5); B is
 then "a tier holds more than one sector and the portal offers two". Unlocks in A: reaching a sector adds it to
 a **Sector Atlas** (Field Guide-style, a NEW badge) and feats unlock **variant palettes / hazards** and,
 later, B's alternate branches.
@@ -132,7 +154,89 @@ Each hazard is its own later PR; a sector ships first with only palette, terrain
 
 ---
 
-## 5. Risks
+## 5. Story campaign
+
+### 5.1 How story is delivered
+A cutscene and talking-head system is being built by another session (no branch pushed yet when this was
+written). This design assumes two calls; the real names come from that PR:
+
+| Tool | When | Rules |
+|---|---|---|
+| **Cutscene** (`playCutscene(id)`) | Run start (first time), **inside each portal transit**, VICTORY, the Endless tag | Paused game; 3–6 panels or talking-head exchanges, under ~30 s; SKIP (hold to skip); run clock and score frozen. |
+| **Talking heads / radio** (`say(speaker, line)`) | Wave starts, boss warnings, objective updates, a few reactions (first Vortex, low shield) | **Never pauses.** Portrait plus one line in a bottom corner, 3–4 s, typewriter bleeps; at most one queued line; muted during the boss title card and level-up hands. |
+
+- `save.story = { seen: [...beat ids] }`, normalized like `guide.seen`. A beat plays once per save; a
+  **STORY: ON / FIRST TIME / OFF** setting covers veterans and speed-runners. The **Sector Atlas** (§7, PR 11)
+  doubles as the rewatch menu.
+- Story shows in NORMAL and HARDCORE. BLITZ gets none (it's the quick run). The Weapon Range and sandbox never
+  trigger story.
+- Story data is pure data in `js/story.js` (beats keyed by sector and trigger), so writers can edit it
+  without touching game code, and a test checks every beat id the sectors reference exists.
+
+### 5.2 Cast (from the splash art)
+- **The hero: JACK HAMMER** *(working name)*: mulleted, shades-wearing, sleeveless Astra Mining space miner
+  who flies the drill-crab. Twenty years on the rocks, wants his shift over and his pay cheque. Talks in
+  one-liners. *PG note:* the splash has him smoking; in-game he chews a **toothpick** instead.
+- **DOLORES "DEE" REYES:** ASTRA dispatch, Jack's voice in his ear. Dry, fast, always right. The heart.
+- **R. KESSLER, VP of Acquisitions:** ASTRA's corporate suit. Big hair, bigger shoulder pads, smaller
+  conscience. Comic villain, not a scary one.
+- **DR. PIXIE OKONKWO:** ASTRA's rift scientist. Excitable, explains the weird stuff in a single line.
+- **The invaders, the VEX:** geometric alien warp-swarms that pour out of rifts. Their bosses are the
+  ten we already have; the Prism is their heart. They don't talk; their bosses get a title card and Dee does
+  the trash talk.
+- **The VEXOLITH:** the alien crystal at the heart of the belt, the thing everyone wants. It gives the game
+  its name.
+
+### 5.3 Story outline (8 beats, one per chapter break)
+1. **Cold open — "Just Another Shift"** *(run start, Sector 1)*. Jack's hauler drills a routine Astra claim.
+   His claw cracks a glowing crystal; space tears open and geometric things pour out. Dee: "Jack, you've got
+   company." Jack: "I didn't order company." → wave 1.
+2. **Ouroboros down — "Overtime"** *(portal 1)*. The snake dies; a portal hangs where it fell. Kessler cuts in:
+   the crystal is VEXOLITH, worth more than the company, and the aliens are heading for the motherlode.
+   "Follow them." Jack: "I'm a miner, not a hero." Kessler: "Triple hazard pay." Jack: "...I'm a hero."
+3. **Hive Carrier down — "Rescue Shift"** *(portal 2)*. In the Kestrel Belt Jack saves stranded Astra crews
+   (the chapter objective). They owe him a beer. Dee notices Kessler cut the rescue budget.
+4. **The Architect down — "Through the Looking Glass"** *(portal 3)*. In Horizon Deep, Dr. Pixie explains:
+   the VEX don't invade, they *harvest*, and every rift Astra drilled rang their dinner bell. Jack: "So this is
+   our fault." Pixie: "Technically it's *your* claw."
+5. **Mid-Lattice twist — "Hostile Takeover"** *(radio, around wave 35)*. Dee intercepts Kessler's calls:
+   he's selling Jack's coordinates to the VEX in exchange for the motherlode. Kessler locks Jack out of
+   Astra resupply. Dee goes rogue to keep feeding him supplies.
+6. **The Conductor down — "Last Call"** *(portal 4)*. Jack, Dee and the rescued crews against everyone.
+   Jack fits a fresh toothpick. "Let's go to work."
+7. **Victory — "Clock Out"** *(VICTORY screen)*. The Prism shatters; the rifts shut. Kessler's getaway shuttle
+   gets swallowed by the last rift (PG: he's spat out, unhurt, into the Astra brig). Dee: "Shift's over,
+   Jack." Choices: **CLOCK OUT** (End run) or **ONE MORE SHIFT** (Endless: the rifts keep coming back).
+8. **Endless tag — "Graveyard Shift"** *(first Endless loop)*. One line from Dee each loop ("Loop 3. You're
+   getting paid for this, right?"). No new plot, just banter.
+
+The mission objectives below give each chapter something to do besides survive, and feed the story lines.
+
+### 5.4 Chapter objectives (optional, never gating)
+Shown as a one-line HUD tracker. Done: score bonus, a radio line and a feat tick. Failed or ignored: nothing
+lost.
+
+| Sector | Objective | Built from |
+|---|---|---|
+| 1 Geom Shallows | Mine 30 Vexolith shards (glowing ore in rocks) | Ore / gold-vein code |
+| 2 Kestrel Belt | Rescue 4 stranded crew pods (fly over them; drones hunt them) | Pickup + new marker |
+| 3 Horizon Deep | Close 3 rifts by flying through them | `js/rifts.js` |
+| 4 Lattice | Detonate 5 Laser Gates on enemies | `detonateGate` already exists |
+| 5 Prism Core | Kill the Eclipse Twins within 10 s of each other | Twins revive clock |
+
+### 5.5 How the story fits everything else
+- **The 50-wave run:** it *is* the campaign: 5 chapters, 10 bosses, the same difficulty curve. Cutscene time
+  is never run time.
+- **Endless:** after VICTORY, "ONE MORE SHIFT" loops the sectors (§3.4) with banter, no new plot.
+- **Hangar:** the Hangar is **Astra's hangar**. Rescued crews (beat 3) are a natural home for Hangar
+  ships ("Mantis is Rosa's rig; she lends it after you pull her out of the Belt"). Story feats: *Clear
+  chapter N*, *every chapter objective in one run*, *the campaign in HARDCORE*. Ships stay sidegrades
+  (HANGAR_DESIGN pillar 1). Jack pilots all of them.
+- **Leaderboard:** unaffected by story; objective bonuses count in the score, the same for everyone.
+
+---
+
+## 6. Risks
 
 - **Scope.** Five palettes, terrain presets, hazards and a track add up. Mitigation: sectors ship as data
   first; hazards are optional, one PR each; B (branching) waits until A is played.
@@ -149,10 +253,15 @@ Each hazard is its own later PR; a sector ships first with only palette, terrain
 - **Readability.** Palettes must keep enemy colours readable (pillar: threats pop). Each palette is checked
   against the Field Guide previews.
 - **Tutorial / Field Guide.** Portals and Overtime need a slide line; new hazards need Field Guide entries.
+- **Story fatigue.** Players skip text. Keep each cutscene under ~30 s, radio lines under ~60 characters,
+  and every beat skippable and once-only. If playtesters skip everything, cut lines rather than add more.
+- **Writing scope.** 8 beats plus about 40 radio lines is a weekend of writing, but each rewrite touches tests
+  and the tutorial. Lock the outline with Clay before the script.
+- **Dependency.** The story PRs wait on the cutscene / talking-head system; sectors and portals don't.
 
 ---
 
-## 6. PR plan (small, independently mergeable, in order)
+## 7. PR plan (small, independently mergeable, in order)
 
 | # | PR | Lane / files | Gameplay? |
 |---|---|---|---|
@@ -167,14 +276,17 @@ Each hazard is its own later PR; a sector ships first with only palette, terrain
 | 9 | **Hazards**, one PR each (meteor drift, gravity currents, energy gates, prism beams) + Field Guide. | new modules | **Yes** |
 | 10 | **Endless loops** the sectors with remixed palettes. | `js/sectors.js`, `js/victory.js` | **Yes** |
 | 11 | **Sector Atlas + feats** (after the Hangar feat engine): "Reach Sector 3 in HARDCORE", etc. | Hangar & Progression | No / Yes |
-| 12 | *(Later, if wanted)* **Branching** (structure B): second sector per tier, two portals. | all of the above | **Yes** |
+| 12 | **Story data + hooks.** `js/story.js` beats, `save.story.seen`, STORY setting; cold open + portal cutscenes + radio lines wired to sector events. Needs the cutscene system. | new `js/story.js`, `js/progression.js`, `main.js` (few lines) | Content |
+| 13 | **Chapter objectives**, one PR each (shards, crew pods, rifts, gates, twins) with HUD tracker and score bonus. | new `js/objectives.js` | **Yes** |
+| 14 | **Victory / Endless story:** CLOCK OUT / ONE MORE SHIFT labels, ending cutscene, Endless banter. | `js/victory.js`, `js/story.js` | Content |
+| 15 | *(Later, if wanted)* **Branching** (structure B): second sector per tier, two portals. | all of the above | **Yes** |
 
 PRs 1–4 are cosmetic and can land while the difficulty work is in progress; 5+ wait for Clay and the balance
 hold.
 
 ---
 
-## 7. Open questions for Clay
+## 8. Open questions for Clay
 
 1. **Structure:** linear 5 × 10 (recommended), or go straight for branching portals?
 2. **Carry-over:** keep the whole build (recommended)? Shield refill on transit: 50%, full, or none?
@@ -189,3 +301,9 @@ hold.
 8. **Endless:** loop the five sectors (recommended) or one special endless sector ("The Fold")?
 9. **Hazards:** happy with one signature hazard per sector, or keep sectors to looks + enemies only?
 10. **Names and themes:** any sector names or palettes you'd change?
+11. **Hero:** is "JACK HAMMER" the name (or something else)? Swap the splash cigarette for a toothpick in-game?
+12. **Story tone and cast:** happy with the Kessler-is-a-sellout twist, Dee and Dr. Pixie, the VEX as the
+    aliens and the Vexolith as the crystal everyone wants?
+13. **Objectives:** optional bonuses (recommended), or real gates on progress?
+14. **Story in HARDCORE / BLITZ:** recommended NORMAL + HARDCORE, none in BLITZ.
+15. **Voice:** text and bleeps only (recommended), or voiced one-liners later?
