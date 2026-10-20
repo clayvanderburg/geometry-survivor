@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-20',
     title: 'Victory, Rifts & Bedrock',
     notes: [
-      { type: 'new', text: 'VICTORY: beat the wave-50 boss to win the campaign, then fly on into ENDLESS for a higher score (bosses come in pairs) or bank the run as a win.' },
+      { type: 'new', text: 'VICTORY: beat the wave-50 boss to win the campaign. Then keep going in ENDLESS to push your high score (bosses come in pairs), or end the run there as a win.' },
       { type: 'balance', text: 'Bosses every 5th wave, majors every 10th (was 3rd/6th), with 20 new wave themes. Bosses left far behind warp back, and the OUROBOROS arrives coiled up.' },
       { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels through asteroids, bore-charges down a marked lane and spits gravel at you. Rock is no cover from it.' },
       { type: 'new', text: 'Space-time rifts open about every 40 s (edge arrow + radar ring). Fly in to be flung to the far side of the map; you can\'t be hurt mid-jump.' },

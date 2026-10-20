@@ -8,7 +8,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 
 | Date | Decision |
 |---|---|
-| 2026-10-20 | **The campaign is 50 waves** with a boss every 5th wave (10 bosses). Beating wave 50 shows a **victory screen** offering *Continue into Endless* or *Go for high score!* (end the run and bank the score). |
+| 2026-10-20 | **The campaign is 50 waves** with a boss every 5th wave (10 bosses). Beating wave 50 shows a **victory screen** offering *Continue for high score* (keep playing in Endless; the score keeps counting) or *End run* (finish the run here, as a win). |
 | 2026-10-20 | **Hangar of specialist ships** (Vampire Survivors-style heroes): each ship has its own stat boosts and/or starting kit, unlocked by feats. |
 | 2026-10-20 | **Weapon unlocks + weapon mastery** (Deep Rock Galactic: Survivor-style): more weapons, some locked behind unlocks; clearing a run/level with one weapon masters it, granting a bonus and unlocking another weapon. |
 | 2026-10-20 | **Level-up cards show their scope**: utility cards and global cards get a subtle outline/indicator in the level-up window. |
