@@ -88,7 +88,7 @@ import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
 const RADAR_STORAGE_KEY = 'vexolith_radar';
 const RADAR_BASE_SIZE = 152;
-const RADAR_ROCK_STRIDE = { rock: 3, gold_vein: 1, shield_vein: 1, core_vein: 0, bedrock: 0 }; // bitmask: draw when (index & mask) === 0
+const RADAR_ROCK_STRIDE = { rock: 7, gold_vein: 1, shield_vein: 1, core_vein: 0, bedrock: 0 }; // bitmask: draw when (index & mask) === 0 (plain rock: every 8th node)
 const RADAR_ROCK_COLORS = [['rgba(0, 195, 255, 0.38)', ['rock', 'shield_vein']], ['#ffcc00', ['gold_vein']], ['#d68fff', ['core_vein']], ['rgba(222, 210, 255, 0.85)', ['bedrock']]];
 const RADAR_SCALE = 2.5; // on-screen size vs the original 152 px radar
 function loadRadarVisible() {
@@ -6286,7 +6286,7 @@ export class Game {
     ctx.strokeRect(mx, my, mapSize, mapSize);
 
     // 1. Asteroid Clusters & Rich Veins. The field has ~940 small rocks (about twice the old count), so
-    // blips are thinned to about the old density: every 4th plain rock, every 2nd gold or shield vein
+    // blips are thinned to about the old density: every 8th plain rock node (masses pack about twice as many), every 2nd gold or shield vein
     // (as before), and every deep core vein (rare and worth a Void Core).
     // One pass per color, so the fill style is set three times a frame instead of once per blip.
     const rocks = this.asteroidManager.asteroids;
@@ -6294,7 +6294,7 @@ export class Game {
       ctx.fillStyle = color;
       for (let i = 0; i < rocks.length; i++) {
         const r = rocks[i];
-        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0 || r.slab?.border) continue; // the radar frame is the wall
+        if (!ores.includes(r.oreType) || (i & RADAR_ROCK_STRIDE[r.oreType]) !== 0 || r.border) continue; // the radar frame is the wall
         const sz = (r.oreType !== 'rock' ? 2.2 : 1.5) * k;
         ctx.fillRect(mx + r.x * scaleX, my + r.y * scaleY, sz, sz);
       }

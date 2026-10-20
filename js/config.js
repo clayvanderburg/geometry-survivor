@@ -59,8 +59,10 @@ export const DEFAULT_TUNING = {
   rockSizeMult: 0.8,
   goldVeinChance: 0.15,
   bedrockBorder: 1, // the arena edge is a wall of unbreakable bedrock (off: a glowing line)
-  bedrockFormations: 6, // slots for small random bedrock walls, bends, arcs and monoliths in the sector...
+  bedrockFormations: 6, // slots for random bedrock clumps (blobs, ridges, branching arms) in the sector...
   bedrockFormationChance: 0.5, // ...each filled with this chance (about 3 per sector)
+  bedrockWrapChance: 0.85, // chance a clump is buried in a mineable mass (the hard core of an asteroid)
+  massClusterChance: 0.5, // share of asteroid clusters that are one solid mass of small nodes (the rest: loose rocks)
   magnetRadius: 145,
   xpMultiplier: 1.0,
   coreDropMult: 1.0,
@@ -100,9 +102,9 @@ export const DEFAULT_TUNING = {
   // 6a. Space-Time Rifts (js/rifts.js): now and then a rift tears open near the ship. Fly into it and
   // it flings you to a random spot on the far side of the map, then seals behind you.
   riftsEnabled: 1,
-  riftFirstDelay: 45, // s into a run before the first rift can open
-  riftIntervalMin: 50, // s between rifts (from one closing to the next opening), random in [min, max]
-  riftIntervalMax: 80,
+  riftFirstDelay: 30, // s into a run before the first rift can open
+  riftIntervalMin: 25, // s between rifts (from one closing to the next opening), random in [min, max]
+  riftIntervalMax: 45,
   riftOpenTime: 9, // s a rift stays open before it seals
   riftRadius: 46, // px: the aperture (the ship goes through when its centre crosses ~70% of this)
   riftSpawnMin: 360, // px from the ship a rift opens at
@@ -319,6 +321,8 @@ export const TUNING_SCHEMA = [
       { key: 'bedrockBorder', label: 'Bedrock Arena Wall (Regen Sector)', type: 'range', min: 0, max: 1, step: 1, unit: 'onoff' },
       { key: 'bedrockFormations', label: 'Bedrock Formation Slots (Regen Sector)', type: 'range', min: 0, max: 30, step: 1, unit: '' },
       { key: 'bedrockFormationChance', label: 'Chance Each Bedrock Slot Fills', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'bedrockWrapChance', label: 'Bedrock Buried in an Asteroid', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
+      { key: 'massClusterChance', label: 'Solid Asteroid Masses (Share of Clusters)', type: 'range', min: 0, max: 1, step: 0.05, unit: 'prob' },
       { key: 'magnetRadius', label: 'Base Geom Pickup Radius', type: 'range', min: 40, max: 500, step: 5, unit: 'px' },
       { key: 'xpMultiplier', label: 'XP Gain Multiplier', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },
       { key: 'coreDropMult', label: 'Void Core Drop Mult', type: 'range', min: 0.2, max: 5.0, step: 0.1, unit: 'x' },

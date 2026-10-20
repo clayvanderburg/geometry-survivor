@@ -17,247 +17,113 @@ export const CORE_VEIN_CHANCE = 0.08;
 export const SHIELD_VEIN_CHANCE = 0.07;
 export const REPLENISH_SHARE = 0.76; // a cluster respawns each wave while fewer rocks than this share remain
 
-// Bedrock: unbreakable rock for level design (permanent walls and boundaries). Nothing breaks it: not the
-// drill-claws, elite grinding, boss portals or blasts. It blocks ships, enemies and shots like any rock,
-// elites steer round it instead of plowing through, and new clusters are never placed on it.
-// A formation is one SLAB: a single big faceted shape (an outer rim, a raised bevelled top face) with a few
-// rubble chunks hugging its edge. Under it, invisible overlapping collision circles (`slab` pieces) do
-// the physics, so every rock system (shots, pushout, pathing, spawns) treats it as rock with no changes.
-// Lay it with addBedrockWall (along a polyline) or addBedrockMonolith (one big block), then
-// rebuildSpatialHash(). The generated sector is walled in by a bedrock border (TUNING.bedrockBorder) and
-// gets a few small random formations: TUNING.bedrockFormations slots, each filled with
-// TUNING.bedrockFormationChance.
-export const BEDROCK_SIZES = Object.freeze({ thin: 26, standard: 40, massive: 58 }); // wall half-thickness, px
-export const BEDROCK_RADIUS = BEDROCK_SIZES.standard;
-export const BEDROCK_SPACING = 0.7; // collision circles along a wall, in half-thicknesses (the edge dips < 6% between them)
+// Rock is made of round NODES: each is a collision circle with a rough polygon outline, and overlapping
+// nodes are drawn as one solid shape (draw(): every node's rim, then every body over it, then a raised
+// top face), so a tight pack of nodes reads as one big rock that the claws chew apart a few nodes at a
+// time (Deep Rock Galactic style).
+//   * Asteroid MASSES (TUNING.massClusterChance of clusters): small nodes packed tight into one big,
+//     irregular shape (a blob, an elongated ridge or a lobed lump), with ore in short seams of nodes.
+//     Node HP and ore odds scale with node AREA against the classic rock (ROCK_REF), so a mass takes
+//     about as long to mine per area, and pays about as much ore, as the same rock as separate rocks.
+//   * Loose clusters (the rest): the classic scatter of separate rocks.
+//
+// Bedrock: unbreakable rock (level design, the arena wall, and the hard cores of some asteroids).
+// Nothing breaks it: not the drill-claws, elite grinding, boss portals or blasts. It blocks ships,
+// enemies and shots like any rock, elites steer round it instead of plowing through, and the claws
+// never reach for it. It is made of nodes too:
+//   addBedrock(x, y, r)            one node
+//   addBedrockClump(cx, cy, size)  a random clump (a blob, a ridge or branching arms) up to `size` px out
+//   addBedrockWall(points, width)  a rough wall of nodes along a polyline
+//   addBedrockBorder()             the arena wall (nodes flagged `border`)
+// then rebuildSpatialHash(). Each generated sector gets the border (TUNING.bedrockBorder) and
+// TUNING.bedrockFormations slots of clumps, each filled with TUNING.bedrockFormationChance; a clump is
+// usually buried in a mineable mass grown onto it (TUNING.bedrockWrapChance): the hard core of an asteroid.
+export const BEDROCK_RADIUS = 36; // default node radius
 export const BEDROCK_HP = 1e9; // never drained; finite so every `hp > 0` check treats it as solid
 export const BEDROCK_HUE = 268;
 export const isBedrock = (rock) => !!rock?.unbreakable;
+
+export const MASS_NODE_MIN = 22; // mass node radius: MIN + random RANGE, x TUNING.rockSizeMult
+export const MASS_NODE_RANGE = 14;
+export const MASS_REACH_MIN = 95; // px from its centre a mass grows to: MIN + random RANGE
+export const MASS_REACH_RANGE = 85;
+export const ROCK_REF = 37; // radius of the average classic rock (x rockSizeMult): HP and ore odds scale by area against it
+export const SEAM_EXTRA = 1.2; // average nodes added to a vein node to make a seam (its odds are divided to match)
+export const MASS_PACKING = 0.72; // packed nodes overlap: their summed area overstates the rock by about this much
+export const MASS_CORE_CHANCE = 0.18; // a mass's one deep-core roll (a classic cluster averages ~0.18 cores)
+export const BORDER_GAP = 36; // px mineable rock keeps clear of the arena wall (a ship fits through)
+// The raised top face, as a share of each node's outline. Mass and bedrock nodes overlap their
+// neighbours' top faces into one continuous surface (a solid rock); a loose rock keeps a bevel all round.
+export const TOP_FACE = { loose: 0.66, mass: 0.86, bedrock: 0.8 };
 
 // Numeric spatial-hash key (no string building per query: ~1000 rocks are probed many times a tick).
 // Unique for cell coordinates in [-1024, 3071], far beyond the arena.
 const cellKey = (gx, gy) => (gx + 1024) * 4096 + (gy + 1024);
 
-// --- Bedrock slab geometry --------------------------------------------------------------------------
-const SLAB_TOP = 0.6; // the raised top face sits at about this share of the rim's distance from the spine
-const SLAB_TOP_SPREAD = 0.22; // ...give or take half this, per vertex, so the bevel is uneven
-const SLAB_ROUND_TURN = 0.45; // rad: outer corners sharper than this get a rounded (two-facet) rim
-
-const newSlab = (kind) => ({ kind, outline: [], chunks: [], pieces: [], minX: 0, maxX: 0, minY: 0, maxY: 0, look: null });
-
-// Rim vertex `r` px from (cx, cy) along unit (dx, dy), with its top-face partner and outward direction.
-function facetVertex(cx, cy, dx, dy, r) {
-  const top = SLAB_TOP + (Math.random() - 0.5) * SLAB_TOP_SPREAD;
-  return { x: cx + dx * r, y: cy + dy * r, ix: cx + dx * r * top, iy: cy + dy * r * top, ox: dx, oy: dy };
+// A rough node outline: `sides` vertices wandering between lo and hi x radius.
+function nodeVerts(radius, sides, lo, hi) {
+  const verts = [];
+  for (let s = 0; s < sides; s++) {
+    const a = ((s + (Math.random() - 0.5) * 0.4) * Math.PI * 2) / sides;
+    const r = radius * (lo + Math.random() * (hi - lo));
+    verts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+  }
+  return verts;
 }
 
-// Distance of a rim vertex from the spine, as a share of the face distance: mostly a little inside the
-// collision edge, now and then a notch bitten out of it or a spur jutting past it.
-function rimReach() {
-  const roll = Math.random();
-  if (roll < 0.12) return 0.78 + Math.random() * 0.08; // notch
-  if (roll < 0.24) return 1.08 + Math.random() * 0.08; // spur
-  return 0.88 + Math.random() * 0.16;
-}
-
-// Breaks up every rim edge with 0-2 extra kinks (mostly bitten inward) so the edge reads hewn and
-// irregular instead of evenly faceted. `scale` sets how far a kink can move (a wall's face distance).
-function roughenRim(outline, scale) {
+// Accretion: grows up to `count` nodes, each budding off a random node already in the clump (the
+// `pool` seeds, then the new ones), so the clump stays one connected piece. Returns the new nodes
+// ({ x, y, radius }). opts:
+//   radius(parent)   the new node's radius
+//   cx, cy, reach    centres stay within `reach` of (cx, cy)
+//   axes, axisBias   preferred growth directions (rad), taken with chance axisBias (none: any way)
+//   ok(x, y, r)      extra placement check
+function accrete(pool, count, opts) {
   const out = [];
-  for (let i = 0; i < outline.length; i++) {
-    const a = outline[i];
-    const b = outline[(i + 1) % outline.length];
-    out.push(a);
-    const roll = Math.random();
-    const kinks = roll < 0.3 ? 0 : roll < 0.8 ? 1 : 2;
-    const ts = Array.from({ length: kinks }, () => 0.2 + Math.random() * 0.6).sort((x, y) => x - y);
-    for (const t of ts) {
-      const mx = a.x + (b.x - a.x) * t;
-      const my = a.y + (b.y - a.y) * t;
-      const mix = a.ix + (b.ix - a.ix) * t;
-      const miy = a.iy + (b.iy - a.iy) * t;
-      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-      let px = -(b.y - a.y) / len;
-      let py = (b.x - a.x) / len;
-      if (px * (mx - mix) + py * (my - miy) < 0) { px = -px; py = -py; } // point it outward
-      const d = scale * (Math.random() * 0.27 - 0.19);
-      const k = 1 + (Math.random() - 0.5) * 0.3; // the top face kinks with it, by its own amount
-      out.push({ x: mx + px * d, y: my + py * d, ix: mix + px * d * k * 0.6, iy: miy + py * d * k * 0.6, ox: px, oy: py });
+  const all = pool.slice();
+  if (!all.length) return out;
+  for (let tries = 0; out.length < count && tries < count * 8; tries++) {
+    const parent = all[Math.floor(Math.random() * all.length)];
+    const axes = opts.axes;
+    const a = axes?.length && Math.random() < (opts.axisBias ?? 0.7)
+      ? axes[Math.floor(Math.random() * axes.length)] + (Math.random() - 0.5) * 0.9
+      : Math.random() * Math.PI * 2;
+    const r = opts.radius(parent);
+    const d = (parent.radius + r) * (0.5 + Math.random() * 0.25);
+    const x = parent.x + Math.cos(a) * d;
+    const y = parent.y + Math.sin(a) * d;
+    if ((x - opts.cx) ** 2 + (y - opts.cy) ** 2 > opts.reach * opts.reach) continue;
+    let crowded = false;
+    for (let i = 0; i < all.length; i++) {
+      const o = all[i];
+      if ((o.x - x) ** 2 + (o.y - y) ** 2 < ((o.radius + r) * 0.42) ** 2) { crowded = true; break; }
     }
+    if (crowded || (opts.ok && !opts.ok(x, y, r))) continue;
+    const node = { x, y, radius: r };
+    out.push(node);
+    all.push(node);
   }
   return out;
 }
 
-// Hairline cracks running in from the bevel across the top face: 2-3 jagged segments each.
-function slabCracks(outline, count) {
-  const cracks = [];
-  for (let c = 0; c < count && outline.length; c++) {
-    const v = outline[Math.floor(Math.random() * outline.length)];
-    const bevel = Math.hypot(v.x - v.ix, v.y - v.iy);
-    let a = Math.atan2(v.iy - v.y, v.ix - v.x);
-    let x = v.ix;
-    let y = v.iy;
-    const pts = [{ x, y }];
-    const segs = 2 + Math.floor(Math.random() * 2);
-    for (let k = 0; k < segs; k++) {
-      a += (Math.random() - 0.5) * 1.2;
-      const l = bevel * (0.35 + Math.random() * 0.4);
-      x += Math.cos(a) * l;
-      y += Math.sin(a) * l;
-      pts.push({ x, y });
-    }
-    cracks.push(pts);
+// Where mineable rock may go near bedrock: a ship-wide gap from the arena wall; over the edge of any
+// other bedrock (plastered onto it) but never buried in its middle.
+function clearOfBedrock(bedrock, x, y, r) {
+  for (let i = 0; i < bedrock.length; i++) {
+    const b = bedrock[i];
+    const d = Math.hypot(x - b.x, y - b.y);
+    if (b.border ? d < r + b.radius + BORDER_GAP : d < b.radius * 0.75) return false;
   }
-  return cracks;
+  return true;
 }
 
-
-function pathLength(points) {
-  let len = 0;
-  for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  return len;
-}
-
-// Points evenly spaced along a polyline, never more than `step` apart, both ends and every corner included.
-function resamplePath(points, step) {
-  const out = [{ x: points[0].x, y: points[0].y }];
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
-    for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
-  }
-  return out;
-}
-
-// Rim of a wall: the left face along the spine, a rounded cap at the end, the right face back, a rounded
-// cap at the start. Faces sit `w` px off the spine (jittered); inner corners are mitered, outer corners
-// rounded, so the rim follows the collision circles' outline.
-function wallOutline(points, w) {
-  const spine = resamplePath(points, w * 1.7);
-  if (spine.length < 2) {
-    const out = [];
-    for (let k = 0; k < 8; k++) out.push(facetVertex(spine[0].x, spine[0].y, Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4), w));
-    return out;
-  }
-  const jit = () => w * rimReach();
-  const dir = (a, b) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
-  const left = [];
-  const right = [];
-  for (let i = 0; i < spine.length; i++) {
-    const p = spine[i];
-    const tIn = dir(spine[Math.max(0, i - 1)], spine[Math.max(1, i)]);
-    const tOut = dir(spine[Math.min(spine.length - 2, i)], spine[Math.min(spine.length - 1, i + 1)]);
-    const nIn = { x: -tIn.y, y: tIn.x };
-    const nOut = { x: -tOut.y, y: tOut.x };
-    const cross = tIn.x * tOut.y - tIn.y * tOut.x;
-    const turn = Math.acos(Math.max(-1, Math.min(1, tIn.x * tOut.x + tIn.y * tOut.y)));
-    let mx = nIn.x + nOut.x;
-    let my = nIn.y + nOut.y;
-    const ml = Math.hypot(mx, my) || 1;
-    mx /= ml;
-    my /= ml;
-    const miter = 1 / Math.max(0.5, mx * nIn.x + my * nIn.y);
-    // Inner side: one mitered vertex. Outer side: one vertex per face when the corner is sharp.
-    const leftInner = cross > 0;
-    const sharp = turn > SLAB_ROUND_TURN;
-    const side = (arr, sign, inner) => {
-      if (!sharp || inner) {
-        // Mitered inner corners stay close to the true corner (a notch there would leave a dead pocket).
-        const r = inner && miter > 1.02 ? w * (0.94 + Math.random() * 0.1) * miter : jit();
-        arr.push(facetVertex(p.x, p.y, mx * sign, my * sign, r));
-      } else {
-        arr.push(facetVertex(p.x, p.y, nIn.x * sign, nIn.y * sign, jit()));
-        arr.push(facetVertex(p.x, p.y, mx * sign, my * sign, jit()));
-        arr.push(facetVertex(p.x, p.y, nOut.x * sign, nOut.y * sign, jit()));
-      }
-    };
-    side(left, 1, leftInner);
-    side(right, -1, !leftInner);
-  }
-  // Caps: two facets round each end.
-  const cap = (p, n, from, sweep) => {
-    const out = [];
-    const base = Math.atan2(n.y, n.x);
-    for (let k = 1; k <= 2; k++) {
-      const a = base + from + (sweep * k) / 3;
-      out.push(facetVertex(p.x, p.y, Math.cos(a), Math.sin(a), jit()));
-    }
-    return out;
-  };
-  const end = spine[spine.length - 1];
-  const tEnd = dir(spine[spine.length - 2], end);
-  const start = spine[0];
-  const tStart = dir(start, spine[1]);
-  return [
-    ...left,
-    ...cap(end, { x: -tEnd.y, y: tEnd.x }, 0, -Math.PI),
-    ...right.reverse(),
-    ...cap(start, { x: -tStart.y, y: tStart.x }, Math.PI, -Math.PI)
-  ];
-}
-
-function finishSlab(slab) {
-  slab.cracks = slabCracks(slab.outline, Math.max(2, Math.round(slab.outline.length / 7)));
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  const grow = (v) => { minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); };
-  slab.outline.forEach(grow);
-  for (const ch of slab.chunks) ch.verts.forEach(grow);
-  Object.assign(slab, { minX, maxX, minY, maxY });
-}
-
-function polyPath(verts, kx, ky) {
-  const path = new Path2D();
-  for (let i = 0; i < verts.length; i++) {
-    if (i === 0) path.moveTo(verts[i][kx], verts[i][ky]);
-    else path.lineTo(verts[i][kx], verts[i][ky]);
-  }
-  path.closePath();
-  return path;
-}
-
-// Cached Path2Ds for a slab (browser only; without Path2D the slab is traced each frame).
-function slabLook(sl) {
-  if (sl.look) return sl.look;
-  const has = typeof Path2D !== 'undefined';
-  let ridges = null;
-  let cracks = null;
-  if (has) {
-    ridges = new Path2D();
-    for (const v of sl.outline) { ridges.moveTo(v.x, v.y); ridges.lineTo(v.ix, v.iy); }
-    cracks = new Path2D();
-    for (const c of sl.cracks || []) c.forEach((pt, i) => (i ? cracks.lineTo(pt.x, pt.y) : cracks.moveTo(pt.x, pt.y)));
-  }
-  sl.look = {
-    rim: has ? polyPath(sl.outline, 'x', 'y') : null,
-    top: has ? polyPath(sl.outline, 'ix', 'iy') : null,
-    ridges,
-    cracks,
-    chunks: sl.chunks.map((ch) => ({ verts: ch.verts, path: has ? polyPath(ch.verts, 'x', 'y') : null }))
-  };
-  return sl.look;
-}
-
-function fillOrStroke(ctx, path, verts, kx, ky, op) {
-  if (!path) {
-    ctx.beginPath();
-    for (let i = 0; i < verts.length; i++) {
-      if (i === 0) ctx.moveTo(verts[i][kx], verts[i][ky]);
-      else ctx.lineTo(verts[i][kx], verts[i][ky]);
-    }
-    ctx.closePath();
-  }
-  if (op === 'fill') path ? ctx.fill(path) : ctx.fill();
-  else path ? ctx.stroke(path) : ctx.stroke();
-}
-
-// Per-rock render cache: the outline as a Path2D (browser only) and the rock's resting colors.
+// Per-node render cache: the outline as a Path2D (browser only) and its colors. All fills are opaque so
+// overlapping nodes merge into one solid shape with no seams showing through.
 function rockLook(a) {
   if (a.look) return a.look;
   const bedrock = isBedrock(a);
   const isRich = a.oreType !== 'rock' && !bedrock;
   let path = null;
-  let inner = null;
   if (typeof Path2D !== 'undefined') {
     path = new Path2D();
     for (let v = 0; v < a.verts.length; v++) {
@@ -266,42 +132,138 @@ function rockLook(a) {
       else path.lineTo(pt.x, pt.y);
     }
     path.closePath();
-    if (bedrock) {
-      // Bedrock wears an inset facet so it reads as solid slab, not drillable rock.
-      inner = new Path2D();
-      for (let v = 0; v < a.verts.length; v++) {
-        const pt = a.verts[v];
-        if (v === 0) inner.moveTo(pt.x * 0.58, pt.y * 0.58);
-        else inner.lineTo(pt.x * 0.58, pt.y * 0.58);
-      }
-      inner.closePath();
-    }
   }
+  const topScale = bedrock ? TOP_FACE.bedrock : a.mass ? TOP_FACE.mass : TOP_FACE.loose;
+  const base = { path, cos: Math.cos(a.rotation), sin: Math.sin(a.rotation), isRich, bedrock, topScale };
   if (bedrock) {
-    a.look = {
-      isRich: false,
-      bedrock: true,
-      path,
-      inner,
-      cos: Math.cos(a.rotation),
-      sin: Math.sin(a.rotation),
-      fill: 'rgba(15, 11, 28, 0.97)',
-      stroke: `hsla(${a.hue}, 45%, 74%, 0.95)`,
-      core: `hsla(${a.hue}, 70%, 58%, 0.55)`
-    };
+    // A dark crack across the top face (local frame), so bedrock reads as weathered stone.
+    const t = Math.random() * Math.PI * 2;
+    const r = a.radius * topScale * 0.8;
+    const crack = [{ x: Math.cos(t) * r, y: Math.sin(t) * r }];
+    for (let k = 1; k <= 2; k++) crack.push({ x: crack[k - 1].x * 0.25 + (Math.random() - 0.5) * r * 0.9, y: crack[k - 1].y * 0.25 + (Math.random() - 0.5) * r * 0.9 });
+    a.look = { ...base, rim: `hsl(${a.hue}, 45%, 74%)`, rimW: 6, body: 'rgb(13, 9, 24)', top: 'rgb(31, 23, 52)', flash: 'rgb(31, 23, 52)', seam: `hsla(${a.hue}, 55%, 66%, 0.14)`, crack };
     return a.look;
   }
   a.look = {
-    isRich,
-    path,
-    cos: Math.cos(a.rotation),
-    sin: Math.sin(a.rotation),
-    fill: isRich ? `hsla(${a.hue}, 75%, 14%, 0.92)` : 'rgba(7, 13, 28, 0.92)',
-    flashFill: `hsla(${a.hue}, 80%, 32%, 0.9)`,
-    stroke: `hsla(${a.hue}, 100%, ${isRich ? 64 : 52}%, ${isRich ? 0.92 : 0.68})`,
+    ...base,
+    rim: isRich ? `hsl(${a.hue}, 100%, 60%)` : 'hsl(205, 95%, 46%)',
+    rimW: isRich ? 5 : 4.2,
+    body: isRich ? `hsl(${a.hue}, 55%, 11%)` : 'rgb(8, 14, 30)',
+    top: isRich ? `hsl(${a.hue}, 65%, 20%)` : 'rgb(15, 28, 54)',
+    flash: `hsl(${a.hue}, 80%, 34%)`,
+    // Cobble seams: a faint hint on a solid mass (brighter once a node is damaged), clearer on a loose rock.
+    seam: isRich ? `hsla(${a.hue}, 100%, 70%, ${a.mass ? 0.18 : 0.35})` : `rgba(110, 170, 255, ${a.mass ? 0.07 : 0.16})`,
+    seamHurt: isRich ? `hsla(${a.hue}, 100%, 72%, 0.5)` : 'rgba(140, 190, 255, 0.35)',
     core: `hsla(${a.hue}, 100%, 78%, 0.85)`
   };
   return a.look;
+}
+
+// Points a node into its own frame (rotation, and a scale for the top face) on top of the camera
+// transform `base` (or with save/translate when the context has no getTransform; call nodeEnd after).
+function nodeBegin(ctx, base, a, look, s) {
+  const px = a.x + (a.jx || 0), py = a.y + (a.jy || 0);
+  if (base) {
+    const c = look.cos * s, n = look.sin * s;
+    ctx.setTransform(base.a * c + base.c * n, base.b * c + base.d * n, base.c * c - base.a * n, base.d * c - base.b * n,
+      base.a * px + base.c * py + base.e, base.b * px + base.d * py + base.f);
+  } else {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(a.rotation);
+    if (s !== 1) ctx.scale(s, s);
+  }
+}
+const nodeEnd = (ctx, base) => { if (!base) ctx.restore(); };
+
+// Draw groups: every cluster, mass, clump and stretch of wall is one group, drawn from a few shared
+// Path2Ds in world coordinates (one outline and one top-face path per ore type) instead of node by
+// node. Rocks never move, so the paths are only rebuilt when a node in the group breaks.
+const newGroup = (kind) => ({ kind, nodes: [], count: -1, dirty: true, mats: null, minX: 0, maxX: 0, minY: 0, maxY: 0 });
+
+// A node's outline in world coordinates (cached: nodes never move once placed).
+function worldVerts(a) {
+  if (a.wv && a.wvx === a.x && a.wvy === a.y) return a.wv;
+  const c = Math.cos(a.rotation), n = Math.sin(a.rotation);
+  a.wv = a.verts.map((v) => ({ x: a.x + v.x * c - v.y * n, y: a.y + v.x * n + v.y * c }));
+  a.wvx = a.x;
+  a.wvy = a.y;
+  return a.wv;
+}
+
+function addPoly(path, pts, cx, cy, k) {
+  for (let i = 0; i < pts.length; i++) {
+    const x = cx + (pts[i].x - cx) * k, y = cy + (pts[i].y - cy) * k;
+    if (i === 0) path.moveTo(x, y); else path.lineTo(x, y);
+  }
+  path.closePath();
+}
+
+// True when a node's edge is covered all round by others in its group: an interior node, drawn as
+// flat top face with no rim or bevel (only the shape's exposed edge gets those, which also keeps the
+// painted area near the rock's own area). Mining a neighbour away exposes it.
+function isInterior(a, nodes) {
+  const K = 10;
+  for (let k = 0; k < K; k++) {
+    const ang = (k * Math.PI * 2) / K;
+    const px = a.x + Math.cos(ang) * a.radius * 0.98;
+    const py = a.y + Math.sin(ang) * a.radius * 0.98;
+    let covered = false;
+    for (let j = 0; j < nodes.length; j++) {
+      const o = nodes[j];
+      if (o === a) continue;
+      const lim = o.radius * 0.84;
+      if ((o.x - px) ** 2 + (o.y - py) ** 2 < lim * lim) { covered = true; break; }
+    }
+    if (!covered) return false;
+  }
+  return true;
+}
+
+function buildGroup(g) {
+  const mats = new Map();
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const a of g.nodes) {
+    const look = rockLook(a);
+    let m = mats.get(a.oreType);
+    if (!m) mats.set(a.oreType, (m = { look, rim: null, body: null, top: new Path2D(), extra: null }));
+    const wv = worldVerts(a);
+    if (isInterior(a, g.nodes)) {
+      addPoly(m.top, wv, a.x, a.y, 1);
+    } else {
+      // The rim is the outline grown by half the rim width and filled (a fill rasterizes far cheaper
+      // than a wide stroke); the body fills the true outline over it.
+      addPoly((m.rim ||= new Path2D()), wv, a.x, a.y, 1 + look.rimW / (2 * a.radius));
+      addPoly((m.body ||= new Path2D()), wv, a.x, a.y, 1);
+      addPoly(m.top, wv, a.x, a.y, look.topScale);
+    }
+    const c = look.cos, n = look.sin;
+    const toWorld = (x, y) => ({ x: a.x + x * c - y * n, y: a.y + x * n + y * c });
+    if (look.isRich) {
+      const r = a.radius * 0.42;
+      addPoly((m.extra ||= new Path2D()), [toWorld(r, 0), toWorld(0, r), toWorld(-r, 0), toWorld(0, -r)], a.x, a.y, 1);
+    } else if (look.crack) {
+      const pts = look.crack.map((p) => toWorld(p.x, p.y));
+      const path = (m.extra ||= new Path2D());
+      pts.forEach((p, i) => (i ? path.lineTo(p.x, p.y) : path.moveTo(p.x, p.y)));
+    }
+    const reach = a.radius * 1.15 + look.rimW;
+    minX = Math.min(minX, a.x - reach); maxX = Math.max(maxX, a.x + reach);
+    minY = Math.min(minY, a.y - reach); maxY = Math.max(maxY, a.y + reach);
+  }
+  Object.assign(g, { mats: [...mats.values()], minX, maxX, minY, maxY, dirty: false });
+}
+
+function nodePath(ctx, a, look) {
+  if (look.path) return look.path;
+  ctx.beginPath();
+  for (let v = 0; v < a.verts.length; v++) {
+    const pt = a.verts[v];
+    if (v === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  }
+  ctx.closePath();
+  return undefined;
 }
 
 // Crack network (visual only), in the rock's local frame: 3-4 jagged branches that start where the
@@ -417,16 +379,27 @@ export class AsteroidManager {
     this.asteroids = [];
     this.isDrilling = false;
     this.drillingRocks = [];
+    const avoid = { x: centerX, y: centerY, radius: 250 };
 
-    // Bedrock first, so the clusters fill in round it.
+    // Bedrock first, so the asteroids fill in round it; most clumps get a mass grown onto them (each
+    // in place of one of the sector's clusters, so the field holds as much rock and ore as before).
+    let wrapped = 0;
     if ((TUNING.bedrockBorder ?? 1) >= 0.5) this.addBedrockBorder();
     const slots = Math.max(0, Math.round(TUNING.bedrockFormations ?? 0));
     const chance = TUNING.bedrockFormationChance ?? 1;
     for (let f = 0; f < slots; f++) {
-      if (Math.random() < chance) this.spawnBedrockFormation({ x: centerX, y: centerY, radius: 600 });
+      if (!(Math.random() < chance)) continue;
+      const clump = this.spawnBedrockFormation({ x: centerX, y: centerY, radius: 600 });
+      if (clump.length && Math.random() < (TUNING.bedrockWrapChance ?? 0.85)) {
+        const cx = clump.reduce((t, n) => t + n.x, 0) / clump.length;
+        const cy = clump.reduce((t, n) => t + n.y, 0) / clump.length;
+        const extent = Math.max(...clump.map((n) => Math.hypot(n.x - cx, n.y - cy) + n.radius));
+        this.spawnMassCluster(cx, cy, avoid, { seeds: clump, reach: extent + 50 + Math.random() * 70 });
+        wrapped++;
+      }
     }
 
-    const clusterCount = Math.round(TUNING.clusterCount ?? 38);
+    const clusterCount = Math.max(0, Math.round(TUNING.clusterCount ?? 38) - wrapped);
     for (let c = 0; c < clusterCount; c++) {
       let cx = 260 + Math.random() * (this.worldWidth - 520);
       let cy = 260 + Math.random() * (this.worldHeight - 520);
@@ -436,7 +409,7 @@ export class AsteroidManager {
         cy += (cy < centerY ? -440 : 440);
       }
 
-      this.spawnCluster(cx, cy, { x: centerX, y: centerY, radius: 250 });
+      this.spawnCluster(cx, cy, avoid);
     }
 
     this.sectorRockCount = this.breakableCount();
@@ -456,28 +429,23 @@ export class AsteroidManager {
     return this.breakableCount() < (this.sectorRockCount || 0) * REPLENISH_SHARE;
   }
 
-  // One unbreakable piece. Breakable rock touching it is cleared away (no ore drops). Returns the piece.
-  addBedrock(x, y, radius = BEDROCK_RADIUS) {
+  // One bedrock node. Breakable rock touching it is cleared away (no ore drops). Returns the node.
+  addBedrock(x, y, radius = BEDROCK_RADIUS, group = newGroup('bedrock')) {
     for (let i = this.asteroids.length - 1; i >= 0; i--) {
       const r = this.asteroids[i];
       if (!r.unbreakable && Math.hypot(r.x - x, r.y - y) < r.radius + radius) this.asteroids.splice(i, 1);
     }
-    const sides = 6 + Math.floor(Math.random() * 2);
-    const verts = [];
-    for (let s = 0; s < sides; s++) {
-      const a = (s * Math.PI * 2) / sides;
-      const rJitter = radius * (0.9 + Math.random() * 0.14);
-      verts.push({ x: Math.cos(a) * rJitter, y: Math.sin(a) * rJitter });
-    }
+    const sides = 7 + Math.floor(Math.random() * 3);
     const rock = {
       x,
       y,
       radius,
       sides,
-      verts,
+      verts: nodeVerts(radius, sides, 0.82, 1.06),
       rotation: Math.random() * Math.PI * 2,
       oreType: 'bedrock',
       unbreakable: true,
+      group,
       hp: BEDROCK_HP,
       maxHp: BEDROCK_HP,
       hue: BEDROCK_HUE,
@@ -487,133 +455,83 @@ export class AsteroidManager {
     return rock;
   }
 
-  // Collision piece of a slab: an invisible bedrock circle (the slab draws it).
-  addSlabPiece(slab, x, y, radius, chunk = false) {
-    const piece = this.addBedrock(x, y, radius);
-    piece.slab = slab;
-    if (chunk) piece.chunk = true;
-    else slab.pieces.push(piece);
-    return piece;
+  // A random clump of bedrock nodes reaching about `size` px from (cx, cy): a blob, a ridge (grown
+  // along one line) or branching arms. Big nodes at the heart, smaller ones toward the tips. Returns
+  // the nodes.
+  addBedrockClump(cx, cy, size = 120) {
+    const kind = Math.floor(Math.random() * 3);
+    const a0 = Math.random() * Math.PI * 2;
+    const axes = kind === 1 ? [a0, a0 + Math.PI]
+      : kind === 2 ? [a0, a0 + 2.1 + Math.random() * 0.5, a0 - 2.1 - Math.random() * 0.5]
+        : [];
+    const rMax = Math.min(46, 18 + size * 0.16);
+    const group = newGroup('bedrock');
+    const nodes = [this.addBedrock(cx, cy, rMax, group)];
+    const count = Math.round(3 + Math.pow(size / 22, 1.6));
+    const pad = 120;
+    const grown = accrete(nodes, count, {
+      cx, cy, reach: size, axes, axisBias: kind === 1 ? 0.85 : 0.75,
+      radius: (parent) => Math.max(14, Math.min(rMax, parent.radius * (0.72 + Math.random() * 0.4))),
+      ok: (x, y, r) => x > pad + r && y > pad + r && x < this.worldWidth - pad - r && y < this.worldHeight - pad - r
+    });
+    for (const n of grown) nodes.push(this.addBedrock(n.x, n.y, n.radius, group));
+    return nodes;
   }
 
-  // A bedrock wall along a polyline ([{ x, y }, ...]), `width` px from its spine to each face
-  // (BEDROCK_SIZES): one slab with a gapless chain of collision circles under it. Returns the slab
-  // ({ outline, chunks, pieces, ... }; `pieces` is the spine chain, the chunks have their own pieces).
+  // A rough wall of bedrock nodes along a polyline ([{ x, y }, ...]), about `width` px from its spine
+  // to each face: nodes of varied size, spaced to overlap, wandering a little off the line. Returns them.
   addBedrockWall(points, width = BEDROCK_RADIUS) {
-    const slab = newSlab('wall');
-    if (!points?.length) return slab;
-    // Collision spine: circles every BEDROCK_SPACING x width along the line, both ends included.
-    for (const pt of resamplePath(points, width * BEDROCK_SPACING)) this.addSlabPiece(slab, pt.x, pt.y, width);
-    // Visible outline: faceted faces either side of the spine, rounded at outer corners and both ends.
-    slab.outline = roughenRim(wallOutline(points, width), width);
-    this.backSpurs(slab, width);
-    this.addSlabChunks(slab, Math.max(3, Math.round(pathLength(points) / (width * 2.2))), width);
-    finishSlab(slab);
-    return slab;
-  }
-
-  // One big block of bedrock, about `radius` px across from its centre. Returns the slab.
-  addBedrockMonolith(x, y, radius = 90) {
-    const slab = newSlab('monolith');
-    // A core circle and a ring of six cover the faceted shape (each well under the field's largest rock
-    // query radius, so spatial lookups stay cheap).
-    this.addSlabPiece(slab, x, y, radius * 0.62);
-    for (let k = 0; k < 6; k++) {
-      const a = (k * Math.PI) / 3;
-      this.addSlabPiece(slab, x + Math.cos(a) * radius * 0.48, y + Math.sin(a) * radius * 0.48, radius * 0.5);
-    }
-    const sides = 8 + Math.floor(Math.random() * 3);
-    const turn = Math.random() * Math.PI * 2;
-    for (let k = 0; k < sides; k++) {
-      const a = turn + ((k + (Math.random() - 0.5) * 0.35) * Math.PI * 2) / sides;
-      const r = radius * (0.84 + Math.random() * 0.2);
-      slab.outline.push(facetVertex(x, y, Math.cos(a), Math.sin(a), r));
-    }
-    slab.outline = roughenRim(slab.outline, radius * 0.4);
-    this.backSpurs(slab, radius * 0.4);
-    this.addSlabChunks(slab, 4 + Math.floor(Math.random() * 4), radius * 0.55);
-    finishSlab(slab);
-    return slab;
-  }
-
-  // Spurs that jut past the collision circles get a small solid piece of their own, so the rim you see
-  // is the rim you hit.
-  backSpurs(slab, scale) {
-    const spine = slab.pieces.slice();
-    const r = scale * 0.14;
-    for (const v of slab.outline) {
-      let edge = Infinity;
-      for (const p of spine) edge = Math.min(edge, Math.hypot(v.x - p.x, v.y - p.y) - p.radius);
-      if (edge > scale * 0.05) this.addSlabPiece(slab, v.x - v.ox * r * 0.7, v.y - v.oy * r * 0.7, r, true);
-    }
-  }
-
-  // Rubble chunks hugging a slab's rim: small solid shards at random outline vertices, poking out.
-  addSlabChunks(slab, count, scale) {
-    const rim = slab.outline;
-    for (let c = 0; c < count && rim.length; c++) {
-      const v = rim[Math.floor(Math.random() * rim.length)];
-      // Mostly small flecks, now and then a bigger slab of rubble; shards are stretched along a random axis.
-      const r = scale * (Math.random() < 0.3 ? 0.3 + Math.random() * 0.16 : 0.12 + Math.random() * 0.16);
-      const x = v.x + v.ox * r * (0.3 + Math.random() * 0.5);
-      const y = v.y + v.oy * r * (0.3 + Math.random() * 0.5);
-      if (x < r || y < r || x > this.worldWidth - r || y > this.worldHeight - r) continue;
-      const sides = 3 + Math.floor(Math.random() * 4);
-      const turn = Math.random() * Math.PI * 2;
-      const stretch = 1 + Math.random() * 0.7;
-      const verts = [];
-      for (let k = 0; k < sides; k++) {
-        const a = (k * Math.PI * 2) / sides + (Math.random() - 0.5) * 0.7;
-        const rr = r * (0.6 + Math.random() * 0.5);
-        const lx = Math.cos(a) * rr * stretch;
-        const ly = (Math.sin(a) * rr) / stretch;
-        verts.push({ x: x + lx * Math.cos(turn) - ly * Math.sin(turn), y: y + lx * Math.sin(turn) + ly * Math.cos(turn) });
+    const nodes = [];
+    if (!points?.length) return nodes;
+    const group = newGroup('bedrock');
+    nodes.push(this.addBedrock(points[0].x, points[0].y, width, group));
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (!(len > 0)) continue;
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      for (let d = width * 0.7; d < len; d += width * (0.6 + Math.random() * 0.2)) {
+        const off = (Math.random() - 0.5) * width * 0.4;
+        nodes.push(this.addBedrock(a.x + ux * d - uy * off, a.y + uy * d + ux * off, width * (0.8 + Math.random() * 0.35), group));
       }
-      slab.chunks.push({ x, y, r, verts });
-      this.addSlabPiece(slab, x, y, r * 0.85, true);
+      nodes.push(this.addBedrock(b.x, b.y, width * (0.85 + Math.random() * 0.3), group));
     }
+    return nodes;
   }
 
-  // The arena wall: rough bedrock segments laid along all four edges, their spines on the edge so only
-  // the inner half shows. Segments vary in thickness and overlap at the joins, so the wall reads as a
-  // run of hewn blocks. Returns the slabs (flagged `border`).
+  // The arena wall: bedrock nodes along all four edges, centred on or just past the edge so only their
+  // inner part shows, in varied sizes with the odd bigger outcrop, so the wall reads as rough rock.
+  // Returns the nodes (flagged `border`).
   addBedrockBorder() {
     const W = this.worldWidth;
     const H = this.worldHeight;
-    const slabs = [];
+    const nodes = [];
     const edge = (x0, y0, x1, y1, nx, ny) => {
       const len = Math.hypot(x1 - x0, y1 - y0);
-      const ux = (x1 - x0) / len;
-      const uy = (y1 - y0) / len;
-      let d = -40; // start past the corner, so the corners close up
-      while (d < len + 40) {
-        const segLen = 320 + Math.random() * 380;
-        const a = d;
-        const b = Math.min(len + 40, d + segLen);
-        const mid = (a + b) / 2;
-        const bulge = Math.random() * 14; // a slight bow inward breaks up the straight line
-        const width = 36 + Math.random() * 18;
-        const slab = this.addBedrockWall([
-          { x: x0 + ux * a, y: y0 + uy * a },
-          { x: x0 + ux * mid + nx * bulge, y: y0 + uy * mid + ny * bulge },
-          { x: x0 + ux * b, y: y0 + uy * b }
-        ], width);
-        slab.border = true;
-        slabs.push(slab);
-        if (b >= len + 40) break;
-        d = b - (30 + Math.random() * 30); // overlap the next block
+      const ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+      let group = newGroup('bedrock');
+      let groupStart = -30;
+      for (let d = -30; d < len + 30;) {
+        if (d - groupStart > 560) { group = newGroup('bedrock'); groupStart = d; } // draw-culled in stretches
+        const outcrop = Math.random() < 0.12;
+        const r = outcrop ? 52 + Math.random() * 20 : 32 + Math.random() * 28;
+        const inset = outcrop ? 8 + Math.random() * 18 : -r * 0.35 + Math.random() * 14;
+        const n = this.addBedrock(x0 + ux * d + nx * inset, y0 + uy * d + ny * inset, r, group);
+        n.border = true;
+        nodes.push(n);
+        d += r * (0.6 + Math.random() * 0.25);
       }
     };
     edge(0, 0, W, 0, 0, 1);
     edge(W, 0, W, H, -1, 0);
     edge(W, H, 0, H, 0, -1);
     edge(0, H, 0, 0, 1, 0);
-    return slabs;
+    return nodes;
   }
 
-  // A random bedrock formation somewhere in the arena, kept out of `avoid` ({ x, y, radius }): a short
-  // wall, a bend or an arc (mostly thin or standard, now and then massive) or a small monolith. Kept
-  // modest: they shape the field without walling it off. Returns the slab.
+  // A random bedrock clump somewhere in the arena, kept out of `avoid` ({ x, y, radius }): mostly small
+  // to medium, now and then big. Returns its nodes.
   spawnBedrockFormation(avoid = null) {
     const margin = 420;
     let cx = 0;
@@ -623,60 +541,129 @@ export class AsteroidManager {
       cy = margin + Math.random() * (this.worldHeight - margin * 2);
       if (!avoid || Math.hypot(cx - avoid.x, cy - avoid.y) > avoid.radius + 300) break;
     }
-    const kind = Math.floor(Math.random() * 4);
-    if (kind === 3) return this.addBedrockMonolith(cx, cy, 50 + Math.random() * 35);
-    const roll = Math.random();
-    const width = roll < 0.4 ? BEDROCK_SIZES.thin : roll < 0.9 ? BEDROCK_SIZES.standard : BEDROCK_SIZES.massive;
-    const angle = Math.random() * Math.PI * 2;
-    const points = [];
-    if (kind === 0) {
-      // Straight wall
-      const half = 90 + Math.random() * 120;
-      points.push({ x: cx - Math.cos(angle) * half, y: cy - Math.sin(angle) * half });
-      points.push({ x: cx + Math.cos(angle) * half, y: cy + Math.sin(angle) * half });
-    } else if (kind === 1) {
-      // Bend: two legs meeting at a corner
-      const legA = 110 + Math.random() * 130;
-      const legB = 110 + Math.random() * 130;
-      const turn = angle + (Math.random() < 0.5 ? 1 : -1) * (Math.PI * (0.4 + Math.random() * 0.2));
-      points.push({ x: cx + Math.cos(angle) * legA, y: cy + Math.sin(angle) * legA });
-      points.push({ x: cx, y: cy });
-      points.push({ x: cx + Math.cos(turn) * legB, y: cy + Math.sin(turn) * legB });
-    } else {
-      // Arc: part of a ring, open on one side
-      const r = 130 + Math.random() * 100;
-      const sweep = Math.PI * (0.45 + Math.random() * 0.45);
-      const steps = 7;
-      for (let k = 0; k <= steps; k++) {
-        const a = angle - sweep / 2 + (sweep * k) / steps;
-        points.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-      }
-    }
-    const pad = width + 50;
-    for (const pt of points) {
-      pt.x = Math.max(pad, Math.min(this.worldWidth - pad, pt.x));
-      pt.y = Math.max(pad, Math.min(this.worldHeight - pad, pt.y));
-    }
-    return this.addBedrockWall(points, width);
+    return this.addBedrockClump(cx, cy, 45 + Math.pow(Math.random(), 1.5) * 165);
   }
 
-  // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
-  // A cluster's footprint is fixed (CLUSTER_SPREAD); rock size only sets how many rocks fit in it, so
-  // smaller rocks (TUNING.rockSizeMult) give a denser field of more, smaller rocks rather than a smaller one.
-  spawnCluster(cx, cy, avoid = null) {
-    const numRocks = CLUSTER_ROCKS_MIN + Math.floor(Math.random() * CLUSTER_ROCKS_RANGE);
-    const mainAngle = Math.random() * Math.PI * 2;
-    const elongation = 1.2 + Math.random() * 1.4;
+  // A mineable rock node: HP and (for veins) ore by `oreType`, both scaled by area against ROCK_REF
+  // when `scaled` (mass nodes), so mining time and ore per area match the classic rocks.
+  makeRock(x, y, radius, oreType, scaled, group = newGroup(scaled ? 'mass' : 'loose')) {
     const sizeMult = TUNING.rockSizeMult ?? 0.8;
     const hpMult = TUNING.rockHpMult ?? 1.6;
     // Vein HP was set for the old 1.15x rocks: it shrinks with rock size so drilling time per area holds.
     const veinHp = hpMult * Math.min(1, sizeMult / 1.15);
+    const ref = ROCK_REF * sizeMult;
+    const area = scaled ? (radius / ref) ** 2 * MASS_PACKING : 1;
+    let maxHp = scaled ? (ROCK_HP_BASE + ref * 1.05) * hpMult * area : (ROCK_HP_BASE + radius * 1.05) * hpMult;
+    let hue = 205;
+    if (oreType === 'core_vein') { maxHp = 80 * veinHp * area; hue = 285; }
+    else if (oreType === 'gold_vein') { maxHp = 58 * veinHp * area; hue = 46; }
+    else if (oreType === 'shield_vein') { maxHp = 48 * veinHp * area; hue = 155; }
+    const sides = scaled ? 7 + Math.floor(Math.random() * 2) : 6 + Math.floor(Math.random() * 3);
+    const rock = {
+      x,
+      y,
+      radius,
+      sides,
+      mass: !!scaled,
+      group,
+      verts: scaled ? nodeVerts(radius, sides, 0.86, 1.1) : nodeVerts(radius, sides, 0.82, 1.14),
+      rotation: Math.random() * Math.PI * 2,
+      oreType,
+      hp: maxHp,
+      maxHp,
+      hue,
+      hitFlash: 0
+    };
+    this.asteroids.push(rock);
+    return rock;
+  }
+
+  // A fresh cluster at (cx, cy): a mass (TUNING.massClusterChance) or a loose scatter.
+  // `avoid` ({ x, y, radius }) keeps every rock clear of a point, e.g. the player.
+  spawnCluster(cx, cy, avoid = null) {
+    if (Math.random() < (TUNING.massClusterChance ?? 0.5)) this.spawnMassCluster(cx, cy, avoid);
+    else this.spawnLooseCluster(cx, cy, avoid);
+  }
+
+  // An asteroid mass: small nodes accreted into one big irregular shape (a blob, an elongated ridge or
+  // a lumpy, lobed rock) up to `reach` px from (cx, cy), grown from `seeds` when given (a bedrock clump
+  // it buries). Ore comes in short seams: a node that rolls a vein spreads it to a neighbour or two.
+  spawnMassCluster(cx, cy, avoid = null, { seeds = null, reach = MASS_REACH_MIN + Math.random() * MASS_REACH_RANGE } = {}) {
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
+    const kind = Math.floor(Math.random() * 3);
+    const a0 = Math.random() * Math.PI * 2;
+    const axes = kind === 1 ? [a0, a0 + Math.PI] : kind === 2 ? [a0, a0 + 2 + Math.random(), a0 - 2 - Math.random()] : [];
+    const edgeFor = (r) => Math.max(80, r + 60);
+    const nearBedrock = this.asteroids.filter((b) => b.unbreakable && Math.hypot(b.x - cx, b.y - cy) < reach + b.radius + BORDER_GAP + 60);
+    const ok = (x, y, r) => {
+      const e = edgeFor(r);
+      if (x < e || y < e || x > this.worldWidth - e || y > this.worldHeight - e) return false;
+      if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < r + avoid.radius) return false;
+      return clearOfBedrock(nearBedrock, x, y, r);
+    };
+    const nodeR = () => (MASS_NODE_MIN + Math.random() * MASS_NODE_RANGE) * sizeMult;
+    const meanR = (MASS_NODE_MIN + MASS_NODE_RANGE / 2) * sizeMult;
+    let pool = seeds;
+    if (!pool?.length) {
+      const r = nodeR();
+      if (!ok(cx, cy, r)) return [];
+      pool = [{ x: cx, y: cy, radius: r }];
+    }
+    const count = Math.round((Math.PI * reach * reach) / (meanR * meanR * 2.6));
+    const nodes = seeds?.length ? [] : [pool[0]];
+    nodes.push(...accrete(pool, count, { cx, cy, reach, axes, axisBias: kind === 0 ? 0 : 0.55, radius: nodeR, ok }));
+
+    // Ore seams. Odds per node scale with its area (against the classic rock, less the packing overlap),
+    // divided by the seam length, so a mass pays about as much ore as the same rock in classic rocks.
+    const ore = new Array(nodes.length).fill('rock');
+    const ref = ROCK_REF * sizeMult;
     const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
-    const bedrock = this.asteroids.filter(isBedrock);
-    // Behind a bedrock arena wall, rocks keep the same ship-wide gap from the wall's face.
-    const wallPad = bedrock.some((r) => r.slab?.border) ? 70 : 0;
+    const seam = (i, type) => {
+      ore[i] = type;
+      let extra = Math.random() < 0.5 ? 1 : Math.random() < 0.6 ? 2 : 0; // ~SEAM_EXTRA on average
+      let last = nodes[i];
+      while (extra-- > 0) {
+        let best = -1, bestD = Infinity;
+        for (let j = 0; j < nodes.length; j++) {
+          if (ore[j] !== 'rock') continue;
+          const d = Math.hypot(nodes[j].x - last.x, nodes[j].y - last.y);
+          if (d < bestD) { bestD = d; best = j; }
+        }
+        if (best < 0 || bestD > (last.radius + nodes[best].radius) * 1.1) break;
+        ore[best] = type;
+        last = nodes[best];
+      }
+    };
+    // A deep core (one node, no seam) sits at the heart: the mineable node nearest the centre.
+    if (nodes.length && Math.random() < MASS_CORE_CHANCE) {
+      let best = 0;
+      for (let i = 1; i < nodes.length; i++) if (Math.hypot(nodes[i].x - cx, nodes[i].y - cy) < Math.hypot(nodes[best].x - cx, nodes[best].y - cy)) best = i;
+      ore[best] = 'core_vein';
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      if (ore[i] !== 'rock') continue;
+      const w = (nodes[i].radius / ref) ** 2 * MASS_PACKING / (1 + SEAM_EXTRA);
+      const roll = Math.random();
+      if (roll < goldChance * w) seam(i, 'gold_vein');
+      else if (roll < (goldChance + SHIELD_VEIN_CHANCE) * w) seam(i, 'shield_vein');
+    }
+    const group = newGroup('mass');
+    return nodes.map((n, i) => this.makeRock(n.x, n.y, n.radius, ore[i], true, group));
+  }
+
+  // The classic loose cluster: separate rocks scattered round (cx, cy), touching but mostly apart.
+  // A cluster's footprint is fixed (CLUSTER_SPREAD); rock size only sets how many rocks fit in it, so
+  // smaller rocks (TUNING.rockSizeMult) give a denser field of more, smaller rocks rather than a smaller one.
+  spawnLooseCluster(cx, cy, avoid = null) {
+    const numRocks = CLUSTER_ROCKS_MIN + Math.floor(Math.random() * CLUSTER_ROCKS_RANGE);
+    const mainAngle = Math.random() * Math.PI * 2;
+    const elongation = 1.2 + Math.random() * 1.4;
+    const sizeMult = TUNING.rockSizeMult ?? 0.8;
+    const goldChance = Math.max(0, TUNING.goldVeinChance ?? 0.15);
+    const nearBedrock = this.asteroids.filter((b) => b.unbreakable && Math.hypot(b.x - cx, b.y - cy) < CLUSTER_SPREAD * 3 + b.radius + BORDER_GAP + 60);
 
     const placed = [];
+    const group = newGroup('loose');
     for (let i = 0; i < numRocks; i++) {
       const spreadA = mainAngle + (Math.random() - 0.5) * 2.2;
       const dist = Math.pow(Math.random(), 0.65) * CLUSTER_SPREAD;
@@ -685,7 +672,7 @@ export class AsteroidManager {
 
       const radius = (26 + Math.random() * 22) * sizeMult;
       // Leave a wall gap wide enough for the ship to pass.
-      const edge = Math.max(80, radius + 60) + wallPad;
+      const edge = Math.max(80, radius + 60);
       const x = Math.max(edge, Math.min(this.worldWidth - edge, rx));
       const y = Math.max(edge, Math.min(this.worldHeight - edge, ry));
       if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < radius + avoid.radius) continue;
@@ -699,66 +686,18 @@ export class AsteroidManager {
           break;
         }
       }
-      if (tooClose) continue;
-      for (let j = 0; j < bedrock.length; j++) {
-        const w = bedrock[j];
-        if (Math.hypot(x - w.x, y - w.y) < radius + w.radius + 4) {
-          tooClose = true;
-          break;
-        }
-      }
-      if (tooClose) continue;
-
-      const distFromCore = Math.hypot(x - cx, y - cy);
-      const roll = Math.random();
-      let oreType = 'rock';
-      let maxHp = (ROCK_HP_BASE + radius * 1.05) * hpMult;
-      let hue = 205;
+      if (tooClose || !clearOfBedrock(nearBedrock, x, y, radius)) continue;
 
       // Deep cores sit near the cluster's heart; the rest roll gold, then shield, then plain rock.
+      const distFromCore = Math.hypot(x - cx, y - cy);
+      const roll = Math.random();
       const coreBand = distFromCore < CORE_VEIN_RADIUS ? CORE_VEIN_CHANCE : 0;
-      if (roll < coreBand) {
-        oreType = 'core_vein';
-        maxHp = 80 * veinHp;
-        hue = 285;
-      } else if (roll < coreBand + goldChance) {
-        oreType = 'gold_vein';
-        maxHp = 58 * veinHp;
-        hue = 46;
-      } else if (roll < coreBand + goldChance + SHIELD_VEIN_CHANCE) {
-        oreType = 'shield_vein';
-        maxHp = 48 * veinHp;
-        hue = 155;
-      }
-
-      const sides = 6 + Math.floor(Math.random() * 3);
-      const verts = [];
-      for (let s = 0; s < sides; s++) {
-        const a = (s * Math.PI * 2) / sides;
-        const rJitter = radius * (0.82 + Math.random() * 0.32);
-        verts.push({
-          x: Math.cos(a) * rJitter,
-          y: Math.sin(a) * rJitter
-        });
-      }
-
-      const rock = {
-        x,
-        y,
-        radius,
-        sides,
-        verts,
-        rotation: Math.random() * Math.PI * 2,
-        oreType,
-        hp: maxHp,
-        maxHp,
-        hue,
-        hitFlash: 0
-      };
-
-      placed.push(rock);
-      this.asteroids.push(rock);
+      const oreType = roll < coreBand ? 'core_vein'
+        : roll < coreBand + goldChance ? 'gold_vein'
+          : roll < coreBand + goldChance + SHIELD_VEIN_CHANCE ? 'shield_vein' : 'rock';
+      placed.push(this.makeRock(x, y, radius, oreType, false, group));
     }
+    return placed;
   }
 
   // Blow up every rock touching a circle (a boss's portal opening): each goes through the normal shatter
@@ -783,11 +722,22 @@ export class AsteroidManager {
   rebuildSpatialHash() {
     this.spatialGrid.clear();
     this.maxRockRadius = this.asteroids.reduce((max, rock) => Math.max(max, rock.radius), 0);
-    // Slabs to draw: the ones whose pieces are still in the field (callers may swap `asteroids` out).
-    const slabs = new Set();
-    for (let i = 0; i < this.asteroids.length; i++) if (this.asteroids[i].slab) slabs.add(this.asteroids[i].slab);
-    this.slabs = [...slabs];
-    this.bordered = this.slabs.some((sl) => sl.border); // walled in by bedrock (else the game draws a line)
+    this.bordered = this.asteroids.some((r) => r.border); // walled in by bedrock (else the game draws a line)
+    // Draw groups and their live nodes; a group whose node count changed rebuilds its paths.
+    const groups = new Map();
+    for (let i = 0; i < this.asteroids.length; i++) {
+      const g = this.asteroids[i].group;
+      if (!g) continue;
+      let list = groups.get(g);
+      if (!list) groups.set(g, (list = []));
+      list.push(this.asteroids[i]);
+    }
+    for (const [g, list] of groups) {
+      if (g.count !== list.length) g.dirty = true;
+      g.nodes = list;
+      g.count = list.length;
+    }
+    this.groups = [...groups.keys()];
     for (let i = 0; i < this.asteroids.length; i++) {
       const a = this.asteroids[i];
       const gx = Math.floor(a.x / this.cellSize);
@@ -1076,25 +1026,28 @@ export class AsteroidManager {
     return false;
   }
 
-  // Rocks in view only (via the spatial grid), each drawn with one setTransform from the camera
-  // transform instead of save/translate/rotate/restore, and a cached outline path and colors.
+  // Rocks in view. Bedrock first, then mineable rock over it (rock grown onto a bedrock core overlaps
+  // its edge). Overlapping nodes merge into one solid shape by drawing in passes: every rim, then every
+  // body over them (hiding each rim inside the shape, so only the outer edge keeps one), then the raised
+  // top faces, then detail. Grouped nodes draw from their group's shared paths (buildGroup); nodes being
+  // drilled are redrawn on top with their hit flash, cracks and hot spot.
   draw(ctx, camX, camY, viewW, viewH) {
-    const pad = 70;
+    const pad = 70 + (this.maxRockRadius || 0);
     const minX = camX - pad;
     const maxX = camX + viewW + pad;
     const minY = camY - pad;
     const maxY = camY + viewH + pad;
     const base = ctx.getTransform ? ctx.getTransform() : null;
+    const grouped = !!base && typeof Path2D !== 'undefined';
     const cs = this.cellSize;
     const gx0 = Math.floor(minX / cs) - 1, gx1 = Math.floor(maxX / cs) + 1;
     const gy0 = Math.floor(minY / cs) - 1, gy1 = Math.floor(maxY / cs) + 1;
-
-    const slabs = this.slabs || [];
-    for (let i = 0; i < slabs.length; i++) {
-      const sl = slabs[i];
-      if (sl.maxX < minX || sl.minX > maxX || sl.maxY < minY || sl.minY > maxY) continue;
-      this.drawSlab(ctx, sl);
-    }
+    const bed = (this.visibleBedrock ||= []);
+    const rock = (this.visibleRock ||= []);
+    const live = (this.visibleLive ||= []);
+    bed.length = 0;
+    rock.length = 0;
+    live.length = 0;
 
     for (let gx = gx0; gx <= gx1; gx++) {
       for (let gy = gy0; gy <= gy1; gy++) {
@@ -1102,61 +1055,165 @@ export class AsteroidManager {
         if (!cell) continue;
         for (let i = 0; i < cell.length; i++) {
           const a = cell[i];
-          if (a.hp <= 0 || a.slab || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
-          this.drawRock(ctx, a, base);
+          if (a.hp <= 0 || a.x < minX || a.x > maxX || a.y < minY || a.y > maxY) continue;
+          if (grouped && a.group) {
+            if (a.hitFlash > 0 || a.hp < a.maxHp * 0.97) live.push(a);
+          } else (a.unbreakable ? bed : rock).push(a);
         }
       }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineJoin = 'round';
+    if (grouped) {
+      const gb = (this.visibleGroupsBed ||= []);
+      const gr = (this.visibleGroupsRock ||= []);
+      gb.length = 0;
+      gr.length = 0;
+      for (const g of this.groups || []) {
+        if (g.dirty) buildGroup(g);
+        if (g.maxX < minX || g.minX > maxX || g.maxY < minY || g.minY > maxY) continue;
+        (g.kind === 'bedrock' ? gb : gr).push(g);
+      }
+      ctx.setTransform(base);
+      if (gb.length) this.drawGroups(ctx, gb);
+      if (bed.length) this.drawNodes(ctx, base, bed);
+      if (gr.length) this.drawGroups(ctx, gr);
+      if (rock.length) this.drawNodes(ctx, base, rock);
+      if (live.length) this.drawLiveNodes(ctx, base, live);
+    } else {
+      if (bed.length) this.drawNodes(ctx, base, bed);
+      if (rock.length) this.drawNodes(ctx, base, rock);
     }
     ctx.globalCompositeOperation = 'source-over';
     if (base) ctx.setTransform(base);
   }
 
-  drawRock(ctx, a, base) {
-    const look = rockLook(a);
-    const { cos, sin } = look;
-    // A rock being ground shudders a pixel or so.
-    const jit = a.hitFlash > 0.4 ? 1.3 : 0;
-    const px = a.x + (jit ? (Math.random() - 0.5) * jit * 2 : 0);
-    const py = a.y + (jit ? (Math.random() - 0.5) * jit * 2 : 0);
-    if (base) {
-      ctx.setTransform(
-        base.a * cos + base.c * sin, base.b * cos + base.d * sin,
-        base.c * cos - base.a * sin, base.d * cos - base.b * sin,
-        base.a * px + base.c * py + base.e, base.b * px + base.d * py + base.f
-      );
-    } else {
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(a.rotation);
+  // Grouped nodes, a few fills per group: rims and bodies of the exposed nodes, every top face (an
+  // interior node's covers its whole outline), then ore cores and bedrock cracks. No wide strokes: on a
+  // CPU-rastered canvas they cost several times a fill. Seams show only on damaged nodes (drawLiveNodes).
+  drawGroups(ctx, groups) {
+    for (const g of groups) {
+      for (const m of g.mats) {
+        if (!m.rim) continue;
+        ctx.fillStyle = m.look.rim;
+        ctx.fill(m.rim);
+      }
     }
+    for (const g of groups) {
+      for (const m of g.mats) {
+        if (!m.body) continue;
+        ctx.fillStyle = m.look.body;
+        ctx.fill(m.body);
+      }
+    }
+    for (const g of groups) {
+      for (const m of g.mats) {
+        ctx.fillStyle = m.look.top;
+        ctx.fill(m.top);
+      }
+    }
+    for (const g of groups) {
+      for (const m of g.mats) {
+        if (!m.extra) continue;
+        ctx.strokeStyle = m.look.bedrock ? 'rgba(6, 3, 12, 0.95)' : m.look.core;
+        ctx.lineWidth = m.look.bedrock ? 1.6 : 1.8;
+        ctx.stroke(m.extra);
+      }
+    }
+  }
+
+  // Nodes being drilled (or damaged), over their group: the top face with its hit flash, a brighter
+  // seam, then cracks and the hot spot. A node being ground shudders a pixel or so.
+  drawLiveNodes(ctx, base, list) {
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const look = rockLook(a);
+      const jit = a.hitFlash > 0.4 ? 1.3 : 0;
+      a.jx = jit ? (Math.random() - 0.5) * jit * 2 : 0;
+      a.jy = jit ? (Math.random() - 0.5) * jit * 2 : 0;
+      nodeBegin(ctx, base, a, look, look.topScale);
+      ctx.fillStyle = a.hitFlash > 0 ? look.flash : look.top;
+      const path = nodePath(ctx, a, look);
+      if (path) ctx.fill(path); else ctx.fill();
+      ctx.strokeStyle = look.seamHurt || look.seam;
+      ctx.lineWidth = 1.1 / look.topScale;
+      if (path) ctx.stroke(path); else ctx.stroke();
+      nodeEnd(ctx, base);
+      nodeBegin(ctx, base, a, look, 1);
+      this.drawNodeDetail(ctx, a, look);
+      nodeEnd(ctx, base);
+    }
+    if (base) ctx.setTransform(base);
+  }
+
+  // Node by node (no Path2D, or nodes outside any group): the same passes, one node at a time.
+  drawNodes(ctx, base, list) {
+    // A node being ground shudders a pixel or so (the same offset in every pass this frame).
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const jit = a.hitFlash > 0.4 ? 1.3 : 0;
+      a.jx = jit ? (Math.random() - 0.5) * jit * 2 : 0;
+      a.jy = jit ? (Math.random() - 0.5) * jit * 2 : 0;
+    }
+    // 1. Rims: wide strokes, mostly covered by the bodies next.
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const look = rockLook(a);
+      nodeBegin(ctx, base, a, look, 1);
+      ctx.strokeStyle = a.hitFlash > 0 ? '#ffffff' : look.rim;
+      ctx.lineWidth = look.rimW;
+      const path = nodePath(ctx, a, look);
+      if (path) ctx.stroke(path); else ctx.stroke();
+      nodeEnd(ctx, base);
+    }
+    // 2. Bodies.
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const look = rockLook(a);
+      nodeBegin(ctx, base, a, look, 1);
+      ctx.fillStyle = look.body;
+      const path = nodePath(ctx, a, look);
+      if (path) ctx.fill(path); else ctx.fill();
+      nodeEnd(ctx, base);
+    }
+    // 3. Raised top faces: an inset of each outline, a shade lighter (hit-flashed while being ground).
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const look = rockLook(a);
+      nodeBegin(ctx, base, a, look, look.topScale);
+      ctx.fillStyle = a.hitFlash > 0 ? look.flash : look.top;
+      const path = nodePath(ctx, a, look);
+      if (path) ctx.fill(path); else ctx.fill();
+      // Faint cobble seam round each top face: the nodes the mass will break into.
+      ctx.strokeStyle = a.hp < a.maxHp * 0.97 && look.seamHurt ? look.seamHurt : look.seam;
+      ctx.lineWidth = 1.1 / look.topScale;
+      if (path) ctx.stroke(path); else ctx.stroke();
+      nodeEnd(ctx, base);
+    }
+    // 4. Detail: ore cores, bedrock cracks, damage cracks and the hot spot under the drill.
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const look = rockLook(a);
+      if (!look.isRich && !look.bedrock && !(a.hp < a.maxHp * 0.97)) continue;
+      nodeBegin(ctx, base, a, look, 1);
+      this.drawNodeDetail(ctx, a, look);
+      nodeEnd(ctx, base);
+    }
+    if (base) ctx.setTransform(base);
+  }
+
+  drawNodeDetail(ctx, a, look) {
     if (look.bedrock) {
-      this.drawBedrockPiece(ctx, a, look);
-      if (!base) ctx.restore();
+      const c = look.crack;
+      ctx.strokeStyle = 'rgba(6, 3, 12, 0.95)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(c[0].x, c[0].y);
+      for (let k = 1; k < c.length; k++) ctx.lineTo(c[k].x, c[k].y);
+      ctx.stroke();
       return;
     }
-    const hpRatio = Math.max(0, a.hp / a.maxHp);
     const isRich = look.isRich;
-    const flashing = a.hitFlash > 0;
-
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = flashing ? look.flashFill : look.fill;
-    let path = look.path;
-    if (!path) {
-      ctx.beginPath();
-      for (let v = 0; v < a.verts.length; v++) {
-        const pt = a.verts[v];
-        if (v === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      }
-      ctx.closePath();
-    }
-    if (path) ctx.fill(path); else ctx.fill();
-
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = flashing ? '#ffffff' : look.stroke;
-    ctx.lineWidth = isRich ? 2.6 : 1.9;
-    if (path) ctx.stroke(path); else ctx.stroke();
-
     if (isRich) {
       const rCore = a.radius * 0.42;
       ctx.strokeStyle = look.core;
@@ -1172,7 +1229,7 @@ export class AsteroidManager {
 
     // Cracks spread from where the drill bit in, glowing hotter as the rock nears breaking; a
     // white-hot spot marks the contact while it is being ground.
-    const dmg = 1 - hpRatio;
+    const dmg = 1 - Math.max(0, a.hp / a.maxHp);
     if (dmg > 0.03) {
       let cracks = a.cracks;
       if (!cracks) {
@@ -1183,13 +1240,14 @@ export class AsteroidManager {
       const open = Math.min(1, dmg * 1.15);
       ctx.beginPath();
       for (let i = 0; i < cracks.segs.length; i++) {
-        const s = cracks.segs[i];
-        if (s.at0 >= open) continue;
-        const k = Math.min(1, (open - s.at0) / (s.at - s.at0));
-        ctx.moveTo(s.x1, s.y1);
-        ctx.lineTo(s.x1 + (s.x2 - s.x1) * k, s.y1 + (s.y2 - s.y1) * k);
+        const sg = cracks.segs[i];
+        if (sg.at0 >= open) continue;
+        const k = Math.min(1, (open - sg.at0) / (sg.at - sg.at0));
+        ctx.moveTo(sg.x1, sg.y1);
+        ctx.lineTo(sg.x1 + (sg.x2 - sg.x1) * k, sg.y1 + (sg.y2 - sg.y1) * k);
       }
       ctx.lineCap = 'round';
+      ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = `hsla(${hue}, 100%, 55%, ${0.25 + 0.35 * dmg})`;
       ctx.lineWidth = 3.4 + 2 * dmg;
       ctx.stroke();
@@ -1208,74 +1266,7 @@ export class AsteroidManager {
         ctx.arc(hot.x, hot.y, 1.5 + 2 * heat, 0, Math.PI * 2);
         ctx.fill();
       }
-    }
-    if (!base) ctx.restore();
-  }
-
-  // A bedrock slab (world coordinates, under the camera transform): a near-black body, a raised top face
-  // a shade lighter with hairline cracks, faint bevel ridges joining the two, a dim inner edge and a bright
-  // pale-violet rim. Rubble chunks get the body and rim. No cracks or flashes: it never takes damage.
-  drawSlab(ctx, sl) {
-    const look = slabLook(sl);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(13, 9, 24, 0.98)';
-    fillOrStroke(ctx, look.rim, sl.outline, 'x', 'y', 'fill');
-    ctx.fillStyle = 'rgba(30, 22, 50, 0.98)';
-    fillOrStroke(ctx, look.top, sl.outline, 'ix', 'iy', 'fill');
-    for (const ch of look.chunks) fillOrStroke(ctx, ch.path, ch.verts, 'x', 'y', 'fill');
-    // Cracks: dark hairlines cut into the top face.
-    ctx.strokeStyle = 'rgba(6, 3, 12, 0.95)';
-    ctx.lineWidth = 1.8;
-    if (look.cracks) ctx.stroke(look.cracks);
-    else {
-      ctx.beginPath();
-      for (const c of sl.cracks || []) c.forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)));
-      ctx.stroke();
-    }
-
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 40%, 62%, 0.22)`;
-    ctx.lineWidth = 1.2;
-    if (look.ridges) ctx.stroke(look.ridges);
-    else {
-      ctx.beginPath();
-      for (const v of sl.outline) { ctx.moveTo(v.x, v.y); ctx.lineTo(v.ix, v.iy); }
-      ctx.stroke();
-    }
-    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 55%, 64%, 0.42)`;
-    ctx.lineWidth = 1.4;
-    fillOrStroke(ctx, look.top, sl.outline, 'ix', 'iy', 'stroke');
-    ctx.strokeStyle = `hsla(${BEDROCK_HUE}, 45%, 76%, 0.95)`;
-    ctx.lineWidth = 3;
-    fillOrStroke(ctx, look.rim, sl.outline, 'x', 'y', 'stroke');
-    ctx.lineWidth = 2;
-    for (const ch of look.chunks) fillOrStroke(ctx, ch.path, ch.verts, 'x', 'y', 'stroke');
-  }
-
-  // A lone bedrock piece (addBedrock without a slab): a near-black slab with a bright pale-violet rim
-  // and an inset facet. No cracks or flashes.
-  drawBedrockPiece(ctx, a, look) {
-    const path = look.path;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = look.fill;
-    if (!path) {
-      ctx.beginPath();
-      for (let v = 0; v < a.verts.length; v++) {
-        const pt = a.verts[v];
-        if (v === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      }
-      ctx.closePath();
-    }
-    if (path) ctx.fill(path); else ctx.fill();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = look.stroke;
-    ctx.lineWidth = 3.2;
-    if (path) ctx.stroke(path); else ctx.stroke();
-    if (look.inner) {
-      ctx.strokeStyle = look.core;
-      ctx.lineWidth = 1.6;
-      ctx.stroke(look.inner);
+      ctx.globalCompositeOperation = 'source-over';
     }
   }
 }

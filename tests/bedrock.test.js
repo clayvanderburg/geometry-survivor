@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Bedrock (js/asteroids.js): unbreakable rock for level design. Walls and monoliths are slabs drawn as one
-// shape over gapless collision that matches the rim. Nothing breaks it
-// (drill-claws, elite grinding, boss portal blasts), it blocks the ship, it never counts toward
-// replenishing the sector, clusters fill in round it, and elites steer round it instead of plowing.
+// Bedrock (js/asteroids.js): unbreakable rock made of overlapping nodes: clumps (blobs, ridges, arms) in
+// all sizes, walls and the arena border. Nothing breaks it (drill-claws, elite grinding, boss portal
+// blasts), it blocks the ship, it never counts toward replenishing the sector, asteroids coat it without
+// burying it (most clumps are an asteroid's hard core), and elites steer round it instead of plowing.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
-const { AsteroidManager, BEDROCK_RADIUS, BEDROCK_SIZES, BEDROCK_SPACING, isBedrock } = await import('../js/asteroids.js');
+const { AsteroidManager, BEDROCK_RADIUS, BORDER_GAP, isBedrock } = await import('../js/asteroids.js');
 const { steerAroundRocks } = await import('../js/pursuit.js');
 
 const DT = 1 / 60;
@@ -20,44 +20,52 @@ function ship(x, y, angle = 0) {
   return { x, y, vx: 0, vy: 0, radius: 15, angle, drillAngle: angle, stats: { miningSpeed: 9999, miningRange: 60 } };
 }
 
-test('a bedrock wall is one slab over a gapless chain of collision circles that matches its rim', () => {
-  const am = new AsteroidManager(4200, 4200);
-  for (const width of Object.values(BEDROCK_SIZES)) {
-    const slab = am.addBedrockWall([{ x: 1000, y: 1000 }, { x: 1600, y: 1000 }, { x: 1600, y: 1500 }], width);
-    const pieces = slab.pieces;
-    assert.ok(pieces.length > 10);
-    assert.ok(pieces.every((r) => isBedrock(r) && r.slab === slab));
-    for (let i = 1; i < pieces.length; i++) {
-      const gap = Math.hypot(pieces[i].x - pieces[i - 1].x, pieces[i].y - pieces[i - 1].y);
-      assert.ok(gap <= width * BEDROCK_SPACING + 1e-6, `gap ${gap}`);
+// Two nodes touch when their circles overlap; a clump is one piece when every node can reach every other.
+function connected(nodes) {
+  const seen = new Set([nodes[0]]);
+  const stack = [nodes[0]];
+  while (stack.length) {
+    const a = stack.pop();
+    for (const b of nodes) {
+      if (!seen.has(b) && Math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius) { seen.add(b); stack.push(b); }
     }
-    assert.ok(Math.hypot(pieces.at(-1).x - 1600, pieces.at(-1).y - 1500) < 1e-6, 'reaches the end point');
-    // What you see is what you hit: every rim vertex sits close to the edge of the collision.
-    const solid = [...pieces, ...am.asteroids.filter((r) => r.chunk && r.slab === slab)];
-    for (const v of slab.outline) {
-      const edge = Math.min(...solid.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
-      // Rough rock: notches bite in (the collision stays a little fuller there), spurs barely jut past it.
-      assert.ok(edge > -width * 0.48 && edge < width * 0.18, `rim vertex ${edge.toFixed(1)} px off the collision edge (width ${width})`);
-    }
-    assert.ok(slab.chunks.length >= 2, 'rubble chunks round the rim');
   }
+  return seen.size === nodes.length;
+}
+
+test('a bedrock clump is one connected piece of overlapping nodes, in all shapes and sizes', () => {
+  const sizes = [];
+  for (let i = 0; i < 40; i++) {
+    const am = new AsteroidManager(4200, 4200);
+    const size = 45 + (i % 8) * 25;
+    const nodes = am.addBedrockClump(2000, 2000, size);
+    assert.ok(nodes.length >= 3, `${nodes.length} nodes`);
+    assert.ok(nodes.every((r) => isBedrock(r) && r.group === nodes[0].group), 'one draw group');
+    assert.ok(connected(nodes), 'connected');
+    for (const r of nodes) {
+      assert.ok(r.radius >= 14 && r.radius <= 46, `node radius ${r.radius}`);
+      assert.ok(Math.hypot(r.x - 2000, r.y - 2000) <= size + 1e-6, 'within its size');
+    }
+    const span = Math.max(...nodes.map((r) => Math.hypot(r.x - 2000, r.y - 2000) + r.radius));
+    sizes.push(span);
+  }
+  assert.ok(Math.min(...sizes) < 80 && Math.max(...sizes) > 160, `small and big clumps (${Math.min(...sizes).toFixed(0)}-${Math.max(...sizes).toFixed(0)} px)`);
 });
 
-test('a monolith is one big slab covered by a few collision circles', () => {
+test('a bedrock wall is a chain of overlapping nodes from end to end', () => {
   const am = new AsteroidManager(4200, 4200);
-  const slab = am.addBedrockMonolith(2000, 2000, 100);
-  assert.equal(slab.pieces.length, 7);
-  assert.ok(slab.pieces.every((r) => r.radius <= 70), 'pieces stay small for the spatial hash');
-  const solid = am.asteroids.filter((r) => r.slab === slab);
-  for (const v of slab.outline) {
-    const edge = Math.min(...solid.map((r) => Math.hypot(v.x - r.x, v.y - r.y) - r.radius));
-    assert.ok(edge > -28 && edge < 12, `rim vertex ${edge.toFixed(1)} px off the collision edge`);
+  const nodes = am.addBedrockWall([{ x: 1000, y: 1000 }, { x: 1600, y: 1000 }, { x: 1600, y: 1500 }], BEDROCK_RADIUS);
+  assert.ok(nodes.length > 15);
+  for (let i = 1; i < nodes.length; i++) {
+    const [a, b] = [nodes[i - 1], nodes[i]];
+    assert.ok(Math.hypot(a.x - b.x, a.y - b.y) < (a.radius + b.radius) * 0.9, 'neighbours overlap');
   }
+  assert.ok(Math.hypot(nodes.at(-1).x - 1600, nodes.at(-1).y - 1500) < 1e-6, 'reaches the end point');
   am.rebuildSpatialHash();
-  assert.deepEqual(am.slabs, [slab]);
+  assert.equal(am.groups.length, 1, 'one draw group');
   am.asteroids = [];
   am.rebuildSpatialHash();
-  assert.deepEqual(am.slabs, [], 'a cleared field draws no slabs');
+  assert.deepEqual(am.groups, [], 'a cleared field draws nothing');
 });
 
 test('the drill-claws, elites and boss portals never break bedrock', () => {
@@ -80,54 +88,61 @@ test('the drill-claws, elites and boss portals never break bedrock', () => {
   assert.ok(Math.hypot(p.x - 2000, p.y - 2000) >= BEDROCK_RADIUS + p.radius - 1e-6, 'pushed out');
 });
 
-test('bedrock never counts toward replenishing, and clusters are never placed on it', () => {
+test('bedrock never counts toward replenishing; rock may coat it but never buries it, and keeps a gap from the wall', () => {
   reset();
   TUNING.bedrockFormations = 8;
+  TUNING.bedrockFormationChance = 1;
   const am = new AsteroidManager(4200, 4200);
   am.generateSector(2100, 2100);
   const bedrock = am.asteroids.filter(isBedrock);
-  assert.ok(bedrock.length > 20, `${bedrock.length} bedrock pieces`);
+  assert.ok(bedrock.length > 20, `${bedrock.length} bedrock nodes`);
   assert.equal(am.sectorRockCount, am.asteroids.length - bedrock.length);
-  for (const r of am.asteroids) {
-    if (isBedrock(r)) continue;
-    for (const b of bedrock) assert.ok(Math.hypot(r.x - b.x, r.y - b.y) >= (r.radius + b.radius) * 0.8 - 1e-6, 'rock on bedrock');
-  }
+  const check = (label) => {
+    for (const r of am.asteroids) {
+      if (isBedrock(r)) continue;
+      for (const b of bedrock) {
+        const d = Math.hypot(r.x - b.x, r.y - b.y);
+        if (b.border) assert.ok(d >= r.radius + b.radius + BORDER_GAP - 1e-6, `${label}: rock against the wall`);
+        else assert.ok(d >= b.radius * 0.75 - 1e-6, `${label}: rock buried in bedrock`);
+      }
+    }
+  };
+  check('sector');
   // Mine out the breakable rock: replenish asks for more even though the bedrock remains.
   am.asteroids = am.asteroids.filter(isBedrock);
   assert.equal(am.needsReplenish(), true);
   for (let c = 0; c < 30; c++) am.spawnCluster(300 + Math.random() * 3600, 300 + Math.random() * 3600);
-  for (const r of am.asteroids) {
-    if (isBedrock(r)) continue;
-    for (const b of bedrock) assert.ok(Math.hypot(r.x - b.x, r.y - b.y) >= r.radius + b.radius, 'replenished rock on bedrock');
-  }
+  check('replenished');
   reset();
 });
 
-test('the standard sector is walled in by bedrock and gets a few small formations, clear of the start', () => {
+test('the standard sector is walled in, and gets a few bedrock clumps, mostly buried in asteroids', () => {
   reset();
-  let formations = 0;
+  let clumps = 0, buried = 0;
   const N = 20;
   for (let i = 0; i < N; i++) {
     const am = new AsteroidManager(4200, 4200);
     am.generateSector(2100, 2100);
     assert.ok(am.bordered, 'walled in');
-    const border = am.slabs.filter((sl) => sl.border);
-    const inner = am.slabs.filter((sl) => !sl.border);
-    formations += inner.length;
-    // The wall hugs every edge: no stretch of edge without a piece near it.
-    for (let t = 0; t <= 4200; t += 60) {
+    const border = am.asteroids.filter((r) => r.border);
+    // The wall hugs every edge: no stretch of edge without a node over it.
+    for (let t = 0; t <= 4200; t += 40) {
       for (const [x, y] of [[t, 0], [t, 4200], [0, t], [4200, t]]) {
-        assert.ok(border.some((sl) => sl.pieces.some((r) => Math.hypot(r.x - x, r.y - y) < r.radius)), `gap in the wall at ${x},${y}`);
+        assert.ok(border.some((r) => Math.hypot(r.x - x, r.y - y) < r.radius), `gap in the wall at ${x},${y}`);
       }
     }
-    // Formations stay modest and keep away from where the ship starts.
-    for (const sl of inner) {
-      assert.ok(sl.maxX - sl.minX < 640 && sl.maxY - sl.minY < 640, 'small formation');
-      for (const r of sl.pieces) assert.ok(Math.hypot(r.x - 2100, r.y - 2100) > 400, 'clear of the start');
+    const groups = new Map();
+    for (const r of am.asteroids) if (isBedrock(r) && !r.border) groups.set(r.group, [...(groups.get(r.group) || []), r]);
+    for (const nodes of groups.values()) {
+      clumps++;
+      for (const r of nodes) assert.ok(Math.hypot(r.x - 2100, r.y - 2100) > 400, 'clear of the start');
+      const coated = am.asteroids.filter((o) => !o.unbreakable && nodes.some((b) => Math.hypot(o.x - b.x, o.y - b.y) < o.radius + b.radius)).length;
+      if (coated >= 6) buried++;
     }
   }
-  const mean = formations / N;
-  assert.ok(mean > 1.5 && mean < 4.5, `about 3 formations per sector (${mean})`);
+  const mean = clumps / N;
+  assert.ok(mean > 1.5 && mean < 4.5, `about 3 clumps per sector (${mean})`);
+  assert.ok(buried / clumps > 0.6, `most clumps are the hard core of an asteroid (${buried}/${clumps})`);
 });
 
 test('with the wall switched off the field is open (the game draws a boundary line instead)', () => {

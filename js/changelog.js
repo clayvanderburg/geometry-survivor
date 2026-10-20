@@ -16,9 +16,10 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-20',
     title: 'Space-Time Rifts & Bedrock',
     notes: [
-      { type: 'new', text: 'Space-time rifts: about once a minute a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
+      { type: 'new', text: 'Space-time rifts: about every 40 seconds a rift tears open near you. Fly in and it flings you to the far side of the map, then seals. You can\'t be hurt mid-jump.' },
       { type: 'new', text: 'An arrow at the screen edge and a ring on the radar point to an open rift. It closes after about 9 seconds.' },
-      { type: 'new', text: 'Bedrock: jagged violet slabs of rock that nothing can break, not your drills, elites or bosses. A few small formations turn up in every sector.' },
+      { type: 'new', text: 'Bedrock: violet rock that nothing can break, not your drills, elites or bosses. Clumps of it turn up in every sector, often buried inside an asteroid as its hard core.' },
+      { type: 'new', text: 'Bigger asteroids: about half the clusters are now one solid mass that your claws chew apart a few chunks at a time, with ore in short seams.' },
       { type: 'new', text: 'The edge of the sector is now a wall of bedrock instead of a glowing red line.' }
     ]
   },
