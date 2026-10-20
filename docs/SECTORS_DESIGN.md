@@ -157,33 +157,35 @@ Each hazard is its own later PR; a sector ships first with only palette, terrain
 ## 5. Story campaign
 
 ### 5.1 How story is delivered
-A cutscene and talking-head system is being built by another session (no branch pushed yet when this was
-written). This design assumes two calls; the real names come from that PR:
+The cutscene and talking-head system is built by the cutscene lane (PR #167); the story uses it as is:
 
 | Tool | When | Rules |
 |---|---|---|
-| **Cutscene** (`playCutscene(id)`) | Run start (first time), **inside each portal transit**, VICTORY, the Endless tag | Paused game; 3–6 panels or talking-head exchanges, under ~30 s; SKIP (hold to skip); run clock and score frozen. |
-| **Talking heads / radio** (`say(speaker, line)`) | Wave starts, boss warnings, objective updates, a few reactions (first Vortex, low shield) | **Never pauses.** Portrait plus one line in a bottom corner, 3–4 s, typewriter bleeps; at most one queued line; muted during the boss title card and level-up hands. |
+| **Cutscene** (`Game.playCutscene(id)`, scenes in `SCENES`, `js/story.js`) | Run start (first time), **inside each portal transit**, VICTORY, the Endless tag | Scripts are plain data (`{ do: 'say', who, text }` plus stage actions). The world keeps simulating but nothing can hurt the ship. Lines auto-advance after a read hold; A / click / Space speeds them up; **one press skips** (Esc, SKIP, pad Start). Under ~30 s; run clock and score frozen. For mid-run scenes the new sector holds its spawns until the scene ends, and the ship stays invulnerable. |
+| **Radio lines** (non-pausing `say(speaker, line)`, *planned* with the Dr. Pixie Breakthrough work) | Wave starts, boss warnings, objective updates, a few reactions (first Vortex, low shield) | **Never pauses.** Portrait plus one line in a bottom corner, 3–4 s, typewriter bleeps; at most one queued line; muted during the boss title card and level-up hands. |
 
-- `save.story = { seen: [...beat ids] }`, normalized like `guide.seen`. A beat plays once per save; a
+- Speakers and portraits go through `registerSpeaker` (name, colour, portrait, voice) and `registerPortrait`
+  (72×72 canvas pixel art). The VEX don't speak: their glyphs are read out by Dee's translator.
+- Today the opening's seen flag is localStorage `vexolith_intro_seen`. For the campaign it becomes
+  `save.story = { seen: [...scene ids] }`, normalized like `guide.seen`. A beat plays once per save; a
   **STORY: ON / FIRST TIME / OFF** setting covers veterans and speed-runners. The **Sector Atlas** (§7, PR 11)
   doubles as the rewatch menu.
 - Story shows in NORMAL and HARDCORE. BLITZ gets none (it's the quick run). The Weapon Range and sandbox never
   trigger story.
-- Story data is pure data in `js/story.js` (beats keyed by sector and trigger), so writers can edit it
-  without touching game code, and a test checks every beat id the sectors reference exists.
+- Chapter scenes and radio lines join `SCENES` in `js/story.js` (keyed by sector and trigger), so writers edit
+  data, not game code, and a test checks that every scene id the sectors reference exists.
 
 ### 5.2 Cast (from the splash art)
-- **The hero: JACK HAMMER** *(working name)*: mulleted, shades-wearing, sleeveless Astra Mining space miner
+- **The hero: JACK HAMMER** *(working name, already used in PR #167)*: mulleted, shades-wearing, sleeveless Astra Mining space miner
   who flies the drill-crab. Twenty years on the rocks, wants his shift over and his pay cheque. Talks in
-  one-liners. *PG note:* the splash has him smoking; in-game he chews a **toothpick** instead.
+  one-liners. *PG note:* the splash has him smoking; in-game he chews a **toothpick** (as in PR #167).
 - **DOLORES "DEE" REYES:** ASTRA dispatch, Jack's voice in his ear. Dry, fast, always right. The heart.
 - **R. KESSLER, VP of Acquisitions:** ASTRA's corporate suit. Big hair, bigger shoulder pads, smaller
   conscience. Comic villain, not a scary one.
 - **DR. PIXIE OKONKWO:** ASTRA's rift scientist. Excitable, explains the weird stuff in a single line.
 - **The invaders, the VEX:** geometric alien warp-swarms that pour out of rifts. Their bosses are the
-  ten we already have; the Prism is their heart. They don't talk; their bosses get a title card and Dee does
-  the trash talk.
+  ten we already have; the Prism is their heart. They don't talk; their glyphs come through Dee's translator, and Dee does the
+  trash talk.
 - **The VEXOLITH:** the alien crystal at the heart of the belt, the thing everyone wants. It gives the game
   its name.
 
@@ -276,7 +278,7 @@ lost.
 | 9 | **Hazards**, one PR each (meteor drift, gravity currents, energy gates, prism beams) + Field Guide. | new modules | **Yes** |
 | 10 | **Endless loops** the sectors with remixed palettes. | `js/sectors.js`, `js/victory.js` | **Yes** |
 | 11 | **Sector Atlas + feats** (after the Hangar feat engine): "Reach Sector 3 in HARDCORE", etc. | Hangar & Progression | No / Yes |
-| 12 | **Story data + hooks.** `js/story.js` beats, `save.story.seen`, STORY setting; cold open + portal cutscenes + radio lines wired to sector events. Needs the cutscene system. | new `js/story.js`, `js/progression.js`, `main.js` (few lines) | Content |
+| 12 | **Story data + hooks.** Chapter scenes in `SCENES`, `save.story.seen` (replaces `vexolith_intro_seen`), STORY setting; portal cutscenes and radio lines wired to sector events. Needs PR #167 and the radio-line API. | `js/story.js`, `js/progression.js`, `main.js` (few lines) | Content |
 | 13 | **Chapter objectives**, one PR each (shards, crew pods, rifts, gates, twins) with HUD tracker and score bonus. | new `js/objectives.js` | **Yes** |
 | 14 | **Victory / Endless story:** CLOCK OUT / ONE MORE SHIFT labels, ending cutscene, Endless banter. | `js/victory.js`, `js/story.js` | Content |
 | 15 | *(Later, if wanted)* **Branching** (structure B): second sector per tier, two portals. | all of the above | **Yes** |
@@ -301,7 +303,7 @@ hold.
 8. **Endless:** loop the five sectors (recommended) or one special endless sector ("The Fold")?
 9. **Hazards:** happy with one signature hazard per sector, or keep sectors to looks + enemies only?
 10. **Names and themes:** any sector names or palettes you'd change?
-11. **Hero:** is "JACK HAMMER" the name (or something else)? Swap the splash cigarette for a toothpick in-game?
+11. **Hero:** keep "JACK HAMMER" and the in-game toothpick (both already in PR #167), or change them?
 12. **Story tone and cast:** happy with the Kessler-is-a-sellout twist, Dee and Dr. Pixie, the VEX as the
     aliens and the Vexolith as the crystal everyone wants?
 13. **Objectives:** optional bonuses (recommended), or real gates on progress?
