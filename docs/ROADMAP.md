@@ -2,12 +2,13 @@
 
 **Owner:** the Director session (works with Clay). **Read this before starting any work.** It says what we're
 building next, which conversation owns which files, and how changes get merged without stepping on each other.
-Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds decisions and priorities.
+Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds decisions and priorities. Design drafts for discussion: [HANGAR_DESIGN.md](HANGAR_DESIGN.md) (ships, feats, mastery) and [SECTORS_DESIGN.md](SECTORS_DESIGN.md) (sectors, portals, story campaign).
 
 ## Decisions (source of truth)
 
 | Date | Decision |
 |---|---|
+| 2026-10-20 | **Core design principle: everything in sound and animation is SATISFYING.** Punchy feedback, juicy impacts, rewarding pickups and level-ups, smooth easing, weighty audio with pitch variety. If it feels flat, it isn't done; readability and frame rate come first. |
 | 2026-10-20 | **The campaign is 50 waves** with a boss every 5th wave (10 bosses). Beating wave 50 shows a **victory screen** offering *Continue for high score* (keep playing in Endless; the score keeps counting) or *End run* (finish the run here, as a win). |
 | 2026-10-20 | **Hangar of specialist ships** (Vampire Survivors-style heroes): each ship has its own stat boosts and/or starting kit, unlocked by feats. |
 | 2026-10-20 | **Weapon unlocks + weapon mastery** (Deep Rock Galactic: Survivor-style): more weapons, some locked behind unlocks; clearing a run/level with one weapon masters it, granting a bonus and unlocking another weapon. |
@@ -19,20 +20,35 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 | 2026-10-20 | **Weapon balance target:** offensive weapons (Autocannon, Rocket Pods, Swarm Missiles, …) sit at about the same DPS. Close-range defensive weapons (Shock Field, Orbit Blades) may sit a bit lower: they are the last line of defense. Buff the others up to the Autocannon rather than nerfing it. |
 | 2026-10-20 | **The balance sim under-rates Rocket Pods and Swarm Missiles** (Clay has long runs with them). Treat sim numbers as relative until the bot is calibrated against real play. |
 | 2026-10-20 | **Geom Attractor Field maxes at 2x XP** (armory XP stacks on top) and half its old pickup radius (6x base, was 12x: most of the map). |
+| 2026-10-20 | **Difficulty targets (v0.43.x):** a skilled pilot with **0 Armory dies around wave 25–35** (10–14 min); with a **mid Armory (~rank 3 everywhere) can win** with good play; with a **full Armory wins reliably**, and Endless is the challenge. Waves 1–~15 stay friendly for new players. Levers, in order: contact damage up ~25–30%, a steeper curve from ~wave 30, faster bosses with one real (telegraphed or contact-range) threat each and no extra HP, denser swarmers/blinkers late. Weapons are not nerfed for this (Weapons lane). |
+| 2026-10-20 | **No body-blocking or knockback from regular enemies** (Clay): packs never physically stop the ship. Only a special enemy built for it may push the ship, such as the Repulsor's shield. |
 | 2026-10-20 | **Contact damage is not being lowered** (the report's recommendation is on hold): Clay can still charge through packs and may want it higher. The difficulty curve is decided after Clay playtests PR #119. |
 | 2026-10-20 | **Tesla Arc is always SHOCK** ("it's friggin lightning"): stun arcs are its baseline, like the Flamethrower's FIRE. It has no element cards; its SHOCK rank follows its level (+1 at LV 6/12/18). |
 | 2026-10-20 | **Class-based weapon balance** (replaces "all offensive weapons equal" for realized damage): per target at equal level vs the Autocannon (100%): automatic single-target (Drones, Turret) ~85%; area weapons 60–70% per target, about even in total against packs; close-range defensive (Shock Field, Orbit Blades) lower by design. Encoded as `WEAPON_CLASS` / `CLASS_TARGET`; area targets enforced once enemies-hit-per-blast is measured. |
+| 2026-10-20 | **A full Void Armory is about 3× total power** vs 0 Armory (offense × defense, `armoryPower` in `js/progression.js`, pinned ±15% by `tests/armory.test.js`). v0.43.3: Plasma Overcharge +1.5%/rank (+60%), Aegis Shield Matrix +2/rank (+80), both refunded. Rank 3 everywhere ≈ 1.1×, **mid Armory = half ranks everywhere** ≈ 1.85× (under 10% of the full cost), full ≈ 3.07×. The difficulty curve is sized against these tiers. |
+| 2026-10-20 | **Armory: buff existing upgrades, no new ones for now** (no revive, free reroll, extra slot, …). Power comes from bigger values per rank, a steeper top end or more ranks on existing upgrades. |
 | 2026-10-20 | **Sentry Turret works like Deep Rock Galactic: Survivor's LMG Gun Platform** (Clay, v0.43.4): 2 charges, stand still 0.5 s to drop them all, one charge back every 6 s, a reload into a full bank auto-deploys, fixed 10 s lifetime, no cap on turrets out. Cards follow DRG's upgrades (Bigger Cogs / Tighten Springs / Loosen Bolts / Add Punch); Breakthroughs follow its overclocks (Extra Capacity / Tank Tracks / LMG Overload). Stays in the auto class (~85% of the Autocannon). |
 
 ## Priorities (in order)
 
-Shipped 2026-10-20: **v0.43.0** (50-wave campaign + victory, rifts & bedrock, weapons pass, Attractor retune; #137), **v0.43.1** (Tesla Arc always SHOCK, class-based weapon balance, Drones/Turret buff; #138), **Void Core refunds + early-access note** (#133).
+Shipped 2026-10-20: **v0.43.0** (#137), **v0.43.1** (#138), Void Core refunds (#133), sim calibration (#142), Armory in run stats (#141), **v0.43.2** difficulty (#143), **v0.43.3** 3× Armory (#144).
 
-1. **Difficulty curve** (Enemies & Bosses lane, in progress): a skilled 0-Armory pilot should die around W25–35, a mid-Armory pilot can win, a full Armory wins reliably. Contact damage up, a steeper curve from ~W30, faster bosses with a real attack, denser Swarmers/Blinkers late.
-2. **Balance sim calibration** (in progress), then **Armory ranks in run stats**, so real data can be split by Armory tier.
-3. **Area-weapon class targets:** set them from measured enemies-hit-per-blast once calibration delivers.
-4. Items in **To check** below, as Clay schedules them.
-5. **Hangar** (big update, own discussion), then burrower & mini-spawner enemies, sector travel.
+### Build swarm (Oct 20–22): many sessions in parallel, one lane each
+| Work | Notes |
+|---|---|
+| Weapon floor | ≥2 weapons by player LV 6 … 6 by LV 30; a forced CHOOSE A WEAPON hand |
+| Sentry Turret rework | works like DRG: Survivor's LMG Gun Platform (PR #145) |
+| Volatile Shatter nerf | same shards, ~0.4× shard damage (PR #146) |
+| Late-HP curve | softer past ~W35 so a 3× full Armory clears W50 |
+| New weapons ×5 | Rail Lance, Glaive Discs, Quake Mortar, Nanite Swarm, Claw Harpoon (in the normal pool; Hangar gating later) |
+| Hangar epic | ships, feats, weapon locks, mastery, SOLO, Prism Beam; **behind `HANGAR_ENABLED` (off)** until Clay signs off; try it with `?hangar=1` |
+| Endgame | wave-50 Final Stand, then scoring that rewards progress (per-wave and VICTORY bonuses), then leaderboard hygiene (preview test boards, envelope refit) |
+| Bosses | overhaul A (minors W5/15/25/35/45) and B (majors W10/20/30/40/50): signature attacks, phases, size and speed, visuals, sound |
+| New enemy | mini-spawner (hive that births drones) |
+| Sectors & portals | design doc only, for a later discussion |
+| UI polish | run-report truncation and an overflow sweep |
+
+**Swarm merge rules:** swarm PRs **don't bump the version or add changelog entries**; the Director assigns versions and patch notes at merge time and merges after Clay's review. Keep shared lists append-only, put features in their own modules, keep `js/main.js` edits small, and merge master in often.
 
 ## Lanes (who owns what)
 

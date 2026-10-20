@@ -23,6 +23,26 @@ export const CHANGELOG = Object.freeze([
     ]
   },
   {
+    version: '0.43.3',
+    date: '2026-10-20',
+    title: 'Stronger Armory',
+    notes: [
+      { type: 'balance', text: 'Plasma Overcharge now gives +1.5% weapon damage per rank (up to +60%, was +40%).' },
+      { type: 'balance', text: 'Aegis Shield Matrix now gives +2 max shield per rank (up to +80, was +60).' },
+      { type: 'balance', text: 'Every Void Core you spent on these two upgrades is refunded, so you can re-buy them at the new values.' }
+    ]
+  },
+  {
+    version: '0.43.2',
+    date: '2026-10-20',
+    title: 'No Free Rides',
+    notes: [
+      { type: 'balance', text: 'Contact hits deal about 27% more damage (bosses too): charging through a pack costs a lot more shield.' },
+      { type: 'balance', text: 'The campaign gets much tougher late: enemy damage climbs faster from wave 30, and swarmer and blinker packs grow bigger from wave 25.' },
+      { type: 'balance', text: 'Bosses move about 1.5x faster, and most now RAM: a red lane marks the charge. Sidestep it or dash through. Their HP is unchanged.' }
+    ]
+  },
+  {
     version: '0.43.1',
     date: '2026-10-20',
     title: 'Stun Arcs Built In',

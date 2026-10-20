@@ -26,6 +26,9 @@ export const TURRET_SCALE = 2;
 const TURRET_MUZZLE_UNIT = 17;   // barrel length in unit geometry (drawn under the scale)
 const TURRET_MUZZLE = TURRET_MUZZLE_UNIT * TURRET_SCALE; // world px from the turret centre to where bolts spawn
 const TURRET_BOLT_RADIUS = 3.3;
+const TURRET_LAND = 0.22; // s: the slam-in animation of a fresh turret
+const TURRET_FOLD = 0.3;  // s: the fold-away at the end of its lifetime (it stops firing)
+const easeOutBack = (x) => 1 + 2.70158 * (x - 1) ** 3 + 1.70158 * (x - 1) ** 2;
 export const TURRET_BASE = 14 * TURRET_SCALE;    // base hex radius plus a little clearance from rock surfaces
 export const TURRET_SPACING = 34 * TURRET_SCALE; // a new turret never sits closer than this to a live one
 const SIDESTEPS = [38, -38, 76, -76, 114, -114].map((v) => v * TURRET_SCALE); // sideways offsets tried when the ship's spot is taken
@@ -50,7 +53,7 @@ export function isDeployableTarget(e) {
 export class Deployables {
   constructor() {
     this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0, cluster: false, seeker: false }));
-    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0 }));
+    this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, packing: false }));
     this.drones = Array.from({ length: DRONE_POOL }, () => ({
       x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0,
       trailX: new Float32Array(TRAIL_LEN), trailY: new Float32Array(TRAIL_LEN), trailHead: 0, trailCount: 0
@@ -254,7 +257,13 @@ export class Deployables {
         this.turrets[i] = this.turrets[this.turretCount - 1];
         this.turrets[--this.turretCount] = t;
         game.particles.spawnShockwave(t.x, t.y, 34 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2, 0.22, true);
-        game.particles.spawnExplosionSparks(t.x, t.y, 8, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
+        game.particles.spawnExplosionSparks(t.x, t.y, 12, DEPLOYABLE_HUES.turret, 1, 5, 1.6);
+        continue;
+      }
+      if (t.life < TURRET_FOLD) {
+        // Packing up: the barrel winds down and folds away (deployables draw), no more rounds.
+        if (!t.packing) { t.packing = true; game.sound.playTurretPackUp?.(); }
+        t.aim += dt * 6 * (1 - t.life / TURRET_FOLD);
         continue;
       }
       // Tank Tracks: roll after the ship into a ring around it, each turret at its own spot on the ring.
@@ -323,8 +332,12 @@ export class Deployables {
     t.target = null;
     t.retarget = 0;
     t.flash = 0;
+    t.packing = false;
+    // Landing: a ring, sparks kicked out sideways, a dent in the grid and a heavy clunk.
     game.particles.spawnShockwave(t.x, t.y, 48 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2.5, 0.25);
-    game.grid.applyImpulse(t.x, t.y, 12, 70, DEPLOYABLE_HUES.turret);
+    game.particles.spawnExplosionSparks(t.x, t.y, 10, DEPLOYABLE_HUES.turret, 1, 4, 1.2);
+    game.grid.applyImpulse(t.x, t.y, 18, 90, DEPLOYABLE_HUES.turret);
+    game.sound.playTurretDeploy?.();
   }
 
   // A turret spot is clear when no other live turret sits within TURRET_SPACING, it is inside the
@@ -606,13 +619,35 @@ export class Deployables {
       const t = this.turrets[i];
       if (!this.inView(game, t.x, t.y, 40 * TURRET_SCALE)) continue;
       const frac = Math.max(0, t.life / t.maxLife);
-      const popIn = Math.min(1, (t.maxLife - t.life) / 0.15);
-      const s = (0.6 + 0.4 * popIn) * TURRET_SCALE;
+      // Slam in: drops from 1.5x, squashes past full size and settles (ease-out-back) over TURRET_LAND s,
+      // the barrel unfolding just after. Packing up it folds and shrinks over the last TURRET_FOLD s.
+      const age = t.maxLife - t.life;
+      const land = easeOutBack(Math.min(1, age / TURRET_LAND));
+      const fold = Math.min(1, t.life / TURRET_FOLD);
+      const unfold = Math.min(1, Math.max(0, (age - 0.06) / 0.14), fold);
+      const s = (1.5 - 0.5 * land) * (0.6 + 0.4 * fold) * TURRET_SCALE;
       const ending = t.life < 1.5 && Math.sin(this.time * 18) < 0;
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(s, s);
-      // Lifetime ring: faint full track, bright arc for the time left (blinks in the last 1.5 s).
+      if (fold < 1) ctx.rotate((1 - fold) * 1.4); // a twist as it folds away
+      // Recoil: every round kicks the whole body back along the aim.
+      if (t.flash > 0) ctx.translate(-Math.cos(t.aim) * t.flash * 1.3, -Math.sin(t.aim) * t.flash * 1.3);
+      // Landing flash: a white-hot hex for the first instants on the ground.
+      if (age < 0.14) {
+        ctx.fillStyle = `hsla(${ht}, 100%, 92%, ${0.85 * (1 - age / 0.14)})`;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = (k * Math.PI) / 3 + Math.PI / 6;
+          if (k === 0) ctx.moveTo(Math.cos(a) * 12, Math.sin(a) * 12);
+          else ctx.lineTo(Math.cos(a) * 12, Math.sin(a) * 12);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Lifetime ring: faint full track, bright arc for the time left (blinks in the last 1.5 s); it
+      // sweeps full as the turret powers up.
+      const ringFrac = frac * Math.min(1, age / 0.3);
       ctx.lineWidth = 2.4;
       ctx.strokeStyle = `hsla(${ht}, 100%, 60%, 0.14)`;
       ctx.beginPath();
@@ -620,7 +655,7 @@ export class Deployables {
       ctx.stroke();
       ctx.strokeStyle = `hsla(${ht}, 100%, ${ending ? 85 : 64}%, ${ending ? 0.5 : 0.9})`;
       ctx.beginPath();
-      ctx.arc(0, 0, 19, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+      ctx.arc(0, 0, 19, -Math.PI / 2, -Math.PI / 2 + ringFrac * Math.PI * 2);
       ctx.stroke();
       // Hexagonal base.
       ctx.strokeStyle = `hsla(${ht}, 100%, 62%, 0.95)`;
@@ -633,21 +668,28 @@ export class Deployables {
       }
       ctx.closePath();
       ctx.stroke();
-      // Rotating twin barrel + hub.
+      // Rotating twin barrel + hub (the barrels slide back on every round and unfold / fold with the body).
       ctx.rotate(t.aim);
+      const muzzle = 2 + (TURRET_MUZZLE_UNIT - 2) * unfold - 3.2 * t.flash;
       ctx.strokeStyle = `hsla(${ht}, 100%, 72%, 1)`;
       ctx.lineWidth = 2.6;
       ctx.beginPath();
-      ctx.moveTo(2, -2.6); ctx.lineTo(TURRET_MUZZLE_UNIT - 2 * t.flash, -2.6);
-      ctx.moveTo(2, 2.6); ctx.lineTo(TURRET_MUZZLE_UNIT - 2 * t.flash, 2.6);
+      ctx.moveTo(2, -2.6); ctx.lineTo(muzzle, -2.6);
+      ctx.moveTo(2, 2.6); ctx.lineTo(muzzle, 2.6);
       ctx.stroke();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.6;
       ctx.strokeRect(-4, -4, 8, 8);
-      if (t.flash > 0.05) {
-        ctx.fillStyle = `hsla(${ht - 20}, 100%, 80%, ${t.flash})`;
+      if (t.flash > 0.05 && unfold > 0.9) {
+        // Muzzle flash: a hot core plus a short forward spike.
+        ctx.fillStyle = `hsla(${ht - 20}, 100%, 82%, ${t.flash})`;
         ctx.beginPath();
         ctx.arc(TURRET_MUZZLE_UNIT + 2, 0, 3 + t.flash * 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(TURRET_MUZZLE_UNIT + 2, -2.2 * t.flash);
+        ctx.lineTo(TURRET_MUZZLE_UNIT + 2 + 9 * t.flash, 0);
+        ctx.lineTo(TURRET_MUZZLE_UNIT + 2, 2.2 * t.flash);
         ctx.fill();
       }
       ctx.restore();
