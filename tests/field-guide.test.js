@@ -199,7 +199,7 @@ test('guide stats come from the real spawn config and game formulas', () => {
     assert.equal(s.speed, Math.round(cfg.speed * (id === 'blackhole' ? 1 : TUNING.enemySpeedMult) * 60), `${id} speed`);
     assert.equal(s.contact, Math.round(contactDamageAt(cfg, 1)), `${id} contact`);
   }
-  assert.equal(hostileStats('bruiser').contact, Math.round(18 * 1.5 * damageRampAt(1)));
+  assert.equal(hostileStats('bruiser').contact, Math.round(TUNING.contactDamage * 1.5 * damageRampAt(1)));
   assert.equal(hostileStats('brood_queen').hp, Math.round(650 * waveScaleAt(5) * TUNING.bossHpMult * TUNING.campaignBossHpMult * TUNING.enemyHpMult), 'bosses show HP on their own wave');
   assert.equal(hostileStats('gunner').unlockWave, ARCHETYPE_INFO.gunner.unlockWave);
   const g = Object.assign(Object.create(Game.prototype), { wave: 9 });
