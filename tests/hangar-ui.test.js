@@ -56,7 +56,7 @@ test('feats: hidden ones read ??? with their hint until done; done ones show the
   assert.match(done, /2026-10-21/);
   assert.equal((featsHTML(h).match(/hangar-feat-row/g) || []).length, FEATS.length);
   assert.match(progressBarHTML(FEAT_BY_ID.wave_10, h), /BEST WAVE 0 \/ 10/);
-  assert.deepEqual(HANGAR_TABS.map((t) => t.id), ['ships', 'feats']);
+  assert.deepEqual(HANGAR_TABS.map((t) => t.id), ['ships', 'arsenal', 'feats']);
 });
 
 test('toasts name the feat and what it unlocked', () => {
