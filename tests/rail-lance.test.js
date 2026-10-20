@@ -144,7 +144,7 @@ test('Split Rails fans extra lances round the aim; Flux Lens widens the line', (
   assert.equal(wide.hits.length, 1);
 });
 
-test('Magnetic Rail drags enemies near the line onto it while charging (bosses hold); every lance hits x1.22', () => {
+test('Magnetic Rail drags enemies near the line onto it while charging (bosses hold); valued at magnetHitShare lances', () => {
   const { g, p, foes } = railGame({ bt: { 6: 'transform' }, foes: [{ dx: 250, dy: 90 }, { dx: 250, dy: 90, isBoss: true, radius: 40 }, { dx: 250, dy: -200 }] });
   tick(g, 20);
   assert.ok(foes[0].y - p.y < 90 - 30, 'pulled toward the line');
@@ -152,7 +152,10 @@ test('Magnetic Rail drags enemies near the line onto it while charging (bosses h
   assert.equal(foes[2].y - p.y, -200, 'out of reach');
   assert.equal(magnetScale({ isBoss: true }), 0);
   const plain = W.railDamageMult(makeBuild('raillance', 6));
-  assert.ok(near(W.railDamageMult(makeBuild('raillance', 6, {}, { 6: 'transform' })), plain * BT_TRANSFORM_DPS));
+  assert.ok(near(W.railDamageMult(makeBuild('raillance', 6, {}, { 6: 'transform' })), plain * BT_TRANSFORM_DPS / W.magnetHitShare));
+  // Playtest retune: the pull and the Ion Wake / Overload Shot are valued by what they realize in the card
+  // bench (each about x1.22; all three ~x1.75 against ~x2.2 when valued as single hits).
+  assert.deepEqual([W.magnetPull, W.magnetHitShare, W.wakeHitShare, W.overloadHitShare], [110, 1.3, 1.25, 1]);
 });
 
 test('Ion Wake: the line keeps ticking whatever stands on it for wakeLife s, wakeShare of a hit in all', () => {

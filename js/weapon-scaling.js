@@ -555,22 +555,25 @@ export const WEAPON_SCALING = {
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
   railKnock: 1.6,
   // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it
-  // at magnetPull px/s: no extra attacks, so every lance hits BT_TRANSFORM_DPS harder), Ion Wake (each lance
-  // leaves an ionized line for wakeLife s that ticks everything on it every wakeTick s, wakeShare of a hit in
-  // all, valued at wakeHitShare), Overload Shot (every overloadEvery-th shot is overloadWidth x as wide and
-  // hits overloadMult x as hard, valued at overloadHitShare: the fat beam catches more of a pack).
+  // at magnetPull px/s, so each lance lines up more of a pack: valued at magnetHitShare lances), Ion Wake
+  // (each lance leaves an ionized line for wakeLife s that ticks everything on it every wakeTick s, wakeShare
+  // of a hit in all, valued at wakeHitShare: like a gas cloud, the line catches what walks into it),
+  // Overload Shot (every overloadEvery-th shot is overloadWidth x as wide and hits overloadMult x as hard,
+  // valued at overloadHitShare). The hit shares are measured in the card bench so each transform realizes
+  // about BT_TRANSFORM_DPS (v0.44 playtest: valued as single hits, the three carried ~x2.2 instead of ~x1.8).
   magnetRange: 120,
-  magnetPull: 150,
+  magnetPull: 110, // 150 before the playtest retune
+  magnetHitShare: 1.3,
   wakeLife: 1.2,
   wakeTick: 0.2,
   wakeShare: 0.5,
-  wakeHitShare: 1,
+  wakeHitShare: 1.25,
   overloadEvery: 3,
   overloadMult: 2,
   overloadWidth: 3,
-  overloadHitShare: 1.25,
+  overloadHitShare: 1,
   railOverloadAvg: (b) => (b.t12 ? (W.overloadEvery - 1 + W.overloadMult * W.overloadHitShare) / W.overloadEvery : 1),
-  railUnits: (b) => (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b),
+  railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b),
   // Damage of one lance hit on the first enemy in its line (an Overload Shot hits overloadMult x this).
   railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLances(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
   // One Ion Wake tick on one enemy.
