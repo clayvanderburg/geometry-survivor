@@ -2972,6 +2972,19 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
 .guide-weapon.owned { box-shadow: inset 3px 0 0 var(--emerald); }
 .guide-grid-cards { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 
+/* Weapon Range clips (js/weapon-media.js): Field Guide weapon cards and the Breakthrough TRANSFORM card. */
+.weapon-clip {
+  aspect-ratio: 16 / 9;
+  margin: 0 0 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #02040c;
+  border: 1px solid rgba(0, 243, 255, 0.22);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6);
+}
+.weapon-clip img { display: block; width: 100%; height: 100%; object-fit: cover; color: transparent; } /* no alt text over a missing clip */
+.upgrade-option .weapon-clip { margin: 8px 0 6px; border-color: rgba(255, 204, 0, 0.35); }
+
 .guide-weapon-meta {
   margin: -2px 0 6px;
   font-size: 9.5px;
@@ -4554,7 +4567,7 @@ body.touch-mode .upgrade-choices-grid.cards-4,
 body.touch-mode #chest-rewards-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) { padding: 10px 10px 8px; }
 body.touch-mode .upgrade-option:not(.card-detail-card):hover { transform: none; }
-body.touch-mode .upgrade-option:not(.card-detail-card) :is(.upg-key, .upg-tags, .upg-stats) { display: none; }
+body.touch-mode .upgrade-option:not(.card-detail-card) :is(.upg-key, .upg-tags, .upg-stats, .weapon-clip) { display: none; }
 /* What the card actually does, in brief: the full text and stats are behind MORE. */
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-summary {
   display: -webkit-box;
