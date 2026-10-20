@@ -236,5 +236,9 @@ test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and dr
 
 test('Volatile Shatter stays off the DPS curve: flat shard damage, gated by kills', () => {
   assert.ok(!('shrapnel' in POTENTIAL_DPS), 'passive, conditional on kills');
-  assert.equal(W.shrapnelDamageMult, 0.75);
+  assert.equal(W.shrapnelDamageMult, 0.3, 'a supporting passive: 0.75 before v0.43.4');
+  // The burst chance climbs evenly to 100% at the max level (LV 8): no early cliff where every kill bursts.
+  const chances = [1, 2, 3, 4, 5, 6, 7, 8].map(W.shrapnelChance);
+  assert.ok(chances.every((c, i) => i === 0 || Math.abs(c - chances[i - 1] - 0.075) < 1e-9), 'even steps');
+  assert.ok(chances[6] < 1 && chances[7] === 1, '100% only at LV 8');
 });

@@ -265,10 +265,14 @@ export const WEAPON_SCALING = {
   orbitalNovaDamageMult: (b) => W.novaShare * W.orbitalPassesContactTicksPerSec(b) * W.novaEvery / W.orbitalBlades(b) * W.orbitalDamageMult(b),
 
   // --- Volatile Shatter (passive, no slot) --------------------------------------------------------
-  // On-kill shards at a flat 0.75x base damage. Not on the DPS curve (it needs kills), like the dash nova.
-  shrapnelChance: (lv) => Math.min(1, 0.45 + lv * 0.12),
+  // On-kill shards at a flat shrapnelDamageMult x base damage. Not on the DPS curve (it needs kills), like
+  // the dash nova. A supporting passive (Clay, v0.43.4): v0.42.4 tripled the shards at full damage, so a
+  // strong build took ~20% of its damage from shards; shards now hit for 0.3x (0.75x before, / 2.5).
+  // The burst chance reaches 100% only at LV 8 (it hit 100% at LV 5 before, where every kill bursting set
+  // off chain reactions: the card bench output tripled from LV 4 to LV 5).
+  shrapnelChance: (lv) => Math.min(1, 0.4 + lv * 0.075), // 0.45 + 0.12 / LV before v0.43.4
   shrapnelShards: (lv) => 1 + 3 * lv, // 4 at LV 1, +3 per level (25 at LV 8)
-  shrapnelDamageMult: 0.75,
+  shrapnelDamageMult: 0.3,
 
   // Phase Nova Thrusters
   novaRadius: (lv) => 140 + lv * 35,
