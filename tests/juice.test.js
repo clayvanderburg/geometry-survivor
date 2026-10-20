@@ -90,3 +90,12 @@ test('burst presets only spawn through the fx handles they are given', () => {
   }
   assert.equal(J.burst({ particles: rec }, 'nope', 0, 0), false);
 });
+
+test('hueOf reads palette hex colours and falls back on greys or junk', () => {
+  assert.equal(J.hueOf('#ff0000'), 0);
+  assert.equal(J.hueOf('#00ff88'), 152);
+  assert.equal(J.hueOf('#3d9bff'), 211);
+  assert.equal(J.hueOf('#c9d4e4', 205), 216);
+  assert.equal(J.hueOf('#808080', 205), 205);
+  assert.equal(J.hueOf('nope', 7), 7);
+});

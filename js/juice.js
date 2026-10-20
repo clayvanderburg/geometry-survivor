@@ -31,6 +31,18 @@ export const EASE = Object.freeze({
 
 export const lerp = (a, b, t) => a + (b - a) * t;
 
+// Hue (0..360) of a '#rrggbb' colour, for feeding CSS-palette colours (rarities, weapons) to the
+// hue-based particle spawns. Greys and bad input give `fallback`.
+export function hueOf(hex, fallback = 190) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ''));
+  if (!m) return fallback;
+  const [r, g, b] = m.slice(1).map(v => parseInt(v, 16) / 255);
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  if (d < 0.08) return fallback;
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return Math.round((h * 60 + 360) % 360);
+}
+
 // A 0 → 1 → 0 bump over `t` in 0..1 (fast attack, eased release): pulses, flashes, pops.
 export function pulse(t, attack = 0.2) {
   t = clamp01(t);
@@ -127,7 +139,7 @@ export function particleDensity(enemyCount = 0) {
 export const BURSTS = Object.freeze({
   // The ship levels up: a bright bloom, two rings and a sparkle of embers.
   levelUp(fx, x, y, { hue = 145, scale = 1 } = {}) {
-    fx.particles?.spawnFlash?.(x, y, 90 * scale, hue, 0.32);
+    fx.particles?.spawnFlash?.(x, y, 60 * scale, hue, 0.26);
     fx.particles?.spawnShockwave?.(x, y, 120 * scale, 55, 3, 0.36);
     fx.particles?.spawnExplosionSparks?.(x, y, Math.round(22 * scale), hue, 1.5, 9, 2.4);
   },
@@ -140,6 +152,12 @@ export const BURSTS = Object.freeze({
     fx.particles?.spawnExplosionSparks?.(x, y, Math.round(40 * scale), hue, 2, 15, 2.6);
     fx.grid?.applyImpulse?.(x, y, 70 * scale, 300 * scale, hue);
     fx.grid?.ripple?.(x, y, 300 * scale, hue, 1.2);
+  },
+  // A level-up card is taken: a snap flash and a tight ring in the card's colour.
+  pick(fx, x, y, { hue = 190, scale = 1 } = {}) {
+    fx.particles?.spawnFlash?.(x, y, 44 * scale, hue, 0.18);
+    fx.particles?.spawnShockwave?.(x, y, 90 * scale, hue, 3.5, 0.28);
+    fx.particles?.spawnExplosionSparks?.(x, y, Math.round(14 * scale), hue, 2, 8, 2.2);
   },
   // An XP geom lands: a tiny glint (cheap enough for a big hoover).
   pickup(fx, x, y, { hue = 150, scale = 1 } = {}) {
