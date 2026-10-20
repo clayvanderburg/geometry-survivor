@@ -7,7 +7,9 @@ import { ReplayRecorder, ReplayPlayer, REPLAY_SETTINGS } from './replay.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
-import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE } from './wave-plan.js';
+import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
+import { updateBossWarps, drawBossWarps } from './boss-warp.js';
+import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
@@ -161,7 +163,7 @@ const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks
 
 // "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
 export function bossEpithet(wave) {
-  const rank = BOSS_RANKS[Math.max(0, Math.min(BOSS_RANKS.length - 1, Math.floor(wave / 3) - 1))];
+  const rank = BOSS_RANKS[Math.max(0, Math.min(BOSS_RANKS.length - 1, Math.floor(wave / BOSS_EVERY) - 1))];
   return `WAVE ${wave} ${rank}`;
 }
 
@@ -190,7 +192,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer', SPAWN_BORER: 'borer'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -373,6 +375,7 @@ export class Game {
     this.bossCardTimer = 0;
     this.novaCalloutTimer = 0;
     this.novaCalloutDone = false;
+    resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -649,6 +652,8 @@ export class Game {
     document.getElementById('btn-claim-chest').addEventListener('click', () => {
       this.closeChestModal();
     });
+    document.getElementById('btn-victory-continue')?.addEventListener('click', () => continueEndless(this));
+    document.getElementById('btn-victory-end')?.addEventListener('click', () => endVictoriousRun(this));
 
     window.addEventListener('keydown', (e) => {
       // Any key on the splash screen just continues to the title.
@@ -729,6 +734,8 @@ export class Game {
         this.setSelectedMode(MODE_IDS[Number(modeKey[1]) - 1]);
         return;
       }
+
+      if (victoryKey(this, e)) return;
 
       if (this.state === 'CHEST' && (code === 'Space' || code === 'Enter')) {
         e.preventDefault();
@@ -1747,7 +1754,7 @@ export class Game {
     this.updateLowShieldVignette();
     this.setQuitConfirm(false);
     globalThis.document?.activeElement?.blur?.();
-    for (const id of ['pause-modal', 'upgrade-modal', 'chest-modal', 'gameover-modal']) document.getElementById(id)?.classList.add('hidden');
+    for (const id of ['pause-modal', 'upgrade-modal', 'chest-modal', 'victory-modal', 'gameover-modal']) document.getElementById(id)?.classList.add('hidden');
     const pauseBtn = document.getElementById('btn-pause');
     if (pauseBtn) {
       pauseBtn.textContent = '⏸ PAUSE [P]';
@@ -2685,7 +2692,12 @@ export class Game {
     const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
+    if (isCampaignWin(this, e)) this.victoryTimer = VICTORY_DELAY; // the final boss: VICTORY follows (js/victory.js)
   }
+
+  showVictory() { showVictory(this); }
+  continueEndless() { continueEndless(this); }
+  endVictoriousRun() { endVictoriousRun(this); }
 
   // Boss-kill time dilation in whole 60 Hz ticks: hit-stop holds every tick, then slow-mo holds
   // every other tick (half speed). Skipping ticks instead of scaling dt keeps per-tick motion exact.
@@ -4726,7 +4738,7 @@ export class Game {
   }
 
   // dying: the shield just collapsed, so the death sequence plays before the results open.
-  triggerGameOver({ dying = false } = {}) {
+  triggerGameOver({ dying = false, victory = false } = {}) {
     // The range ship can't die, but nothing from a range run is ever recorded: leave to the title instead.
     if (this.range?.active) {
       this.range.exit();
@@ -4739,7 +4751,8 @@ export class Game {
     const rules = modeRules(this);
     this.updateGuideToast(); // a pending FIELD GUIDE UPDATED toast doesn't linger behind the results
     this.sound.setMusicState({ intensity: 0.3, muffled: true, boss: 0 });
-    if (this.sound.playGameOver) this.sound.playGameOver();
+    if (victory) this.sound.playBossDefeat?.();
+    else if (this.sound.playGameOver) this.sound.playGameOver();
     else this.sound.playSupernova();
 
     const mins = Math.floor(this.elapsedTime / 60);
@@ -4790,8 +4803,19 @@ export class Game {
       rankBadge.style.color = result.rank ? 'var(--gold)' : 'var(--text-dim)';
     }
 
+    const head = resultsHeadline({ victory, campaignWon: this.campaignWon, wave: this.wave, label: rules.badge ? rules.label : '' });
     const subtitle = document.getElementById('gameover-subtitle');
-    if (subtitle) subtitle.textContent = rules.badge ? `SHIELD COLLAPSED // ${rules.label} RUN COMPLETE` : 'SHIELD COLLAPSED // SESSION COMPLETE';
+    if (subtitle) {
+      subtitle.textContent = head.subtitle;
+      subtitle.classList[head.won ? 'add' : 'remove']('victory-text');
+      subtitle.classList[head.won ? 'remove' : 'add']('danger-text');
+    }
+    const title = document.getElementById('gameover-title');
+    if (title) {
+      title.textContent = head.title;
+      title.classList[victory ? 'add' : 'remove']('victory-glow');
+      title.classList[victory ? 'remove' : 'add']('danger-glow');
+    }
     const modeTag = document.getElementById('go-mode-tag');
     if (modeTag) {
       modeTag.textContent = rules.badge || rules.label;
@@ -4908,6 +4932,7 @@ export class Game {
       CHEST: ['chest-modal', 'btn-claim-chest'],
       PAUSED: ['pause-modal', 'btn-resume-game'],
       GAMEOVER: ['gameover-modal', 'btn-restart-game'],
+      VICTORY: ['victory-modal', 'btn-victory-continue'],
       RANGE_EDIT: ['range-panel', null] // Weapon Range panel, opened with Back
     };
     if (this.menuState !== this.state) {
@@ -5045,6 +5070,7 @@ export class Game {
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
+    if (tickVictory(this, dt)) return;
     if ((++this.statsTick & 15) === 0) this.syncRunStats();
 
     const enemyCount = this.enemyManager.enemies.length;
@@ -5362,6 +5388,7 @@ export class Game {
     this.enemyManager.view = spawnView(this);
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    updateBossWarps(this, dt);
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
@@ -6616,6 +6643,7 @@ export class Game {
     this.grenades?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
+    drawBossWarps(ctx, this);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
@@ -6647,7 +6675,7 @@ export class Game {
     ctx.restore();
 
     // 6. Screen-Space Tactical Sector Radar Minimap & Boss Direction Cues (hidden with the HUD, [H])
-    if (!this.hudHidden && (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST')) {
+    if (!this.hudHidden && (this.state === 'PLAYING' || this.state === 'PAUSED' || this.state === 'UPGRADE' || this.state === 'CHEST' || this.state === 'VICTORY')) {
       if (this.radarVisible && !this.touchMode) this.drawMinimap(ctx);
       this.drawBossIndicators(ctx);
     }

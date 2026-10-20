@@ -12,6 +12,20 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.0',
+    date: '2026-10-20',
+    title: 'Victory at Wave 50',
+    notes: [
+      { type: 'new', text: 'VICTORY: beat the wave-50 boss to win the campaign. Then fly on into ENDLESS for a higher score (bosses come in pairs), or end the run and bank it as a win.' },
+      { type: 'balance', text: 'Bosses are spread out: a minor boss every 5th wave and a major boss every 10th (was every 3rd and 6th).' },
+      { type: 'balance', text: 'New enemies still arrive with each boss, now on waves 5, 10, 15 ... 45: mayflies 5, bruisers and serpents 10, blinkers and kestrels 15, gunners and carriers 20, and so on.' },
+      { type: 'new', text: 'Twenty new wave themes fill the longer campaign, from PINCER and LOCUST STORM to SIEGE LINE, PLAGUE SHIP and THE GLARE.' },
+      { type: 'new', text: 'No more outrunning bosses: one left far behind tears a rift open near you and warps back into the fight.' },
+      { type: 'new', text: 'The OUROBOROS now arrives coiled up round its head, then unwinds and comes for you.' },
+      { type: 'new', text: 'NEW ENEMY: the BORER (wave 15) tunnels straight through asteroids, bore-charges down a marked lane and spits gravel at you while it digs. Rock is no cover from it.' }
+    ]
+  },
+  {
     version: '0.42.5',
     date: '2026-10-20',
     title: 'Afterburner Jets',

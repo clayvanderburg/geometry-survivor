@@ -504,7 +504,8 @@ export class AsteroidManager {
             else if (ahead > s1) { g1 = rock; s1 = ahead; }
           }
         }
-        if (dSq < minDist * minDist && dSq > 0.01) {
+        // A borer mid-charge rams on through: the rock it is grinding gives way instead of shoving it back.
+        if (dSq < minDist * minDist && dSq > 0.01 && !e.boring) {
           const dist = Math.sqrt(dSq);
           const nx = dx / dist;
           const ny = dy / dist;
@@ -520,6 +521,7 @@ export class AsteroidManager {
         }
       }
       if (g0) {
+        e.grindT = 0.3; // its drill is in rock this moment (a borer spits the gravel back out)
         const grind = g1 && ELITE_GRIND_MAX_ROCKS > 1 ? 2 : 1;
         for (let k = 0; k < grind; k++) {
           const rock = k === 0 ? g0 : g1;
