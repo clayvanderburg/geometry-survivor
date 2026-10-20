@@ -250,6 +250,15 @@ export const STAT_ROWS = [
   { id: 'fieldLash', label: 'Arc Lash arcs / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t4 ? W.lashArcs : null)), fmt: int, newText: (a) => `DISCHARGES LASH // ${a} ARCS` },
   { id: 'fieldDashRefund', label: 'Dash recharge / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t8 ? W.dashRefund : null)), fmt: secs, newText: (a, row) => `DISCHARGES REPULSE // -${row.fmt(a)} DASH` },
   { id: 'fieldClap', label: 'Thunderclap radius', get: (p) => wb(p, 'shockfield', (b) => (b.t12 ? fieldRadius(p, b) * W.overchargeRadiusMult : null)), fmt: int, newText: (a, row) => `THUNDERCLAP // ${row.fmt(a)} RADIUS` },
+  // Rail Lance (aimed, pierces the whole line: each enemy behind the first takes railKeep of the one before)
+  { id: 'railDamage', label: 'Lance damage', get: (p) => wb(p, 'raillance', (b) => weaponDamage(p, 'rail', b)), fmt: dec1, headline: 'pct', unit: 'LANCE DAMAGE', newText: (a, row) => `RAIL LANCE // ${row.fmt(a)} DMG` },
+  { id: 'railCycle', label: 'Charge time', get: (p) => wb(p, 'raillance', W.railCharge), fmt: secs, headline: 'pct', unit: 'CHARGE TIME' },
+  { id: 'railLances', label: 'Lances / shot', get: (p) => wb(p, 'raillance', W.railLances), fmt: int, headline: 'count', unit: 'LANCE' },
+  { id: 'railWidth', label: 'Line width', get: (p) => wb(p, 'raillance', (b) => 2 * W.railWidth(b)), fmt: int, headline: (b, a) => `+${Math.round(a - b)} PX LINE WIDTH` },
+  { id: 'railKeep', label: 'Damage kept / enemy pierced', get: (p) => wb(p, 'raillance', W.railKeep), fmt: pct, headline: (b, a) => `+${Math.round((a - b) * 100)}% KEPT PER PIERCE` },
+  { id: 'railMagnet', label: 'Magnetic pull reach', get: (p) => wb(p, 'raillance', (b) => (b.t4 ? W.magnetRange : null)), fmt: int, newText: (a) => `CHARGE DRAGS ENEMIES // ${a} PX` },
+  { id: 'railWake', label: 'Ion Wake damage / tick', get: (p) => wb(p, 'raillance', (b) => (b.t8 ? weaponDamage(p, 'rail', b) / W.railDamageMult(b) * W.railWakeDamageMult(b) : null)), fmt: dec1, newText: (a, row) => `ION WAKE // ${row.fmt(a)} DMG / TICK` },
+  { id: 'railOverload', label: 'Overload Shot damage', get: (p) => wb(p, 'raillance', (b) => (b.t12 ? weaponDamage(p, 'rail', b) * W.overloadMult : null)), fmt: dec1, newText: (a, row) => `EVERY ${W.overloadEvery}RD SHOT // ${row.fmt(a)} DMG` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -475,7 +484,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

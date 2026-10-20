@@ -22,6 +22,7 @@ import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
+import { RailLance } from './rail-lance.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
@@ -438,6 +439,7 @@ export class Game {
         cryospray: 0,
         acidspray: 0,
         shockfield: 0,
+        raillance: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -467,6 +469,7 @@ export class Game {
     (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
+    (this.railLance ||= new RailLance()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -5287,6 +5290,7 @@ export class Game {
     this.flamethrower?.update(dt, this, shouldFire);
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
+    this.railLance?.update(dt, this, shouldFire); // Rail Lance: charge, then a piercing line (js/rail-lance.js)
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -5614,7 +5618,7 @@ export class Game {
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
     // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
-    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge() });
+    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge(), raillance: this.railLance?.hudCharge() });
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
@@ -6685,6 +6689,7 @@ export class Game {
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
     this.acidSprayer?.draw(ctx, this);
+    this.railLance?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
 

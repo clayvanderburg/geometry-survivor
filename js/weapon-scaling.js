@@ -44,7 +44,7 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7 and Sentry
 // Turret 4.2 bring the automatic class to its WEAPON_CLASS target (below).
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8 });
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2, raillance: 2 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -61,7 +61,8 @@ export const WEAPON_CLASS = Object.freeze({
   drones: 'auto', turret: 'auto',
   rockets: 'area', missiles: 'area', grenades: 'area', gas: 'area', flamethrower: 'area', cryospray: 'area', acidspray: 'area',
   lightning: 'area', mines: 'area', singularity: 'area', // chains, blasts and pulls also hit several enemies
-  shockfield: 'defensive', orbitals: 'defensive'
+  shockfield: 'defensive', orbitals: 'defensive',
+  raillance: 'aimed' // slow, huge aimed hits that pierce the whole line: held to the Autocannon in the card bench
 });
 export const CLASS_TARGET = Object.freeze({
   aimed: Object.freeze({ perTarget: 1, enforced: true }),
@@ -538,6 +539,43 @@ export const WEAPON_SCALING = {
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
+  // --- Rail Lance (stats: damage, rate, count, width, pierce) ----------------------------------------
+  // A PRIMARY aimed weapon (js/rail-lance.js). While firing it charges for railCharge s, then fires a
+  // hair-thin line along the aim that pierces every enemy (and every rock) to the screen edge, then vents
+  // for the rest of its cycle. Each enemy behind the first takes railKeep of the hit before it. Capacitor
+  // Bank (+RATE_STEP shots/s per rank), Split Rails (+1 lance per rank, fanned railSpread apart), Flux Lens
+  // (a wider hit line; utility) and Penetrator Core (less lost per enemy pierced; utility). Potential counts
+  // every lance on one target, like an Autocannon bolt.
+  railCycle: (b) => 1 / rateMult(b.r.rate),       // s per shot at LV 1: 0.8 s charge + 0.2 s vent
+  railChargeShare: 0.8,
+  railCharge: (b) => W.railCycle(b) * W.railChargeShare,
+  railLances: (b) => 1 + (b.r.count || 0),
+  railSpread: 0.12,                               // rad between Split Rails lances
+  railWidth: (b) => 6 * (1 + 0.3 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull)
+  railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
+  railKnock: 1.6,
+  // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it
+  // at magnetPull px/s: no extra attacks, so every lance hits BT_TRANSFORM_DPS harder), Ion Wake (each lance
+  // leaves an ionized line for wakeLife s that ticks everything on it every wakeTick s, wakeShare of a hit in
+  // all, valued at wakeHitShare), Overload Shot (every overloadEvery-th shot is overloadWidth x as wide and
+  // hits overloadMult x as hard, valued at overloadHitShare: the fat beam catches more of a pack).
+  magnetRange: 120,
+  magnetPull: 150,
+  wakeLife: 1.2,
+  wakeTick: 0.2,
+  wakeShare: 0.5,
+  wakeHitShare: 1,
+  overloadEvery: 3,
+  overloadMult: 2,
+  overloadWidth: 3,
+  overloadHitShare: 1.25,
+  railOverloadAvg: (b) => (b.t12 ? (W.overloadEvery - 1 + W.overloadMult * W.overloadHitShare) / W.overloadEvery : 1),
+  railUnits: (b) => (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b),
+  // Damage of one lance hit on the first enemy in its line (an Overload Shot hits overloadMult x this).
+  railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLances(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
+  // One Ion Wake tick on one enemy.
+  railWakeDamageMult: (b) => W.railDamageMult(b) * W.wakeShare / (W.wakeLife / W.wakeTick),
+
   // Golden synergies
   helixArms: 2,
   helixDamageMult: 0.8,
@@ -754,7 +792,8 @@ export const POTENTIAL_DPS = {
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap) / W.fieldCooldown(b);
-  }
+  },
+  raillance: (b) => W.railLances(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
 };
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
@@ -779,7 +818,8 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area']
+  shockfield: ['electric', 'area'],
+  rail: ['kinetic']
 };
 
 // Chip label + neon per tag (weapon families, damage types and crits share one palette).
@@ -815,7 +855,8 @@ export const areaMult = (p) => p.stats.areaMult ?? 1;
 export const SOURCE_WEAPON = {
   blaster: 'blaster', helix: 'blaster', rocket: 'rockets', missile: 'missiles', lightning: 'lightning',
   singularity: 'singularity', collapse: 'singularity', orbital: 'orbitals', mine: 'mines', turret: 'turret',
-  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield'
+  drone: 'drones', siege: 'turret', grenade: 'grenades', gas: 'gas', flame: 'flamethrower', cryo: 'cryospray', acid: 'acidspray', shockfield: 'shockfield',
+  rail: 'raillance'
 };
 
 // A build for `weapon`: the one given, a level-only build for a number (Storm Protocol's chain), or
@@ -859,6 +900,7 @@ export function weaponDamage(p, weapon, b) {
     case 'gas': base = d * W.gasDamageMult(sourceBuild(p, weapon, b)); break;
     case 'flame': case 'cryo': case 'acid': base = d * W.flameDamageMult(sourceBuild(p, weapon, b)); break;
     case 'shockfield': base = d * W.fieldDamageMult(sourceBuild(p, weapon, b)); break;
+    case 'rail': base = d * W.railDamageMult(sourceBuild(p, weapon, b)); break;
     default: return d;
   }
   return base * tagDamageMult(p, weapon) * elementDamageMult(p, sourceElement(p, weapon));

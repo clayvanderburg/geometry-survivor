@@ -90,6 +90,11 @@ export const WEAPONS = [
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
     color: '#9ff4ff',
     summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
+  },
+  {
+    id: 'raillance', name: 'Rail Lance', hudName: 'Rail Lance', levelId: 'raillance', levelKey: 'raillance', category: 'PRIMARY', tagSources: ['rail'],
+    color: '#9d8cff',
+    summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and rock to the edge of the screen. Slow fire, huge hits.'
   }
 ];
 

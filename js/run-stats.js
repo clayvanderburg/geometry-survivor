@@ -32,7 +32,9 @@ export const SUB_SOURCES = Object.freeze({
   shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
   meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
-  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  ionwake: 'raillance',      // Ion Wake ticks (Rail Lance Breakthrough)
+  overload: 'raillance'      // Overload Shot beams (Rail Lance Breakthrough)
 });
 
 // Damage that is not a loadout weapon's.
