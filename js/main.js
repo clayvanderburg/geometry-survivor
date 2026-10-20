@@ -3086,8 +3086,8 @@ export class Game {
         this.particles.spawnImpact(hx, hy, travel, 5 + b.radius);
         if (b.kind === 'shard') {
           // A Volatile Shatter shard striking home: a white-gold glint and a burst of glass splinters.
-          this.particles.spawnCritFlare?.(hx, hy, 11, 0.16);
-          this.particles.spawnDirectionalSparks(hx, hy, travel, 0.7, 4, 52, 9);
+          this.particles.spawnCritFlare?.(hx, hy, 7, 0.12);
+          this.particles.spawnDirectionalSparks(hx, hy, travel, 0.7, 2, 52, 8);
         }
         const kb = (b.knock ?? KNOCKBACK.blaster) / (Math.hypot(b.vx, b.vy) || 1);
         this.hitEnemy(e, b.damage * pierceMult, b.source || 'blaster', b.vx * kb, b.vy * kb, 1, b.stat || b.source || 'blaster');
@@ -6081,29 +6081,25 @@ export class Game {
     }
   }
 
-  // Volatile Shatter shard: a spinning white-gold sliver of glass with a glinting gold wake, so the
-  // chain reaction reads apart from ordinary bolts.
+  // Volatile Shatter shard: a small spinning pale-gold sliver of glass with a faint wake, so the chain
+  // reaction reads apart from ordinary bolts without drowning the screen at high levels.
   drawShard(ctx, b) {
     const spin = (b.spin += 0.35);
-    const len = 7.5, wid = 3.2 + 1.6 * Math.abs(Math.sin(spin));
+    const len = 5.5, wid = 2 + 1.2 * Math.abs(Math.sin(spin));
     const a = Math.atan2(b.vy, b.vx);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = 'hsla(48, 100%, 62%, 0.5)';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'hsla(48, 100%, 62%, 0.3)';
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(b.x - b.vx * 2.4, b.y - b.vy * 2.4);
+    ctx.moveTo(b.x - b.vx * 1.8, b.y - b.vy * 1.8);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
     ctx.translate(b.x, b.y);
     ctx.rotate(a);
-    ctx.fillStyle = 'hsla(48, 100%, 60%, 0.45)';
-    ctx.beginPath();
-    ctx.arc(0, 0, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fffbe8';
-    ctx.strokeStyle = 'hsl(46, 100%, 66%)';
-    ctx.lineWidth = 1.2;
+    ctx.fillStyle = 'hsla(48, 100%, 86%, 0.8)';
+    ctx.strokeStyle = 'hsla(46, 100%, 62%, 0.7)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(len, 0);
     ctx.lineTo(0, -wid);
