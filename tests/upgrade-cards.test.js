@@ -320,3 +320,17 @@ test('every offered card maps to a scope, and the level-up card shows it', () =>
   assert.equal(cardScope({ id: 'tag_area', category: 'SPECIALIST' }), 'global');
   assert.equal(cardScope({ id: 'status_potency', statusCard: true }), 'global');
 });
+
+test('cards that do several separate things name all of them in the headline, not just the first stat', () => {
+  const p = makePlayer();
+  applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'blaster_fire')); // an element, so status cards apply
+  const headline = (id) => describeUpgrade(p, UPGRADE_POOL.find((u) => u.id === id)).headline;
+  assert.equal(headline('status_application'), 'ALL 4 STATUS REACTIONS STRONGER');
+  assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
+  assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
+  assert.equal(headline('magnet'), '+65% PICKUP · +25% XP · +1 BOMB');
+  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH + SHOCKWAVE');
+  applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
+  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH, BIGGER SHOCKWAVE');
+  assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
+});
