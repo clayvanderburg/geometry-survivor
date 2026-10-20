@@ -12,8 +12,15 @@
   <link rel="apple-touch-icon" href="assets/icon-180.png" />
   <title>VEXOLITH // VOID SURVIVOR</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="preload" as="image" href="assets/splash.webp" fetchpriority="high" />
 </head>
 <body>
+  <!-- Splash: the key art when the game opens (js/splash.js); any key, tap, click or button continues.
+       First in the body and visible from the first paint, so the title never flashes before it. -->
+  <div id="splash-screen" class="splash" role="button" tabindex="-1" aria-label="VEXOLITH: press any key to continue">
+    <img src="assets/splash.webp" alt="VEXOLITH Survivors: a miner on an Astra Mining hauler facing a neon alien fleet" width="1672" height="941" fetchpriority="high">
+    <div class="splash-prompt"><span class="splash-key">PRESS ANY KEY</span><span class="splash-tap">TAP TO START</span></div>
+  </div>
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
 
@@ -583,12 +590,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- Splash: the key art when the game opens (js/splash.js); any key, tap, click or button continues -->
-  <div id="splash-screen" class="splash hidden" role="button" tabindex="-1" aria-label="VEXOLITH: press any key to continue">
-    <img src="assets/splash.webp" alt="VEXOLITH Survivors: a miner on an Astra Mining hauler facing a neon alien fleet" width="1672" height="941" decoding="async">
-    <div class="splash-prompt"><span class="splash-key">PRESS ANY KEY</span><span class="splash-tap">TAP TO START</span></div>
   </div>
 
   <script type="module" src="js/main.js"></script>
