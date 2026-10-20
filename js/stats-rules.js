@@ -13,8 +13,12 @@
 //   sources     { stat id: damage }  (sub-sources such as burn, helix, collapse, storm, siege)
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
 //   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
+//   armory      { upgrade id: rank } Void Armory ranks held during the run (ranks above 0 only)
+//   armorySpent cores spent on those ranks (js/progression.js armorySpent)
+// Runs from older clients carry no armory fields: their Armory tier is 'unknown'.
 import { KNOWN_VERSIONS } from './changelog.js';
 import { normalizeMode } from './modes.js';
+import { META_UPGRADES } from './progression.js';
 
 export const STATS_SCHEMA = 1;
 
@@ -31,12 +35,16 @@ export const STATS_LIMITS = Object.freeze({
   MAX_CARDS: 160,
   MAX_SOURCES: 40,
   MAX_LOADOUT: 12,
+  MAX_ARMORY: 40,
+  MAX_ARMORY_RANK: 100,
   MAX_DAMAGE: 1e13,
   MAX_COUNT: 1e8
 });
 
 // Ids are short lower-case tokens: weapon, card, source and enemy ids ("evo_pulsar", "mini_splitter").
 export const STAT_ID = /^[a-z0-9][a-z0-9_:.-]{0,39}$/;
+// Void Armory upgrade ids are camelCase (js/progression.js: "critChance", "maxHp").
+export const ARMORY_ID = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
 
 // Why a run's stats are not sent, or null when they are: the player opted out, the dev tuner touched
 // the run (not comparable), or the run was too short to say anything.
@@ -54,7 +62,7 @@ const num = (v, max, min = 0) => (typeof v === 'number' && Number.isFinite(v) ? 
 const int = (v, max, min = 0) => Math.floor(num(v, max, min));
 const dec = (v, max, digits = 1) => { const f = 10 ** digits; return Math.round(num(v, max) * f) / f; };
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
-const entries = (v, max) => (isObj(v) ? Object.entries(v).filter(([k]) => STAT_ID.test(k)).slice(0, max) : []);
+const entries = (v, max, id = STAT_ID) => (isObj(v) ? Object.entries(v).filter(([k]) => id.test(k)).slice(0, max) : []);
 
 // Validates and clamps an uploaded summary. Returns { run } or { error, status } (400 / 422).
 // Unknown fields are dropped, out-of-range numbers clamped, malformed ids skipped.
@@ -130,7 +138,25 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
       run[key][id] = [offered, Math.min(offered, int(v[1], 1e5)), eligible, dec(v[3], eligible, 0), Math.min(eligible, int(v[4], 1e5))];
     }
   }
+  if (isObj(body.armory)) {
+    run.armory = {};
+    for (const [id, v] of entries(body.armory, L.MAX_ARMORY, ARMORY_ID)) {
+      const rank = int(v, L.MAX_ARMORY_RANK);
+      if (rank > 0) run.armory[id] = rank;
+    }
+    run.armorySpent = int(body.armorySpent, L.MAX_COUNT);
+  }
   return { run };
+}
+
+// Armory tier of a run, for comparing like with like: 'unknown' (an older client sent no ranks),
+// 'none' (no cores spent), 'maxed' (every current Armory upgrade at its top rank) or 'partial'.
+export const ARMORY_TIERS = Object.freeze(['none', 'partial', 'maxed', 'unknown']);
+export function armoryTier(run) {
+  const ranks = run?.armory;
+  if (!isObj(ranks)) return 'unknown';
+  if (META_UPGRADES.every((u) => (ranks[u.id] || 0) >= u.maxRank)) return 'maxed';
+  return (run.armorySpent || 0) > 0 || Object.values(ranks).some((r) => r > 0) ? 'partial' : 'none';
 }
 
 export const jsonBytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
