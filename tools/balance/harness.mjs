@@ -24,7 +24,7 @@ globalThis.document ??= {
 const { Game } = await import('../../js/main.js');
 const { EnemyManager } = await import('../../js/enemies.js');
 const { AsteroidManager } = await import('../../js/asteroids.js');
-const { ProgressionManager, META_UPGRADES } = await import('../../js/progression.js');
+const { ProgressionManager, META_UPGRADES, armorySpent } = await import('../../js/progression.js');
 const { UPGRADE_POOL, applyUpgradeLevels, totalXpForLevel } = await import('../../js/upgrades.js');
 const { TUNING, DEFAULT_TUNING, clearTuningOverlay } = await import('../../js/config.js');
 const { MODES, normalizeMode } = await import('../../js/modes.js');
@@ -275,7 +275,11 @@ export function createHeadlessGame({ metaRank = 0, mode = 'normal' } = {}) {
     updateHUD() {}, updateBossHUD() {}, showBanner() {}, renderHubUI() {}
   });
   game.asteroidManager = new AsteroidManager(game.worldWidth, game.worldHeight);
-  for (const upg of META_UPGRADES) game.progression.data.ranks[upg.id] = Math.min(upg.maxRank, metaRank);
+  for (const upg of META_UPGRADES) {
+    const rank = Math.min(upg.maxRank, metaRank);
+    game.progression.data.ranks[upg.id] = rank;
+    if (game.progression.data.paid) game.progression.data.paid[upg.id] = armorySpent({ [upg.id]: rank }); // what buying them would have cost
+  }
   return game;
 }
 
