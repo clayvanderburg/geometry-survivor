@@ -35,7 +35,7 @@ Shipped 2026-10-20: **v0.43.0** (50-wave campaign + victory, rifts & bedrock, we
 2. **Balance sim calibration** (in progress), then **Armory ranks in run stats**, so real data can be split by Armory tier.
 3. **Area-weapon class targets:** set them from measured enemies-hit-per-blast once calibration delivers.
 4. Items in **To check** below, as Clay schedules them.
-5. **Hangar** (big update, own discussion), then burrower & mini-spawner enemies, sector travel.
+5. **Hangar** (big update, own discussion), then burrower & mini-spawner enemies, sector travel (draft: [SECTORS_DESIGN.md](SECTORS_DESIGN.md)).
 
 ## Lanes (who owns what)
 
