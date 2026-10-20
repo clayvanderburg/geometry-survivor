@@ -12,6 +12,14 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.43.4',
+    date: '2026-10-20',
+    title: 'The Long Haul',
+    notes: [
+      { type: 'balance', text: 'Past wave 35, enemy HP grows about half as fast per wave, so a well-upgraded Void Armory can carry a run to the wave 50 finale. Enemy damage and pack sizes still climb.' }
+    ]
+  },
+  {
     version: '0.43.3',
     date: '2026-10-20',
     title: 'Stronger Armory',

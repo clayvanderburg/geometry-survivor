@@ -235,11 +235,12 @@ export const DEFAULT_TUNING = {
   waveHpGrowth: 1.1, // 1.06 before v0.31 (enemy HP outgrew even maxed-armory builds)
   waveHpGrowthFrom: 8, // 18 before v0.31, 12 before v0.31.1
   waveHpGrowthRamp: 10, // 14 before v0.31.1: full compounding by ~wave 18, when weapons hit LV15
-  // Late-campaign HP stage: a second compounding stage on top from waveHpLateFrom, eased in over
-  // waveHpLateRamp waves. Off (1) in v0.43.2: late difficulty leans on contact damage, density and bosses
-  // until the Armory rework sets each tier's power (then it may flatten the late curve instead).
-  waveHpLateFrom: 30,
-  waveHpLateGrowth: 1,
+  // Late-campaign HP stage: a second compounding factor on top from waveHpLateFrom, eased in over
+  // waveHpLateRamp waves. 0.96 softens HP growth past wave 35 from ×1.10 to ~×1.056 a wave (v0.43.4), so a
+  // full Void Armory (~3× power) can carry a run to wave 50; late difficulty leans on contact damage,
+  // density and bosses instead (1 before v0.43.4).
+  waveHpLateFrom: 35,
+  waveHpLateGrowth: 0.96,
   waveHpLateRamp: 10,
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
