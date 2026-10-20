@@ -9,7 +9,7 @@
 // A boss wave whose boss is not defined here gets the Prismatic Dreadnought ('boss', js/enemies.js).
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick.
 import { TUNING } from './config.js';
-import { SERPENT, spawnSerpent, spawnBody, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
+import { SERPENT, spawnSerpent, spawnBody, coilPath, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 import { launchDrones, traceCell } from './hostiles.js';
 import { lanceCycle, drawLanceAim, drawBeam, beamFrom } from './lancers.js';
@@ -169,7 +169,10 @@ export const OURO = {
   speed: 2.1, rageSpeed: 2.7, turnRate: 1.7, weave: 0.6, weaveRate: 1.3,
   shedEvery: 7, shedSegments: 3, shedMin: 12, spawnSegments: 6,
   coilAt: 0.5, coilTime: 4.2, coilR0: 330, coilR1: 135, coilSpeed: 3.6,
-  rearTime: 0.7, strikeTime: 0.55, strikeSpeed: 10.5, windTime: 3
+  rearTime: 0.7, strikeTime: 0.55, strikeSpeed: 10.5, windTime: 3,
+  // Arrival: the body lies coiled round the head (turns arriveSpacing apart) and the head holds still
+  // for arriveRest s before it starts to unwind.
+  arriveSpacing: 52, arriveRest: 1
 };
 
 // Live body segments of a serpent head, front to tail.
@@ -190,8 +193,14 @@ const ouroboros = {
     e.aiTimer = OURO.shedEvery;
     e.enraged = false;
     e.aimAngle = Math.random() * Math.PI * 2;
+    e.restT = OURO.arriveRest;
+    // It arrives coiled: the plates spiral out from behind the head, which then unwinds them.
+    const first = OURO.gap + Math.max(0, OURO.headRadius - OURO.bodyRadius) * 0.6;
+    const path = coilPath(e.x, e.y, OURO.segments, {
+      first, gap: OURO.gap, spacing: OURO.arriveSpacing, angle: e.aimAngle + Math.PI, dir: Math.random() < 0.5 ? -1 : 1
+    });
     e.bodyRefs = spawnBody(m, e, e.x, e.y, OURO.segments, 1, {
-      angle: e.aimAngle, gap: OURO.gap, radius: OURO.bodyRadius, tail: OURO.tailRadius, hue: e.hue, boss: e.type, headRadius: OURO.headRadius, extra: { instant: true }
+      angle: e.aimAngle, gap: OURO.gap, radius: OURO.bodyRadius, tail: OURO.tailRadius, hue: e.hue, boss: e.type, headRadius: OURO.headRadius, path, extra: { instant: true }
     });
   },
   update(e, m, env) {
@@ -206,6 +215,15 @@ const ouroboros = {
       env.grid?.applyImpulse(e.x, e.y, 70, 300, e.hue);
     }
     e.aiTimer -= dt;
+    if (e.restT > 0) {
+      // Fresh out of the portal, still coiled: the head turns to face the ship, then sets off.
+      e.restT -= dt;
+      e.vx = 0;
+      e.vy = 0;
+      e.aimAngle = turnToward(e.aimAngle, Math.atan2(player.y - e.y, player.x - e.x), OURO.turnRate * dt);
+      e.rotation = e.aimAngle;
+      return;
+    }
     if (e.state === 'wind') {
       e.speed = e.enraged ? OURO.rageSpeed : OURO.speed;
       windToward(e, env, { speed: e.speed, turnRate: OURO.turnRate, weave: OURO.weave, weaveRate: OURO.weaveRate });

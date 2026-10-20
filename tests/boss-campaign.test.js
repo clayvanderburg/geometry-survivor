@@ -714,3 +714,71 @@ test('The Prism: swarm ring, then gate cages, then a gravity well with orb rings
   step(m, g.player, Math.ceil(PRISM.breathEvery * 60));
   assert.ok(m.enemyBullets.count >= PRISM.orbRing, 'orb rings');
 });
+
+test('Ouroboros arrives coiled round its head, holds a beat, then unwinds', async () => {
+  resetTuning();
+  const { coilPath } = await import('../js/serpents.js');
+  const pts = coilPath(0, 0, 26, { first: 35, gap: 30, spacing: 52 });
+  for (let k = 1; k < pts.length; k++) {
+    const d = Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y);
+    assert.ok(Math.abs(d - 30) < 3, `plates ${k - 1}-${k} sit one gap apart (${d.toFixed(1)})`);
+  }
+  const m = new EnemyManager();
+  const player = { x: 2900, y: 2000 };
+  m.queueSpawn('ouroboros', 2000, 2000, waveScaleAt(10), { instant: true, wave: 10 });
+  step(m, player, 4);
+  const head = m.enemies.find(e => e.type === 'ouroboros');
+  const plates = m.enemies.filter(e => e.leader && e.bossBody === 'ouroboros');
+  assert.equal(plates.length, 26);
+  const reach = Math.max(...plates.map(e => Math.hypot(e.x - head.x, e.y - head.y)));
+  assert.ok(reach < 200, `coiled: the whole body lies within ${reach.toFixed(0)} px of the head (a straight body reaches ~800)`);
+  const x0 = head.x;
+  step(m, player, 30);
+  assert.equal(head.x, x0, 'it holds still for a beat');
+  step(m, player, 90);
+  assert.ok(head.x > x0 + 50, 'then winds off toward the ship');
+});
+
+test('boss leash: a boss left far behind warps back near the ship, body and all; coming back calls it off', async () => {
+  resetTuning();
+  const { updateBossWarps, warpGroup } = await import('../js/boss-warp.js');
+  const g = campaignGame({ wave: 10 });
+  const m = g.enemyManager;
+  g.eliteSpawnPoint = () => ({ x: g.player.x + 450, y: g.player.y, onScreen: true });
+  m.queueSpawn('ouroboros', 2000, 2000, waveScaleAt(10), { instant: true, wave: 10 });
+  step(m, g.player, 4);
+  const head = m.enemies.find(e => e.type === 'ouroboros');
+  head.restT = 0;
+  const train = warpGroup(head, m.enemies);
+  assert.equal(train.length, 27, 'the head and its 26 plates travel together');
+
+  const tickWarp = (n) => { for (let i = 0; i < n; i++) updateBossWarps(g, 1 / 60); };
+  // Near the ship: nothing happens.
+  tickWarp(Math.ceil(TUNING.bossLeashTime * 60) + 10);
+  assert.ok(!head.warp);
+
+  // Out of reach for bossLeashTime: a rift opens on screen near the ship, then the boss steps through.
+  g.player.x = 2000 + TUNING.bossLeashDist + 400;
+  tickWarp(Math.ceil(TUNING.bossLeashTime * 60) - 5);
+  assert.ok(!head.warp, 'not before bossLeashTime');
+  tickWarp(10);
+  assert.ok(head.warp, 'the warp is telegraphed');
+  const offsets = train.map(o => [o.x - head.x, o.y - head.y]);
+  tickWarp(Math.ceil(TUNING.bossWarpTime * 60) + 1);
+  assert.ok(!head.warp);
+  assert.ok(Math.hypot(head.x - g.player.x, head.y - g.player.y) < 500, 'back in the fight');
+  train.forEach((o, i) => assert.ok(Math.abs(o.x - head.x - offsets[i][0]) < 1e-6 && Math.abs(o.y - head.y - offsets[i][1]) < 1e-6, 'the body keeps its shape'));
+
+  // A cooldown, then a pending warp is called off when the pilot comes back within reach.
+  g.player.x = head.x + TUNING.bossLeashDist + 400;
+  tickWarp(4 * 60 + 5); // the 4 s cooldown outlasts bossLeashTime, so the next warp opens as it ends
+  assert.ok(head.warp);
+  g.player.x = head.x + 200;
+  tickWarp(1);
+  assert.ok(!head.warp, 'flying back in calls the warp off');
+  TUNING.bossLeashDist = 0;
+  g.player.x = head.x + 5000;
+  tickWarp(600);
+  assert.ok(!head.warp, 'leash distance 0: never');
+  resetTuning();
+});

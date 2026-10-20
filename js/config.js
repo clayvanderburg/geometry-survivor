@@ -109,6 +109,11 @@ export const DEFAULT_TUNING = {
   bossHitStop: 0.1,
   bossSlowMo: 0.5,
   bossPackRate: 0.7, // packs arrive at this share of their usual rate while a boss wave's boss is up
+  // Leash (js/boss-warp.js): a boss left beyond bossLeashDist for bossLeashTime warps back in near the ship
+  // through a bossWarpTime rift (0 distance: never).
+  bossLeashDist: 1500,
+  bossLeashTime: 2.5,
+  bossWarpTime: 1.2,
 
   // 8. Hit Feedback & Damage Numbers
   knockbackMult: 1.0,
@@ -361,7 +366,10 @@ export const TUNING_SCHEMA = [
       { key: 'bossWarningTime', label: 'Boss Warning Telegraph', type: 'range', min: 0.5, max: 8.0, step: 0.25, unit: 's' },
       { key: 'bossHitStop', label: 'Boss Kill Hit-Stop', type: 'range', min: 0, max: 0.5, step: 0.02, unit: 's' },
       { key: 'bossSlowMo', label: 'Boss Kill Half-Speed Slow-Mo', type: 'range', min: 0, max: 2.0, step: 0.05, unit: 's' },
-      { key: 'bossPackRate', label: 'Pack Rate During a Boss Wave\'s Fight', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' }
+      { key: 'bossPackRate', label: 'Pack Rate During a Boss Wave\'s Fight', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
+      { key: 'bossLeashDist', label: 'Boss Warps Back When You Are Beyond', type: 'range', min: 0, max: 4000, step: 50, unit: 'px' },
+      { key: 'bossLeashTime', label: 'Boss Warp: Seconds Out of Reach First', type: 'range', min: 0.5, max: 10, step: 0.25, unit: 's' },
+      { key: 'bossWarpTime', label: 'Boss Warp Rift Telegraph', type: 'range', min: 0.3, max: 4, step: 0.1, unit: 's' }
     ]
   },
   {

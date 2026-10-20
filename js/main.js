@@ -8,6 +8,7 @@ import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
+import { updateBossWarps, drawBossWarps } from './boss-warp.js';
 import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
@@ -5387,6 +5388,7 @@ export class Game {
     this.enemyManager.view = spawnView(this);
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
+    updateBossWarps(this, dt);
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
@@ -6641,6 +6643,7 @@ export class Game {
     this.grenades?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
+    drawBossWarps(ctx, this);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
