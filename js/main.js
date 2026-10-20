@@ -85,6 +85,7 @@ import {
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
+import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -234,6 +235,7 @@ export class Game {
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
+    setReduceEffects(loadReduceEffects()); // REDUCE EFFECTS (accessibility, js/juice.js)
     this.radarVisible = loadRadarVisible(); // sector radar minimap, toggled with [R] / controller Back
     this.enemyManager = new EnemyManager();
     this.damageNumbers = new DamageNumbers();
@@ -944,6 +946,8 @@ export class Game {
     this.syncDamageNumbersButton();
     this.syncRadarButton();
     this.syncShareStatsButton();
+    document.getElementById('btn-pause-effects')?.addEventListener('click', () => this.toggleReduceEffects());
+    this.syncReduceEffectsButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -1564,6 +1568,22 @@ export class Game {
   toggleDamageNumbers() {
     this.damageNumbers.toggle();
     this.syncDamageNumbersButton();
+  }
+
+  // REDUCE EFFECTS: no screen shake, softer flashes, fewer particles, no decorative UI motion. Saved.
+  toggleReduceEffects() {
+    setReduceEffects(!isReduceEffects());
+    saveReduceEffects(isReduceEffects());
+    this.syncReduceEffectsButton();
+  }
+
+  syncReduceEffectsButton() {
+    const btn = globalThis.document?.getElementById('btn-pause-effects');
+    if (!btn) return;
+    const on = isReduceEffects();
+    btn.textContent = `✨ REDUCE EFFECTS: ${on ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', on);
+    btn.setAttribute?.('aria-pressed', String(on));
   }
 
   toggleRadar() {
@@ -5027,6 +5047,7 @@ export class Game {
     const held = this.state === 'PLAYING' && this.consumeTimeDilation();
     if (!held) {
       this.grid.update(this.camX, this.camY, this.width, this.height);
+      this.particles.density = particleDensity(this.enemyManager?.enemies?.length ?? 0);
       this.particles.update(dt, this.worldWidth, this.worldHeight);
       this.damageNumbers?.update(dt);
     }
@@ -6500,9 +6521,10 @@ export class Game {
     ctx.save();
     let offsetX = -this.camX;
     let offsetY = -this.camY;
-    if (this.shake > 0.2) {
-      offsetX += (Math.random() - 0.5) * this.shake;
-      offsetY += (Math.random() - 0.5) * this.shake;
+    const shake = this.shake * shakeScale(); // REDUCE EFFECTS turns it off
+    if (shake > 0.2) {
+      offsetX += (Math.random() - 0.5) * shake;
+      offsetY += (Math.random() - 0.5) * shake;
     }
     ctx.translate(offsetX, offsetY);
 
@@ -6733,7 +6755,7 @@ export class Game {
     if (this.bossFlash > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16})`;
+      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16 * flashScale()})`;
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
@@ -6741,7 +6763,7 @@ export class Game {
     if (this.chromaFlash > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(0, 243, 255, ${this.chromaFlash * 0.22})`;
+      ctx.fillStyle = `rgba(0, 243, 255, ${this.chromaFlash * 0.22 * flashScale()})`;
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
