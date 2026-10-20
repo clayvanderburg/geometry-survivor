@@ -2043,6 +2043,7 @@ export class Game {
     this.grid.applyImpulse(p.x, p.y, 46, 180, 188);
     this.grid.ripple?.(p.x, p.y, 110, 188);
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
+    burst(this, 'dash', p.x, p.y, { angle: moveAngle });
 
     // Corrosive Gas Trail: every dash vents one giant cloud where the ship took off (js/gas-trail.js).
     this.gasTrail?.dashCloud(this, p);
@@ -2528,6 +2529,7 @@ export class Game {
     if (this.sound.playPlayerHit) this.sound.playPlayerHit();
     else this.sound.playExplosion(1.8);
     this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
+    burst(this, 'shieldCrackle', p.x, p.y, { hue: 190, r: p.radius * 1.9, scale: dmg >= 20 ? 1.5 : 1 });
     this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
     this.grid.ripple?.(p.x, p.y, 130, 348);
     return p.hp <= 0;
@@ -5575,12 +5577,14 @@ export class Game {
           // Currency only: no XP, no multiplier.
           if (this.sound.playGoldPickup) this.sound.playGoldPickup();
           else this.sound.playGeomPickup(true);
+          burst(this, 'gold', g.x, g.y);
           this.addGold(g.gold || 1);
           this.score += Math.round(10 * this.multiplier);
           this.geoms.splice(i, 1);
           continue;
         }
         this.sound.playGeomPickup(g.isCore);
+        burst(this, g.isCore ? 'core' : 'pickup', g.x, g.y, g.isCore ? undefined : { hue: g.hue ?? 150 });
 
         if (g.isCore) {
           const amt = g.coreAmount || 1;
