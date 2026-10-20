@@ -386,3 +386,23 @@ test('card fairness flags need a real gap: >25% off and beyond noise (|z| >= 3)'
   assert.equal(by.rare.lowSample, true);
   assert.equal(by.rare.flag, null);
 });
+
+test('the uploaded summary carries the Void Armory the run was flown with (ranks and cores spent)', async () => {
+  const h = await import('../tools/balance/harness.mjs');
+  const { armoryTier } = await import('../js/stats-rules.js');
+  const { armorySpent, META_UPGRADES } = await import('../js/progression.js');
+  const fresh = h.simulateRun({ strategy: { name: 'random', priorities: [] }, seed: 'armory:0', maxSeconds: 25, god: true }).stats;
+  assert.deepEqual(fresh.armory, {});
+  assert.equal(fresh.armorySpent, 0);
+  assert.equal(armoryTier(sanitizeRunStats(fresh).run), 'none');
+  const ranked = h.simulateRun({ strategy: { name: 'random', priorities: [] }, seed: 'armory:3', maxSeconds: 25, god: true, metaRank: 3 }).stats;
+  const ranks = Object.fromEntries(META_UPGRADES.map((u) => [u.id, Math.min(3, u.maxRank)]));
+  assert.deepEqual(ranked.armory, ranks);
+  assert.equal(ranked.armorySpent, armorySpent(ranks));
+  const { run } = sanitizeRunStats(ranked);
+  assert.deepEqual(run.armory, ranks, 'the server keeps the ranks as sent');
+  assert.equal(armoryTier(run), 'partial');
+  assert.equal(armoryTier(sanitizeRunStats(h.simulateRun({ strategy: { name: 'random', priorities: [] }, seed: 'armory:99', maxSeconds: 25, god: true, metaRank: 99 }).stats).run), 'maxed');
+  const { armory, armorySpent: spent, ...older } = ranked;
+  assert.equal(armoryTier(sanitizeRunStats(older).run), 'unknown', 'older clients send no ranks');
+});

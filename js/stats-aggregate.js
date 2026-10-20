@@ -12,6 +12,8 @@
 //   index = vsTarget / median(vsTarget of the curve weapons with enough data at that level)
 // index > 1 + OUTLIER_BAND -> "needs nerf", index < 1 - OUTLIER_BAND -> "needs buff".
 
+import { armoryTier, ARMORY_TIERS } from './stats-rules.js';
+
 export const SUMMARY_SCHEMA = 'vexolith-stats-summary/1';
 export const OUTLIER_BAND = 0.2;
 // A weapon level needs this much data before it is compared (fewer runs/seconds -> "low sample").
@@ -57,8 +59,15 @@ function histogram(values, buckets, unit) {
   return buckets.map(([a, b]) => ({ label: bucketLabel([a, b], unit), count: values.filter((v) => v >= a && (b === Infinity || (unit === 'min' ? v < b : v <= b))).length }));
 }
 
-export function aggregateRuns(runs, { version = 'all', source = 'players', generatedAt = new Date().toISOString(), band = OUTLIER_BAND, minSample = MIN_SAMPLE } = {}) {
-  const list = (Array.isArray(runs) ? runs : []).filter((r) => r && typeof r === 'object' && Number.isFinite(r.time));
+// `armory`: one of ARMORY_TIERS (js/stats-rules.js) to aggregate only runs flown with that Void Armory
+// tier; the summary's `armoryTiers` always counts every tier of the unfiltered runs.
+export function aggregateRuns(runs, { version = 'all', source = 'players', generatedAt = new Date().toISOString(), band = OUTLIER_BAND, minSample = MIN_SAMPLE, armory = null } = {}) {
+  const valid = (Array.isArray(runs) ? runs : []).filter((r) => r && typeof r === 'object' && Number.isFinite(r.time));
+  const armoryTiers = ARMORY_TIERS.map((tier) => {
+    const rs = valid.filter((r) => armoryTier(r) === tier);
+    return { tier, runs: rs.length, medianTime: round(median(rs.map((r) => r.time)), 1), medianWave: median(rs.map((r) => r.wave)) };
+  });
+  const list = armory ? valid.filter((r) => armoryTier(r) === armory) : valid;
   const n = list.length;
   const times = list.map((r) => r.time);
   const levels = list.map((r) => r.level);
@@ -220,6 +229,8 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
     source,
     generatedAt,
     runs: n,
+    armory: armory || 'all',
+    armoryTiers,
     outlierBand: band,
     minSample,
     run: {

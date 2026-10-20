@@ -94,12 +94,14 @@
     <div class="source" style="--sc: var(--series-a)" data-slot="a">
       <b>A</b>
       <select data-version aria-label="Dataset A version"><option value="all">Players · all versions</option></select>
+      <select data-armory aria-label="Dataset A Armory tier"><option value="">Any Armory</option><option value="none">No Armory</option><option value="partial">Partial Armory</option><option value="maxed">Maxed Armory</option><option value="unknown">Armory not recorded (older clients)</option></select>
       <label class="file-btn">Load JSON…<input type="file" accept="application/json,.json" data-file /></label>
       <div class="status" data-status></div>
     </div>
     <div class="source" style="--sc: var(--series-b)" data-slot="b">
       <b>B</b>
       <select data-version aria-label="Dataset B version"><option value="">None</option><option value="all">Players · all versions</option></select>
+      <select data-armory aria-label="Dataset B Armory tier"><option value="">Any Armory</option><option value="none">No Armory</option><option value="partial">Partial Armory</option><option value="maxed">Maxed Armory</option><option value="unknown">Armory not recorded (older clients)</option></select>
       <label class="file-btn">Load JSON…<input type="file" accept="application/json,.json" data-file /></label>
       <div class="status" data-status></div>
     </div>

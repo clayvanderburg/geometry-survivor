@@ -7,7 +7,8 @@ import {
 } from '../netlify/lib/stats.mjs';
 import { hashIp } from '../netlify/lib/leaderboard.mjs';
 import { aggregateRuns, percentile, median, flagFor, OUTLIER_BAND, SUMMARY_SCHEMA } from '../js/stats-aggregate.js';
-import { STATS_LIMITS } from '../js/stats-rules.js';
+import { STATS_LIMITS, armoryTier } from '../js/stats-rules.js';
+import { META_UPGRADES, armorySpent } from '../js/progression.js';
 import { KNOWN_VERSIONS } from '../js/changelog.js';
 import { GAME_VERSION } from '../js/version.js';
 
@@ -297,4 +298,29 @@ test('the run\'s game mode is stored with it; a payload without one (older clien
   assert.equal((await post(handler, runBody())).status, 201);
   const modes = store.keys(RUNS_PREFIX).map((k) => store.json(k).mode).sort();
   assert.deepEqual(modes, ['blitz', 'normal']);
+});
+
+test('Void Armory ranks and cores spent are stored; older payloads without them stay valid ("unknown" tier)', async () => {
+  const { store, handler } = setup();
+  const maxed = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u.maxRank]));
+  assert.equal((await post(handler, runBody({ armory: { magnet: 2, critChance: 1, maxHp: 0, 'bad id': 3 }, armorySpent: 120 }))).status, 201);
+  assert.equal((await post(handler, runBody({ armory: {}, armorySpent: 0 }))).status, 201);
+  assert.equal((await post(handler, runBody({ armory: maxed, armorySpent: armorySpent(maxed) }))).status, 201);
+  assert.equal((await post(handler, runBody())).status, 201);
+  const stored = store.keys(RUNS_PREFIX).map((k) => store.json(k));
+  const partial = stored.find((r) => r.armorySpent === 120);
+  assert.deepEqual(partial.armory, { magnet: 2, critChance: 1 }, 'zero ranks and malformed ids are dropped');
+  assert.deepEqual(stored.map(armoryTier).sort(), ['maxed', 'none', 'partial', 'unknown']);
+  assert.ok(stored.every((r) => r.name === undefined && r.callsign === undefined), 'no player identifier');
+
+  const all = await (await get(handler, '?version=all')).json();
+  assert.equal(all.runs, 4);
+  assert.equal(all.armory, 'all');
+  assert.deepEqual(all.armoryTiers.map((t) => [t.tier, t.runs]), [['none', 1], ['partial', 1], ['maxed', 1], ['unknown', 1]]);
+  const none = await (await get(handler, '?version=all&armory=none')).json();
+  assert.equal(none.runs, 1);
+  assert.equal(none.armory, 'none');
+  assert.equal(none.armoryTiers.find((t) => t.tier === 'partial').runs, 1, 'the tier counts cover every run');
+  assert.ok(store.keys(summaryKey('all', 'none')).length === 1, 'each tier has its own cached summary');
+  assert.equal((await get(handler, '?version=all&armory=rich')).status, 400);
 });
