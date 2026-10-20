@@ -36,11 +36,10 @@ const BASE_META_UPGRADES = [
   { id: 'area', cat: 'offense', name: 'Field Expander', icon: '◯', color: '#c79bff', stat: 'area size (blasts, pulls, auras)', per: 0.01, fmt: 'pct', maxRank: 25, baseCost: 18, growth: 1.15 },
   // DEFENSE
   { id: 'maxHp', cat: 'defense', name: 'Aegis Shield Matrix', icon: '◈', color: '#00f3ff', stat: 'max shield', per: 1.5, fmt: 'flat', maxRank: 40, baseCost: 8, growth: 1.11 },
-  { id: 'armor', cat: 'defense', name: 'Ablative Plating', icon: '⬢', color: '#7fd4ff', stat: 'damage taken', per: -0.004, fmt: 'pct', maxRank: 30, baseCost: 18, growth: 1.14 },
-  { id: 'phase', cat: 'defense', name: 'Phase Buffer', icon: '◐', color: '#9d8cff', stat: 'invulnerability after a hit', per: 0.01, fmt: 'sec', maxRank: 15, baseCost: 22, growth: 1.18 },
   // MOBILITY
   { id: 'moveSpeed', cat: 'mobility', name: 'Vector Thrusters', icon: '➤', color: '#00ff88', stat: 'move speed', per: 0.008, fmt: 'pct', maxRank: 25, baseCost: 12, growth: 1.14 },
   { id: 'dash', cat: 'mobility', name: 'Blink Coils', icon: '⇢', color: '#5aa8ff', stat: 'dash cooldown', per: -0.01, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },
+  { id: 'dashDistance', cat: 'mobility', name: 'Afterburner Jets', icon: '⇥', color: '#7fd4ff', stat: 'dash distance', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.14 },
   // ECONOMY
   { id: 'coreYield', cat: 'economy', name: 'Deep-Core Extractor', icon: '❖', color: '#d68fff', stat: 'Void Core gain', per: 0.02, fmt: 'pct', maxRank: 40, baseCost: 15, growth: 1.12 },
   { id: 'xpGain', cat: 'economy', name: 'Geom Resonator', icon: '⬡', color: '#6dff9e', stat: 'XP gain', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
@@ -54,10 +53,9 @@ const BASE_META_UPGRADES = [
   { id: 'miningReach', cat: 'utility', name: 'Extended Claws', icon: '⟟', color: '#7fd4ff', stat: 'drill reach', per: 0.02, fmt: 'pct', maxRank: 15, baseCost: 12, growth: 1.15 },
   { id: 'bombs', cat: 'utility', name: 'Supernova Reserve', icon: '✸', color: '#ffcc00', stat: 'starting Supernova bomb', per: 1, fmt: 'flat', maxRank: 3, baseCost: 400, growth: 3 }
 ];
-export const META_UPGRADES = BASE_META_UPGRADES.map((u) => ({
-  ...u,
-  growth: Math.max(u.growth, Math.pow(ARMORY_TOP_COST / u.baseCost, 1 / Math.max(1, u.maxRank - 1)))
-}));
+// An upgrade's growth steepened so its last rank costs about ARMORY_TOP_COST.
+const topCostGrowth = (u) => Math.max(u.growth, Math.pow(ARMORY_TOP_COST / u.baseCost, 1 / Math.max(1, u.maxRank - 1)));
+export const META_UPGRADES = BASE_META_UPGRADES.map((u) => ({ ...u, growth: topCostGrowth(u) }));
 
 export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u]));
 
@@ -96,10 +94,9 @@ export function armoryBonuses(ranks = {}) {
     critDamageBonus: step('critDamage'),
     areaMult: 1 + step('area'),
     bonusHp: step('maxHp'),
-    damageTakenMult: Math.max(0.5, 1 + step('armor')),
-    hitInvulnBonus: step('phase'),
     moveSpeedMult: 1 + step('moveSpeed'),
     dashCooldownMult: Math.max(0.5, 1 + step('dash')),
+    dashDistanceMult: 1 + step('dashDistance'),
     coreMult: 1 + step('coreYield'),
     xpMult: 1 + step('xpGain'),
     goldMult: 1 + step('goldGain'),
@@ -152,9 +149,13 @@ export function normalizeGuide(value) {
 
 // Armory upgrades that were removed: a save still holding ranks in one gets every core it spent on them
 // back once (the ranks then drop out of the save). Chronos Capacitor boosted only the Autocannon, while
-// every other weapon is built in the run, so it went in v0.27.3.
+// every other weapon is built in the run, so it went in v0.27.3. Ablative Plating (damage taken) and Phase
+// Buffer (post-hit invulnerability) made way for Afterburner Jets (dash distance) in v0.42.4; they were
+// priced on the ARMORY_TOP_COST curve, so their refund is too.
 export const RETIRED_UPGRADES = Object.freeze({
-  fireRate: { baseCost: 12, growth: 1.13, maxRank: 30 }
+  fireRate: { baseCost: 12, growth: 1.13, maxRank: 30 },
+  armor: { baseCost: 18, growth: topCostGrowth({ baseCost: 18, growth: 1.14, maxRank: 30 }), maxRank: 30 },
+  phase: { baseCost: 22, growth: topCostGrowth({ baseCost: 22, growth: 1.18, maxRank: 15 }), maxRank: 15 }
 });
 
 // Cores spent on ranks of retired upgrades in a save's `ranks`.

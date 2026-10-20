@@ -80,7 +80,7 @@ test('HARDCORE: base shield (no Aegis Shield Matrix), other armory upgrades stil
   assert.equal(hc.player.hp, BASE_SHIELD);
   assert.equal(hc.player.base.maxHp, BASE_SHIELD);
   assert.equal(hc.player.stats.damage, normal.player.stats.damage, 'damage armory applies');
-  assert.equal(hc.player.damageTakenMult, normal.player.damageTakenMult, 'armor armory applies');
+  assert.equal(hc.player.dashDistanceMult, normal.player.dashDistanceMult, 'dash distance armory applies');
   assert.equal(hc.player.bombs, normal.player.bombs);
   assert.equal(hc.player.mode, 'hardcore');
 

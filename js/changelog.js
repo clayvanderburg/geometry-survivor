@@ -12,6 +12,15 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.42.4',
+    date: '2026-10-20',
+    title: 'Afterburner Jets',
+    notes: [
+      { type: 'new', text: 'New Void Armory upgrade, Afterburner Jets: +2% dash distance per rank (up to +50%). It stacks with Phase Dash Extender cards and stretches Blink Drive teleports too.' },
+      { type: 'balance', text: 'Ablative Plating and Phase Buffer leave the Void Armory. Every Void Core you spent on them is refunded.' }
+    ]
+  },
+  {
     version: '0.42.3',
     date: '2026-10-20',
     title: 'Independent Drill Claws',
