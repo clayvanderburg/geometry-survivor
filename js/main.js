@@ -7,7 +7,8 @@ import { ReplayRecorder, ReplayPlayer, REPLAY_SETTINGS } from './replay.js';
 import { ParticleSystem } from './particles.js';
 import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xpScaleAt, spawnIntervalAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
-import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY, CAMPAIGN_WAVES, FINAL_BOSS } from './wave-plan.js';
+import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
+import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
@@ -154,8 +155,6 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 // Boss encounters: warning telegraph -> arrival title card -> HUD health bars -> defeat payoff.
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
-const VICTORY_DELAY = 2.5; // s of play between the final boss's death payoff and the VICTORY screen
-const VICTORY_KEY_GRACE = 800; // ms before ENTER on the VICTORY screen counts (a held key must not skip it)
 const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges pulse red
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
@@ -375,9 +374,7 @@ export class Game {
     this.bossCardTimer = 0;
     this.novaCalloutTimer = 0;
     this.novaCalloutDone = false;
-    this.victoryTimer = 0;
-    this.campaignWon = false; // beat the wave-50 boss; still true while flying on in ENDLESS
-    globalThis.document?.getElementById('victory-modal')?.classList.add('hidden');
+    resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -654,8 +651,8 @@ export class Game {
     document.getElementById('btn-claim-chest').addEventListener('click', () => {
       this.closeChestModal();
     });
-    document.getElementById('btn-victory-continue')?.addEventListener('click', () => this.continueEndless());
-    document.getElementById('btn-victory-end')?.addEventListener('click', () => this.endVictoriousRun());
+    document.getElementById('btn-victory-continue')?.addEventListener('click', () => continueEndless(this));
+    document.getElementById('btn-victory-end')?.addEventListener('click', () => endVictoriousRun(this));
 
     window.addEventListener('keydown', (e) => {
       // Any key on the splash screen just continues to the title.
@@ -737,13 +734,7 @@ export class Game {
         return;
       }
 
-      if (this.state === 'VICTORY') {
-        // ENTER flies on into ENDLESS after a short grace (a held key can't skip the screen); SPACE is
-        // the dash key, so it never presses a button here.
-        if (code === 'Enter' || code === 'Space') e.preventDefault();
-        if (code === 'Enter' && Date.now() - (this.victoryShownAt || 0) > VICTORY_KEY_GRACE) this.continueEndless();
-        return;
-      }
+      if (victoryKey(this, e)) return;
 
       if (this.state === 'CHEST' && (code === 'Space' || code === 'Enter')) {
         e.preventDefault();
@@ -2700,52 +2691,12 @@ export class Game {
     const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
-    // The campaign's final boss (wave CAMPAIGN_WAVES) wins the run: VICTORY follows the death payoff.
-    if (e.type === FINAL_BOSS && e.bossWave === CAMPAIGN_WAVES && !this.campaignWon && !this.range?.active) this.victoryTimer = VICTORY_DELAY;
+    if (isCampaignWin(this, e)) this.victoryTimer = VICTORY_DELAY; // the final boss: VICTORY follows (js/victory.js)
   }
 
-  // The campaign is won: the run pauses on the VICTORY screen, which offers ENDLESS or ending the run.
-  showVictory() {
-    this.victoryTimer = 0;
-    if (this.state !== 'PLAYING') return;
-    this.state = 'VICTORY';
-    this.campaignWon = true;
-    this.victoryShownAt = Date.now();
-    for (const sp of [this.flamethrower, this.cryoSprayer, this.acidSprayer]) if (sp?.firing) sp.silence(this);
-    this.sound.setMusicState?.({ intensity: 0.4, muffled: true, boss: 0 });
-    const mins = Math.floor(this.elapsedTime / 60);
-    const secs = String(Math.floor(this.elapsedTime % 60)).padStart(2, '0');
-    const sub = document.getElementById('victory-subtitle');
-    if (sub) sub.textContent = `★ ${bossDef(FINAL_BOSS)?.name ?? 'THE FINAL BOSS'} IS DOWN // WAVE ${CAMPAIGN_WAVES} CLEARED ★`;
-    const stats = document.getElementById('victory-stats');
-    if (stats) {
-      stats.innerHTML = [
-        ['SCORE', this.score.toLocaleString(), 'var(--cyan)'],
-        ['TIME', `${mins}:${secs}`, 'var(--emerald)'],
-        ['KILLS', this.kills.toLocaleString(), 'var(--magenta)'],
-        ['LEVEL', String(this.player?.level ?? 1), 'var(--gold)']
-      ].map(([label, val, color]) => `<div class="go-stat-box"><div class="go-stat-label">${label}</div><div class="go-stat-val" style="color:${color}">${val}</div></div>`).join('');
-    }
-    document.getElementById('victory-modal')?.classList.remove('hidden');
-  }
-
-  // VICTORY → ENDLESS: the run goes on from where it stood (waves keep climbing, bosses pair up).
-  continueEndless() {
-    if (this.state !== 'VICTORY') return;
-    document.getElementById('victory-modal')?.classList.add('hidden');
-    globalThis.document?.activeElement?.blur?.();
-    this.state = 'PLAYING';
-    this.showBanner(`∞ ENDLESS // BOSSES NOW COME IN PAIRS // HOW FAR CAN YOU GO?`);
-  }
-
-  // VICTORY → END RUN: the run ends here and posts like any other, under a VICTORY results screen.
-  endVictoriousRun() {
-    if (this.state !== 'VICTORY') return;
-    document.getElementById('victory-modal')?.classList.add('hidden');
-    globalThis.document?.activeElement?.blur?.();
-    this.state = 'PLAYING';
-    this.triggerGameOver({ victory: true });
-  }
+  showVictory() { showVictory(this); }
+  continueEndless() { continueEndless(this); }
+  endVictoriousRun() { endVictoriousRun(this); }
 
   // Boss-kill time dilation in whole 60 Hz ticks: hit-stop holds every tick, then slow-mo holds
   // every other tick (half speed). Skipping ticks instead of scaling dt keeps per-tick motion exact.
@@ -4851,21 +4802,16 @@ export class Game {
       rankBadge.style.color = result.rank ? 'var(--gold)' : 'var(--text-dim)';
     }
 
-    // A won campaign gets a gold VICTORY screen; a pilot who won and then fell in ENDLESS keeps the win.
-    const scope = rules.badge ? `${rules.label} ` : '';
+    const head = resultsHeadline({ victory, campaignWon: this.campaignWon, wave: this.wave, label: rules.badge ? rules.label : '' });
     const subtitle = document.getElementById('gameover-subtitle');
     if (subtitle) {
-      subtitle.textContent = victory
-        ? `★ WAVE ${CAMPAIGN_WAVES} CLEARED // ${scope}CAMPAIGN COMPLETE ★`
-        : this.campaignWon
-        ? `★ CAMPAIGN WON ★ // ${scope}ENDLESS ENDED AT WAVE ${this.wave}`
-        : rules.badge ? `SHIELD COLLAPSED // ${rules.label} RUN COMPLETE` : 'SHIELD COLLAPSED // SESSION COMPLETE';
-      subtitle.classList[this.campaignWon ? 'add' : 'remove']('victory-text');
-      subtitle.classList[this.campaignWon ? 'remove' : 'add']('danger-text');
+      subtitle.textContent = head.subtitle;
+      subtitle.classList[head.won ? 'add' : 'remove']('victory-text');
+      subtitle.classList[head.won ? 'remove' : 'add']('danger-text');
     }
     const title = document.getElementById('gameover-title');
     if (title) {
-      title.textContent = victory ? 'VICTORY' : 'SIGNAL LOST';
+      title.textContent = head.title;
       title.classList[victory ? 'add' : 'remove']('victory-glow');
       title.classList[victory ? 'remove' : 'add']('danger-glow');
     }
@@ -5123,10 +5069,7 @@ export class Game {
 
     this.elapsedTime += dt;
     this.waveTimer += dt;
-    if (this.victoryTimer > 0 && (this.victoryTimer -= dt) <= 0) {
-      this.showVictory();
-      return;
-    }
+    if (tickVictory(this, dt)) return;
     if ((++this.statsTick & 15) === 0) this.syncRunStats();
 
     const enemyCount = this.enemyManager.enemies.length;
