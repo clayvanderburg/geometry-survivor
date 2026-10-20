@@ -4,13 +4,14 @@
 // (button, overlay, toast), so with the Hangar flag off (js/hangar-flag.js) the page is exactly master's:
 // mountHangar returns null and adds nothing. HTML builders are pure so tests can check them in node.
 import { hangarEnabled } from './hangar-flag.js';
-import { SHIPS, SHIP_BY_ID, shipStatChips, shipLook, shipFixedKit, DEFAULT_SHIP } from './ships.js';
+import { SHIPS, SHIP_BY_ID, shipStatChips, shipLook, shipFixedKit, shipCanSolo, DEFAULT_SHIP } from './ships.js';
 import { FEATS, featProgress, nextFeat } from './feats.js';
 import { WEAPONS, WEAPON_BY_ID } from './loadout.js';
 import { isWeaponUnlocked, isLockable, WEAPON_UNLOCK_FEATS, GRANDFATHERED } from './weapon-unlocks.js';
 import { ShipPreview } from './ship-preview.js';
 import { PAD } from './gamepad.js';
 import { TUNING } from './config.js';
+import { readSolo, writeSolo, masteryStars, masteryName, nextMasteryTarget, MASTERY_DAMAGE_STEP } from './mastery.js';
 
 export const HANGAR_TABS = [
   { id: 'ships', label: 'SHIPS' },
@@ -70,7 +71,6 @@ export function shipsHTML(h) {
 }
 
 // ARSENAL: every weapon with its lock state, the feat(s) that unlock it and its mastery stars.
-const STARS = ['', '★', '★★', '★★★', '✦'];
 export function arsenalRowHTML(w, h) {
   const unlocked = isWeaponUnlocked(h, w.id);
   const fresh = h.fresh.includes(`weapon:${w.id}`);
@@ -84,8 +84,8 @@ export function arsenalRowHTML(w, h) {
   }
   const bar = !unlocked && feats[0] ? progressBarHTML(feats[0], h) : '';
   return `<article class="hangar-arsenal-row${unlocked ? '' : ' locked'}${fresh ? ' fresh' : ''}" style="--wpn:${w.color}" data-weapon="${esc(w.id)}" data-gp-nav tabindex="0">
-    <div class="hangar-feat-main"><h3>${unlocked ? '' : '🔒 '}${esc(w.name)}${fresh ? ' <span class="guide-new">NEW</span>' : ''} <span class="hangar-stars" title="Mastery">${STARS[tier] || ''}</span></h3>
-    <p>${esc(how)}</p></div><div class="hangar-feat-side"><span class="hangar-reward">${esc(w.category)}</span>${bar}</div></article>`;
+    <div class="hangar-feat-main"><h3>${unlocked ? '' : '🔒 '}${esc(w.name)}${fresh ? ' <span class="guide-new">NEW</span>' : ''} <span class="hangar-stars" title="Mastery">${masteryStars(tier)}</span></h3>
+    <p>${esc(how)}${unlocked ? ` · <b class="hangar-mastery">${tier ? `${esc(masteryName(tier))} · ` : ''}${nextMasteryTarget(tier) ? `NEXT ${masteryStars(tier + 1)}: ${esc(nextMasteryTarget(tier))} SOLO` : 'FULLY MASTERED'}</b>` : ''}</p></div><div class="hangar-feat-side"><span class="hangar-reward">${esc(w.category)}</span>${bar}</div></article>`;
 }
 
 export function arsenalHTML(h) {
@@ -114,7 +114,11 @@ export function featsHTML(h) {
 }
 
 // One toast line per completed feat: "FEAT // EXTERMINATOR — MANTIS JOINS THE HANGAR".
-export function toastText({ feat, added }) {
+export function toastText({ feat, added, mastery }) {
+  if (mastery) {
+    const bonus = mastery.tier === 2 ? ` (+${Math.round(MASTERY_DAMAGE_STEP * 100)}% DAMAGE)` : mastery.tier === 3 ? ` (+${Math.round(MASTERY_DAMAGE_STEP * 200)}% DAMAGE)` : '';
+    return `MASTERY ${masteryStars(mastery.tier)} // ${(WEAPON_BY_ID[mastery.weapon]?.name || mastery.weapon).toUpperCase()} ${masteryName(mastery.tier)}${bonus}`;
+  }
   const parts = added.map((a) => {
     const [kind, id] = a.split(':');
     if (kind === 'ship') return `${SHIP_BY_ID[id]?.name || id.toUpperCase()} JOINS THE HANGAR`;
@@ -190,7 +194,7 @@ export class HangarUI {
     this.root.innerHTML = `<div class="modal-card guide-card hangar-card">
       <div class="guide-header"><div><div class="glitch-subtitle">FLEET COMMAND // HANGAR</div>
         <h2 class="guide-title">🚀 HANGAR</h2><div class="guide-progress" data-hangar-sub></div></div>
-        <button type="button" class="neon-btn guide-close-btn" data-hangar-close>◀ BACK [ESC]</button></div>
+        <div class="hangar-head-btns"><button type="button" class="neon-btn hangar-solo-btn" data-solo-toggle title="One weapon all run: no NEW WEAPON cards, 3-card hands. Clearing waves masters it."></button><button type="button" class="neon-btn guide-close-btn" data-hangar-close>◀ BACK [ESC]</button></div></div>
       <div class="guide-tabs" role="tablist">${HANGAR_TABS.map((t) => `<button type="button" class="guide-tab" data-hangar-tab="${t.id}" role="tab">${t.label} <span class="guide-tab-new" data-hangar-tab-new="${t.id}"></span></button>`).join('')}</div>
       <div class="guide-body hangar-body" data-hangar-body tabindex="-1"></div>
       <div class="guide-foot"><span><b>Q E</b> / <b>LB RB</b> tabs</span><span><b>TAB</b> / <b>D-pad</b> browse</span><span><b>ESC</b> / <b>B</b> back</span></div></div>`;
@@ -203,6 +207,22 @@ export class HangarUI {
       if (sel) this.select(sel.dataset.selectShip);
     });
 
+    // SOLO // MASTERY ATTEMPT switch: in the Hangar header and on the start pick (remembered per device).
+    const pickFoot = doc.getElementById('start-pick-options')?.parentNode?.querySelector?.('.start-pick-foot');
+    if (pickFoot) {
+      const b = doc.createElement('button');
+      b.type = 'button';
+      b.className = 'neon-btn hangar-solo-btn';
+      b.dataset.soloToggle = '';
+      pickFoot.insertBefore(b, pickFoot.firstChild?.nextSibling || null);
+    }
+    doc.querySelectorAll?.('[data-solo-toggle]').forEach((b) => b.addEventListener('click', () => this.toggleSolo()));
+    this.syncSolo();
+    // SOLO chip on the HUD during a solo run.
+    this.soloChip = doc.createElement('div');
+    this.soloChip.className = 'hangar-solo-chip hidden';
+    (doc.getElementById('guide-toast')?.parentNode || doc.body)?.appendChild(this.soloChip);
+
     // Unlock toast: top centre, one at a time.
     this.toastEl = doc.createElement('div');
     this.toastEl.className = 'hangar-toast hidden';
@@ -211,6 +231,24 @@ export class HangarUI {
     (doc.getElementById('guide-toast')?.parentNode || doc.body)?.appendChild(this.toastEl);
     this.syncBadges();
     this.syncTitleShip();
+  }
+
+  get soloOn() { return readSolo(globalThis.localStorage); }
+
+  toggleSolo() {
+    writeSolo(globalThis.localStorage, !this.soloOn);
+    this.game.sound?.playUiSelect?.();
+    this.syncSolo();
+  }
+
+  // Button labels; the switch greys out for a ship that can't solo (BROOD's two-weapon kit).
+  syncSolo() {
+    const can = shipCanSolo(this.h.ship);
+    this.doc.querySelectorAll?.('[data-solo-toggle]').forEach((b) => {
+      b.textContent = `✦ SOLO // MASTERY ATTEMPT: ${can ? (this.soloOn ? 'ON' : 'OFF') : 'N/A'}`;
+      b.classList.toggle('on', can && this.soloOn);
+      b.disabled = !can;
+    });
   }
 
   // The title screen's idle ship wears the selected ship's silhouette.
@@ -301,6 +339,7 @@ export class HangarUI {
     // The title ship and the next run fly it; the title's idle player is rebuilt for the preview cards.
     if (this.game.state === 'TITLE') this.game.resetRun?.();
     this.syncTitleShip();
+    this.syncSolo();
     const scroll = this.body.scrollTop;
     this.render();
     this.body.scrollTop = scroll;
@@ -354,6 +393,20 @@ export class HangarUI {
     else if (gp.pressed(PAD.A)) g.menuNav.activate();
   }
 
+  // `SOLO ✦ AUTOCANNON · NEXT ★: CLEAR WAVE 10` while a solo run is live.
+  updateSoloChip() {
+    const g = this.game;
+    const p = g.player;
+    const w = g.feats?.run?.soloWeapon;
+    const show = g.state === 'PLAYING' && !!p?.solo && !!w;
+    this.soloChip.classList.toggle('hidden', !show);
+    if (!show) return;
+    const tier = this.h.mastery[w] || 0;
+    const next = nextMasteryTarget(tier);
+    const text = `SOLO ✦ ${(WEAPON_BY_ID[w]?.hudName || w).toUpperCase()}${next ? ` · NEXT ${masteryStars(tier + 1)}: ${next}` : ' · MASTERED'}`;
+    if (this.soloChip.textContent !== text) this.soloChip.textContent = text;
+  }
+
   // Fill (or hide) the strip on the results screen once a run has ended.
   showResults(ledger) {
     if (!this.resultsEl) {
@@ -386,6 +439,7 @@ export class HangarUI {
   // Called each frame from the game loop. Toasts wait, hidden, while a level-up hand, a cache, the pause
   // menu, the victory screen or a boss card is up; they run during play and on the title / results.
   update(dt) {
+    this.updateSoloChip();
     if (this.toastT <= 0) return;
     const g = this.game;
     const clear = !['UPGRADE', 'CHEST', 'PAUSED', 'VICTORY'].includes(g.state) && !(g.state === 'PLAYING' && g.bossCardTimer > 0);

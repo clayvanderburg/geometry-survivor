@@ -690,7 +690,7 @@ export const NEW_WEAPON_ID = 'new_weapon';
 
 // A NEW WEAPON card can appear while a slot is free and some weapon is not equipped.
 export function canOfferNewWeapon(player) {
-  return freeSlots(player) > 0 && unownedWeapons(player).length > 0;
+  return !player.solo && freeSlots(player) > 0 && unownedWeapons(player).length > 0; // SOLO runs (Hangar): never
 }
 
 export function newWeaponCard(player) {

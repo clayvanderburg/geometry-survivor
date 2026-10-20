@@ -2,10 +2,11 @@
 // entry point is a no-op unless the Hangar flag is on (js/hangar-flag.js): game.feats is null then.
 import { hangarEnabled, setHangarEnabled } from './hangar-flag.js';
 import { FeatLedger, FEATS } from './feats.js';
-import { SHIPS, DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook, shipDef, shipFixedKit } from './ships.js';
+import { SHIPS, shipCanSolo, DEFAULT_SHIP, normalizeShip, isShip, shipRunBonuses, shipLook, shipDef, shipFixedKit } from './ships.js';
 import { WEAPONS, START_WEAPON_CHOICES } from './loadout.js';
 import { quirkOnKill, quirkOnHit } from './ship-quirks.js';
 import { lockedWeapons } from './weapon-unlocks.js';
+import { masteryDamageTable, readSolo, SOLO_HAND_SIZE } from './mastery.js';
 
 // The ship this run flies: null while the flag is off (the crab, exactly as before) or in the Weapon Range;
 // else the Hangar's pick. `game.shipOverride` (balance sim --ship, tests) wins even with the flag off.
@@ -29,10 +30,28 @@ export function shipFields(shipId) {
 
 // The run's locked weapons while the Hangar flag is on (js/weapon-unlocks.js); {} otherwise, so the
 // player carries no lock list and every weapon can join, as before.
+// and the mastery damage table and SOLO rules (js/mastery.js).
 export function lockFields(game) {
   if (!hangarEnabled() || game.range?.active || !game.progression?.hangar) return {};
-  return { lockedWeapons: lockedWeapons(game.progression.hangar()) };
+  const h = game.progression.hangar();
+  const out = { lockedWeapons: lockedWeapons(h) };
+  const mastery = masteryDamageTable(h.mastery);
+  if (Object.keys(mastery).length) out.masteryDamage = mastery;
+  if (soloRun(game)) {
+    // SOLO // MASTERY ATTEMPT: no NEW WEAPON cards, 3-card hands (LANCER keeps its 4), no weapon floor.
+    out.solo = true;
+    out.handSize = Math.max(SOLO_HAND_SIZE, shipDef(game.shipId || DEFAULT_SHIP).bonuses.handSize || 0);
+    out.weaponFloor = false;
+  }
+  return out;
 }
+
+// Is the run about to start a SOLO run? The switch is on (remembered per device) and the ship can solo.
+export function soloRun(game) {
+  if (!hangarEnabled() || game.range?.active) return false;
+  return readSolo(pageStorage()) && shipCanSolo(runShip(game) || DEFAULT_SHIP);
+}
+const pageStorage = () => { try { return globalThis.localStorage || null; } catch { return null; } };
 
 // The weapons a ship run starts with: its fixed kit, else the start pick when the ship allows it, else the
 // default kit. null without a ship (the flag is off): resetRun keeps its own rule.
@@ -55,7 +74,11 @@ export function startChoices(game, { forKit = false } = {}) {
   const locked = hangarEnabled() && game.progression?.hangar ? lockedWeapons(game.progression.hangar()) : [];
   const open = (ids) => ids.filter((w) => !locked.includes(w));
   if (kit === 'any') return open(WEAPONS.map((w) => w.id));
-  if (kit === 'pick' || (kit === 'last' && forKit)) return open(START_WEAPON_CHOICES);
+  if (kit === 'pick' || (kit === 'last' && forKit)) {
+    // Mastered weapons (★) join the pick.
+    const mastered = hangarEnabled() && game.progression?.hangar ? WEAPONS.map((w) => w.id).filter((w) => (game.progression.hangar().mastery[w] || 0) >= 1) : [];
+    return open([...new Set([...START_WEAPON_CHOICES, ...mastered])]);
+  }
   return [];
 }
 
@@ -74,7 +97,8 @@ export function hangarHit(game, dmg) {
 // A fresh ledger for the run resetRun just built (null: flag off, or the Weapon Range).
 export function newRunLedger(game) {
   if (!hangarEnabled() || game.range?.active || !game.progression?.hangar) return null;
-  return new FeatLedger({ mode: game.mode, ship: game.player?.shipId || DEFAULT_SHIP });
+  const ship = game.player?.shipId || DEFAULT_SHIP;
+  return new FeatLedger({ mode: game.mode, ship, loadout: [...(game.player?.loadout || [])], canMaster: shipCanSolo(ship) });
 }
 
 // Land the run's counts in the save (each wave, each boss, and once at the end). Tuner/sandbox runs drop
