@@ -4521,6 +4521,7 @@ export class Game {
     // Level-up hands, weapon picks and Breakthroughs all show the current build under the cards.
     const strip = document.getElementById('upgrade-loadout-strip');
     if (strip && this.player) strip.innerHTML = loadoutStripHtml(this.player);
+    this.radio?.undock(); // Dr. Pixie leaves the old grid before it's cleared
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
     this.closeCardDetail();
@@ -4671,6 +4672,7 @@ export class Game {
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
+      if (this.radioOn) this.radio.dock(document.getElementById('upgrade-choices')); // big, in the free column
       this.pixie?.offer(id, name); // Dr. Pixie's EUREKA on the radio (never blocks the pick)
       const modal = document.getElementById('upgrade-modal');
       modal.classList.remove('hidden');
@@ -4687,6 +4689,7 @@ export class Game {
 
   closeUpgradeModal() {
     this.breakthrough = null;
+    this.radio?.undock(); // her reaction plays on in the corner
     if (this.openNextBreakthrough()) return;
     this.currentChoices = [];
     this.handPhase = null;

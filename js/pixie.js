@@ -175,7 +175,8 @@ export class PixieDirector {
 
   offer(weaponId, weaponName) {
     const line = this.offerLine(weaponId, weaponName);
-    this.radio?.say({ ...line, onStart: () => { if (!isReduceEffects()) this.sound?.playEureka?.(); } }); // REDUCE EFFECTS skips the chime
+    // She stays up beside the cards until the pick (picked() cuts her short); no rush to read.
+    this.radio?.say({ ...line, hold: 600, onStart: () => { if (!isReduceEffects()) this.sound?.playEureka?.(); } }); // REDUCE EFFECTS skips the chime
     return line;
   }
 

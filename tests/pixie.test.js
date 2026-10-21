@@ -21,6 +21,7 @@ const { CAST } = await import('../js/story.js');
 const { Game } = await import('../js/main.js');
 
 const root = new URL('../', import.meta.url);
+const root_ = root;
 const seeded = (seed = 7) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const weaponNames = WEAPONS.map((w) => w.name);
 const transformNames = Object.values(TRANSFORMS).flatMap((t) => Object.values(t).map((x) => x.name));
@@ -121,4 +122,35 @@ test('Game: the Breakthrough pick and choice call Pixie; the radio is off unless
   assert.match(main, /\.showSplash\(\)\.enableStoryRadio\(\)/);
   const html = readFileSync(new URL('index.html', root), 'utf8');
   for (const id of ['radio-box', 'radio-portrait', 'radio-name', 'radio-text']) assert.match(html, new RegExp(`id="${id}"`));
+});
+
+test('on the Breakthrough pick Pixie docks big into the free card column, and leaves it before the grid is cleared', () => {
+  const el = (cls = '') => {
+    const node = {
+      className: cls, children: [], parentNode: null, classList: { set: new Set(), add(c) { this.set.add(c); }, remove(c) { this.set.delete(c); }, contains(c) { return this.set.has(c); } },
+      appendChild(c) { c.parentNode?.children.splice(c.parentNode.children.indexOf(c), 1); c.parentNode = node; node.children.push(c); return c; },
+      insertBefore(c) { return node.appendChild(c); },
+      remove() { node.parentNode?.children.splice(node.parentNode.children.indexOf(node), 1); node.parentNode = null; }
+    };
+    return node;
+  };
+  const home = el('game'), root = el('radio'), grid = el('grid');
+  home.appendChild(root);
+  globalThis.document = { createElement: () => el() };
+  const radio = new RadioBox({ box: { bind: () => true, root, show() {}, hide() {} } });
+  assert.equal(radio.dock(grid), true);
+  assert.equal(radio.docked, true);
+  assert.equal(grid.children[0].children[0], root, 'in its own grid cell, beside the cards');
+  assert.ok(root.classList.contains('radio-docked'));
+  radio.undock();
+  assert.equal(root.parentNode, home, 'back in its corner for the reaction');
+  assert.equal(grid.children.length, 0);
+  assert.equal(root.classList.contains('radio-docked'), false);
+  delete globalThis.document;
+
+  const main = readFileSync(new URL('js/main.js', root_), 'utf8');
+  assert.match(main, /this\.radio\?\.undock\(\);[^\n]*\n\s*const container = document\.getElementById\('upgrade-choices'\)/);
+  assert.match(main, /this\.radio\.dock\(document\.getElementById\('upgrade-choices'\)\)[\s\S]{0,200}this\.pixie\?\.offer\(id, name\)/);
+  const css = readFileSync(new URL('css/style.css', root_), 'utf8');
+  for (const px of [216, 144]) assert.match(css, new RegExp(`radio-docked \\.dialogue-portrait \\{ width: ${px}px`), `${px} px: whole multiples of the 72 px art`);
 });
