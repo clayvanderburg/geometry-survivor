@@ -34,7 +34,7 @@ const TABLE = {
   orbitals: ['count', 'orbitals_count', 6, '+1 BLADE'],
   mines: ['capacity', 'mines_capacity', 8, '+1 MINE'],
   turret: ['charges', null, 2, '+1 TURRET'],
-  drones: ['wingmen', 'drones_wingmen', 2, '+1 DRONE'],
+  drones: ['wingmen', 'drones_wingmen', 4, '+1 DRONE'],
   grenades: ['count', 'grenades_count', 5, '+1 GRENADE'],
   flamethrower: ['nozzles', 'flamethrower_nozzles', 3, '+1 NOZZLE'],
   cryospray: ['nozzles', 'cryospray_nozzles', 3, '+1 NOZZLE'],
@@ -87,10 +87,10 @@ test('Replicator Array: one rank adds one count rank to every equipped eligible 
 
 test('Replicator Array: respects each count cap, and the count card shares its room', () => {
   const p = player(['blaster', 'drones', 'raillance']);
-  install(p, U.UPGRADE_BY_ID.drones_wingmen, 2); // drones at their cap
+  install(p, U.UPGRADE_BY_ID.drones_wingmen, 4); // drones at their cap (5 drones)
   install(p, U.UPGRADE_BY_ID.raillance_count, 2); // one lance rank left
   replicate(p, 2);
-  assert.equal(weaponBuild(p, 'drones').r.wingmen, 2, 'a capped weapon gets nothing');
+  assert.equal(weaponBuild(p, 'drones').r.wingmen, 4, 'a capped weapon gets nothing');
   assert.equal(weaponBuild(p, 'raillance').r.count, 3, 'only what fits under the cap');
   assert.equal(weaponBuild(p, 'blaster').r.prism, 2);
   // Prism Split now has 5 - 2 ranks of room left; a +5 roll installs 3.
@@ -101,7 +101,7 @@ test('Replicator Array: respects each count cap, and the count card shares its r
   assert.equal(countRoom(p, 'blaster'), 0);
   // Eligibility: offered only while some equipped weapon can take a count rank.
   const q = player(['blaster', 'drones']);
-  install(q, U.UPGRADE_BY_ID.drones_wingmen, 2);
+  install(q, U.UPGRADE_BY_ID.drones_wingmen, 4);
   install(q, U.UPGRADE_BY_ID.multishot, 5);
   assert.ok(!U.eligibleUpgrades(q).some((u) => u.id === REPLICATOR_ID), 'every equipped weapon is at its cap');
   assert.ok(U.eligibleUpgrades(player(['blaster'])).some((u) => u.id === REPLICATOR_ID));
@@ -137,7 +137,8 @@ test('Replicator Array: card preview lists each weapon\'s gain, rows read the ne
   const q = player(['blaster', 'drones']);
   const dps = weaponPotentialDps(q, 'drones');
   replicate(q);
-  assert.ok(Math.abs(weaponPotentialDps(q, 'drones') / dps - 2) < 1e-9, 'one drone -> two drones doubles their potential');
+  // The second drone is a wingman with a lighter gun (droneWingHitShare of the lead's), so 1 -> 2 drones adds that share.
+  assert.ok(Math.abs(weaponPotentialDps(q, 'drones') / dps - (1 + W.droneWingHitShare)) < 1e-9, 'one drone -> two drones adds a wingman gun');
 });
 
 test('Replicator Array: always at least RARE, one rank at a time, rare in hands, no OVERCHARGE', () => {

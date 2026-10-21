@@ -447,7 +447,7 @@ export const COUNT_STATS = Object.freeze({
   orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
   mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
   turret: countStat('charges', null, 2, 1, 'TURRET'),
-  drones: countStat('wingmen', 'drones_wingmen', 2, 1, 'DRONE'),
+  drones: countStat('wingmen', 'drones_wingmen', 4, 1, 'DRONE'),
   grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
   flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
   cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
