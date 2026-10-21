@@ -90,7 +90,7 @@ export const STAT_CARDS = {
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (the front pair first, then the back row).', { maxLevel: 4 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
@@ -361,7 +361,7 @@ export const TRANSFORMS = {
     18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
   },
   drones: {
-    6: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
+    6: tf('wingman', 'Escort Squadron', 'Escort Drones: a whole back row of 3 drones joins the formation (5 in all). Drones past 5 add their guns to the rest.'),
     12: tf('homing', 'Homing Bolts', 'Escort Drone bolts curve onto their targets.'),
     18: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
   },

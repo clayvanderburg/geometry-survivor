@@ -24,8 +24,8 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
-const { levelBuild, weaponBuild, makeBuild } = await import('../js/weapon-levels.js');
+const { WEAPON_SCALING: W, DRONE_MAX, POTENTIAL_DPS } = await import('../js/weapon-scaling.js');
+const { levelBuild, weaponBuild, makeBuild, BT_TRANSFORM_DPS } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
 const silent = new Proxy({}, { get: () => () => {} });
@@ -168,31 +168,90 @@ test('a second turret planted by a parked ship steps aside, but never into a roc
   assert.equal(b.target, target, 'and the new turret can shoot');
 });
 
-test('escort drones fly in formation behind the hull, fire drone bolts, and never target vortex portals', () => {
+// Ship heading +x: which drones fly ahead of the hull (the front pair) and which behind it (the back row).
+const formation = (g) => {
+  const d = g.deployables.drones.slice(0, g.deployables.droneCount);
+  return { front: d.filter((u) => u.x > g.player.x), back: d.filter((u) => u.x < g.player.x) };
+};
+
+test('escort drones fly in formation round the hull, fire drone bolts, and never target vortex portals', () => {
   const portal = enemy(2150, 2000, { type: 'blackhole', radius: 22 });
   const g = arena({ enemies: [portal] });
   assert.equal(isDeployableTarget(portal), false);
   g.player.weapons.drones = 3;
-  g.player.upgradeLevels.drones_wingmen = 2; // three drones in the V
+  g.player.upgradeLevels.drones_wingmen = 2; // the front pair and the back-row centre
   tick(g, 2);
   const d = g.deployables;
   assert.equal(d.droneCount, 3);
   assert.equal(d.droneCount, W.droneCount(weaponBuild(g.player, 'drones')));
   for (let i = 0; i < d.droneCount; i++) {
     const drone = d.drones[i];
-    assert.ok(drone.x < g.player.x, `drone ${i} trails behind a ship heading +x`);
-    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.5);
+    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.6);
   }
+  const { front, back } = formation(g);
+  assert.equal(front.length, 2);
+  assert.equal(back.length, 1);
+  assert.ok(Math.abs(back[0].y - g.player.y) < 8, 'a lone back drone flies the centre slot');
+  assert.ok(front[0].y < g.player.y !== front[1].y < g.player.y, 'the front pair flanks the nose');
   assert.equal(g.bullets.length, 0, 'the only enemy is a portal');
 
   const target = enemy(2150, 2050);
   g.enemyManager.enemies.push(target);
   tick(g, 1);
   assert.ok(g.bullets.length >= 3);
-  assert.ok(g.bullets.every((b) => b.source === 'drone' && b.damage === 10 * W.droneDamageMult(weaponBuild(g.player, 'drones'))));
+  const build = weaponBuild(g.player, 'drones');
+  const lead = 10 * W.droneDamageMult(build), wing = 10 * W.droneWingDamageMult(build);
+  assert.ok(Math.abs(wing / lead - W.droneWingHitShare) < 1e-12, 'wingmen fly lighter guns than the flight lead');
+  const is = (x, v) => Math.abs(x / v - 1) < 1e-9;
+  assert.ok(g.bullets.every((b) => b.source === 'drone' && (is(b.damage, lead) || is(b.damage, wing))));
+  assert.ok(g.bullets.some((b) => is(b.damage, lead)) && g.bullets.some((b) => is(b.damage, wing)));
   g.player.upgradeLevels.drones_wingmen = 0;
   tick(g, DT);
   assert.equal(d.droneCount, 1);
+});
+
+test('escort drones: up to 5 (a front pair and a back row of 3); Escort Squadron brings the whole back row', () => {
+  const g = arena();
+  const docks = [];
+  g.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => docks.push(slot) : () => {}) });
+  g.player.weapons.drones = 5;
+  g.player.upgradeLevels.drones_wingmen = 4;
+  tick(g, 2);
+  let f = formation(g);
+  assert.equal(g.deployables.droneCount, DRONE_MAX);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 3);
+  assert.deepEqual(docks, [0, 1, 2, 3, 4]);
+
+  // LV 6 Escort Squadron with no Wingmen ranks: one front drone, then the back row peels off one by one.
+  const s = arena();
+  const sdocks = [];
+  s.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => sdocks.push(slot) : () => {}) });
+  s.player.weapons.drones = 6;
+  tick(s, 1);
+  assert.equal(s.deployables.droneCount, 1);
+  s.player.breakthroughs = { drones: { 6: 'transform' } };
+  tick(s, DT);
+  assert.equal(s.deployables.droneCount, 4);
+  assert.ok(s.deployables.drones[3].launch > s.deployables.drones[2].launch, 'the squadron launches one drone at a time');
+  tick(s, 2);
+  f = formation(s);
+  assert.equal(f.front.length, 1);
+  assert.equal(f.back.length, 3);
+  assert.deepEqual(sdocks, [0, 1, 2, 3], 'each new drone docks with its own rising chirp');
+  assert.ok(s.deployables.drones.slice(0, 4).every((u) => u.pop === 0 && u.docked));
+
+  // Drones past the 5 never go to waste: their guns ride on the rest, so the squadron still adds its full share.
+  const full = makeBuild('drones', 9, { wingmen: 3 }, { 6: 'transform' });
+  assert.equal(W.droneSquad(full), 7);
+  assert.equal(W.droneCount(full), DRONE_MAX);
+  assert.ok(Math.abs(W.droneWingDamageMult(full) / W.droneDamageMult(full) - W.droneWingHitShare * 6 / 4) < 1e-12, 'the 2 surplus guns ride on the 4 wingmen');
+  // A full formation of 5 taking the squadron: all 3 are surplus, so the same 5 drones hit x1.22 harder.
+  const five = makeBuild('drones', 10, { wingmen: 4 });
+  const five6 = makeBuild('drones', 10, { wingmen: 4 }, { 6: 'transform' });
+  assert.equal(W.droneCount(five6), W.droneCount(five));
+  assert.ok(Math.abs(POTENTIAL_DPS.drones(five6) / POTENTIAL_DPS.drones(five) - BT_TRANSFORM_DPS) < 1e-9);
+  assert.ok(W.droneWingDamageMult(five6) > W.droneWingDamageMult(five));
 });
 
 test('deployables freeze under hit-stop and pause, and never join the enemy list', () => {
