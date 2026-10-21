@@ -38,7 +38,20 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await page.keyboard.press('3');
  if(await page.locator('#mode-select [aria-checked="true"]').getAttribute('data-game-mode') !== 'blitz') throw Error('[3] should pick BLITZ');
  await page.locator('#btn-start-game').click();
- // First LAUNCH: the tutorial comes first; NEXT / BACK move, SKIP closes it for good and starts the run.
+ // First LAUNCH: the opening cutscene plays first (talking-head dialogue over the live world); a click
+ // types the line out / moves it on, Esc skips the whole scene and remembers it was seen.
+ await page.locator('#cutscene-layer').waitFor({state:'visible'});
+ if(await page.evaluate(()=>__game.state)!=='CUTSCENE') throw Error('The first LAUNCH should play the opening cutscene');
+ await page.locator('#dialogue-box').waitFor({state:'visible', timeout:8000});
+ const firstLine = await page.locator('#dialogue-text').innerText();
+ await page.mouse.click(640,300); await page.mouse.click(640,300);
+ await page.waitForTimeout(300);
+ if(await page.locator('#dialogue-text').innerText() === firstLine) throw Error('Clicking should move the dialogue on');
+ await page.keyboard.press('Escape');
+ await page.waitForTimeout(200);
+ if(await page.locator('#cutscene-layer').isVisible()) throw Error('Esc should skip the cutscene');
+ if(await page.evaluate(()=>localStorage.getItem('vexolith_intro_seen'))!=='1') throw Error('Skipping should remember the intro was seen');
+ // Then the tutorial; NEXT / BACK move, SKIP closes it for good and starts the run.
  await page.locator('#tutorial-modal').waitFor({state:'visible'});
  if(!await page.locator('#title-modal').isVisible()) throw Error('The run should wait for the tutorial');
  await page.locator('#btn-tutorial-next').click();
@@ -111,7 +124,9 @@ const { chromium } = require(process.argv[2] || 'playwright');
  if(await blocked.locator('#btn-title-notes [data-notes-badge]').isVisible()) throw Error('Reading the notes should clear the badge');
  await blocked.locator('#mode-select [data-game-mode="hardcore"]').click();
  await blocked.locator('#btn-start-game').click();
- // Storage blocked: the first LAUNCH still shows the tutorial (it can't know it was seen); Esc skips into the run.
+ // Storage blocked: the first LAUNCH still plays the intro and shows the tutorial (it can't know they were seen); Esc skips each.
+ await blocked.locator('#cutscene-layer').waitFor({state:'visible'});
+ await blocked.keyboard.press('Escape');
  await blocked.locator('#tutorial-modal').waitFor({state:'visible'});
  await blocked.keyboard.press('Escape');
  if(await blocked.locator('#tutorial-modal').isVisible()) throw Error('Esc did not skip the tutorial');
@@ -124,6 +139,6 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await blocked.keyboard.press('p');
  if(!await blocked.locator('#pause-modal').isVisible()) throw Error('Blocked-storage boot failed');
  if(errors.length) throw Error(errors.join('\n'));
- console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (every load and refresh, key continues to the title), first-launch tutorial (next/back/skip into the starting-weapon pick/remembered), starting-weapon pick (click/[3]/Enter launch with that weapon, remembered, Esc back to pause), blocked-storage boot + tutorial + pick + patch notes + mode pick; no page errors.');
+ console.log('Browser smoke PASS: boot, play, pause/resume, slider shortcuts, restart, tuner, both canvas renders, game mode selector + HUD badge, splash (every load and refresh, key continues to the title), first-launch opening cutscene (click advance, Esc skip, remembered), first-launch tutorial (next/back/skip into the starting-weapon pick/remembered), starting-weapon pick (click/[3]/Enter launch with that weapon, remembered, Esc back to pause), blocked-storage boot + tutorial + pick + patch notes + mode pick; no page errors.');
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -7,7 +7,7 @@ import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChan
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, chillSlow,
-  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius,
+  blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius, naniteRadius, quakeRadius,
   shockStun, shockLongStun, shockLongChance, statusPotency, statusDecay, statusDotShare, stacksPerBaseDamage, burnSpreadChance,
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
@@ -180,10 +180,11 @@ export const STAT_ROWS = [
   { id: 'mineBlastRadius', label: 'Mine blast radius', get: (p) => wb(p, 'mines', (b) => mineBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'MINE BLAST RADIUS' },
   { id: 'mineTrigger', label: 'Mine trigger radius', get: (p) => wb(p, 'mines', W.mineTriggerRadius), fmt: int },
   { id: 'mineLifetime', label: 'Mine fuse', get: (p) => wb(p, 'mines', W.mineLifetime), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s MINE FUSE` },
-  { id: 'turretMaxActive', label: 'Max active turrets', get: (p) => wb(p, 'turret', W.turretMaxActive), fmt: int, headline: (b, a) => `+${a - b} SENTRY TURRET${a - b > 1 ? 'S' : ''}`, newText: (a) => `SENTRY TURRET // ${a} ACTIVE` },
+  { id: 'turretCharges', label: 'Turret charges', get: (p) => wb(p, 'turret', W.turretCharges), fmt: int, newText: (a) => `SENTRY TURRET // ${a} CHARGES` },
   { id: 'turretFireRate', label: 'Turret fire rate', get: (p) => wb(p, 'turret', W.turretFireRate), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'TURRET FIRE RATE' },
-  { id: 'turretDuration', label: 'Turret lifetime', get: (p) => wb(p, 'turret', W.turretDuration), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s TURRET LIFETIME` },
-  { id: 'turretCooldown', label: 'Turret deploy cooldown', get: (p) => wb(p, 'turret', W.turretCooldown), fmt: secs, headline: 'pct', unit: 'TURRET REDEPLOY TIME' },
+  { id: 'turretReload', label: 'Turret charge reload', get: (p) => wb(p, 'turret', W.turretReload), fmt: secs, headline: 'pct', unit: 'TURRET RELOAD TIME' },
+  { id: 'turretDuration', label: 'Turret lifetime', get: (p) => wb(p, 'turret', W.turretDuration), fmt: sec1 },
+  { id: 'turretPierce', label: 'Turret bolt pierce', get: (p) => wb(p, 'turret', W.turretPierce), fmt: int, headline: (b, a) => `+${a - b} TURRET PIERCE` },
   { id: 'turretRange', label: 'Turret range', get: (p) => wb(p, 'turret', W.turretRange), fmt: int },
   { id: 'turretDamage', label: 'Turret bolt damage', get: (p) => wb(p, 'turret', (b) => weaponDamage(p, 'turret', b)), fmt: dec1, headline: 'pct', unit: 'TURRET DAMAGE' },
   { id: 'siegeShell', label: 'Turret shell burst', get: (p) => (p.weapons.siegeBattery && ownsWeapon(p, 'turret') ? weaponDamage(p, 'siege') : null), fmt: dec1, newText: (a, row) => `TURRET SHELLS BURST // ${row.fmt(a)} DMG` },
@@ -250,6 +251,46 @@ export const STAT_ROWS = [
   { id: 'fieldLash', label: 'Arc Lash arcs / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t4 ? W.lashArcs : null)), fmt: int, newText: (a) => `DISCHARGES LASH // ${a} ARCS` },
   { id: 'fieldDashRefund', label: 'Dash recharge / discharge', get: (p) => wb(p, 'shockfield', (b) => (b.t8 ? W.dashRefund : null)), fmt: secs, newText: (a, row) => `DISCHARGES REPULSE // -${row.fmt(a)} DASH` },
   { id: 'fieldClap', label: 'Thunderclap radius', get: (p) => wb(p, 'shockfield', (b) => (b.t12 ? fieldRadius(p, b) * W.overchargeRadiusMult : null)), fmt: int, newText: (a, row) => `THUNDERCLAP // ${row.fmt(a)} RADIUS` },
+  // Rail Lance (aimed, pierces the whole line: each enemy behind the first takes railKeep of the one before)
+  { id: 'railDamage', label: 'Lance damage', get: (p) => wb(p, 'raillance', (b) => weaponDamage(p, 'rail', b)), fmt: dec1, headline: 'pct', unit: 'LANCE DAMAGE', newText: (a, row) => `RAIL LANCE // ${row.fmt(a)} DMG` },
+  { id: 'railCycle', label: 'Charge time', get: (p) => wb(p, 'raillance', W.railCharge), fmt: secs, headline: 'pct', unit: 'CHARGE TIME' },
+  { id: 'railLances', label: 'Lances / shot', get: (p) => wb(p, 'raillance', W.railLances), fmt: int, headline: 'count', unit: 'LANCE' },
+  { id: 'railWidth', label: 'Line width', get: (p) => wb(p, 'raillance', (b) => 2 * W.railWidth(b)), fmt: int, headline: (b, a) => `+${Math.round(a - b)} PX LINE WIDTH` },
+  { id: 'railKeep', label: 'Damage kept / enemy pierced', get: (p) => wb(p, 'raillance', W.railKeep), fmt: pct, headline: (b, a) => `+${Math.round((a - b) * 100)}% KEPT PER PIERCE` },
+  { id: 'railMagnet', label: 'Magnetic pull reach', get: (p) => wb(p, 'raillance', (b) => (b.t4 ? W.magnetRange : null)), fmt: int, newText: (a) => `CHARGE DRAGS ENEMIES // ${a} PX` },
+  { id: 'railWake', label: 'Ion Wake damage / tick', get: (p) => wb(p, 'raillance', (b) => (b.t8 ? weaponDamage(p, 'rail', b) / W.railDamageMult(b) * W.railWakeDamageMult(b) : null)), fmt: dec1, newText: (a, row) => `ION WAKE // ${row.fmt(a)} DMG / TICK` },
+  { id: 'railOverload', label: 'Overload Shot damage', get: (p) => wb(p, 'raillance', (b) => (b.t12 ? weaponDamage(p, 'rail', b) * W.overloadMult : null)), fmt: dec1, newText: (a, row) => `EVERY ${W.overloadEvery}RD SHOT // ${row.fmt(a)} DMG` },
+  // Glaive Discs
+  { id: 'glaiveCount', label: 'Discs per throw', get: (p) => wb(p, 'glaive', W.glaiveCount), fmt: int, headline: (b, a) => `+${a - b} DISC${a - b > 1 ? 'S' : ''}`, newText: (a) => `GLAIVE DISCS // ${a} PER THROW` },
+  { id: 'glaiveBounces', label: 'Ricochets per disc', get: (p) => wb(p, 'glaive', W.glaiveBounces), fmt: int, headline: (b, a) => `+${a - b} RICOCHET${a - b > 1 ? 'S' : ''}` },
+  { id: 'glaiveDamage', label: 'Disc damage', get: (p) => wb(p, 'glaive', (b) => weaponDamage(p, 'glaive', b)), fmt: dec1, headline: 'pct', unit: 'DISC DAMAGE' },
+  { id: 'glaiveCooldown', label: 'Throw interval', get: (p) => wb(p, 'glaive', W.glaiveCooldown), fmt: secs, headline: 'pct', unit: 'GLAIVE THROW INTERVAL' },
+  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', W.glaiveSpeed), fmt: (v) => `${Math.round(v)} px/s`, headline: 'pct', unit: 'DISC SPEED' },
+  { id: 'glaiveFission', label: 'Twins per disc', get: (p) => wb(p, 'glaive', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'DISCS SPLIT ON THEIR FIRST HIT' },
+  { id: 'glaiveMomentum', label: 'Ricochet damage growth', get: (p) => wb(p, 'glaive', (b) => (b.t8 ? W.momentumGrowth - 1 : null)), fmt: pct, newText: (a, row) => `EVERY RICOCHET +${row.fmt(a)} DAMAGE` },
+  { id: 'glaiveRecall', label: 'Return-trip hits', get: (p) => wb(p, 'glaive', (b) => (b.t12 ? W.recallHits : null)), fmt: int, newText: (a) => `DISCS RETURN // ${a} HITS ON THE WAY` },
+  // Nanite Swarm (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
+  { id: 'naniteRadius', label: 'Swarm radius', get: (p) => wb(p, 'nanites', (b) => naniteRadius(p, b)), fmt: int, headline: 'count', unit: 'SWARM RADIUS', newText: (a) => `NANITE SWARM // ${a} RADIUS` },
+  { id: 'naniteDamage', label: 'Bite damage', get: (p) => wb(p, 'nanites', (b) => weaponDamage(p, 'nanite', b)), fmt: dec1, headline: 'pct', unit: 'BITE DAMAGE' },
+  { id: 'naniteTickRate', label: 'Bites / s', get: (p) => wb(p, 'nanites', (b) => 1 / W.naniteTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'BITE RATE' },
+  { id: 'naniteLife', label: 'Swarm lifetime', get: (p) => wb(p, 'nanites', W.naniteLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s SWARM LIFETIME` },
+  { id: 'naniteCooldown', label: 'Swarm launch', get: (p) => wb(p, 'nanites', W.naniteCooldown), fmt: secs, headline: 'pct', unit: 'LAUNCH RATE' },
+  { id: 'naniteCorrode', label: 'Swarm max damage taken', get: (p) => wb(p, 'nanites', () => { const e = weaponElement(p, 'nanites'); return e ? corrodeCap(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
+  { id: 'naniteAcid', label: 'Swarm acid (of bite damage)', get: (p) => wb(p, 'nanites', () => { const e = weaponElement(p, 'nanites'); return e ? statusDotShare(p, 'corrode', e.rank) : null; }), fmt: bonus },
+  { id: 'naniteFission', label: 'Daughter swarms / swarm', get: (p) => wb(p, 'nanites', (b) => (b.t4 ? W.fissionMax : null)), fmt: int, newText: () => `SWARMS BUD EVERY ${W.fissionKills} KILLS` },
+  { id: 'naniteGoo', label: 'Swarm life / kill', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooLifePerKill : null)), fmt: secs, newText: (a, row) => `GRAY GOO // +${row.fmt(a)} PER KILL` },
+  { id: 'naniteGooGrow', label: 'Swarm max growth', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooGrowMax : W.naniteGrowMax)), fmt: mult },
+  { id: 'nanitePlague', label: 'Plague swarm radius', get: (p) => wb(p, 'nanites', (b) => (b.t12 ? naniteRadius(p, b) * W.plagueRadiusMult : null)), fmt: int, newText: () => 'BITTEN ENEMIES CARRY THE PLAGUE' },
+  // Claw Harpoon (aimed; mining and the yank are utility)
+  { id: 'harpoonDamage', label: 'Claw hit damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b)), fmt: dec1, headline: 'pct', unit: 'CLAW DAMAGE' },
+  { id: 'harpoonRate', label: 'Throws / s', get: (p) => wb(p, 'harpoon', (b) => 1 / W.harpoonCooldown(b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'THROW RATE' },
+  { id: 'harpoonRange', label: 'Tether reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'count', unit: 'TETHER REACH', newText: (a) => `CLAW HARPOON // ${a} PX REACH` },
+  { id: 'harpoonHook', label: 'Yanks hulls up to', get: (p) => wb(p, 'harpoon', W.harpoonHookSize), fmt: (v) => `${Math.round(v)} px`, headline: (b, a) => `+${Math.round(a - b)} PX HOOK SIZE` },
+  { id: 'harpoonCrush', label: 'Crush damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b) * W.harpoonCrushShare), fmt: dec1 },
+  { id: 'harpoonDrill', label: 'Rock drilled / throw', get: (p) => wb(p, 'harpoon', (b) => W.harpoonDrill(b) * (p.stats.miningSpeed || 75) / (TUNING.miningSpeed || 75)), fmt: int, headline: 'pct', unit: 'ROCK DRILLED' },
+  { id: 'harpoonSlam', label: 'Seismic Slam damage', get: (p) => wb(p, 'harpoon', (b) => (b.t4 ? weaponDamage(p, 'harpoon', b) * W.slamShare : null)), fmt: dec1, newText: (a, row) => `SEISMIC SLAM // ${row.fmt(a)} DMG` },
+  { id: 'harpoonSpin', label: 'Drill Spin damage / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t8 ? weaponDamage(p, 'harpoon', b) * W.spinShare : null)), fmt: dec1, newText: (a, row) => `DRILL SPIN // ${row.fmt(a)} DMG` },
+  { id: 'harpoonChain', label: 'Chain leaps / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t12 ? W.chainLeaps : null)), fmt: int, newText: (a) => `CHAIN HARPOON // ${a} LEAPS` },
 
   // Drill-claws + Tectonic Claw Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
@@ -285,7 +326,17 @@ export const STAT_ROWS = [
   ...elementRows('flamethrower'),
   ...elementRows('cryospray'),
   ...elementRows('acidspray'),
-  ...elementRows('lightning') // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
+  ...elementRows('lightning'), // always SHOCK: its rank follows its level (weapon-levels.js fixedElementRank)
+
+  // Graviton Mortar (weapon id 'quake')
+  { id: 'quakeShells', label: 'Charges / volley', get: (p) => wb(p, 'quake', W.quakeShells), fmt: int, headline: 'count', unit: 'CHARGES / VOLLEY', newText: (a) => `GRAVITON MORTAR // ${a} / VOLLEY` },
+  { id: 'quakeDamage', label: 'Gravity wave damage', get: (p) => wb(p, 'quake', (b) => weaponDamage(p, 'quake', b)), fmt: dec1, headline: 'pct', unit: 'GRAVITY WAVE DAMAGE' },
+  { id: 'quakeCooldown', label: 'Volley interval', get: (p) => wb(p, 'quake', W.quakeCooldown), fmt: secs, headline: 'pct', unit: 'MORTAR VOLLEY INTERVAL' },
+  { id: 'quakeRadius', label: 'Gravity wave radius', get: (p) => wb(p, 'quake', (b) => quakeRadius(p, b)), fmt: int, headline: 'count', unit: 'WAVE RADIUS' },
+  { id: 'quakeRock', label: 'Rock damage / wave', get: (p) => wb(p, 'quake', (b) => (W.quakeRockDamage(b) > 0 ? W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75 : null)), fmt: int, headline: 'pct', unit: 'ROCK DAMAGE', newText: (a) => `WAVES TEAR ROCKS // ${a} DMG` },
+  { id: 'quakeSkip', label: 'Rebounds / charge', get: (p) => wb(p, 'quake', (b) => (b.t4 ? W.skipBounces : null)), fmt: int, newText: (a) => `CHARGES REBOUND // ${a} MORE PULSES` },
+  { id: 'quakeFault', label: 'Fractures / burst', get: (p) => wb(p, 'quake', (b) => (b.t8 ? W.faultCount : null)), fmt: int, newText: (a) => `BURSTS TEAR // ${a} FRACTURES` },
+  { id: 'quakeEpicenter', label: 'Graviton Surge radius', get: (p) => wb(p, 'quake', (b) => (b.t12 ? quakeRadius(p, b) * W.epicenterRadiusMult : null)), fmt: int, newText: (a) => `GRAVITON SURGE // ${a} RADIUS` }
 ];
 
 const ROW_BY_ID = Object.fromEntries(STAT_ROWS.map((row) => [row.id, row]));
@@ -475,7 +526,7 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
 // included). Autocannon counts its real LV 1 output (streams x fire rate) as its starting point.
 export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   if (!ownsWeapon(p, id) || !POTENTIAL_DPS[id]) return null;
-  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield' };
+  const SRC = { blaster: 'blaster', rockets: 'rocket', missiles: 'missile', lightning: 'lightning', singularity: 'singularity', orbitals: 'orbital', mines: 'mine', turret: 'turret', drones: 'drone', grenades: 'grenade', gas: 'gas', flamethrower: 'flame', cryospray: 'cryo', acidspray: 'acid', shockfield: 'shockfield', raillance: 'rail', glaive: 'glaive', nanites: 'nanite', harpoon: 'harpoon', quake: 'quake' };
   let v = POTENTIAL_DPS[id](b) * baseDamage(p) * tagDamageMult(p, SRC[id]) * elementDamageMult(p, weaponElement(p, id)?.element);
   if (id === 'blaster') v *= (p.stats.bulletCount * p.stats.fireRate) / DPS_TARGET(1);
   if (['mines', 'turret', 'drones'].includes(id)) v *= TUNING.deployableDamageMult ?? 1;

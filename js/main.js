@@ -9,7 +9,11 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
-import { VICTORY_DELAY, isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
+import { applyBossHazards } from './boss-hazards.js';
+import { playBossCue } from './boss-sfx-major.js';
+import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
+import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
+import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
 import { SERPENT, spawnSerpent, turnToward as turnAngleToward } from './serpents.js';
@@ -20,15 +24,21 @@ import { DamageNumbers } from './damage-numbers.js';
 import { Deployables } from './deployables.js';
 import { Grenades } from './grenades.js';
 import { GasTrail } from './gas-trail.js';
+import { NaniteSwarm } from './nanites.js';
 import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
+import { RailLance } from './rail-lance.js';
+import { GlaiveDiscs } from './glaive.js';
+import { ClawHarpoon } from './claw-harpoon.js';
+import { QuakeMortar } from './quake-mortar.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
 import { SoundEngine } from './audio.js';
 import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
-  discardWeapon, snapshotBase, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered
+  discardWeapon, snapshotBase, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered,
+  MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE
 } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
@@ -46,6 +56,7 @@ import {
   slotRewardHtml, slotTipHtml
 } from './upgrade-cards.js';
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
+import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
@@ -53,6 +64,10 @@ import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
 import { SplashScreen } from './splash.js';
+import { CutsceneStage } from './cutscene-stage.js';
+import { RadioBox } from './radio.js';
+import { PixieDirector } from './pixie.js';
+import { SCENES, registerStoryCast, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
 import { buildRunReport, renderRunReport, OTHER_GROUP_INFO } from './run-report.js';
@@ -85,6 +100,8 @@ import {
 } from './config.js';
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
+import { playPreset, semis } from './sfx-layers.js';
+import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -168,6 +185,16 @@ export function bossEpithet(wave) {
   return `WAVE ${wave} ${rank}`;
 }
 
+// Choice cards deal in one after another (css: card-deal); rare and better ones get a shimmer sweep.
+function dealInCard(card, idx, className, doc = globalThis.document) {
+  card.style?.setProperty?.('--deal-i', idx);
+  if (/rarity-(common|uncommon)\b/.test(className) || !doc?.createElement) return;
+  const shimmer = doc.createElement('span');
+  shimmer.className = 'card-shimmer';
+  shimmer.setAttribute?.('aria-hidden', 'true');
+  card.appendChild(shimmer);
+}
+
 const setHidden = (el, hidden) => {
   if (el) el.classList[hidden ? 'add' : 'remove']('hidden');
 };
@@ -193,7 +220,7 @@ const HIT_STOP_MAX_TICKS = 3;
 // Sandbox buttons that drop one of each new archetype next to the ship.
 const SANDBOX_ARCHETYPES = {
   SPAWN_BRUISER: 'bruiser', SPAWN_GUNNER: 'gunner', SPAWN_SHIELDER: 'shielder', SPAWN_BLINKER: 'blinker', SPAWN_CONDUIT: 'conduit',
-  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer', SPAWN_BORER: 'borer'
+  SPAWN_MAYFLY: 'mayfly', SPAWN_HULK: 'hulk', SPAWN_SERPENT: 'serpent', SPAWN_KESTREL: 'kestrel', SPAWN_CARRIER: 'carrier', SPAWN_GATE: 'gate', SPAWN_MITOSIS: 'mitosis', SPAWN_REPULSOR: 'repulsor', SPAWN_LANCER: 'lancer', SPAWN_BORER: 'borer', SPAWN_HATCHERY: 'hatchery'
 };
 // Intel cards (NEW HOSTILE SIGNATURE) for every progressively introduced type.
 const INTEL_INFO = { ...ARCHETYPE_INFO, ...HOSTILE_INFO };
@@ -234,8 +261,10 @@ export class Game {
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
+    setReduceEffects(loadReduceEffects()); // REDUCE EFFECTS (accessibility, js/juice.js)
     this.radarVisible = loadRadarVisible(); // sector radar minimap, toggled with [R] / controller Back
     this.enemyManager = new EnemyManager();
+    this.enemyManager.sound = this.sound; // boss entrance cues and attack tells (js/boss-sfx.js)
     this.damageNumbers = new DamageNumbers();
     this.asteroidManager = new AsteroidManager(this.worldWidth, this.worldHeight);
     this.enemyManager.terrain = this.asteroidManager;
@@ -312,6 +341,16 @@ export class Game {
       onClose: (reason) => this.onTutorialClosed(reason),
       onGuide: () => this.openGuide()
     });
+    // Opening cutscene (js/story.js, played by js/cutscene-stage.js): on the first LAUNCH on a device
+    // (enableFirstLaunchIntro, browser boot only) before the tutorial, and from 🎬 INTRO on the title.
+    this.cutscene = new CutsceneStage(this);
+    this.introOnLaunch = false;
+    this.introSeen = readIntroSeen(defaultIntroStorage());
+    // Radio (js/radio.js): non-pausing talking-head lines (Game.say); Dr. Pixie (js/pixie.js) cheers every
+    // Breakthrough on it. Off until the browser boot switches it on (enableStoryRadio).
+    this.radio = new RadioBox({ sound: this.sound });
+    this.radioOn = false;
+    this.pixie = new PixieDirector({ sound: this.sound });
     this.renderVersionTags();
     // Weapon Range (title screen): a sandbox run with a config panel, target dummies and a DPS readout.
     this.range = new WeaponRange(this);
@@ -341,6 +380,8 @@ export class Game {
   // `startWeapon`: the weapon picked after LAUNCH (START_WEAPON_CHOICES); none = the default kit.
   resetRun(mode = DEFAULT_MODE, startWeapon = null) {
     this.resetInput();
+    this.radio?.clear();
+    this.pixie?.resetRun();
     this.mode = normalizeMode(mode);
     applyTuningOverlay(modeRules(this.mode).tuning);
     const bonuses = modeBonuses(this.progression.getBonuses(), this.mode);
@@ -377,6 +418,8 @@ export class Game {
     this.novaCalloutTimer = 0;
     this.novaCalloutDone = false;
     resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
+    resetFinalStand(this); // wave 50's FINAL STAND (js/final-stand.js)
+    resetScoreBonus(this); // wave and victory bonuses (js/score-bonus.js)
     this.hitStopTicks = 0;
     this.slowMoTicks = 0;
     this.bossFlash = 0;
@@ -417,6 +460,8 @@ export class Game {
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
       loadout: [],
       newWeaponDrought: 0,
+      // Weapon floor on for this run (weapon-floor.js): off in the Weapon Range or a mode without it.
+      weaponFloor: modeRules(this.mode).weaponFloor !== false && !this.range?.active,
       banished: {}, // card ids banished with gold this run (never offered again)
       weapons: {
         rockets: 0,
@@ -438,6 +483,11 @@ export class Game {
         cryospray: 0,
         acidspray: 0,
         shockfield: 0,
+        raillance: 0,
+        glaive: 0,
+        nanites: 0,
+        harpoon: 0,
+        quake: 0,
         siegeBattery: 0,
         empGrenades: 0,
         supercritical: 0
@@ -467,6 +517,11 @@ export class Game {
     (this.cryoSprayer ||= new Flamethrower('cryospray')).clear();
     (this.acidSprayer ||= new Flamethrower('acidspray')).clear();
     (this.shockField ||= new ShockField()).clear();
+    (this.railLance ||= new RailLance()).clear();
+    (this.glaive ||= new GlaiveDiscs()).clear();
+    (this.nanites ||= new NaniteSwarm()).clear();
+    (this.clawHarpoon ||= new ClawHarpoon()).clear();
+    (this.quakeMortar ||= new QuakeMortar()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
     this.missileSalvos = 0;
@@ -670,6 +725,10 @@ export class Game {
         if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
         e.preventDefault();
         if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.deathSeq.skip()) this.revealGameOver();
+        return;
+      }
+      if (this.state === 'CUTSCENE') {
+        this.cutscene.handleKey(e);
         return;
       }
       const focused = document.activeElement;
@@ -941,9 +1000,12 @@ export class Game {
     for (const id of ['btn-title-tutorial', 'btn-pause-tutorial']) {
       document.getElementById(id)?.addEventListener('click', () => this.openTutorial());
     }
+    document.getElementById('btn-title-intro')?.addEventListener('click', () => this.playIntro());
     this.syncDamageNumbersButton();
     this.syncRadarButton();
     this.syncShareStatsButton();
+    document.getElementById('btn-pause-effects')?.addEventListener('click', () => this.toggleReduceEffects());
+    this.syncReduceEffectsButton();
 
     // Volume Sliders (HUD & Pause Menu)
     const hudVolSlider = document.getElementById('hud-volume-slider');
@@ -1092,9 +1154,9 @@ export class Game {
         xpMultiplier: TUNING.xpMultiplier * bonuses.xpMult * Math.pow(1.25, upgLv.magnet || 0),
         luck: TUNING.baseLuck + (bonuses.luckBonus || 0) + (upgLv.luck_boost || 0) * 0.25,
         coreDropMult: TUNING.coreDropMult * bonuses.coreMult,
-        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(1.5, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.9 : 1),
-        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1) * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.3 : 1),
-        drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? 1.25 : 1),
+        miningSpeed: TUNING.miningSpeed * (bonuses.miningMult || 1) * Math.pow(MINING_SPEED_STEP, upgLv.mining_speed || 0) * (weapons.tectonicBore ? TECTONIC_MINING_SPEED : 1),
+        miningRange: TUNING.miningRange * (bonuses.miningRangeMult || 1) * Math.pow(1.2, upgLv.mining_speed || 0) * (weapons.tectonicBore ? TECTONIC_MINING_RANGE : 1),
+        drillScale: TUNING.drillScale * Math.pow(1.15, upgLv.mining_speed || 0) * (weapons.tectonicBore ? TECTONIC_DRILL_SCALE : 1),
         // Crit base values are live too: tuned base + the same per-level steps the crit cards add.
         critChance: (TUNING.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0) + (upgLv.crit_chance || 0) * W.critChanceStep + (weapons.supercritical ? W.supercritChance : 0),
         critDamage: (TUNING.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0) + (upgLv.crit_damage || 0) * W.critDamageStep
@@ -1566,6 +1628,22 @@ export class Game {
     this.syncDamageNumbersButton();
   }
 
+  // REDUCE EFFECTS: no screen shake, softer flashes, fewer particles, no decorative UI motion. Saved.
+  toggleReduceEffects() {
+    setReduceEffects(!isReduceEffects());
+    saveReduceEffects(isReduceEffects());
+    this.syncReduceEffectsButton();
+  }
+
+  syncReduceEffectsButton() {
+    const btn = globalThis.document?.getElementById('btn-pause-effects');
+    if (!btn) return;
+    const on = isReduceEffects();
+    btn.textContent = `✨ REDUCE EFFECTS: ${on ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', on);
+    btn.setAttribute?.('aria-pressed', String(on));
+  }
+
   toggleRadar() {
     this.radarVisible = !this.radarVisible;
     try { globalThis.localStorage?.setItem(RADAR_STORAGE_KEY, this.radarVisible ? '1' : '0'); } catch { /* storage blocked */ }
@@ -1731,6 +1809,9 @@ export class Game {
     // Instant replay: the tape rolls through every run (only the death screen plays it back).
     this.replayRec ??= new ReplayRecorder(isTouchDevice() ? REPLAY_SETTINGS.touch : REPLAY_SETTINGS.desktop);
     this.replayRec.reset();
+    // First LAUNCH on this device: the opening cutscene, then the tutorial; the run starts after them.
+    if (this.introOnLaunch && !this.introSeen && this.state === 'TITLE' && !this.range?.active
+      && this.playIntro({ launchAfter: true })) return;
     // First LAUNCH on this device: the tutorial comes first, and the run starts when it closes.
     if (this.tutorialOnLaunch && this.state === 'TITLE' && !this.range?.active && this.tutorial?.shouldAutoOpen()
       && this.openTutorial({ launchAfter: true })) return;
@@ -2013,6 +2094,7 @@ export class Game {
     this.grid.applyImpulse(p.x, p.y, 46, 180, 188);
     this.grid.ripple?.(p.x, p.y, 110, 188);
     this.particles.spawnShockwave(p.x, p.y, 110, 188, 3.5, 0.3);
+    burst(this, 'dash', p.x, p.y, { angle: moveAngle });
 
     // Corrosive Gas Trail: every dash vents one giant cloud where the ship took off (js/gas-trail.js).
     this.gasTrail?.dashCloud(this, p);
@@ -2105,7 +2187,8 @@ export class Game {
     this.updateHUD();
   }
 
-  // Weapons and explosions ONLY damage enemies — never asteroids!
+  // Weapons and explosions ONLY damage enemies — never asteroids! (The Graviton Mortar's waves are the one
+  // weapon that cracks rocks, on purpose: quake-mortar.js / AsteroidManager.quakeRock.)
   // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
   // Blasts deal full damage to anything touching the center and fade linearly toward the rim
   // (TUNING.splashEdgeFalloff: 0.4 = 60% at the edge), so a direct hit keeps the weapon's full
@@ -2498,6 +2581,7 @@ export class Game {
     if (this.sound.playPlayerHit) this.sound.playPlayerHit();
     else this.sound.playExplosion(1.8);
     this.particles.spawnShockwave(p.x, p.y, 130, 348, 5, 0.38);
+    burst(this, 'shieldCrackle', p.x, p.y, { hue: 190, r: p.radius * 1.9, scale: dmg >= 20 ? 1.5 : 1 });
     this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
     this.grid.ripple?.(p.x, p.y, 130, 348);
     return p.hp <= 0;
@@ -2521,6 +2605,7 @@ export class Game {
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
+    this.enemyManager.bossTelegraphs?.hitPlayer(this.player, this.enemyBulletHit); // telegraphed boss attacks hit like orbs
     return this.endRunIfDead();
   }
 
@@ -2713,7 +2798,7 @@ export class Game {
     const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
-    if (isCampaignWin(this, e)) this.victoryTimer = VICTORY_DELAY; // the final boss: VICTORY follows (js/victory.js)
+    if (isCampaignWin(this, e)) finalBossDown(this); // the final boss: clear the sector, then VICTORY (js/final-stand.js)
   }
 
   showVictory() { showVictory(this); }
@@ -2868,9 +2953,9 @@ export class Game {
         const c = packMemberPoint(this, pt, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90);
         em.queueSpawn('mitosis', c.x, c.y, this.getWaveScale('mitosis'), this.placedSpawn(c));
       }
-    } else if (pack === 'carrier') {
-      // The roster's drones are launched by the carriers over time, not spawned with them.
-      spread('carrier', count('carrier'));
+    } else if (pack === 'carrier' || pack === 'hatchery') {
+      // The roster's drones / hatchlings are launched or bred over time, not spawned with their mothership.
+      spread(pack, count(pack));
     } else if (pack === 'kestrel') {
       // One V on a strafing run that starts lined up on the ship.
       const p2 = this.spawnPoint(80);
@@ -4048,12 +4133,21 @@ export class Game {
     this.sound.setMusicState({ intensity: this.sound.intensity, muffled: true });
     this.sound.playLevelUp();
     this.particles.spawnShockwave(this.player.x, this.player.y, 220, 145, 5, 0.5);
+    burst(this, 'levelUp', this.player.x, this.player.y);
     this.grid.applyImpulse(this.player.x, this.player.y, 45, 220, 145);
     this.grid.ripple?.(this.player.x, this.player.y, 220, 145);
 
     // Level-up hand: equipped weapons' level-ups and upgrades, general cards, and (while a slot is
     // free) sometimes a NEW WEAPON card that opens a pick of 1 of 3 weapons. A card locked with gold in
     // an earlier hand comes back in its slot (if still valid) in place of one random card.
+    // Under the weapon floor (weapon-floor.js) the level-up is a forced CHOOSE A WEAPON pick instead;
+    // a gold lock waits for the next hand.
+    if (weaponFloorDue(this.player)) {
+      this.banishMode = false;
+      this.openWeaponPick({ forced: true });
+      document.getElementById('upgrade-modal').classList.remove('hidden');
+      return;
+    }
     this.beginHand();
     this.currentChoices = rollHandAround(this.player, this.handSize(), this.handLock, rollLevelUpHand);
     this.runStats?.offered(this.currentChoices);
@@ -4428,6 +4522,7 @@ export class Game {
     // Level-up hands, weapon picks and Breakthroughs all show the current build under the cards.
     const strip = document.getElementById('upgrade-loadout-strip');
     if (strip && this.player) strip.innerHTML = loadoutStripHtml(this.player);
+    this.radio?.undock(); // Dr. Pixie leaves the old grid before it's cleared
     const container = document.getElementById('upgrade-choices');
     container.innerHTML = '';
     this.closeCardDetail();
@@ -4439,6 +4534,7 @@ export class Game {
       const card = document.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
+      dealInCard(card, idx, view.className);
       card.addEventListener('click', () => {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.selectUpgrade(idx);
@@ -4515,7 +4611,8 @@ export class Game {
 
   // NEW WEAPON picked: the same modal now offers 1 of 3 unequipped weapons with their LV 1 stats.
   // Gold can reroll the 3 weapons (rerollWeaponPick); the slot's reward shows under the title.
-  openWeaponPick() {
+  // `forced`: a weapon floor pick (triggerLevelUp), with the floor in the header.
+  openWeaponPick({ forced = false } = {}) {
     this.handPhase = 'weapon';
     this.pickRerolls = 0;
     this.currentChoices = rollWeaponPicks(this.player, WEAPON_PICK_SIZE);
@@ -4527,7 +4624,7 @@ export class Game {
     }
     const p = this.player;
     const slot = ownedWeapons(p).length + 1;
-    this.setUpgradeHeader(`SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
+    this.setUpgradeHeader(forced ? `LV ${p.level} // ${weaponFloor(p.level)} WEAPONS REQUIRED // SLOT ${slot} OF ${weaponSlots()}` : `SLOT ${slot} OF ${weaponSlots()} // NEW WEAPON`, 'CHOOSE A WEAPON',
       `Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Equip`);
     const reward = slotReward(slot);
     this.setSlotReward(reward && { ...reward, slot });
@@ -4576,11 +4673,14 @@ export class Game {
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
+      if (this.radioOn) this.radio.dock(document.getElementById('upgrade-choices')); // big, in the free column
+      this.pixie?.offer(id, name); // Dr. Pixie's EUREKA on the radio (never blocks the pick)
       const modal = document.getElementById('upgrade-modal');
       modal.classList.remove('hidden');
       for (const el of [modal, modal.querySelector?.('.modal-card')]) if (el) el.scrollTop = 0;
       this.menuGrace = Math.max(this.menuGrace || 0, CHOICE_CLICK_GUARD_MS / 1000);
       this.particles.spawnShockwave(p.x, p.y, 260, 280, 5, 0.5);
+      burst(this, 'unlock', p.x, p.y, { hue: 172 });
       if (this.sound.playBreakthrough) this.sound.playBreakthrough();
       else this.sound.playLevelUp();
       return true;
@@ -4590,6 +4690,7 @@ export class Game {
 
   closeUpgradeModal() {
     this.breakthrough = null;
+    this.radio?.undock(); // her reaction plays on in the corner
     if (this.openNextBreakthrough()) return;
     this.currentChoices = [];
     this.handPhase = null;
@@ -4624,8 +4725,10 @@ export class Game {
     }
     if (upg.isBreakthrough) {
       applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      this.pixie?.picked(upg);
       this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
+      burst(this, 'pick', p.x, p.y, { hue: hueOf(upg.color, 172), scale: 1.3 });
       this.closeUpgradeModal();
       return;
     }
@@ -4634,13 +4737,18 @@ export class Game {
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
+      burst(this, 'unlock', p.x, p.y, { hue: hueOf(RARITY.weapon.color), scale: 0.8 });
+      playPreset(this.sound, 'shimmer');
       this.closeUpgradeModal();
       return;
     }
 
     const jump = this.applyUpgrade(upg);
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
-    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, RARITY[rarityFor(upg, jump)].color, 15);
+    const color = RARITY[rarityFor(upg, jump)].color;
+    this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
+    burst(this, 'pick', p.x, p.y, { hue: hueOf(color, 205), scale: 0.8 + 0.12 * Math.min(5, jump) });
+    playPreset(this.sound, 'pickSnap', { pitch: semis(2 * (Math.min(5, jump) - 1)) }); // rarer = higher
     this.closeUpgradeModal();
   }
 
@@ -4845,10 +4953,11 @@ export class Game {
     }
 
     const statsEl = document.getElementById('gameover-stats');
+    const breakdown = scoreBreakdown(this);
     statsEl.innerHTML = `
       <div class="go-stat-box">
         <div class="go-stat-label">FINAL SCORE</div>
-        <div class="go-stat-val" style="color:var(--cyan)">${this.score.toLocaleString()}</div>
+        <div class="go-stat-val" style="color:var(--cyan)">${this.score.toLocaleString()}${breakdown ? `<div class="go-stat-sub">${breakdown}</div>` : ''}</div>
       </div>
       <div class="go-stat-box">
         <div class="go-stat-label">VOID CORES EARNED</div>
@@ -5027,6 +5136,7 @@ export class Game {
     const held = this.state === 'PLAYING' && this.consumeTimeDilation();
     if (!held) {
       this.grid.update(this.camX, this.camY, this.width, this.height);
+      this.particles.density = particleDensity(this.enemyManager?.enemies?.length ?? 0);
       this.particles.update(dt, this.worldWidth, this.worldHeight);
       this.damageNumbers?.update(dt);
     }
@@ -5041,6 +5151,7 @@ export class Game {
     if (this.tutorialOpen && !TUTORIAL_STATES.includes(this.state)) this.closeTutorial();
     const gp = this.pollGamepad();
     if (this.deathSeq) {
+      if (this.radio?.onAir) this.radio.clear();
       const skip = (gp?.pressed(PAD.A) || gp?.pressed(PAD.START)) && this.deathSeq.skip();
       this.deathSeq.update(dt, this.deathFx());
       // The tape stops when the headline lands: the last seconds of play plus the blast.
@@ -5055,6 +5166,15 @@ export class Game {
       this.gpBombLatch = !!gp?.bomb;
       return;
     }
+    if (this.state === 'CUTSCENE') {
+      this.cutscene.update(dt, gp);
+      this.gpDashLatch = !!gp?.dash;
+      this.gpBombLatch = !!gp?.bomb;
+      return;
+    }
+    // The radio plays on over play, level-ups and caches; it's off air everywhere else.
+    if (['PLAYING', 'UPGRADE', 'CHEST', 'VICTORY'].includes(this.state)) this.radio?.update(dt);
+    else if (this.radio?.onAir && this.state !== 'PAUSED') this.radio.clear();
     const stateBefore = this.state;
     this.updateMenuController(gp, dt);
     if (this.state !== 'PLAYING' || stateBefore !== 'PLAYING') {
@@ -5101,15 +5221,17 @@ export class Game {
     );
     // Boss warning drops the mix out; a live boss pins it at full intensity with the boss riff.
     const bossStage = this.getBossStage();
-    this.sound.setMusicState({ intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
+    this.sound.setMusicState(finalStandMusic(this) ?? { intensity: bossStage === 2 ? 1.0 : dynamicIntensity, muffled: false, boss: bossStage });
 
     // Weapon Range: dummies and respawns instead of waves, bosses, lieutenants and packs.
     const range = this.range?.active ? this.range : null;
     if (range) range.tick();
 
     // Escalate waves every `waveLength` seconds (Difficulty Ramp tuning)
-    if (!range && this.waveTimer >= (TUNING.waveLength ?? 22)) {
+    // Wave 50 has no timer: the FINAL STAND holds it until the sector is clear (js/final-stand.js).
+    if (!range && this.waveTimer >= (TUNING.waveLength ?? 22) && !holdsWave(this)) {
       this.waveTimer = 0;
+      awardWaveBonus(this, this.wave); // survived it (js/score-bonus.js)
       this.wave++;
       this.coresDroppedThisWave = 0;
       this.sessionCores += 1;
@@ -5133,9 +5255,10 @@ export class Game {
     if (!range) {
       this.enemyManager.wave = this.wave;
       this.processPendingBossSpawns();
+      tickFinalStand(this, dt);
       this.updateLieutenantSchedule();
       this.spawnCooldown -= dt;
-      if (this.spawnCooldown <= 0) {
+      if (this.spawnCooldown <= 0 && !blocksSpawning(this)) {
         this.spawnWavePack();
         this.spawnCooldown = this.packInterval();
       }
@@ -5287,6 +5410,8 @@ export class Game {
     this.flamethrower?.update(dt, this, shouldFire);
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
+    this.railLance?.update(dt, this, shouldFire); // Rail Lance: charge, then a piercing line (js/rail-lance.js)
+    this.clawHarpoon?.update(dt, this, shouldFire); // js/claw-harpoon.js
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -5323,7 +5448,10 @@ export class Game {
     this.deployables?.update(dt, this);
     this.grenades?.update(dt, this);
     this.gasTrail?.update(dt, this);
+    this.nanites?.update(dt, this);
     this.shockField?.update(dt, this);
+    this.glaive?.update(dt, this);
+    this.quakeMortar?.update(dt, this);
     this.weaponFx?.update(dt, this);
 
     // 5. Sweep projectiles against enemies and cover in travel order (black holes bend them first).
@@ -5417,6 +5545,7 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
+    if (applyBossHazards(this, playBossCue)) return; // boss blasts, lines and rings that hit the ship; boss sound cues
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
@@ -5471,7 +5600,8 @@ export class Game {
         continue;
       }
       // Contact uses the same hull-hugging outline the shield draws.
-      if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
+      // A Blinker that just landed (arriveT) can't hit: only its lunge can (js/archetypes.js BLINKER).
+      if (!(e.arriveT > 0) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
@@ -5537,12 +5667,14 @@ export class Game {
           // Currency only: no XP, no multiplier.
           if (this.sound.playGoldPickup) this.sound.playGoldPickup();
           else this.sound.playGeomPickup(true);
+          burst(this, 'gold', g.x, g.y);
           this.addGold(g.gold || 1);
           this.score += Math.round(10 * this.multiplier);
           this.geoms.splice(i, 1);
           continue;
         }
         this.sound.playGeomPickup(g.isCore);
+        burst(this, g.isCore ? 'core' : 'pickup', g.x, g.y, g.isCore ? undefined : { hue: g.hue ?? 150 });
 
         if (g.isCore) {
           const amt = g.coreAmount || 1;
@@ -5583,7 +5715,16 @@ export class Game {
 
     const xpPct = Math.min(100, (p.xp / p.xpToNext) * 100);
     document.getElementById('xp-bar-fill').style.width = `${xpPct}%`;
-    document.getElementById('level-display').textContent = `LVL ${p.level}`;
+    const levelEl = document.getElementById('level-display');
+    levelEl.textContent = `LVL ${p.level}`;
+    // A new level pops the HUD readout (skipped with REDUCE EFFECTS).
+    if (this.hudLevelShown !== p.level) {
+      if (this.hudLevelShown !== undefined && !isReduceEffects()) {
+        levelEl.animate?.([{ transform: 'scale(1)' }, { transform: 'scale(1.45)', color: '#8dffb9', textShadow: '0 0 14px #2dff8a' }, { transform: 'scale(1)' }],
+          { duration: 520, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' });
+      }
+      this.hudLevelShown = p.level;
+    }
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
     document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
@@ -5614,7 +5755,7 @@ export class Game {
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
     // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
-    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge() });
+    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge(), turret: this.deployables?.turretHudCharge(p), raillance: this.railLance?.hudCharge() });
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
@@ -5938,6 +6079,7 @@ export class Game {
       const card = doc.createElement('div');
       card.className = view.className;
       card.innerHTML = view.html;
+      dealInCard(card, idx, view.className);
       card.addEventListener('click', () => {
         if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
         this.chooseStartWeapon(id);
@@ -6044,6 +6186,63 @@ export class Game {
   enableFirstLaunchTutorial() {
     this.tutorialOnLaunch = true;
     return this;
+  }
+
+  // --- Opening cutscene (js/story.js, js/cutscene-stage.js) -----------------------------------------
+
+  // The browser boot switches this on: the first LAUNCH on a device plays the opening before the
+  // tutorial. Headless tests, tools and the balance harness leave it off.
+  // The browser boot switches the radio on (Dr. Pixie's Breakthrough lines, Game.say); headless tests,
+  // tools and the balance harness stay silent.
+  enableStoryRadio() {
+    registerStoryCast();
+    this.radioOn = true;
+    this.pixie.radio = this.radio;
+    return this;
+  }
+
+  // A non-pausing radio line: say('pixie', 'EUREKA!', { mood: 'eureka' }). False when the radio is off.
+  say(who, text, opts = {}) {
+    return this.radioOn ? this.radio.say({ who, text, ...opts }) : false;
+  }
+
+  enableFirstLaunchIntro() {
+    this.introOnLaunch = true;
+    return this;
+  }
+
+  // The opening, from LAUNCH (`launchAfter`: hard-cut into the run, tutorial and weapon pick first when
+  // they're due) or the INTRO button (back to the title).
+  playIntro({ launchAfter = false } = {}) {
+    return this.playCutscene('opening', { onEnd: (reason) => this.onIntroEnded(reason, launchAfter) });
+  }
+
+  // Any scene in SCENES (js/story.js) by id, from the title: plays over a fresh, untouched sector
+  // (nothing is recorded). `onEnd(reason)` defaults to going back to the title.
+  playCutscene(id, { onEnd = () => this.returnToTitle() } = {}) {
+    const script = SCENES[id];
+    if (!script || this.state !== 'TITLE' || this.cutscene.active || this.guideOpen || this.notesOpen || this.tutorialOpen || this.startPickOpen) return false;
+    this.sound.init();
+    this.closeMobileWindows();
+    this.resetRun();
+    const title = globalThis.document?.getElementById('title-modal');
+    title?.classList.add('hidden');
+    this.state = 'CUTSCENE';
+    this.resetInput();
+    globalThis.document?.activeElement?.blur?.();
+    if (this.cutscene.play(script, { onEnd })) return true;
+    this.state = 'TITLE';
+    title?.classList.remove('hidden');
+    return false;
+  }
+
+  onIntroEnded(_reason, launchAfter) {
+    this.introSeen = true;
+    writeIntroSeen(defaultIntroStorage());
+    if (!launchAfter) return this.returnToTitle();
+    this.state = 'TITLE';
+    globalThis.document?.getElementById('title-modal')?.classList.remove('hidden');
+    this.startGame();
   }
 
   openTutorial({ launchAfter = false } = {}) {
@@ -6417,6 +6616,7 @@ export class Game {
     for (let i = 0; i < enemies.length; i++) {
       if (enemies[i].isBoss) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ffcc00', 'BOSS');
       else if (enemies[i].isLieutenant) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#dfe6ff', 'LT');
+      else if (enemies[i].type === 'hatchery' && enemies[i].born > 0) this.drawEdgeArrow(ctx, enemies[i].x, enemies[i].y, '#ff6a5a', 'HIVE');
     }
     const rift = this.rifts?.active;
     if (rift && rift.phase !== 'seal') this.drawEdgeArrow(ctx, rift.x, rift.y, '#e07bff', 'RIFT');
@@ -6500,9 +6700,10 @@ export class Game {
     ctx.save();
     let offsetX = -this.camX;
     let offsetY = -this.camY;
-    if (this.shake > 0.2) {
-      offsetX += (Math.random() - 0.5) * this.shake;
-      offsetY += (Math.random() - 0.5) * this.shake;
+    const shake = this.shake * shakeScale(); // REDUCE EFFECTS turns it off
+    if (shake > 0.2) {
+      offsetX += (Math.random() - 0.5) * shake;
+      offsetY += (Math.random() - 0.5) * shake;
     }
     ctx.translate(offsetX, offsetY);
 
@@ -6675,18 +6876,25 @@ export class Game {
     this.weaponFx?.draw(ctx, this);
 
     this.gasTrail?.drawGround(ctx, this);
+    this.nanites?.drawGround(ctx, this);
     this.deployables?.drawGround(ctx, this);
     this.grenades?.drawGround(ctx, this);
+    this.quakeMortar?.drawGround(ctx, this);
     if (this.state !== 'GAMEOVER') this.shockField?.draw(ctx, this);
     this.rifts?.draw(ctx, this);
     this.enemyManager.draw(ctx, this.camX, this.camY, this.width, this.height);
     drawBossWarps(ctx, this);
+    this.cutscene?.drawWorld(ctx);
     drawStatusEffects(ctx, this.enemyManager.enemies, this.camX, this.camY, this.width, this.height);
     this.flamethrower?.draw(ctx, this);
     this.cryoSprayer?.draw(ctx, this);
     this.acidSprayer?.draw(ctx, this);
+    this.railLance?.draw(ctx, this);
+    this.glaive?.draw(ctx, this);
+    if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
+    this.quakeMortar?.drawAir(ctx, this);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
@@ -6719,6 +6927,7 @@ export class Game {
 
     // 5. Draw Sparks, Shatter Shards, Shockwaves & Lightning in World Space
     this.particles.draw(ctx, this.camX, this.camY, this.width, this.height);
+    this.enemyManager.drawTopTelegraphs(ctx, this.camX, this.camY, this.width, this.height); // Blinker marks read over the sparks
     this.damageNumbers.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Close Camera Transform
@@ -6733,7 +6942,7 @@ export class Game {
     if (this.bossFlash > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16})`;
+      ctx.fillStyle = `rgba(255, 214, 110, ${this.bossFlash * 0.16 * flashScale()})`;
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
@@ -6741,7 +6950,7 @@ export class Game {
     if (this.chromaFlash > 0.01) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(0, 243, 255, ${this.chromaFlash * 0.22})`;
+      ctx.fillStyle = `rgba(0, 243, 255, ${this.chromaFlash * 0.22 * flashScale()})`;
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.restore();
     }
@@ -6869,5 +7078,5 @@ export class Game {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableStartPick().showSplash());
+  window.addEventListener('DOMContentLoaded', () => new Game().enableFirstLaunchTutorial().enableFirstLaunchIntro().enableStartPick().showSplash().enableStoryRadio());
 }

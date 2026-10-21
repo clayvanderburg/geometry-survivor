@@ -167,7 +167,7 @@ const CLIPS = {
       await context.addInitScript(() => {
         let s = 1234567;
         Math.random = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-        try { localStorage.setItem('vexolith_tutorial_seen', '1'); localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {}
+        try { localStorage.setItem('vexolith_tutorial_seen', '1'); localStorage.setItem('vexolith_intro_seen', '1'); localStorage.setItem('vexolith_slot_tip_seen', '1'); } catch {}
       });
       const page = await context.newPage();
       const errors = [];

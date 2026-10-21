@@ -79,11 +79,13 @@ export const STAT_CARDS = {
     card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
   ],
   turret: [
-    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bolts', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
-    card('turret', 'turret_rate', 'rate', 'Sentry Turret Fire Rate', 'turretFireRate', 'Sentry Turret: shoots faster.', cap(8)),
-    card('turret', 'turret_count', 'count', 'Sentry Turret Count', 'turretMaxActive', 'Sentry Turret: carry one more turret.', cap(6)),
-    card('turret', 'turret_lifetime', 'lifetime', 'Sentry Turret Lifetime', 'turretDuration', 'Sentry Turret: each turret stays deployed longer. Only lifetime.'),
-    card('turret', 'turret_redeploy', 'redeploy', 'Sentry Turret Recharge', 'turretCooldown', 'Sentry Turret: an expired turret is ready to plant again sooner. Only recharge.')
+    // Deep Rock Galactic: Survivor's LMG upgrades (Bigger Cogs, Tighten Springs, Loosen Bolts, Add Punch).
+    // turret_redeploy keeps its id (it was the slot recharge, now charge reload); Count and Lifetime are
+    // retired (RETIRED_STAT_CARDS).
+    card('turret', 'turret_damage', 'damage', 'Sentry Turret Bigger Cogs', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
+    card('turret', 'turret_rate', 'rate', 'Sentry Turret Tighten Springs', 'turretFireRate', 'Sentry Turret: shoots faster. Only fire rate.', cap(8)),
+    card('turret', 'turret_redeploy', 'reload', 'Sentry Turret Loosen Bolts', 'turretReload', 'Sentry Turret: turret charges come back faster, so more turrets are out at once. Only reload speed.', cap(8)),
+    card('turret', 'turret_pierce', 'pierce', 'Sentry Turret Add Punch', 'turretPierce', 'Sentry Turret: each bolt punches through one more enemy (each one behind takes a little less). Only pierce.', cap(4))
   ],
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
@@ -136,10 +138,51 @@ export const STAT_CARDS = {
     card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
     card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
     card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
+  ],
+  raillance: [
+    card('raillance', 'raillance_damage', 'damage', 'Rail Lance Slug Mass', 'railDamage', 'Rail Lance: a heavier slug. Only damage per lance.'),
+    card('raillance', 'raillance_rate', 'rate', 'Rail Lance Capacitor Bank', 'railCycle', 'Rail Lance: charges faster, so it fires more often. Only charge time.', cap(6)),
+    card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', cap(3)),
+    card('raillance', 'raillance_width', 'width', 'Rail Lance Flux Lens', 'railWidth', 'Rail Lance: a wider line that clips more enemies. Only its width.', cap(6)),
+    card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', cap(5))
+  ],
+  glaive: [
+    card('glaive', 'glaive_damage', 'damage', 'Glaive Edge', 'glaiveDamage', 'Glaive Discs: keener edges. Only damage per hit.'),
+    card('glaive', 'glaive_count', 'count', 'Glaive Disc Count', 'glaiveCount', 'Glaive Discs: one more disc per throw.', cap(4)),
+    card('glaive', 'glaive_chain', 'chain', 'Glaive Ricochet', 'glaiveBounces', 'Glaive Discs: each disc ricochets to one more enemy. Only ricochets.', cap(6)),
+    card('glaive', 'glaive_rate', 'rate', 'Glaive Launcher', 'glaiveCooldown', 'Glaive Discs: throws more often. Only throw rate.', cap(8)),
+    card('glaive', 'glaive_speed', 'speed', 'Glaive Spin', 'glaiveSpeed', 'Glaive Discs: faster discs. Only disc speed.', cap(6))
+  ],
+  nanites: [
+    card('nanites', 'nanites_damage', 'damage', 'Nanite Swarm Acid Enzymes', 'naniteDamage', 'Nanite Swarm: a hungrier strain. Only damage per bite.'),
+    card('nanites', 'nanites_rate', 'rate', 'Nanite Swarm Hunger', 'naniteTickRate', 'Nanite Swarm: the nanites bite more often. Only bite rate.', cap(8)),
+    card('nanites', 'nanites_radius', 'radius', 'Nanite Swarm Cloud Size', 'naniteRadius', 'Nanite Swarm: wider swarms. Only swarm size.', cap(8)),
+    card('nanites', 'nanites_duration', 'duration', 'Nanite Swarm Endurance', 'naniteLife', 'Nanite Swarm: each swarm holds together longer before it disperses. Only lifetime.', cap(8)),
+    card('nanites', 'nanites_launch', 'cooldown', 'Nanite Swarm Fabricator', 'naniteCooldown', 'Nanite Swarm: a fresh swarm launches sooner. Only launch rate.', cap(6))
+  ],
+  harpoon: [
+    card('harpoon', 'harpoon_damage', 'damage', 'Claw Harpoon Tungsten Bit', 'harpoonDamage', 'Claw Harpoon: a harder drill bit. Only damage per hit.'),
+    card('harpoon', 'harpoon_rate', 'rate', 'Claw Harpoon Winch Motor', 'harpoonRate', 'Claw Harpoon: a faster winch throws and reels in the claw more often. Only throw rate.', cap(8)),
+    card('harpoon', 'harpoon_range', 'range', 'Claw Harpoon Tether Length', 'harpoonRange', 'Claw Harpoon: a longer tether, so the claw flies further. Only reach.', cap(8)),
+    card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', cap(6)),
+    card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
+  ],
+  quake: [
+    card('quake', 'quake_damage', 'damage', 'Graviton Mortar Dense Core', 'quakeDamage', 'Graviton Mortar: denser charges. Only gravity wave damage.'),
+    card('quake', 'quake_count', 'count', 'Graviton Mortar Barrels', 'quakeShells', 'Graviton Mortar: one more charge per volley, aimed at the next pack.', cap(4)),
+    card('quake', 'quake_rate', 'rate', 'Graviton Mortar Autoloader', 'quakeCooldown', 'Graviton Mortar: fires volleys more often. Only fire rate.', cap(8)),
+    card('quake', 'quake_radius', 'radius', 'Graviton Mortar Wave Radius', 'quakeRadius', 'Graviton Mortar: the gravity waves ripple out wider. Only wave size.'),
+    card('quake', 'quake_bore', 'bore', 'Graviton Mortar Tidal Shear', 'quakeRock', 'Graviton Mortar: its gravity waves tear at the rocks they pass (the base waves leave rocks alone); more ranks break them sooner, and broken rocks count as mined. Only rock damage.', cap(6))
   ]
 };
 
 export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
+// Stat cards that no longer exist, by id: old run stats still name them, and nothing else reads them
+// (runs are not saved mid-run, and a weapon's ranks are looked up only for its current cards).
+export const RETIRED_STAT_CARDS = Object.freeze({
+  turret_count: 'Sentry Turret Count (retired)',
+  turret_lifetime: 'Sentry Turret Lifetime (retired)'
+});
 export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.id, c]));
 
 // --- Element infusion (v0.34) ----------------------------------------------------------------------
@@ -180,7 +223,7 @@ const ELEMENT_EFFECT_TEXT = {
 export const ELEMENT_WEAPON_LABEL = {
   blaster: 'Autocannon', rockets: 'Rocket Pods', missiles: 'Swarm Missiles', lightning: 'Tesla Arc', grenades: 'Plasma Grenades',
   // Built-in elements (FIXED_ELEMENTS): no element cards, but the same status rows.
-  flamethrower: 'Flamethrower', cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer', gas: 'Gas Trail'
+  flamethrower: 'Flamethrower', cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer', gas: 'Gas Trail', nanites: 'Nanite Swarm'
 };
 // player.weapons / upgradeLevels key of a weapon's element card.
 export const elementKey = (weapon, element) => `${weapon}_${element}`;
@@ -208,7 +251,8 @@ export const levelCardWeapon = (id) => STAT_CARD_BY_ID[id]?.weapon || ELEMENT_CA
 // The Cryo Sprayer (FROST) and Acid Sprayer (CORROSIVE) rank theirs like the Flamethrower, from Deep Freeze / Etching Agent.
 // The Tesla Arc is lightning, so it is always SHOCK (Clay, v0.43.1; it took Stun Arcs and the other element
 // cards before): its rank follows its level like the Gas Trail's, so it needs no extra card.
-export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock', lightning: 'shock' };
+// The Nanite Swarm is always CORROSIVE (it eats hulls): its rank follows its level like the Gas Trail's.
+export const FIXED_ELEMENTS = { gas: 'corrode', flamethrower: 'fire', cryospray: 'frost', acidspray: 'corrode', shockfield: 'shock', lightning: 'shock', nanites: 'corrode' };
 export const fixedElementRank = (lv) => Math.min(ELEMENT_MAX_RANKS, 1 + Math.floor(Math.max(0, lv) / 6));
 // Sprayer element rank from a build: 1 + its element stat ranks (burn / chill / acid; one per sprayer).
 export const flameBurnRank = (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.burn || b?.r?.chill || b?.r?.acid || 0));
@@ -265,7 +309,12 @@ export function elementsOf(p, weapons = [...ELEMENT_WEAPONS, ...Object.keys(FIXE
 export const WEAPON_BADGE = {
   blaster: 'AUTOCANNON', rockets: 'ROCKET PODS', missiles: 'SWARM MISSILES', lightning: 'TESLA ARC',
   singularity: 'VORTEX SINGULARITY', orbitals: 'ORBIT BLADES', mines: 'PROXIMITY MINES', turret: 'SENTRY TURRET', drones: 'ESCORT DRONES',
-  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD'
+  grenades: 'PLASMA GRENADES', gas: 'GAS TRAIL', flamethrower: 'FLAMETHROWER', cryospray: 'CRYO SPRAYER', acidspray: 'ACID SPRAYER', shockfield: 'SHOCK FIELD',
+  raillance: 'RAIL LANCE',
+  glaive: 'GLAIVE DISCS',
+  nanites: 'NANITE SWARM',
+  harpoon: 'CLAW HARPOON',
+  quake: 'GRAVITON MORTAR'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -307,9 +356,9 @@ export const TRANSFORMS = {
     18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, each a little weaker, tossed out toward the nearest enemy.')
   },
   turret: {
-    6: tf('twin', 'Twin Barrels', 'Sentry Turrets fire two bolts per shot, side by side.'),
-    12: tf('mobile', 'Mobile Sentries', 'Sentry Turrets slowly follow you around instead of staying where they were planted, and their bolts hit harder.'),
-    18: tf('mortar', 'Mortar Battery', 'Sentry Turrets also lob mortar shells that crash down on enemies in range.')
+    6: tf('capacity', 'Extra Capacity', 'Sentry Turret: carry one more turret charge, and every bolt hits harder.'),
+    12: tf('mobile', 'Tank Tracks', 'Sentry Turrets roll after you instead of staying where they were planted, and their bolts hit harder.'),
+    18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
   },
   drones: {
     6: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
@@ -345,13 +394,38 @@ export const TRANSFORMS = {
     6: tf('lash', 'Arc Lash', 'Every Electric Shield Field discharge also lashes arcs out at the 3 nearest enemies beyond the field, stunning them too.'),
     12: tf('repulse', 'Repulsor Surge', 'Electric Shield Field discharges hurl enemies back and hit harder, and each one that lands recharges your Phase Dash faster.'),
     18: tf('overcharge', 'Thunderclap Overcharge', 'The Electric Shield Field banks charge with every discharge. When a big pack or a boss closes in, it releases it all in a wide thunderclap.')
+  },
+  raillance: {
+    6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, and every lance hits harder.'),
+    12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever stands on it or walks through.'),
+    18: tf('overload', 'Overload Shot', 'Every third Rail Lance shot is an Overload: a beam three times as wide that hits twice as hard.')
+  },
+  glaive: {
+    6: tf('fission', 'Fission Discs', 'A Glaive Disc splits in two on its first hit. Both twins ricochet on through the pack with every bounce the disc had left.'),
+    12: tf('momentum', 'Momentum Edge', 'Glaive Discs feed on impact: every bounce speeds them up instead of slowing them, and every ricochet hits harder than the last.'),
+    18: tf('recall', 'Boomerang Recall', 'Spent Glaive Discs no longer fade: they swing back to your ship, slicing through the enemies on the way home.')
+  },
+  nanites: {
+    6: tf('fission', 'Fission Bloom', 'Every few kills a Nanite Swarm buds off a daughter swarm that flies to the next pack and eats it too.'),
+    12: tf('goo', 'Gray Goo', 'Nanite Swarms feed on what they kill: every kill keeps the swarm alive longer and lets it swell far past its usual size.'),
+    18: tf('plague', 'Nanite Plague', 'Enemies a Nanite Swarm bites carry the plague: when one dies to anything, a small swarm bursts from the wreck and keeps eating.')
+  },
+  harpoon: {
+    6: tf('slam', 'Seismic Slam', 'Every time the Claw Harpoon reels in, your claws snap shut in a seismic slam that hits everything round your nose.'),
+    12: tf('spin', 'Drill Spin', 'At the end of every throw the Claw Harpoon spins in place, grinding every enemy and rock round its tip before it reels back.'),
+    18: tf('chain', 'Chain Harpoon', 'At the end of every throw the Claw Harpoon leaps on to up to 3 more enemies near its tip, skewering each one before it reels back.')
+  },
+  quake: {
+    6: tf('skip', 'Rebound Pulse', 'Graviton Mortar charges rebound after they burst: each one springs to the next pack twice, pulsing again in smaller gravity waves.'),
+    12: tf('fault', 'Spacetime Fractures', 'Every Graviton Mortar burst tears three seams in space-time that snap shut a moment later, hitting everything along them and shattering any rock they cross.'),
+    18: tf('epicenter', 'Graviton Surge', 'Every third Graviton Mortar volley your own hull releases a huge gravity wave around the ship, hurling back everything close.')
   }
 };
 
 // Which stats add damage output (POWER) vs. only shape the weapon (UTILITY): tests and the Field Guide.
 // A longer-lived singularity grinds longer, so its lifetime is POWER too. Everything else (size, radius,
-// pull, reach, range, spin, pierce, capacity, fuse, turret lifetime and recharge: turret DPS is counted
-// with every turret out) is UTILITY.
+// pull, reach, range, spin, pierce, capacity, fuse) is UTILITY. Sentry Turret reload is POWER: more
+// charges back means more turrets out.
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
 export const BOOST_NAME = 'Across the Board';

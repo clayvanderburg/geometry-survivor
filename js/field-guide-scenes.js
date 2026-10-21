@@ -232,6 +232,8 @@ const SCENES = {
   },
   brood_queen: {
     w: 680, loop: 12,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'brood_queen') e.spearCd = 2.2; },
     setup(s) {
       s.home(0.82, 0.5);
       s.manager.queueSpawn('brood_queen', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -272,6 +274,7 @@ const SCENES = {
       if (q && s.t > 12.6) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   kestrel: {
@@ -285,6 +288,8 @@ const SCENES = {
   },
   wing_commander: {
     w: 900, loop: 13,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'wing_commander') e.strikeT = 2.4; },
     setup(s) {
       s.home(0.55, 0.5);
       s.manager.queueSpawn('wing_commander', s.W * 0.15, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -333,10 +338,13 @@ const SCENES = {
       if (q && s.t > 12.8) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   event_horizon: {
     w: 900, loop: 12,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'event_horizon') e.aiTimer = 1.6; },
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('event_horizon', s.W * 0.4, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -384,6 +392,7 @@ const SCENES = {
       if (q && s.t > 12) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   mitosis: {
@@ -398,6 +407,8 @@ const SCENES = {
   },
   progenitor: {
     w: 900, loop: 14,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'progenitor' && !e.gen) e.lashT = 2; },
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('progenitor', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -439,6 +450,7 @@ const SCENES = {
       for (const f of s.manager.enemies) if (f.type === 'repulsor') s.repel(f);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   },
   lancer: {
@@ -469,8 +481,37 @@ const SCENES = {
       if (s.count('borer') === 0 && s.every(1)) s.spawn('borer', s.W * 0.1, s.H * 0.5);
     }
   },
+  hatchery: {
+    w: 700, loop: 14,
+    setup(s) {
+      s.home(0.8, 0.5);
+      s.spawn('hatchery', s.W * 0.18, s.H * 0.5);
+    },
+    onSpawn(s, e) { if (e.type === 'hatchery') e.broodT = 0.4; },
+    tick(s) {
+      // The brood harasses the ship; then it turns on the hive, and the brood withers with it.
+      s.kite(s.W * 0.8, s.H * 0.5, 45, 1.6);
+      if (s.t < 7.5) s.autoFire(0.2, e => e.type === 'hatchling');
+      else s.autoFire(0.07, e => e.type === 'hatchery');
+      const h = s.find('hatchery');
+      if (h && s.t > 10.5) s.kill(h);
+    }
+  },
+  hatchling: {
+    w: 520, loop: 9,
+    setup(s) { s.home(0.6, 0.5); },
+    tick(s) {
+      s.kite(s.W * 0.6, s.H * 0.5, 50, 1.4);
+      if (s.t > 2) s.autoFire(0.35);
+      if (s.count() < 3 && s.every(0.8)) {
+        s.spawn('hatchling', s.W * 0.05, s.H * (0.25 + Math.random() * 0.5), { attach: { state: 'orbit', aiTimer: 1 + Math.random(), hatchDir: Math.random() < 0.5 ? 1 : -1, hatchR: 110 } });
+      }
+    }
+  },
   eclipse_twins: {
     w: 900, loop: 14,
+    // Its signature attack comes early so the preview shows it.
+    onSpawn(s, e) { if (e.type === 'eclipse_twins' && e.twinRole === 'sol') e.eclipseCd = 2.6; },
     setup(s) {
       s.home(0.5, 0.5);
       s.manager.queueSpawn('eclipse_twins', s.W * 0.2, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -486,7 +527,7 @@ const SCENES = {
     noContactKill: true
   },
   prism: {
-    w: 900, loop: 15,
+    w: 900, loop: 17,
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('prism', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -498,9 +539,10 @@ const SCENES = {
       const q = s.find('prism');
       if (q && s.t > 5 && q.phase === 0) q.hp = q.maxHp * 0.6;
       if (q && s.t > 9 && q.phase === 1) q.hp = q.maxHp * 0.3;
-      if (q && s.t > 14.2) s.kill(q);
+      if (q && s.t > 15.6) s.kill(q);
       s.bossEntrance();
     },
+    onKill(s, e) { if (e.isBoss) bossDef(e.type)?.onDeath?.(e, s.manager); },
     noContactKill: true
   }
 };
@@ -748,6 +790,7 @@ export class GuidePreview {
     this.manager.lieutenantArrivals.length = 0;
     for (const e of this.manager.doomed.splice(0)) this.kill(e);
     this.manager.enemyBullets.update(dt, this.player, null, this.particles, this.W, this.H, this.orbHit);
+    this.manager.bossTelegraphs.hitPlayer(this.player, this.orbHit);
     this.updateBolts();
     this.updateContacts();
     this.particles.update(dt, this.W, this.H);
@@ -784,6 +827,7 @@ export class GuidePreview {
     drawPlayerShield(ctx, this.player, 0, TUNING, this.t * 1.4, now);
     drawCrabShip(ctx, this.player, TUNING, false, now);
     this.particles.draw(ctx);
+    this.manager.drawTopTelegraphs(ctx);
     ctx.restore();
   }
 
@@ -834,7 +878,7 @@ const SILHOUETTE = {
   kestrel: ['kestrel', 90], wing_commander: ['wing_commander', 260],
   carrier: ['carrier', 150], drone: ['drone', 60], hive_carrier: ['hive_carrier', 300], event_horizon: ['event_horizon', 260],
   gate: ['gate', 200], architect: ['architect', 260], mitosis: ['mitosis', 90], progenitor: ['progenitor', 300],
-  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], borer: ['borer', 150], eclipse_twins: ['eclipse_twins', 220], prism: ['prism', 260]
+  repulsor: ['repulsor', 160], conductor: ['conductor', 280], lancer: ['lancer', 110], borer: ['borer', 150], hatchery: ['hatchery', 170], hatchling: ['hatchling', 60], eclipse_twins: ['eclipse_twins', 220], prism: ['prism', 260]
 };
 
 export function drawSilhouette(ctx, id, canvasW, canvasH) {

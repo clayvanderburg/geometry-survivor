@@ -43,7 +43,8 @@ test('the first rift waits for its delay, opens near the ship and seals on its o
   assert.equal(r.phase, 'tear');
   tick(g, Math.ceil((RIFT.tearTime + TUNING.riftOpenTime + RIFT.sealTime) / DT) + 5);
   assert.equal(g.rifts.active, null, 'sealed and gone');
-  assert.ok(g.rifts.timer >= TUNING.riftIntervalMin && g.rifts.timer <= TUNING.riftIntervalMax, 'next one is on the interval');
+  // The countdown keeps ticking for the few frames after the seal, so allow that much below the minimum.
+  assert.ok(g.rifts.timer >= TUNING.riftIntervalMin - 10 * DT && g.rifts.timer <= TUNING.riftIntervalMax, 'next one is on the interval');
   reset();
 });
 
@@ -64,7 +65,9 @@ test('flying into an open rift jumps the ship to the far side of the map', () =>
   tick(g, Math.ceil(RIFT.transitIn / DT) + 2);
   const jump = Math.hypot(p.x - fromX, p.y - fromY);
   assert.ok(jump >= RIFT.minJump, `jumped ${jump.toFixed(0)} px`);
-  assert.ok(p.x > g.worldWidth / 2 && p.y > g.worldHeight / 2, 'came out on the far side (mirror of the top-left)');
+  // The exit is a random clear spot within exitSpread of the entry's mirror point (the field is empty here).
+  const mirror = Math.hypot(p.x - (g.worldWidth - fromX), p.y - (g.worldHeight - fromY));
+  assert.ok(mirror <= RIFT.exitSpread + 1, `came out on the far side, ${mirror.toFixed(0)} px from the mirror point`);
   assert.ok(Math.abs(g.camX + g.width / 2 - p.x) < g.width && Math.abs(g.camY + g.height / 2 - p.y) < g.height, 'camera cut to the ship');
   assert.equal(r.phase, 'seal', 'entry rift seals behind the ship');
   assert.equal(g.rifts.shipPose().scale < 1, true, 'still popping out');

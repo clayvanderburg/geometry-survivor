@@ -46,14 +46,19 @@ const CORE_INFO = {
   lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
   singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
   mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
-  turret: { headline: 'turretMaxActive', summary: 'Plants a temporary auto-turret that shoots the nearest enemy it can see past asteroid cover.' },
+  turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload over time.' },
   drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
   gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship (and a giant cloud every time you dash): enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
   flamethrower: { headline: 'flameRange', summary: 'A nozzle spins slowly round your ship spraying a cone of fire: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
   cryospray: { headline: 'cryoRange', summary: 'A nozzle spins slowly round your ship spraying a cone of frost: everything inside slows as COLD builds, then FREEZES solid. Asteroids block the spray.' },
   acidspray: { headline: 'acidRange', summary: 'A nozzle spins slowly round your ship spraying a cone of acid: everything inside CORRODES, taking acid ticks and more damage from every weapon. Asteroids block the spray.' },
-  shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' }
+  shockfield: { headline: 'fieldRadius', summary: 'Defensive: a charged field round your hull discharges when enemies get close, zapping and SHOCKing (stunning) everything inside, then recharges. It never repairs your shield.' },
+  raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
+  glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
+  nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
+  harpoon: { headline: 'harpoonRange', summary: 'Fires one of your drill-claws on a tether where you aim: it pierces every enemy on its line, drills through rock (mining it as it goes) and yanks small enemies back into your other claw, which crushes them.' },
+  quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over and shoving it back. Tidal Shear cards and Spacetime Fractures let it break rocks too.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.
@@ -138,16 +143,22 @@ const STATUS_CARDS = [
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
+// Drill-claw numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
+export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
+export const TECTONIC_MINING_SPEED = 1.18;
+export const TECTONIC_MINING_RANGE = 1.15;
+export const TECTONIC_DRILL_SCALE = 1.15;
+
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
     name: 'Rotary Claw Overclock',
     category: 'DRILL CLAWS',
-    maxLevel: 6,
+    maxLevel: 10,
     headline: 'miningSpeed',
     summary: 'Spins the twin drill-claws faster. Only mining speed.',
     apply(player) {
-      player.stats.miningSpeed *= 1.12;
+      player.stats.miningSpeed *= MINING_SPEED_STEP;
     }
   },
   {
@@ -184,6 +195,11 @@ export const UPGRADE_POOL = [
   ...weaponGroup('cryospray'),
   ...weaponGroup('acidspray'),
   ...weaponGroup('shockfield'),
+  ...weaponGroup('raillance'),
+  ...weaponGroup('glaive'),
+  ...weaponGroup('nanites'),
+  ...weaponGroup('harpoon'),
+  ...weaponGroup('quake'),
   // Passive (loadout.js PASSIVES): no slot and no NEW WEAPON pick. A general upgrade offered in normal
   // hands with the usual level jumps; owning it unlocks the KINETIC tag card.
   {
@@ -373,9 +389,9 @@ export const UPGRADE_POOL = [
     summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
-      player.stats.miningSpeed *= 1.9;
-      player.stats.miningRange *= 1.3;
-      player.stats.drillScale = (player.stats.drillScale || 1.0) * 1.25;
+      player.stats.miningSpeed *= TECTONIC_MINING_SPEED;
+      player.stats.miningRange *= TECTONIC_MINING_RANGE;
+      player.stats.drillScale = (player.stats.drillScale || 1.0) * TECTONIC_DRILL_SCALE;
     }
   },
   {

@@ -192,6 +192,8 @@ test('late HP compounding stacks on top of the main ramp from waveHpLateFrom', (
   const at = (w, late) => withTuning({ waveHpGrowthRamp: 0, waveHpLateFrom: 30, waveHpLateGrowth: late, waveHpLateRamp: 0 }, () => waveScaleAt(w));
   assert.equal(at(30, 1.05), at(30, 1));
   assert.ok(Math.abs(at(40, 1.05) / at(40, 1) - Math.pow(1.05, 10)) < 1e-9);
+  assert.ok(Math.abs(at(40, 0.95) / at(40, 1) - Math.pow(0.95, 10)) < 1e-9, 'below 1 it softens');
+  assert.ok(at(41, 0.95) > at(40, 0.95), 'HP still grows every wave');
 });
 
 test('kill XP grows with xpPerWave', () => {

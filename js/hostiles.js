@@ -11,6 +11,7 @@
 //   REPULSOR — a field that shoves your bullets away, guarding itself and whatever stands inside it.
 //   LANCER  — plants itself, telegraphs a line, then fires a sweeping beam (js/lancers.js).
 //   BORER   — tunnels through rock, bore-charges down a marked lane and spits gravel while it digs (js/borers.js).
+//   HATCHERY — a slow armored hive that breeds HATCHLINGS (circling dive-bombers) until killed (js/hatcheries.js).
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { unlockWaveOf } from './wave-plan.js';
 import { SERPENT, windToward } from './serpents.js';
@@ -19,6 +20,7 @@ import { turnToward } from './serpents.js';
 import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
 import { LANCE, lanceCycle, traceLancer, drawLanceAim, drawBeam } from './lancers.js';
 import { BORER, updateBorer, traceBorer, drawBoreLane } from './borers.js';
+import { HATCHERY, updateHatchery, updateHatchling, traceHatchery, traceHatchling, drawIncubation, drawDiveCue } from './hatcheries.js';
 import { hpRingAlpha } from './archetypes.js';
 
 export const CARRIER = { range: 430, band: 70, launchEvery: 3.2, launch: 2, maxDrones: 6 };
@@ -42,7 +44,9 @@ export const HOSTILE_INFO = {
   repulsor: { label: 'REPULSOR', unlockWave: unlockWaveOf('repulsor'), intro: 'ITS FIELD SHOVES BULLETS AWAY · USE AREA DAMAGE, ARCS, MISSILES OR A DASH NOVA' },
   lancer: { label: 'LANCER', unlockWave: unlockWaveOf('lancer'), intro: 'AIMS A LINE, LOCKS (RED), THEN SWEEPS A BEAM — STEP OFF THE LINE, NOT ALONG IT' },
   borer: { label: 'BORER', unlockWave: unlockWaveOf('borer'), intro: 'TUNNELS THROUGH ROCK · CHARGES DOWN A MARKED LANE · SPITS GRAVEL WHILE IT DIGS — DON\'T HIDE BEHIND ROCK' },
+  hatchery: { label: 'HATCHERY', unlockWave: unlockWaveOf('hatchery'), intro: 'BREEDS DIVING HATCHLINGS UNTIL IT DIES · KILL THE HIVE AND ITS BROOD DIES WITH IT' },
   mitosis: { label: 'MITOSIS CELL', unlockWave: unlockWaveOf('mitosis'), intro: 'GROWS, THEN SPLITS IN TWO · KILL IT WHILE IT IS SMALL' },
+  hatchling: { label: 'HATCHLING', unlockWave: unlockWaveOf('hatchling'), intro: 'CIRCLES, FLARES, THEN DIVES THROUGH YOU · SIDESTEP THE DIVE' },
   drone: { label: 'DRONE', unlockWave: unlockWaveOf('drone'), intro: 'HOMING KAMIKAZE FROM A CARRIER · BURNS OUT AFTER A FEW SECONDS — KEEP MOVING' }
 };
 
@@ -122,6 +126,20 @@ export function hostileKindStats(type, waveScale) {
         radius: 18, sides: 3, hue: 34, // Drill-bit bronze
         score: 150, xp: 8, vRot: 0, knockMult: BORER.knockMult, contactMult: 1.3, sturdy: true
       };
+    case 'hatchery':
+      return {
+        hp: 240 * waveScale, maxHp: 240 * waveScale,
+        speed: 0.9,
+        radius: 26, sides: 6, hue: 8, // Brood scarlet
+        score: 400, xp: 14, vRot: 0.006, knockMult: HATCHERY.knockMult, contactMult: 1.2, sturdy: true
+      };
+    case 'hatchling':
+      return {
+        hp: 5 * waveScale, maxHp: 5 * waveScale,
+        speed: 4.4,
+        radius: 8, sides: 4, hue: 8,
+        score: 6, xp: 0, vRot: 0, contactMult: 0.45
+      };
     case 'drone':
       return {
         hp: 6 * waveScale, maxHp: 6 * waveScale,
@@ -135,10 +153,10 @@ export function hostileKindStats(type, waveScale) {
 }
 
 // Kill-feedback tier (DEATH_FX in main.js).
-export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2, mitosis: 1, repulsor: 2, lancer: 1, borer: 2 };
+export const HOSTILE_DEATH_TIER = { mayfly: 0, hulk: 3, serpent: 1, kestrel: 1, carrier: 2, drone: 0, gate: 2, mitosis: 1, repulsor: 2, lancer: 1, borer: 2, hatchery: 3, hatchling: 0 };
 
 // Fast movers that leave a neon ribbon.
-export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel', 'drone']);
+export const HOSTILE_TRAILS = new Set(['mayfly', 'kestrel', 'drone', 'hatchling']);
 
 function updateMayfly(e, m, env) {
   const { dirX, dirY, dt } = env;
@@ -275,7 +293,7 @@ function updateDrone(e, m, env) {
   e.rotation = Math.atan2(e.vy, e.vx);
 }
 
-const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate, mitosis: updateMitosis, repulsor: updateRepulsor, lancer: updateLancer, borer: updateBorer };
+const AI = { mayfly: updateMayfly, hulk: updateHulk, serpent: updateSerpent, kestrel: updateKestrel, carrier: updateCarrier, drone: updateDrone, gate: updateGate, mitosis: updateMitosis, repulsor: updateRepulsor, lancer: updateLancer, borer: updateBorer, hatchery: updateHatchery, hatchling: updateHatchling };
 
 // Returns true when the type is driven here (EnemyManager skips its legacy steering).
 export function updateHostileKind(e, m, env) {
@@ -323,6 +341,10 @@ export function traceHostileKind(ctx, e, r) {
     traceLancer(ctx, r);
   } else if (e.type === 'borer') {
     traceBorer(ctx, e, r);
+  } else if (e.type === 'hatchery') {
+    traceHatchery(ctx, e, r);
+  } else if (e.type === 'hatchling') {
+    traceHatchling(ctx, e, r);
   } else if (e.type === 'repulsor') {
     polygon(ctx, 6, r, 0);
     for (let k = 0; k < 3; k++) {
@@ -357,6 +379,12 @@ export function drawHostileOverlay(ctx, e, r) {
   if (e.type === 'borer') {
     drawBoreLane(ctx, e);
     if (e.isLieutenant || e.hp >= e.maxHp) return;
+  } else if (e.type === 'hatchery') {
+    drawIncubation(ctx, e, r);
+    if (e.isLieutenant || e.hp >= e.maxHp) return;
+  } else if (e.type === 'hatchling') {
+    drawDiveCue(ctx, e, r);
+    return;
   } else if (e.type === 'lancer') {
     drawLanceAim(ctx, e);
     if (e.beam) drawBeam(ctx, e.beam, e.hue);
@@ -390,7 +418,7 @@ export function drawHostileOverlay(ctx, e, r) {
     drawGateBeam(ctx, e);
     return;
   }
-  if ((e.type !== 'hulk' && e.type !== 'borer') || e.isLieutenant || e.hp >= e.maxHp) return;
+  if ((e.type !== 'hulk' && e.type !== 'borer' && e.type !== 'hatchery') || e.isLieutenant || e.hp >= e.maxHp) return;
   const pct = Math.max(0, e.hp / e.maxHp);
   ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${hpRingAlpha(e)})`;
   ctx.lineWidth = 2.6;

@@ -1,19 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Sentry Turret: up to 9 turrets with Sentry Turret Count, and the LV 12 Mobile Sentries transform makes
-// planted turrets drift after the ship.
+// Sentry Turret: the Breakthroughs are DRG: Survivor's overclocks, and the LV 12 Tank Tracks transform
+// (id 'mobile', once Mobile Sentries) makes planted turrets roll after the ship.
 const h = await import('../tools/balance/harness.mjs');
 const { WEAPON_SCALING: W, TURRET_MAX_ACTIVE } = await import('../js/weapon-scaling.js');
 const { makeBuild, STAT_CARDS, TRANSFORMS } = await import('../js/weapon-levels.js');
 const { acquireWeapon } = await import('../js/upgrades.js');
 
-test('Sentry Turret Count goes up to 9 turrets', () => {
-  assert.equal(STAT_CARDS.turret.find((c) => c.stat === 'count').maxLevel, 6);
-  assert.equal(TURRET_MAX_ACTIVE, 9);
-  assert.equal(W.turretMaxActive(makeBuild('turret', 7, { count: 6 })), 9);
-  assert.equal(TRANSFORMS.turret[12].id, 'mobile');
-  assert.equal(TRANSFORMS.turret[18].id, 'mortar', 'Mortar Battery stays');
+test('Sentry Turret Breakthroughs follow the DRG overclocks: Extra Capacity, Tank Tracks, LMG Overload', () => {
+  assert.deepEqual([6, 12, 18].map((m) => TRANSFORMS.turret[m].id), ['capacity', 'mobile', 'overload']);
+  assert.deepEqual([6, 12, 18].map((m) => TRANSFORMS.turret[m].name), ['Extra Capacity', 'Tank Tracks', 'LMG Overload']);
+  assert.deepEqual(STAT_CARDS.turret.map((c) => c.stat), ['damage', 'rate', 'reload', 'pierce']);
+  assert.equal(W.turretFireRate(makeBuild('turret', 18, {}, { 18: 'transform' })), 2 * W.turretFireRate(makeBuild('turret', 18)), 'LMG Overload doubles the fire rate');
+  // The pool holds every turret the fastest reload keeps out, plus a full bank.
+  const fastest = makeBuild('turret', 18, { reload: 8 }, { 6: 'transform' });
+  assert.ok(TURRET_MAX_ACTIVE >= Math.ceil(W.turretDuration(fastest) / W.turretReload(fastest)) + W.turretCharges(fastest));
 });
 
 function turretGame(bt) {
@@ -35,11 +37,11 @@ function turretGame(bt) {
   return g;
 }
 
-test('Mobile Sentries: planted turrets drift after the ship; without it they stay put', () => {
+test('Tank Tracks: planted turrets roll after the ship; without it they stay put', () => {
   for (const [bt, follows] of [[{ 6: 'boost', 12: 'transform', 18: 'boost' }, true], [{ 6: 'boost', 12: 'boost', 18: 'boost' }, false]]) {
     const g = turretGame(bt);
     const d = g.deployables;
-    assert.ok(d.turretCount >= 3, 'turrets planted');
+    assert.ok(d.turretCount >= 2, 'turrets planted');
     const before = d.turrets.slice(0, d.turretCount).map((t) => ({ t, x: t.x, y: t.y }));
     g.player.x += 600; // the ship moves away
     for (let i = 0; i < 60; i++) g.update(1 / 60);

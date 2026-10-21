@@ -15,13 +15,14 @@ import { TUNING } from './config.js';
 
 export const TUTORIAL_SEEN_KEY = 'vexolith_tutorial_seen';
 // The GAME_VERSION major.minor the slides were last checked against (see the rule above).
-export const TUTORIAL_REVIEWED_FOR = '0.43';
+export const TUTORIAL_REVIEWED_FOR = '0.44';
 export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 
 // Lines are plain text with **bold** and [[gold|green|purple:colored]] spans. A line may be an object
 // with a variant per input: keyboard (mouse + keys), touch (phone / tablet) and pad (controller).
 export function tutorialSlides(tuning = TUNING) {
   const slots = tuning.weaponSlots ?? 6;
+  const floorStep = tuning.weaponFloorStep ?? 6;
   const ltWave = tuning.lieutenantFirstWave ?? 2;
   return [
     {
@@ -60,7 +61,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'levelup', title: 'LEVEL UP', media: 'levelup.webp',
       alt: 'The level-up screen with a NEW WEAPON card and an upgrade card',
       lines: [
-        `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade.`,
+        `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade. Every ${floorStep} levels you **must** add a weapon.`,
         'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards.'
       ]
     },
@@ -69,8 +70,8 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'A boss warping in next to the ship',
       lines: [
         `From wave ${ltWave}, a named **LIEUTENANT** elite hunts you.`,
-        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Beat the wave **50** boss to win.',
-        'A **red lane** means a boss is about to **charge** down it.'
+        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Wave **50**: beat its boss, clear the field, win.',
+        'A **red lane** or a **marked zone** means a boss attack is coming: **get out of it**.'
       ]
     },
     {

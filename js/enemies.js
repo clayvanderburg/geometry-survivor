@@ -4,14 +4,17 @@ import { SpatialIndex } from './spatial-index.js';
 import { GRAVITY_DRIFT_DRAG, wellPullScale } from './gravity.js';
 import { EnemyBulletPool } from './enemy-bullets.js';
 import {
-  archetypeStats, updateArchetype, speedCap, traceArchetype, drawArchetypeOverlay, drawConduitLinks, isArchetype, SHIELDER
+  archetypeStats, updateArchetype, speedCap, traceArchetype, drawArchetypeOverlay, drawConduitLinks, isArchetype, SHIELDER,
+  drawBlinkTelegraph
 } from './archetypes.js';
 import { applyLieutenant, drawLieutenantAura, drawLieutenantBar, drawLieutenantTelegraph, drawEliteRift } from './lieutenants.js';
 import { steerAroundRocks, catchupPace, PROBE_TICKS } from './pursuit.js';
 import { isHostileKind, hostileKindStats, updateHostileKind, traceHostileKind, drawHostileOverlay, HOSTILE_TRAILS } from './hostiles.js';
-import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
+import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerSpear, steerCircler, isBossPart, PART_STATS, updateMount, tracePart, drawPartOverlay } from './bosses.js';
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bossRam, drawBossRam } from './boss-ram.js';
+import { BossTelegraphs } from './boss-telegraphs.js';
+import { tickBossHazards, drawBossHazards } from './boss-hazards.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -42,6 +45,15 @@ export function easeIn(x, r) {
 // Light fodder (the core swarm) starts from waveHpStartLight instead: tougher early HP is for the hulls
 // with real health and armor, so swarms stay quick to clear while burn and corrosion matter on the rest.
 export const LIGHT_ENEMY_TYPES = new Set(['swarmer', 'pinwheel', 'weaver', 'mini_splitter', 'mayfly', 'drone']);
+
+// Late-wave readability: hulls this small (swarmers, mini-splitters, mayflies, hatchlings, blinkers, …)
+// draw above the big ones with a dark contrast halo once CROWD_FROM enemies are out, full at +CROWD_SPAN.
+export const SMALL_HULL_RADIUS = 14;
+export const CROWD_FROM = 60;
+export const CROWD_SPAN = 100;
+export function isSmallHull(e) {
+  return e.radius <= SMALL_HULL_RADIUS && !e.isBoss && !e.isLieutenant && !e.mount && !e.leader;
+}
 export function waveScaleAt(wave, { light = false } = {}) {
   const start = light ? (TUNING.waveHpStartLight ?? 1) : (TUNING.waveHpStart ?? 1);
   const perWave = TUNING.waveHpPerWave ?? 0.25;
@@ -50,8 +62,9 @@ export function waveScaleAt(wave, { light = false } = {}) {
   return (start + (wave - 1) * perWave) * Math.pow(growth, easeIn(wave - from, TUNING.waveHpGrowthRamp ?? 0)) * lateHpScaleAt(wave);
 }
 
-// The late-campaign squeeze: a second compounding stage from waveHpLateFrom (eased in over
-// waveHpLateRamp waves), so the back half of the campaign outgrows a build that coasted through the front.
+// The late-campaign stage: a second compounding factor from waveHpLateFrom (eased in over waveHpLateRamp
+// waves) on top of the main one. Below 1 it softens the back half of the campaign so the Void Armory's
+// power can carry a pilot to wave 50; above 1 it steepens it.
 export function lateHpScaleAt(wave) {
   const from = TUNING.waveHpLateFrom ?? 30;
   return Math.pow(TUNING.waveHpLateGrowth ?? 1, easeIn(wave - from, TUNING.waveHpLateRamp ?? 0));
@@ -165,6 +178,10 @@ export class EnemyManager {
     this.discarded = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
+    // Telegraphed boss area attacks (js/boss-telegraphs.js): timed and drawn here, hits resolved by the game.
+    this.bossTelegraphs = new BossTelegraphs();
+    // The game's SoundEngine (null in unit tests and Field Guide previews): bosses play their cues on it.
+    this.sound = null;
     // Optional terrain (AsteroidManager): blinkers never land inside rock and chasers steer round it; null in unit tests.
     this.terrain = null;
     // Camera rect in world space ({ x, y, w, h }), set by Game each tick; off-screen catch-up uses it.
@@ -179,7 +196,7 @@ export class EnemyManager {
     this.steer = { x: 0, y: 0 };
     // One reused scratch object handed to archetype AI each tick (no per-enemy allocation).
     // moveX/moveY: the direction to steer toward the ship (dirX/dirY bent round blocking rock).
-    this.aiEnv = { player: null, dirX: 0, dirY: 0, moveX: 0, moveY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, width: 0, height: 0 };
+    this.aiEnv = { player: null, dirX: 0, dirY: 0, moveX: 0, moveY: 0, dist: 0, dt: 0, sepX: 0, sepY: 0, grid: null, particles: null, sound: null, width: 0, height: 0 };
   }
 
   clear() {
@@ -192,6 +209,8 @@ export class EnemyManager {
     this.doomed = [];
     this.discarded = [];
     this.enemyBullets.clear();
+    this.bossTelegraphs.clear();
+    if (this.bossHazards) this.bossHazards.length = 0;
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -514,6 +533,7 @@ export class EnemyManager {
     env.particles = particles;
     env.width = width;
     env.height = height;
+    env.sound = this.sound;
     const tick = this.tick++;
     const steer = this.steer;
 
@@ -571,8 +591,8 @@ export class EnemyManager {
         } else if (isBossKind(e.type)) {
           bossDef(e.type).update(e, this, env);
           bossRam(e, bossDef(e.type).ram, env); // the shared telegraphed charge (js/boss-ram.js)
-        } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerCircler(e, env))) {
-          // Brood Queen escorts: riding her ring, or circling the ship before they dive (bosses.js).
+        } else if (e.type === 'swarmer' && (steerOrbiter(e, env) || steerSpear(e, env) || steerCircler(e, env))) {
+          // Brood Queen escorts: riding her ring, flying in her spear, or circling the ship before they dive (bosses.js).
         } else if (e.type === 'swarmer') {
           // Boids Flocking: Separation + Alignment + Cohesion + Player Seek
           let sepX = 0, sepY = 0;
@@ -756,6 +776,8 @@ export class EnemyManager {
         e.dead = true;
       }
     }
+    this.bossTelegraphs.update(dt, env);
+    tickBossHazards(this, dt, player, particles, grid); // major bosses' telegraphed blasts, lines and rings
   }
 
   // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
@@ -808,168 +830,214 @@ export class EnemyManager {
       ctx.stroke();
     }
 
-    // 2. Draw Enemies
-    for (let i = 0; i < this.enemies.length; i++) {
-      const e = this.enemies[i];
-      const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4
-        : e.type === 'conduit' ? 250
-        : e.type === 'gate' ? 110
-        : e.type === 'repulsor' ? 140
-        : e.beam || e.lanceState === 'aim' ? 600
-        : e.type === 'bruiser' && e.state === 'windup' ? 300
-        : e.type === 'blinker' && e.state === 'telegraph' ? 280
-        : e.type === 'gunner' && e.state === 'aim' ? 190
-        : e.radius * (e.isBoss || e.isLieutenant ? 2.2 : 1.4) + 24;
-      if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
-      // Hit pop: the hull swells briefly with the white flash so every connecting shot reads.
-      const pulse = 1 + Math.sin(e.pulsePhase) * 0.08 + e.hitFlash * 0.14;
-      const r = e.radius * pulse;
-      // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
-      // version of their own hue, so the archetype stays recognisable.
-      const chilled = e.st && (e.st.cold > 0 || e.st.frozenT > 0);
-      const stunned = e.st && e.st.stunT > 0;
-      const zap = stunned && Math.floor(e.st.stunT * 14) % 2 === 0;
-      const color = e.hitFlash > 0
-        ? '#ffffff'
-        : zap ? STUN_FLASH : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, 62%)`;
-      const glowColor = stunned ? STUN_GLOW : chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
-
-      // Ribbon Trail
-      // Tapered ribbon: fades toward the tail, brightest at the enemy.
-      for (let t = 1; t < e.trail.length; t++) {
-        const k = t / (e.trail.length - 1);
-        ctx.strokeStyle = `hsla(${e.hue}, 100%, ${58 + k * 10}%, ${0.1 + k * 0.32})`;
-        ctx.lineWidth = 1.2 + k * 1.6;
+    // 2. Draw Enemies: big hulls first, then the small fodder on top behind a dark contrast halo, so
+    // "the little guys" stay readable in a dense late wave (fades in from CROWD_FROM enemies).
+    const crowd = Math.min(1, Math.max(0, (this.enemies.length - CROWD_FROM) / CROWD_SPAN));
+    const smallLight = Math.round(62 + 12 * crowd);
+    for (let layer = 0; layer < 2; layer++) {
+      if (layer === 1 && crowd > 0) {
+        // One batched fill for every visible small hull (source-over: the main pass draws additively).
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = `rgba(2, 3, 10, ${0.6 * crowd})`;
         ctx.beginPath();
-        ctx.moveTo(e.trail[t - 1].x, e.trail[t - 1].y);
-        ctx.lineTo(e.trail[t].x, e.trail[t].y);
-        ctx.stroke();
+        for (let i = 0; i < this.enemies.length; i++) {
+          const e = this.enemies[i];
+          if (!isSmallHull(e) || !visible(e.x, e.y, e.radius * 2)) continue;
+          ctx.moveTo(e.x + e.radius * 1.75, e.y);
+          ctx.arc(e.x, e.y, e.radius * 1.75, 0, Math.PI * 2);
+        }
+        ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
       }
+      for (let i = 0; i < this.enemies.length; i++) {
+        const e = this.enemies[i];
+        const small = isSmallHull(e);
+        if (small !== (layer === 1)) continue;
+        const padding = e.type === 'blackhole' ? (TUNING.blackholePullRadius ?? 200) + 4
+          : e.type === 'conduit' ? 250
+          : e.type === 'gate' ? 110
+          : e.type === 'repulsor' ? 140
+          : e.beam || e.lanceState === 'aim' ? 600
+          : e.type === 'bruiser' && e.state === 'windup' ? 300
+          : e.type === 'blinker' && e.state === 'telegraph' ? 280
+          : e.type === 'gunner' && e.state === 'aim' ? 190
+          : e.radius * (e.isBoss || e.isLieutenant ? 2.2 : 1.4) + 24;
+        if (!visible(e.x, e.y, padding) && !e.trail.some(point => visible(point.x, point.y, 4))) continue;
+        // Hit pop: the hull swells briefly with the white flash so every connecting shot reads.
+        const pulse = 1 + Math.sin(e.pulsePhase) * 0.08 + e.hitFlash * 0.14;
+        const r = e.radius * pulse;
+        // Chilled hulls frost over until the slow wears off: an ice-blue glow around a pale
+        // version of their own hue, so the archetype stays recognisable.
+        const chilled = e.st && (e.st.cold > 0 || e.st.frozenT > 0);
+        const stunned = e.st && e.st.stunT > 0;
+        const zap = stunned && Math.floor(e.st.stunT * 14) % 2 === 0;
+        const color = e.hitFlash > 0
+          ? '#ffffff'
+          : zap ? STUN_FLASH : chilled ? `hsl(${e.hue}, 70%, 82%)` : `hsl(${e.hue}, 100%, ${small ? smallLight : 62}%)`;
+        const glowColor = stunned ? STUN_GLOW : chilled ? CHILL_GLOW : `hsla(${e.hue}, 100%, 55%, 0.42)`;
 
-      if (e.type === 'blackhole') this.drawBlackholeAura(ctx, e, r);
-      if (e.type === 'conduit') drawConduitLinks(ctx, e);
+        // Ribbon Trail
+        // Tapered ribbon: fades toward the tail, brightest at the enemy.
+        for (let t = 1; t < e.trail.length; t++) {
+          const k = t / (e.trail.length - 1);
+          ctx.strokeStyle = `hsla(${e.hue}, 100%, ${58 + k * 10}%, ${0.1 + k * 0.32})`;
+          ctx.lineWidth = 1.2 + k * 1.6;
+          ctx.beginPath();
+          ctx.moveTo(e.trail[t - 1].x, e.trail[t - 1].y);
+          ctx.lineTo(e.trail[t].x, e.trail[t].y);
+          ctx.stroke();
+        }
 
-      ctx.save();
-      ctx.translate(e.x, e.y);
-      // Hit squash: the hull flattens along the shot and kicks back a pixel or two, then springs back
-      // as the hit flash fades (bosses and big hulls barely give).
-      if (e.hitFlash > 0 && e.hitAng !== undefined) {
-        const s = e.hitFlash * Math.min(1, 26 / Math.max(10, e.radius));
-        ctx.rotate(e.hitAng);
-        ctx.translate(s * 2.2, 0);
-        ctx.scale(1 - 0.24 * s, 1 + 0.14 * s);
-        ctx.rotate(-e.hitAng);
-      }
-      ctx.rotate(e.rotation);
+        if (e.type === 'blackhole') this.drawBlackholeAura(ctx, e, r);
+        if (e.type === 'conduit') drawConduitLinks(ctx, e);
 
-      // Outer soft glow pass + inner crisp vector pass
-      for (let pass = 0; pass < 2; pass++) {
-        ctx.strokeStyle = pass === 0 ? glowColor : color;
-        ctx.lineWidth = pass === 0 ? 5.5 : 2.2;
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        // Hit squash: the hull flattens along the shot and kicks back a pixel or two, then springs back
+        // as the hit flash fades (bosses and big hulls barely give).
+        if (e.hitFlash > 0 && e.hitAng !== undefined) {
+          const s = e.hitFlash * Math.min(1, 26 / Math.max(10, e.radius));
+          ctx.rotate(e.hitAng);
+          ctx.translate(s * 2.2, 0);
+          ctx.scale(1 - 0.24 * s, 1 + 0.14 * s);
+          ctx.rotate(-e.hitAng);
+        }
+        ctx.rotate(e.rotation);
 
-        ctx.beginPath();
-        if (e.type === 'serpent') {
-          if (e.leader) traceSegment(ctx, e, r);
-          else traceSerpentHead(ctx, r);
-        } else if (e.type === 'swarmer') {
-          traceSwarmer(ctx, r, e.tier);
-        } else if (e.type === 'pinwheel') {
-          // Square + inner pinwheel blades; veterans grow a pentagon, then a hexagon of blades.
-          const n = 3 + (e.tier || 1);
-          for (let s = 0; s < n; s++) {
-            const a = Math.PI / 4 + (s * Math.PI * 2) / n;
-            const vx = Math.cos(a) * r * 1.13;
-            const vy = Math.sin(a) * r * 1.13;
-            if (s === 0) ctx.moveTo(vx, vy);
-            else ctx.lineTo(vx, vy);
-          }
-          ctx.closePath();
-          for (let s = 0; s < n; s++) {
-            const a = Math.PI / 4 + (s * Math.PI * 2) / n;
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(a) * r * 1.13, Math.sin(a) * r * 1.13);
-          }
-        } else if (e.type === 'weaver') {
-          traceWeaver(ctx, r, e.tier);
-        } else if (isHostileKind(e.type)) {
-          traceHostileKind(ctx, e, r);
-        } else if (isBossKind(e.type)) {
-          bossDef(e.type).trace(ctx, e, r);
-        } else if (isBossPart(e.type)) {
-          tracePart(ctx, e, r);
-        } else if (e.type === 'blackhole') {
-          // Pulsing event horizon circle + inner accretion ring
-          ctx.arc(0, 0, r, 0, Math.PI * 2);
-          ctx.moveTo(r * 0.55, 0);
-          ctx.arc(0, 0, r * 0.55, 0, Math.PI * 1.5);
-        } else if (isArchetype(e.type)) {
-          traceArchetype(ctx, e, r);
-        } else {
-          // Regular Polygon (Splitter Hexagon, Mini Triangle, Boss Octagon)
-          for (let s = 0; s < e.sides; s++) {
-            const a = (s * Math.PI * 2) / e.sides;
-            const vx = Math.cos(a) * r;
-            const vy = Math.sin(a) * r;
-            if (s === 0) ctx.moveTo(vx, vy);
-            else ctx.lineTo(vx, vy);
-          }
-          ctx.closePath();
+        // Outer soft glow pass + inner crisp vector pass
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.strokeStyle = pass === 0 ? glowColor : color;
+          ctx.lineWidth = pass === 0 ? 5.5 : 2.2;
 
-          // Inner sacred geometry detail for Splitters and Bosses
-          if (e.type === 'splitter' || e.isBoss) {
-            const innerR = r * 0.55;
-            for (let s = 0; s < e.sides; s++) {
-              const a = -e.rotation * 2 + (s * Math.PI * 2) / e.sides;
-              const vx = Math.cos(a) * innerR;
-              const vy = Math.sin(a) * innerR;
+          ctx.beginPath();
+          if (e.type === 'serpent') {
+            if (e.leader) traceSegment(ctx, e, r);
+            else traceSerpentHead(ctx, r);
+          } else if (e.type === 'swarmer') {
+            traceSwarmer(ctx, r, e.tier);
+          } else if (e.type === 'pinwheel') {
+            // Square + inner pinwheel blades; veterans grow a pentagon, then a hexagon of blades.
+            const n = 3 + (e.tier || 1);
+            for (let s = 0; s < n; s++) {
+              const a = Math.PI / 4 + (s * Math.PI * 2) / n;
+              const vx = Math.cos(a) * r * 1.13;
+              const vy = Math.sin(a) * r * 1.13;
               if (s === 0) ctx.moveTo(vx, vy);
               else ctx.lineTo(vx, vy);
             }
             ctx.closePath();
+            for (let s = 0; s < n; s++) {
+              const a = Math.PI / 4 + (s * Math.PI * 2) / n;
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(a) * r * 1.13, Math.sin(a) * r * 1.13);
+            }
+          } else if (e.type === 'weaver') {
+            traceWeaver(ctx, r, e.tier);
+          } else if (isHostileKind(e.type)) {
+            traceHostileKind(ctx, e, r);
+          } else if (isBossKind(e.type)) {
+            bossDef(e.type).trace(ctx, e, r);
+          } else if (isBossPart(e.type)) {
+            tracePart(ctx, e, r);
+          } else if (e.type === 'blackhole') {
+            // Pulsing event horizon circle + inner accretion ring
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.moveTo(r * 0.55, 0);
+            ctx.arc(0, 0, r * 0.55, 0, Math.PI * 1.5);
+          } else if (isArchetype(e.type)) {
+            traceArchetype(ctx, e, r);
+          } else {
+            // Regular Polygon (Splitter Hexagon, Mini Triangle, Boss Octagon)
+            for (let s = 0; s < e.sides; s++) {
+              const a = (s * Math.PI * 2) / e.sides;
+              const vx = Math.cos(a) * r;
+              const vy = Math.sin(a) * r;
+              if (s === 0) ctx.moveTo(vx, vy);
+              else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+
+            // Inner sacred geometry detail for Splitters and Bosses
+            if (e.type === 'splitter' || e.isBoss) {
+              const innerR = r * 0.55;
+              for (let s = 0; s < e.sides; s++) {
+                const a = -e.rotation * 2 + (s * Math.PI * 2) / e.sides;
+                const vx = Math.cos(a) * innerR;
+                const vy = Math.sin(a) * innerR;
+                if (s === 0) ctx.moveTo(vx, vy);
+                else ctx.lineTo(vx, vy);
+              }
+              ctx.closePath();
+            }
           }
+          ctx.stroke();
         }
-        ctx.stroke();
-      }
 
-      ctx.restore();
+        ctx.restore();
 
-      drawArchetypeOverlay(ctx, e, r);
-      drawHostileOverlay(ctx, e, r);
-      if (e.mount) drawPartOverlay(ctx, e, r);
-      if (e.isBoss) {
-        bossDef(e.type)?.overlay?.(ctx, e, r);
-        drawBossRam(ctx, e, bossDef(e.type)?.ram);
-      }
-      if (e.isLieutenant) {
-        drawLieutenantAura(ctx, e, r);
-        drawLieutenantBar(ctx, e, r);
-      }
-      if (e.isBoss) this.drawBossAura(ctx, e, r);
-      if (e.emergeT > 0) {
-        // Still emerging from its rift: a white-hot halo that cools and widens as it gains speed.
-        const k = e.emergeT / (e.emergeMax || 1);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`;
-        ctx.lineWidth = 2 + 4 * k;
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, r * (1.25 + (1 - k) * 0.9), 0, Math.PI * 2);
-        ctx.stroke();
-      }
+        drawArchetypeOverlay(ctx, e, r);
+        drawHostileOverlay(ctx, e, r);
+        if (e.mount) drawPartOverlay(ctx, e, r);
+        if (e.isBoss) {
+          bossDef(e.type)?.overlay?.(ctx, e, r);
+          drawBossRam(ctx, e, bossDef(e.type)?.ram);
+        }
+        if (e.isLieutenant) {
+          drawLieutenantAura(ctx, e, r);
+          drawLieutenantBar(ctx, e, r);
+        }
+        if (e.isBoss) this.drawBossAura(ctx, e, r);
+        if (e.emergeT > 0) {
+          // Still emerging from its rift: a white-hot halo that cools and widens as it gains speed.
+          const k = e.emergeT / (e.emergeMax || 1);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * k})`;
+          ctx.lineWidth = 2 + 4 * k;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, r * (1.25 + (1 - k) * 0.9), 0, Math.PI * 2);
+          ctx.stroke();
+        }
 
-      // Boss HP bar floating above polyhedron
-      if (e.isBoss) {
-        const bw = 56;
-        const bh = 5;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(e.x - bw * 0.5, e.y - e.radius - 14, bw, bh);
-        ctx.fillStyle = '#00f3ff';
-        ctx.fillRect(e.x - bw * 0.5, e.y - e.radius - 14, bw * Math.max(0, e.hp / e.maxHp), bh);
+        // Boss HP bar floating above polyhedron
+        if (e.isBoss) {
+          const bw = 56;
+          const bh = 5;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(e.x - bw * 0.5, e.y - e.radius - 14, bw, bh);
+          ctx.fillStyle = '#00f3ff';
+          ctx.fillRect(e.x - bw * 0.5, e.y - e.radius - 14, bw * Math.max(0, e.hp / e.maxHp), bh);
+        }
       }
     }
 
-    // Hostile plasma orbs ride above the hulls so they are never hidden by a crowd.
+    drawBossHazards(ctx, this, camX, camY, viewW, viewH);
+    // Boss attack telegraphs, then hostile plasma orbs, ride above the hulls so a crowd never hides them.
+    this.bossTelegraphs.draw(ctx, camX, camY, viewW, viewH);
     this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);
 
     ctx.restore();
+  }
+
+  // Telegraphs that must read over everything, drawn after the particles (Game.draw): Blinker landing marks.
+  drawTopTelegraphs(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
+    let any = false;
+    for (let i = 0; i < this.enemies.length; i++) {
+      const e = this.enemies[i];
+      if (e.type !== 'blinker' || e.state !== 'telegraph') continue;
+      const pad = e.radius * 6 + 20;
+      const minX = Math.min(e.x, e.blinkX) - pad;
+      const maxX = Math.max(e.x, e.blinkX) + pad;
+      const minY = Math.min(e.y, e.blinkY) - pad;
+      const maxY = Math.max(e.y, e.blinkY) + pad;
+      if (maxX < camX || maxY < camY || minX > camX + viewW || minY > camY + viewH) continue;
+      if (!any) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.lineCap = 'round';
+        any = true;
+      }
+      drawBlinkTelegraph(ctx, e);
+    }
+    if (any) ctx.restore();
   }
 
   // Accretion disc, photon ring and a faint dashed rim marking where the pull starts (no gradients).

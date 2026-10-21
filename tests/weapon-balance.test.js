@@ -30,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x4.2', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 4.2 });
+test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -50,7 +50,7 @@ test('weapons built for damage stay equal: every Damage rank is the same x DAMAG
 });
 
 test('fire rate / reload / recharge / cooldown ranks add the same +RATE_STEP attack rate on every weapon (times its CARD_STEP_TRIM)', () => {
-  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge' };
+  const RATE = { blaster: 'rate', rockets: 'reload', missiles: 'reload', lightning: 'recharge', singularity: 'cooldown', mines: 'rate', turret: 'rate', drones: 'rate', grenades: 'rate', gas: 'rate', flamethrower: 'rate', shockfield: 'recharge', raillance: 'rate', glaive: 'rate', nanites: 'rate', harpoon: 'rate', quake: 'rate' };
   for (const [id, stat] of Object.entries(RATE)) {
     for (let r = 1; r <= 6; r++) {
       const dps = POTENTIAL_DPS[id](makeBuild(id, 1 + r, { [stat]: r }));
@@ -78,12 +78,17 @@ test('every stat formula reads only its own rank', () => {
     singularity: { pull: W.singularityPullRadius, duration: W.singularityLife, cooldown: W.singularityCooldown, core: W.singularityCoreRadius, damage: W.singularityCollapseDamageMult },
     orbitals: { count: W.orbitalBlades, radius: W.orbitalRadius, spin: W.orbitalSpin, size: W.orbitalBladeRadius },
     mines: { capacity: W.mineMaxActive, rate: W.mineCooldown, radius: W.mineBlastRadius, fuse: W.mineLifetime, damage: W.mineDamageMult },
-    turret: { rate: W.turretFireRate, lifetime: W.turretDuration, redeploy: W.turretCooldown, damage: W.turretDamageMult },
+    turret: { rate: W.turretFireRate, reload: W.turretReload, pierce: W.turretPierce, damage: W.turretDamageMult },
     drones: { rate: W.droneFireRate, wingmen: W.droneCount, range: W.droneRange, damage: W.droneDamageMult },
     grenades: { count: W.grenadeCount, rate: W.grenadeCooldown, radius: W.grenadeBlastRadius, range: W.grenadeRange, damage: W.grenadeDamageMult },
     gas: { rate: W.gasTick, radius: W.gasRadius, linger: W.gasLife, damage: W.gasDamageMult },
     flamethrower: { rate: W.flameTickRate, range: W.flameRange, cone: W.flameConeHalf, burn: W.flameBurnRank, damage: W.flameDamageMult },
-    shockfield: { recharge: W.fieldCooldown, radius: W.fieldRadius, stun: W.fieldStunRank, damage: W.fieldDamageMult }
+    shockfield: { recharge: W.fieldCooldown, radius: W.fieldRadius, stun: W.fieldStunRank, damage: W.fieldDamageMult },
+    raillance: { rate: W.railCycle, count: W.railLances, width: W.railWidth, pierce: W.railKeep, damage: W.railDamageMult },
+    glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult },
+    nanites: { rate: W.naniteTick, radius: W.naniteRadius, duration: W.naniteLife, cooldown: W.naniteCooldown, damage: W.naniteDamageMult },
+    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, grapple: W.harpoonHookSize, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
+    quake: { count: W.quakeShells, rate: W.quakeCooldown, radius: W.quakeRadius, bore: W.quakeRockDamage, damage: W.quakeDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
     const base = levelBuild(id, 1);
@@ -118,7 +123,9 @@ test('damage per hit never drops as Damage ranks go up', () => {
   const perHit = {
     rockets: W.wingRocketDamageMult, missiles: W.missileDamageMult, lightning: W.lightningDamageMult, singularity: W.singularityDamageMult,
     orbitals: W.orbitalDamageMult, mines: W.mineDamageMult, turret: W.turretDamageMult, drones: W.droneDamageMult,
-    grenades: W.grenadeDamageMult, gas: W.gasDamageMult, flamethrower: W.flameDamageMult, shockfield: W.fieldDamageMult
+    grenades: W.grenadeDamageMult, gas: W.gasDamageMult, flamethrower: W.flameDamageMult, shockfield: W.fieldDamageMult,
+    raillance: W.railDamageMult, glaive: W.glaiveDamageMult,
+    nanites: W.naniteDamageMult, harpoon: W.harpoonDamageMult, quake: W.quakeDamageMult
   };
   for (const [id, f] of Object.entries(perHit)) {
     for (let r = 1; r < WEAPON_MAX_LEVEL; r++) assert.ok(f(makeBuild(id, 1 + r, { damage: r })) > f(makeBuild(id, r, { damage: r - 1 })), `${id} rank ${r}`);
@@ -181,14 +188,22 @@ test('weapons pass: Swarm Missiles +30% fire rate, Rocket Pods faster and harder
 // Realized own DPS of a weapon alone (no Autocannon unless it is the one benched) with a damage-focused
 // build at weapon level `lv` (Damage ranks, then fire-rate ranks past 11), in the card bench: the mean of
 // the still-pack and chasing-crowd scenarios over 2 seeds.
-const DAMAGE_BUILD = { blaster: ['blaster_damage', 'firerate'], drones: ['drones_damage', 'drones_rate'], turret: ['turret_damage', 'turret_rate'] };
-const SOURCES = { blaster: ['blaster', 'helix'], drones: ['drone'], turret: ['turret', 'siege'] };
-function benchDps(id, lv) {
+const DAMAGE_BUILD = { blaster: ['blaster_damage', 'firerate'], drones: ['drones_damage', 'drones_rate'], turret: ['turret_damage', 'turret_rate'], raillance: ['raillance_damage', 'raillance_rate'], glaive: ['glaive_damage', 'glaive_rate'], harpoon: ['harpoon_damage', 'harpoon_rate'] };
+const SOURCES = { blaster: ['blaster', 'helix'], drones: ['drone'], turret: ['turret', 'siege'], raillance: ['rail', 'ionwake', 'overload'], glaive: ['glaive', 'glaive_recall'], harpoon: ['harpoon'] };
+// Weapons benched with alternating fire-rate / Damage cards (both POWER) instead of Damage first: the Rail
+// Lance's single slow hits already one-shot the wave-6 bench targets, so stacking only Damage would be
+// pure overkill, and a pilot builds it this way.
+const ALTERNATE_BUILD = new Set(['raillance']);
+function benchDps(id, lv, tuning = {}) {
   const [dmg, rate] = DAMAGE_BUILD[id];
   const setup = (p) => {
     if (id !== 'blaster') {
       applyUpgradeLevels(p, UPGRADE_BY_ID[id]);
       discardWeapon(p, 'blaster');
+    }
+    if (ALTERNATE_BUILD.has(id)) {
+      for (let k = 1; k < lv; k++) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[k % 2 ? rate : dmg], levelJump: 1 });
+      return;
     }
     if (lv > 1) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[dmg], levelJump: Math.min(lv - 1, 10) });
     if (lv > 11) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[rate], levelJump: lv - 11 });
@@ -196,7 +211,7 @@ function benchDps(id, lv) {
   let sum = 0;
   for (const scenario of ['pack', 'chase']) {
     for (let seedIndex = 0; seedIndex < 2; seedIndex++) {
-      const r = h.benchUpgrade({ scenario, seedIndex, setup });
+      const r = h.benchUpgrade({ scenario, seedIndex, setup, tuning });
       sum += SOURCES[id].reduce((a, s) => a + (r.dps[s] || 0), 0);
     }
   }
@@ -206,20 +221,48 @@ function benchDps(id, lv) {
 test('class-based balance: every weapon has a class and every class a target', () => {
   for (const id of IDS) assert.ok(CLASS_TARGET[WEAPON_CLASS[id]], `${id} needs a WEAPON_CLASS with a CLASS_TARGET`);
   assert.equal(WEAPON_CLASS.blaster, 'aimed');
+  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'aimed'), ['blaster', 'raillance', 'harpoon']);
   assert.equal(CLASS_TARGET.aimed.perTarget, 1, 'the Autocannon is the reference');
   assert.equal(CLASS_TARGET.auto.perTarget, 0.85);
   assert.deepEqual(CLASS_TARGET.area.perTarget, [0.6, 0.7]);
-  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'auto'), ['drones', 'turret']);
+  assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'auto'), ['drones', 'turret', 'glaive']);
   assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'defensive'), ['shockfield', 'orbitals']);
+});
+
+test('class-based balance: the Rail Lance (aimed) realizes ~100% of the Autocannon at LV 3 and LV 6', () => {
+  for (const lv of [3, 6]) {
+    const share = benchDps('raillance', lv) / benchDps('blaster', lv);
+    assert.ok(Math.abs(share - CLASS_TARGET.aimed.perTarget) <= 0.15, `raillance LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+  }
 });
 
 test('class-based balance: automatic single-target weapons realize ~85% of the Autocannon at LV 3 and LV 6', () => {
   for (const lv of [3, 6]) {
     const ref = benchDps('blaster', lv);
-    for (const id of ['drones', 'turret']) {
+    for (const id of ['drones', 'turret', 'glaive']) {
       const share = benchDps(id, lv) / ref;
       assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `${id} LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
     }
+  }
+});
+
+// Past ~LV 9 the bench's wave-6 targets die to single hits, so late levels are measured against targets
+// that never die (pure per-target DPS). Glaive Discs grow on the Autocannon's own trimmed card steps
+// (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
+test('class-based balance: Glaive Discs stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
+  const tank = { enemyHpMult: 1e6 };
+  for (const lv of [12, 18]) {
+    const share = benchDps('glaive', lv, tank) / benchDps('blaster', lv, tank);
+    assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `glaive LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+  }
+});
+
+// The Claw Harpoon is aimed single-target like the Autocannon: 100% per level (its mining and yank are
+// utility). Past ~LV 9 one throw overkills the bench's wave-6 targets, so the level-matched check stops at 9.
+test('class-based balance: aimed single-target weapons (Claw Harpoon) realize ~100% of the Autocannon at LV 1, 3, 6 and 9', () => {
+  for (const lv of [1, 3, 6, 9]) {
+    const share = benchDps('harpoon', lv) / benchDps('blaster', lv);
+    assert.ok(Math.abs(share - CLASS_TARGET.aimed.perTarget) <= 0.15, `harpoon LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
   }
 });
 
@@ -236,5 +279,9 @@ test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and dr
 
 test('Volatile Shatter stays off the DPS curve: flat shard damage, gated by kills', () => {
   assert.ok(!('shrapnel' in POTENTIAL_DPS), 'passive, conditional on kills');
-  assert.equal(W.shrapnelDamageMult, 0.75);
+  assert.equal(W.shrapnelDamageMult, 0.3, 'a supporting passive: 0.75 before v0.43.4');
+  // The burst chance climbs evenly to 100% at the max level (LV 8): no early cliff where every kill bursts.
+  const chances = [1, 2, 3, 4, 5, 6, 7, 8].map(W.shrapnelChance);
+  assert.ok(chances.every((c, i) => i === 0 || Math.abs(c - chances[i - 1] - 0.075) < 1e-9), 'even steps');
+  assert.ok(chances[6] < 1 && chances[7] === 1, '100% only at LV 8');
 });

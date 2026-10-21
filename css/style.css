@@ -1512,6 +1512,15 @@ html, body {
   color: #fff;
 }
 
+/* Where the score came from: combat + wave bonus (+ victory bonus), js/score-bonus.js. */
+.go-stat-sub {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #7dffb0;
+  margin-top: 3px;
+}
+
 
 /* Pilot Name Input Bar */
 .name-entry-bar {
@@ -4667,6 +4676,7 @@ body.touch-mode .gameover-stats { gap: 6px; margin-bottom: 4px; }
 body.touch-mode .go-stat-box { padding: 5px 8px; }
 body.touch-mode .go-stat-label { font-size: 8px; letter-spacing: 1px; }
 body.touch-mode .go-stat-val { font-size: 15px; }
+body.touch-mode .go-stat-sub { font-size: 8px; }
 body.touch-mode .go-global-rank { min-height: 0; margin: 0 0 2px; font-size: 11px; letter-spacing: 1.5px; }
 body.touch-mode #gameover-modal .title-actions { display: flex; flex-direction: row; flex-wrap: nowrap; }
 body.touch-mode #gameover-modal .title-actions .neon-btn { flex: 1; margin: 0; padding: 12px 8px; font-size: 14px; }
@@ -4896,3 +4906,172 @@ body.touch-mode .start-pick-title { font-size: 18px; }
 }
 .scope-global .upg-scope { background: #dfe8f5; color: #0b1020; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-scope { font-size: 8px; padding: 0 6px; letter-spacing: 1px; bottom: -8px; left: 8px; }
+
+/* REDUCE EFFECTS (pause → settings, js/juice.js): settle every decorative CSS animation and transition
+   at its end state. Defaults on when the OS asks for reduced motion. */
+body.reduce-effects *,
+body.reduce-effects *::before,
+body.reduce-effects *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+}
+
+/* --- Juice: choice cards and modals (js/juice.js) ----------------------------------------------
+   Uses the standalone translate/rotate/scale properties so hover and layout transforms still work. */
+.upgrade-option {
+  animation: card-deal 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.07s) backwards;
+}
+.upgrade-option.breakthrough-card {
+  animation: card-deal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.12s) backwards,
+    breakthrough-pulse 1.8s ease-in-out 0.7s infinite;
+}
+@keyframes card-deal {
+  from { opacity: 0; translate: 0 70px; rotate: -7deg; scale: 0.82; }
+  60% { opacity: 1; }
+  to { opacity: 1; translate: 0 0; rotate: 0deg; scale: 1; }
+}
+/* Rare and better: a light sweep across the face every few seconds, in the rarity colour. */
+.card-shimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--rarity) 30%, transparent) 50%, transparent 62%) no-repeat;
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  mix-blend-mode: screen;
+  animation: card-shimmer 3.2s ease-in-out calc(0.45s + var(--deal-i, 0) * 0.07s) infinite;
+}
+.rarity-epic .card-shimmer, .rarity-evolution .card-shimmer, .rarity-transform .card-shimmer, .rarity-boost .card-shimmer { animation-duration: 2.6s; }
+.rarity-legendary .card-shimmer {
+  background-image: linear-gradient(115deg, transparent 34%, rgba(255, 236, 150, 0.4) 48%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 236, 150, 0.4) 52%, transparent 66%);
+  animation-duration: 2.1s;
+}
+@keyframes card-shimmer {
+  0% { background-position: 130% 0; }
+  45%, 100% { background-position: -30% 0; }
+}
+/* Modals ease in instead of popping. */
+.modal-overlay:not(.hidden) { animation: modal-fade 0.18s ease-out; }
+.modal-overlay:not(.hidden) > .modal-card { animation: modal-pop 0.28s cubic-bezier(0.34, 1.4, 0.64, 1); }
+@keyframes modal-fade { from { opacity: 0; } }
+@keyframes modal-pop { from { opacity: 0; scale: 0.94; translate: 0 10px; } }
+@media (prefers-reduced-motion: reduce) {
+  .upgrade-option, .upgrade-option.breakthrough-card, .card-shimmer,
+  .modal-overlay:not(.hidden), .modal-overlay:not(.hidden) > .modal-card { animation: none; }
+}
+
+/* Cutscenes (js/cutscene-stage.js) and the talking-head dialogue box (js/dialogue.js). The game world
+   plays behind; the HUD and touch controls step aside while it runs. */
+body.cutscene-on #hud,
+body.cutscene-on #touch-controls,
+body.cutscene-on #center-banner,
+body.cutscene-on #low-shield-vignette { display: none !important; }
+.cutscene-layer { position: absolute; inset: 0; z-index: 40; overflow: hidden; cursor: pointer; font-family: Consolas, 'Courier New', monospace; }
+.cs-bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.7s ease; pointer-events: none; }
+.cs-bar-top { top: 0; }
+.cs-bar-bottom { bottom: 0; }
+.cutscene-layer.letterboxed .cs-bar { height: 8vh; }
+.cs-fade { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; }
+.cs-skip {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
+  z-index: 3; padding: 6px 14px; font-size: 13px; opacity: 0.75;
+}
+.cs-skip:hover, .cs-skip:focus-visible { opacity: 1; }
+body.touch-mode .cs-skip-key { display: none; }
+.cs-card {
+  position: absolute; top: calc(8vh + 18px); left: max(24px, env(safe-area-inset-left)); pointer-events: none;
+  border-left: 3px solid var(--cyan); padding: 4px 0 4px 12px; animation: cs-card-in 0.5s ease-out;
+}
+.cs-card.cs-card-out { animation: cs-card-out 0.4s ease-in forwards; }
+.cs-card-title { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.7); }
+.cs-card-sub { font-size: 13px; letter-spacing: 2px; color: var(--text-dim); margin-top: 4px; }
+@keyframes cs-card-in { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes cs-card-out { to { opacity: 0; transform: translateX(-16px); } }
+
+.dialogue-box {
+  --speaker: var(--cyan);
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(920px, calc(100% - 32px)); z-index: 2;
+  display: flex; gap: 14px; align-items: stretch;
+  padding: 10px; background: rgba(4, 6, 16, 0.94); font-family: Consolas, 'Courier New', monospace;
+  border: 3px solid #eef6ff; outline: 3px solid #000; box-shadow: 0 0 0 6px var(--speaker), 0 0 28px color-mix(in srgb, var(--speaker) 45%, transparent);
+  image-rendering: pixelated;
+}
+.dialogue-box.dialogue-pop { animation: dialogue-in 0.18s steps(3); }
+.dialogue-box.dialogue-pop .dialogue-frame { animation: portrait-pop 0.28s cubic-bezier(0.3, 1.8, 0.5, 1); }
+@keyframes dialogue-in { from { transform: translateX(-50%) scaleY(0.2); } to { transform: translateX(-50%); } }
+@keyframes portrait-pop { from { transform: scale(0.6) rotate(-6deg); } to { transform: none; } }
+.dialogue-frame { flex: none; padding: 3px; background: #000; border: 3px solid var(--speaker); line-height: 0; }
+.dialogue-portrait { width: 144px; height: 144px; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.dialogue-body { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 6px 18px 2px; }
+.dialogue-name {
+  align-self: flex-start; padding: 2px 10px; background: var(--speaker); color: #05060f;
+  font-weight: 800; font-size: 15px; letter-spacing: 2px;
+}
+.dialogue-text { font-size: 21px; line-height: 1.4; font-weight: 700; color: #f4f7ff; text-shadow: 2px 2px 0 #000; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialogue-next { position: absolute; right: 6px; bottom: 0; color: var(--speaker); font-size: 16px; opacity: 0; }
+.dialogue-box.dialogue-ready .dialogue-next { opacity: 1; animation: dialogue-next 0.6s steps(2) infinite; }
+@keyframes dialogue-next { 50% { transform: translateY(4px); } }
+
+/* Radio: the same box, small, bottom-left, click-through, above menus (the Breakthrough pick). */
+.radio-box {
+  left: max(14px, env(safe-area-inset-left)); transform: none; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px); /* above the shield bar */
+  width: min(600px, calc(100% - 28px)); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
+  box-shadow: 0 0 0 4px var(--speaker), 0 0 22px color-mix(in srgb, var(--speaker) 45%, transparent);
+}
+.radio-box.dialogue-pop { animation: radio-in 0.3s cubic-bezier(0.25, 1.6, 0.5, 1); }
+.radio-box.radio-out { animation: radio-out 0.25s ease-in forwards; }
+@keyframes radio-in { from { transform: translateX(-115%); } to { transform: none; } }
+@keyframes radio-out { to { transform: translateX(-115%); opacity: 0; } }
+.radio-box .dialogue-portrait { width: 144px; height: 144px; } /* 2x the 72 px art: pixel-crisp */
+.radio-box .dialogue-name { font-size: 13px; }
+.radio-box .dialogue-text { font-size: 20px; }
+.radio-box .dialogue-body { padding-bottom: 4px; gap: 5px; }
+body.cutscene-on .radio-box { display: none; }
+/* Over the level-up / Breakthrough cards: the free bottom-right corner, sliding in from the right. */
+body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+body:has(#upgrade-modal:not(.hidden)) .radio-box.dialogue-pop { animation-name: radio-in-right; }
+body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: radio-out-right; }
+@keyframes radio-in-right { from { transform: translateX(115%); } to { transform: none; } }
+@keyframes radio-out-right { to { transform: translateX(115%); opacity: 0; } }
+/* On the Breakthrough pick Dr. Pixie docks into the card grid's free third column (RadioBox.dock): big,
+   beside the cards, never over them. Portraits stay at whole multiples of the 72 px art. */
+#upgrade-choices .radio-dock { display: flex; align-items: center; justify-content: center; min-width: 0; pointer-events: none; }
+#upgrade-choices #radio-box.radio-docked {
+  position: relative; left: auto; right: auto; bottom: auto; transform: none; z-index: auto;
+  width: 100%; flex-direction: column; align-items: center; text-align: center; padding: 14px 12px; gap: 12px;
+}
+#upgrade-choices #radio-box.radio-docked .dialogue-portrait { width: 216px; height: 216px; }
+#upgrade-choices #radio-box.radio-docked .dialogue-body { align-items: center; padding: 0 4px 4px; gap: 10px; }
+#upgrade-choices #radio-box.radio-docked .dialogue-name { align-self: center; font-size: 15px; }
+#upgrade-choices #radio-box.radio-docked .dialogue-text { font-size: 23px; }
+#upgrade-choices #radio-box.radio-docked.dialogue-pop { animation: radio-dock-in 0.4s cubic-bezier(0.25, 1.7, 0.5, 1); }
+#upgrade-choices #radio-box.radio-docked.radio-out { animation: radio-dock-out 0.25s ease-in forwards; }
+@keyframes radio-dock-in { from { transform: scale(0.55) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes radio-dock-out { to { transform: scale(0.85); opacity: 0; } }
+@media (max-height: 700px) {
+  #upgrade-choices #radio-box.radio-docked .dialogue-portrait { width: 144px; height: 144px; }
+  #upgrade-choices #radio-box.radio-docked .dialogue-text { font-size: 20px; }
+}
+
+@media (max-width: 700px), (max-height: 520px) {
+  .radio-box { width: min(400px, calc(100% - 28px)); padding: 5px; gap: 9px; box-shadow: 0 0 0 3px var(--speaker); }
+  .radio-box .dialogue-frame { padding: 1px; border-width: 2px; }
+  .radio-box .dialogue-portrait { width: 72px; height: 72px; }
+  .radio-box .dialogue-name { font-size: 10px; padding: 1px 6px; }
+  .radio-box .dialogue-text { font-size: 14px; line-height: 1.3; }
+  #upgrade-choices #radio-box.radio-docked { padding: 8px; gap: 6px; }
+  #upgrade-choices #radio-box.radio-docked .dialogue-portrait { width: 144px; height: 144px; }
+  #upgrade-choices #radio-box.radio-docked .dialogue-name { font-size: 11px; }
+  #upgrade-choices #radio-box.radio-docked .dialogue-text { font-size: 15px; }
+  .dialogue-portrait { width: 88px; height: 88px; }
+  .dialogue-text { font-size: 16px; }
+  .dialogue-name { font-size: 12px; }
+  .dialogue-box { gap: 10px; padding: 8px; }
+  .cs-card-title { font-size: 15px; }
+}
