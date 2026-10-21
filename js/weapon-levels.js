@@ -428,6 +428,48 @@ export const TRANSFORMS = {
 // charges back means more turrets out.
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
+// REPLICATOR ARRAY (global card, v0.45): each rank adds +1 rank to the "how many" stat of every equipped
+// weapon that has one (COUNT_STATS), as a bonus outside the weapon level like ACROSS THE BOARD's ranks, so
+// Breakthrough timing never moves. The card ranks + Replicator ranks of a count stat never pass that stat
+// card's own cap (a weapon already at its cap gets nothing), and the count card's own room shrinks to match.
+// `stat` is the build rank key; `card` the weapon's count card (null: the Sentry Turret has no count card,
+// so its bonus is a turret charge, kept in r.charges); `cap` its rank cap; `per` the amount one rank adds
+// and `unit` the word on the card headline. Weapons missing here (Vortex Singularity, Gas Trail, Shock
+// Field, Nanite Swarm, Claw Harpoon) have no count stat and get nothing.
+export const REPLICATOR_ID = 'replicator_array';
+export const REPLICATOR_MAX_RANKS = 2;
+const countStat = (stat, card, cap, per, unit) => ({ stat, card, cap, per, unit });
+export const COUNT_STATS = Object.freeze({
+  blaster: countStat('prism', 'multishot', 5, 2, 'STREAMS'),
+  rockets: countStat('count', 'rockets_count', 6, 1, 'ROCKET'),
+  missiles: countStat('salvo', 'missiles_salvo', 8, 1, 'MISSILE'),
+  lightning: countStat('chain', 'lightning_chain', 6, 2, 'ARC JUMPS'),
+  orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
+  mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
+  turret: countStat('charges', null, 2, 1, 'TURRET'),
+  drones: countStat('wingmen', 'drones_wingmen', 2, 1, 'DRONE'),
+  grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
+  flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
+  cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
+  acidspray: countStat('nozzles', 'acidspray_nozzles', 3, 1, 'NOZZLE'),
+  raillance: countStat('count', 'raillance_count', 3, 1, 'LANCE'),
+  glaive: countStat('count', 'glaive_count', 4, 1, 'DISC'),
+  quake: countStat('count', 'quake_count', 4, 1, 'CHARGE')
+});
+export const replicatorRanks = (p) => p?.upgradeLevels?.[REPLICATOR_ID] || 0;
+// Replicator ranks a weapon actually gets (0..ranks): what fits under its count cap after its own card ranks.
+export function replicatorBonus(id, cardRanks, ranks) {
+  const cs = COUNT_STATS[id];
+  return cs && ranks > 0 ? Math.max(0, Math.min(ranks, cs.cap - (cardRanks || 0))) : 0;
+}
+// Count ranks a weapon can still take from one more Replicator rank (its card ranks + bonus under the cap).
+export function countRoom(p, id) {
+  const cs = COUNT_STATS[id];
+  if (!cs) return 0;
+  const own = cs.card ? p?.upgradeLevels?.[cs.card] || 0 : 0;
+  return Math.max(0, cs.cap - own - replicatorBonus(id, own, replicatorRanks(p)));
+}
+
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
 
@@ -463,7 +505,8 @@ export function statRanks(p, id) {
 
 // Everything the weapon formulas need: level (with any evolution bonus level), effective ranks
 // (card ranks + ACROSS THE BOARD ranks), which transforms are installed and how many boosts.
-export function makeBuild(id, lv, ranks = {}, bt = {}) {
+// `replicator`: REPLICATOR ARRAY ranks, added to the weapon's COUNT_STATS stat up to its cap.
+export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0) {
   let atb = 0;
   const t = {};
   for (const m of BREAKTHROUGH_LEVELS) {
@@ -472,6 +515,8 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
   }
   const r = {};
   for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
+  const cs = COUNT_STATS[id];
+  if (cs && replicator > 0) r[cs.stat] = (r[cs.stat] || 0) + replicatorBonus(id, ranks[cs.stat], replicator);
   // t4 / t8 / t12 name the first, second and third Breakthrough (now at LV 6 / 12 / 18).
   const [m1, m2, m3] = BREAKTHROUGH_LEVELS;
   return { id, lv, r, atb, t4: !!t[m1], t8: !!t[m2], t12: !!t[m3], transforms: (t[m1] ? 1 : 0) + (t[m2] ? 1 : 0) + (t[m3] ? 1 : 0) };
@@ -480,7 +525,7 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
 // Build of an owned weapon. `levelKey` is the player.weapons key holding its level (loadout.js).
 export function weaponBuild(p, id, lv = null) {
   const level = lv ?? (id === 'blaster' ? Math.max(1, p.weapons?.blaster || 0) : (p.weapons?.[id] || 0));
-  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id));
+  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id), replicatorRanks(p));
 }
 
 // A weapon at a level with no stat ranks and no Breakthroughs (Storm Protocol's fixed chain level).

@@ -17,7 +17,8 @@ import { slotReward } from './slot-rewards.js';
 import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
-  weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
+  weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL,
+  REPLICATOR_ID, COUNT_STATS
 } from './weapon-levels.js';
 
 // What a card affects, shown as a subtle outline + label (css .scope-utility / .scope-global):
@@ -28,7 +29,7 @@ import {
 //   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives.
 export const CARD_SCOPES = ['weapon', 'utility', 'global'];
 const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'move_speed', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
-const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage']);
+const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage', REPLICATOR_ID]);
 export function cardScope(upg) {
   const stat = STAT_CARD_BY_ID[upg.id];
   if (stat) return POWER_STATS.has(stat.stat) ? 'weapon' : 'utility';
@@ -392,6 +393,19 @@ const BUNDLE_HEADLINES = {
   thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
 };
 
+// REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
+// +1 TURRET"). Weapons at their count cap (or with no count stat) are left out.
+export function replicatorHeadline(before, after) {
+  const parts = [];
+  for (const id of ownedWeapons(after)) {
+    const cs = COUNT_STATS[id];
+    if (!cs) continue;
+    const n = ((weaponBuild(after, id).r[cs.stat] || 0) - (weaponBuild(before, id).r[cs.stat] || 0)) * cs.per;
+    if (n > 0) parts.push(`+${n} ${cs.unit}${n > 1 && !cs.unit.endsWith('S') ? 'S' : ''}`);
+  }
+  return parts.join(' · ');
+}
+
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
 // Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond maxRows.
 // Rows whose displayed value differs between two readRows() snapshots.
@@ -421,7 +435,8 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const changed = diffRows(before, after);
 
   const lead = changed.find((r) => r.id === upg.headline) || changed[0];
-  const bundle = changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
+  const bundle = upg.id === REPLICATOR_ID ? replicatorHeadline(player, copy)
+    : changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
 
