@@ -15,7 +15,7 @@ const key = (code) => ({ code, repeat: false, preventDefault() {} });
 const launchable = (g) => Object.assign(g, { ctx: new Proxy({}, { get: () => () => {} }) });
 
 test('the pick offers the direct damage dealers; the last pick is stored and read back safely', () => {
-  assert.deepEqual(START_WEAPON_CHOICES, ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive']);
+  assert.deepEqual(START_WEAPON_CHOICES, ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive', 'drones', 'turret']);
   assert.deepEqual(STARTING_WEAPONS, ['blaster'], 'headless runs and tools keep the Autocannon');
   const s = memoryStorage();
   assert.equal(readStartWeapon(s), 'blaster', 'nothing stored: Autocannon');

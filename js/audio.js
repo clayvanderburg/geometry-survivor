@@ -2429,6 +2429,17 @@ export class SoundEngine {
     osc.stop(t + 0.05);
   }
 
+  // Escort drone docks in its formation slot: a soft servo click under a bright two-note chirp that climbs
+  // a pentatonic step per slot, so a squadron docking one by one plays a little rising run.
+  playDroneDock(slot = 0) {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('droneDock', 40, 3, 0.16)) return;
+    const f = 1046 * Math.pow(2, [0, 3, 5, 7, 10][slot % 5] / 12) * (0.98 + Math.random() * 0.04);
+    this.noiseHit(0, 0.03, 0.05, 3200, 1.5);
+    this.tone(f, 0, 0.06, 0.035, 'square', f * 1.02);
+    this.tone(f * 1.5, 0.045, 0.1, 0.03, 'triangle', f * 1.52);
+  }
+
   // Short band-passed noise burst (clanks, chatter, servo hiss) at `start` s from now.
   noiseHit(start, dur, vol, freq, q = 1, glideTo = 0) {
     const t = this.ctx.currentTime + start;

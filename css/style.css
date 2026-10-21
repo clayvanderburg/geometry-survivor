@@ -4869,16 +4869,17 @@ body.touch-mode .splash-tap { display: inline; }
 .start-pick-card { max-width: 1100px; width: min(96vw, 1100px); text-align: center; }
 .start-pick-title { margin: 4px 0 2px; font-size: 26px; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.6); }
 .start-pick-sub { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
+#start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } /* 8 starting weapons: two rows of 4 */
 #start-pick-options .upgrade-option.picked { transform: translateY(-5px); box-shadow: 0 8px 30px var(--rarity-soft), 0 0 0 2px #fff, 0 0 26px var(--rarity-soft); }
 .start-pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .start-pick-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
 body.touch-mode .start-pick-hint { display: none; }
 body.touch-mode .start-pick-title { font-size: 18px; }
 /* Six starting weapons: one row of compact cards on a landscape phone (3 per row when it's narrow). */
-body.touch-mode #start-pick-options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+body.touch-mode #start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 body.touch-mode #start-pick-options .upgrade-option { padding: 8px 7px 7px; }
 body.touch-mode #start-pick-options .upgrade-title { font-size: 14px; margin: 2px 0 4px; }
-@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Card scope (upgrade-cards.js cardScope): utility cards get a dashed inner edge, global cards a double
    one, each with a small pill on the bottom border. Neutral white so rarity colors stay readable; weapon

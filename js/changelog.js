@@ -12,6 +12,21 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.45.0',
+    date: '2026-10-21',
+    title: 'Squadron & Replicator',
+    notes: [
+      { type: 'new', text: 'Escort Drones now fly up to 5: a front pair beside your nose and a back row of 3. The first is the flight lead with the heavy gun; wingmen carry lighter guns.' },
+      { type: 'new', text: 'New LV 6 drone Breakthrough, Escort Squadron: a whole back row of 3 drones joins at once. Drones past 5 add their firepower to the rest.' },
+      { type: 'new', text: 'New drones launch from the hull and snap into formation one by one.' },
+      { type: 'balance', text: 'Escort Drones hold about 85% of the Autocannon at every level (they pulled ahead past LV 12 before).' },
+      { type: 'new', text: 'New global card, Replicator Array (always RARE or better, and rare in hands): each rank gives every equipped weapon one more of what it fires, up to its cap. Max 2 ranks.' },
+      { type: 'balance', text: 'Replicator Array never raises a weapon\'s level, so your Breakthroughs stay on schedule. It adds +2 Autocannon streams, +2 Tesla Arc jumps or +1 of everything else.' },
+      { type: 'new', text: 'The starting pick now offers 8 weapons: Escort Drones and Sentry Turret join it.' },
+      { type: 'fix', text: 'REDUCE EFFECTS now also dims the minor bosses\' glow flashes.' }
+    ]
+  },
+  {
     version: '0.44.0',
     date: '2026-10-20',
     title: 'Big Guns, Bigger Bosses',
