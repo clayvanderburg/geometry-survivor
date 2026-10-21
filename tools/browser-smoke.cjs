@@ -65,7 +65,7 @@ const { chromium } = require(process.argv[2] || 'playwright');
  await page.locator('#start-pick-modal').waitFor({state:'visible'});
  if(!await page.locator('#title-modal').isVisible()) throw Error('The run should wait for the starting-weapon pick');
  const pickCards = page.locator('#start-pick-options > *');
- if(await pickCards.count() !== 3) throw Error('The starting-weapon pick needs its 3 cards');
+ if(await pickCards.count() !== 6) throw Error('The starting-weapon pick needs its 6 cards');
  if(!/\bpicked\b/.test(await pickCards.first().getAttribute('class'))) throw Error('The default starting weapon should be lit');
  await page.waitForTimeout(400); // past the double-click guard
  await pickCards.nth(1).click();

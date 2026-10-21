@@ -4874,6 +4874,11 @@ body.touch-mode .splash-tap { display: inline; }
 .start-pick-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
 body.touch-mode .start-pick-hint { display: none; }
 body.touch-mode .start-pick-title { font-size: 18px; }
+/* Six starting weapons: one row of compact cards on a landscape phone (3 per row when it's narrow). */
+body.touch-mode #start-pick-options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+body.touch-mode #start-pick-options .upgrade-option { padding: 8px 7px 7px; }
+body.touch-mode #start-pick-options .upgrade-title { font-size: 14px; margin: 2px 0 4px; }
+@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Card scope (upgrade-cards.js cardScope): utility cards get a dashed inner edge, global cards a double
    one, each with a small pill on the bottom border. Neutral white so rarity colors stay readable; weapon
