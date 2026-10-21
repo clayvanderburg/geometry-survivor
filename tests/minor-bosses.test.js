@@ -238,3 +238,24 @@ test('boss sound cues: every cue a boss plays exists, and they no-op without an 
   assert.equal(playBossCue({ ctx: null }, 'boss_phase'), false);
   for (const id of MINORS) assert.ok(BOSS_DEFS[id].overlay, `${id} draws its flair`);
 });
+
+test('REDUCE EFFECTS dims the boss glow flashes (telegraph blasts and boss flair)', async () => {
+  const { setReduceEffects } = await import('../js/juice.js');
+  const sizes = [];
+  const fx = { particles: { spawnFlash: (x, y, size) => sizes.push(size) } };
+  const blast = () => {
+    const pool = new BossTelegraphs();
+    pool.zone(0, 0, 100, { warn: 0.05 });
+    pool.update(0.1, fx);
+  };
+  try {
+    setReduceEffects(false);
+    blast();
+    setReduceEffects(true);
+    blast();
+  } finally {
+    setReduceEffects(false);
+  }
+  assert.equal(sizes.length, 2);
+  assert.ok(sizes[1] < sizes[0] * 0.5, `reduced ${sizes[1]} vs ${sizes[0]}`);
+});
