@@ -337,6 +337,20 @@ test('the first boss of a run shows the Supernova bomb reminder once, pointing a
   g.onBossArrived(liveBosses(g)[0]);
   assert.equal(g.novaCalloutTimer, 0, 'only the first boss of a run gets it');
 
+  // Story radio on: Dr. Pixie says it instead, so no banner, but the bomb counter still glows.
+  const radio = bossGame().g;
+  radio.novaCalloutDone = false;
+  let reminders = 0;
+  radio.pixie = { novaReminder: (mode, key) => { reminders++; assert.equal(key, 'E'); return true; } };
+  radio.waveTimer = TUNING.waveLength;
+  ticks = 0;
+  while (liveBosses(radio).length === 0 && ticks < 400) { tick(radio); ticks++; }
+  while (radio.bossCardTimer > 0 && ticks < 1000) { tick(radio); ticks++; }
+  radio.updateNovaCallout();
+  assert.equal(reminders, 1);
+  assert.ok(hidden('nova-callout') && hidden('nova-callout-arrow'), 'Pixie replaces the banner');
+  assert.ok(document.getElementById('nova-indicator').classList.contains('nova-callout-target'), 'the bomb counter still glows');
+
   const fresh = bossGame().g;
   fresh.novaCalloutDone = false;
   fresh.player.bombs = 0;

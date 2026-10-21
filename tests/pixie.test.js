@@ -202,3 +202,63 @@ test('the first rift of a save: Pixie explains it in 2–3 short lines, once, ne
   assert.match(rifts, /game\.onRiftOpened\?\.\(r\)/);
   assert.match(rifts, /game\.onRiftJump\?\.\(rift\)/);
 });
+
+const PIXIE_RIFT_LINES_FOR_PACING = pixieMod.PIXIE_RIFT_LINES[0][0];
+test('radio lines are paced for slow readers: slow typing and a long hold', async () => {
+  const { RADIO_CPS, radioHold } = await import('../js/radio.js');
+  assert.ok(RADIO_CPS <= 32, 'types slower than the cutscene box');
+  const line = PIXIE_RIFT_LINES_FOR_PACING;
+  assert.ok(radioHold(line) >= 4, `a ${line.length}-char line stays up at least 4 s after typing`);
+  assert.ok(radioHold('Hi!') >= 1.6);
+});
+
+test('the first time the shield drops to 30%: Pixie warns once per save, never in BLITZ or HARDCORE', () => {
+  const { PIXIE_LOW_SHIELD_LINES, PIXIE_LOW_SHIELD_KEY } = pixieMod;
+  for (const [t, m] of PIXIE_LOW_SHIELD_LINES) {
+    assert.ok(t.length <= PIXIE_MAX_CHARS, t);
+    assert.ok(PIXIE_MOODS.includes(m));
+  }
+  const map = new Map();
+  const storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
+  const said = [];
+  const pixie = new PixieDirector({ radio: { say: (l) => said.push(l), append() {} }, storage });
+  assert.equal(pixie.lowShield('blitz'), false);
+  assert.equal(pixie.lowShield('hardcore'), false);
+  assert.equal(map.size, 0);
+  assert.equal(pixie.lowShield('normal'), true);
+  assert.equal(said.length, 1);
+  assert.equal(said[0].text, PIXIE_LOW_SHIELD_LINES[0][0]);
+  assert.deepEqual(said[0].then.map(l => l.text), PIXIE_LOW_SHIELD_LINES.slice(1).map(([t]) => t));
+  assert.equal(map.get(PIXIE_LOW_SHIELD_KEY), '1');
+  assert.equal(pixie.lowShield('normal'), false, 'once per save');
+
+  // Game wiring: only a hit that leaves the shield at or under 30% (and alive) calls her.
+  let calls = 0;
+  const g = Object.assign(Object.create(Game.prototype), {
+    player: { x: 0, y: 0, hp: 100, maxHp: 100, radius: 15 }, multiplier: 1, mode: 'normal',
+    pixie: { lowShield: () => { calls++; } },
+    sound: new Proxy({}, { get: () => () => {} }), particles: new Proxy({}, { get: () => () => {} }), grid: new Proxy({}, { get: () => () => {} }),
+    addShake() {}
+  });
+  g.damagePlayer(60);
+  assert.equal(calls, 0, '40% left: no warning');
+  g.damagePlayer(15);
+  assert.equal(calls, 1, '25% left: warning');
+  g.damagePlayer(30);
+  assert.equal(calls, 1, 'a killing hit does not warn');
+});
+
+test('the first boss: Pixie plugs her Supernova bombs instead of the banner (radio on, not BLITZ)', () => {
+  const { PIXIE_NOVA_LINES } = pixieMod;
+  for (const [t, m] of PIXIE_NOVA_LINES) {
+    assert.ok(t.includes('{key}') && t.replace('{key}', 'NOVA').length <= PIXIE_MAX_CHARS, t);
+    assert.ok(PIXIE_MOODS.includes(m));
+  }
+  assert.equal(new PixieDirector({ storage: null }).novaReminder('normal', 'E'), false, 'radio off: the banner shows');
+  const said = [];
+  const pixie = new PixieDirector({ radio: { say: (l) => said.push(l) }, storage: null, rng: seeded(4) });
+  assert.equal(pixie.novaReminder('blitz', 'E'), false);
+  assert.equal(pixie.novaReminder('normal', 'B'), true);
+  assert.match(said[0].text, /SUPERNOVA/);
+  assert.match(said[0].text, /\bB!/);
+});

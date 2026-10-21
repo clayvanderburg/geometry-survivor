@@ -65,7 +65,7 @@ import { TutorialUI } from './tutorial.js';
 import { SplashScreen } from './splash.js';
 import { CutsceneStage } from './cutscene-stage.js';
 import { RadioBox } from './radio.js';
-import { PixieDirector } from './pixie.js';
+import { PixieDirector, PIXIE_LOW_SHIELD_FRACTION } from './pixie.js';
 import { SCENES, registerStoryCast, readIntroSeen, writeIntroSeen, defaultIntroStorage } from './story.js';
 import { RunStats, buildSourceGroups, enemyKind } from './run-stats.js';
 import { uploadRunStats, describeStatsUpload, readShareStats, writeShareStats, readPostGlobal, writePostGlobal, defaultStatsStorage } from './stats-client.js';
@@ -417,6 +417,7 @@ export class Game {
     this.bossCardTimer = 0;
     this.novaCalloutTimer = 0;
     this.novaCalloutDone = false;
+    this.novaCalloutByPixie = false;
     resetVictory(this); // campaignWon: beat the wave-50 boss (stays true in ENDLESS)
     resetFinalStand(this); // wave 50's FINAL STAND (js/final-stand.js)
     resetScoreBonus(this); // wave and victory bonuses (js/score-bonus.js)
@@ -2584,6 +2585,7 @@ export class Game {
     burst(this, 'shieldCrackle', p.x, p.y, { hue: 190, r: p.radius * 1.9, scale: dmg >= 20 ? 1.5 : 1 });
     this.grid.applyImpulse(p.x, p.y, 55, 160, 348);
     this.grid.ripple?.(p.x, p.y, 130, 348);
+    if (p.hp > 0 && p.hp <= p.maxHp * PIXIE_LOW_SHIELD_FRACTION) this.pixie?.lowShield(this.mode); // first time per save
     return p.hp <= 0;
   }
 
@@ -2720,12 +2722,16 @@ export class Game {
     if (!this.novaCalloutDone && this.player?.bombs > 0 && !this.range?.active) {
       this.novaCalloutDone = true;
       this.novaCalloutTimer = NOVA_CALLOUT_TIME;
+      // With the story radio on, Dr. Pixie says it instead of the banner (the bomb counter still glows).
+      this.novaCalloutByPixie = !!this.pixie?.novaReminder(this.mode, this.touchMode && !this.gpActive ? 'NOVA' : this.novaKeyLabel());
     }
   }
 
   // The first-boss bomb reminder: one line, "TRY A SUPERNOVA BOMB! (E)", while the SUPERNOVA gauge glows. It
   // waits for the boss title card to clear. Desktop: just above the dock's shield bar (no arrow, the gauge is
   // right beside it). Touch: the top-right corner (CSS), with a dashed arrow curving down to the NOVA button.
+  novaKeyLabel() { return this.gpActive ? 'B' : this.touchMode ? 'TAP NOVA' : 'E'; }
+
   novaCalloutShowing() {
     return this.novaCalloutTimer > 0 && !(this.bossCardTimer > 0);
   }
@@ -2733,16 +2739,16 @@ export class Game {
   updateNovaCallout() {
     const el = document.getElementById('nova-callout');
     const arrow = document.getElementById('nova-callout-arrow');
-    const on = this.novaCalloutShowing();
+    const glow = this.novaCalloutShowing();
+    const on = glow && !this.novaCalloutByPixie;
     setHidden(el, !on);
     setHidden(arrow, !on);
-    for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[on ? 'add' : 'remove']('nova-callout-target');
+    for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[glow ? 'add' : 'remove']('nova-callout-target');
     if (!on || !el || !arrow) return;
     const fading = this.novaCalloutTimer < 0.45;
     el.classList[fading ? 'add' : 'remove']('nova-callout-out');
     arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
-    const key = this.gpActive ? 'B' : this.touchMode ? 'TAP NOVA' : 'E';
-    const text = `TRY A SUPERNOVA BOMB! (${key})`;
+    const text = `TRY A SUPERNOVA BOMB! (${this.novaKeyLabel()})`;
     const titleEl = document.getElementById('nova-callout-title');
     if (titleEl && titleEl.textContent !== text) titleEl.textContent = text;
 
