@@ -424,6 +424,8 @@ test('FINAL STAND anti-stall: stragglers are drawn in, then wrecked, so the endi
   const { g } = bossGame();
   Object.assign(g, { wave: CAMPAIGN_WAVES, victoryTimer: 0, campaignWon: false });
   g.spawnWavePack = () => {};
+  // The wrecked straggler is a kill: its rare cache drop lands by the ship and would open CHEST first.
+  g.spawnRelicChest = () => {};
   tick(g);
   g.enemyManager.queueSpawn('blackhole', 4000, 2000, 1, { instant: true });
   tick(g, 2);
