@@ -218,6 +218,7 @@ export class RiftManager {
     game.grid?.applyImpulse?.(r.x, r.y, 30, r.radius * 4, RIFT.hue);
     game.particles?.spawnFloatText?.(r.x, r.y - r.radius - 26, '⟁ SPACE-TIME RIFT', '#e9a6ff', 15);
     game.sound?.playRiftOpen?.();
+    game.onRiftOpened?.(r); // story hook (Dr. Pixie explains the first one)
     return r;
   }
 
@@ -297,6 +298,7 @@ export class RiftManager {
     p.invuln = Math.max(p.invuln || 0, RIFT.transitIn + RIFT.transitOut + (TUNING.riftExitInvuln ?? 1));
     rift.life = Math.max(rift.life, RIFT.transitIn + 0.05); // stays open until the ship is through
     game.sound?.playRiftWarp?.();
+    game.onRiftJump?.(rift); // story hook
     game.particles?.spawnShockwave?.(rift.x, rift.y, rift.radius * 2.6, RIFT.rimHue, 3, 0.35, true);
     game.addShake?.(10);
   }

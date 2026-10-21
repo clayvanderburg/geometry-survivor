@@ -13,6 +13,7 @@ const {
   PIXIE_OFFER_LINES, PIXIE_WEAPON_LINES, PIXIE_PICK_LINES, PIXIE_TRANSFORM_LINES, PIXIE_BOOST_LINES, PIXIE_MAX_CHARS,
   LineBag, PixieDirector, fillLine
 } = await import('../js/pixie.js');
+const pixieMod = await import('../js/pixie.js');
 const { RadioBox } = await import('../js/radio.js');
 const { drawPixie, PIXIE_MOODS } = await import('../js/portraits.js');
 const { TRANSFORMS } = await import('../js/weapon-levels.js');
@@ -153,4 +154,51 @@ test('on the Breakthrough pick Pixie docks big into the free card column, and le
   assert.match(main, /this\.radio\.dock\(document\.getElementById\('upgrade-choices'\)\)[\s\S]{0,200}this\.pixie\?\.offer\(id, name\)/);
   const css = readFileSync(new URL('css/style.css', root_), 'utf8');
   for (const px of [216, 144]) assert.match(css, new RegExp(`radio-docked \\.dialogue-portrait \\{ width: ${px}px`), `${px} px: whole multiples of the 72 px art`);
+});
+
+test('the first rift of a save: Pixie explains it in 2–3 short lines, once, never in BLITZ; the first jump gets a line after it', () => {
+  const { PIXIE_RIFT_LINES, PIXIE_RIFT_JUMP_LINE, PIXIE_RIFT_SEEN_KEY, PIXIE_RIFT_JUMP_KEY } = pixieMod;
+  assert.ok(PIXIE_RIFT_LINES.length >= 2 && PIXIE_RIFT_LINES.length <= 3);
+  for (const [t, m] of [...PIXIE_RIFT_LINES, PIXIE_RIFT_JUMP_LINE]) {
+    assert.ok(t.length <= PIXIE_MAX_CHARS, t);
+    assert.ok(PIXIE_MOODS.includes(m));
+  }
+  const map = new Map();
+  const storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
+  const shown = [];
+  const box = {
+    typing: false, idleTime: 0, root: null,
+    show(l) { shown.push(l.text); this.typing = true; this.t = 0; },
+    update(dt) { this.t += dt; if (this.t > 0.3) this.typing = false; this.idleTime = this.typing ? 0 : this.t - 0.3; },
+    advance() { this.typing = false; this.t = 0.3; }, hide() {}
+  };
+  const radio = new RadioBox({ box });
+
+  // Headless (no radio) and BLITZ: nothing, and nothing marked seen.
+  assert.equal(new PixieDirector({ storage }).riftOpened('normal'), false);
+  const pixie = new PixieDirector({ radio, storage, rng: seeded(2) });
+  assert.equal(pixie.riftOpened('blitz'), false);
+  assert.equal(pixie.riftJumped('normal'), false, 'no jump line before the explanation');
+  assert.equal(map.size, 0);
+
+  assert.equal(pixie.riftOpened('normal'), true);
+  assert.equal(pixie.riftJumped('hardcore'), true, 'a jump mid-explanation waits its turn');
+  for (let i = 0; i < 60 * 30; i++) radio.update(1 / 60);
+  assert.deepEqual(shown, [...PIXIE_RIFT_LINES.map(([t]) => t), PIXIE_RIFT_JUMP_LINE[0]]);
+  assert.equal(map.get(PIXIE_RIFT_SEEN_KEY), '1');
+  assert.equal(map.get(PIXIE_RIFT_JUMP_KEY), '1');
+
+  // Once per save: a fresh director (a new session) with the same storage stays quiet.
+  const later = new PixieDirector({ radio, storage });
+  assert.equal(later.riftOpened('normal'), false);
+  assert.equal(later.riftJumped('normal'), false);
+  // Storage blocked: once per page load.
+  const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+  const b = new PixieDirector({ radio, storage: blocked });
+  assert.equal(b.riftOpened('normal'), true);
+  assert.equal(b.riftOpened('normal'), false);
+
+  const rifts = readFileSync(new URL('js/rifts.js', root_), 'utf8');
+  assert.match(rifts, /game\.onRiftOpened\?\.\(r\)/);
+  assert.match(rifts, /game\.onRiftJump\?\.\(rift\)/);
 });
