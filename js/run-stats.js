@@ -42,9 +42,9 @@ export const SUB_SOURCES = Object.freeze({
   harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
   harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
   harpoonchain: 'harpoon',   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
-  quake_skip: 'quake',       // Quake Mortar: Skipping Shells rings
-  quake_fault: 'quake',      // Quake Mortar: Fault Lines eruptions
-  quake_epicenter: 'quake'   // Quake Mortar: Epicenter slams
+  quake_skip: 'quake',       // Graviton Mortar: Rebound Pulse waves
+  quake_fault: 'quake',      // Graviton Mortar: Spacetime Fractures snapping shut
+  quake_epicenter: 'quake'   // Graviton Mortar: Graviton Surge waves
 });
 
 // Damage that is not a loadout weapon's.

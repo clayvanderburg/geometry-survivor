@@ -30,7 +30,7 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Quake Mortar x0.33', () => {
+test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8 });
   assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });

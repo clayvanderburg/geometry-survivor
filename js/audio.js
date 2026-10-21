@@ -2198,17 +2198,17 @@ export class SoundEngine {
     o.stop(t + dur + 0.01);
   }
 
-  // Quake Mortar volley: a deep tube "thoomp" (a sine dropping fast), a puff of low noise and a short
-  // breech clank. More barrels sound a touch heavier.
+  // Graviton Mortar volley (weapon id quake; method names kept): a deep "thoom" with a chest-deep recoil
+  // under it and a rising graviton whoop as the charge leaves the tube. More barrels sound heavier.
   playQuakeLaunch(shells = 2) {
     if (!this.enabled || !this.ctx) return;
-    const dur = 0.24;
+    const dur = 0.26;
     if (!this.claimVoice('quakeLaunch', 120, 2, dur)) return;
     const body = 0.85 + Math.min(0.3, Math.max(0, shells - 2) * 0.08);
     const pitch = 0.95 + Math.random() * 0.1;
     this.tone(120 * pitch, 0, 0.2, 0.16 * body, 'sine', 42);
-    this.tone(62 * pitch, 0.015, 0.26, 0.1 * body, 'sine', 30); // chest-deep recoil under the thoomp
-    this.tone(240, 0.01, 0.04, 0.035, 'square', 180);
+    this.tone(62 * pitch, 0.015, 0.26, 0.1 * body, 'sine', 30); // recoil under the thoom
+    this.tone(260 * pitch, 0.02, 0.16, 0.04, 'triangle', 780 * pitch); // the charge whooping away
     const t = this.ctx.currentTime;
     const noise = this.noiseSource();
     const low = this.ctx.createBiquadFilter();
@@ -2216,7 +2216,7 @@ export class SoundEngine {
     low.frequency.setValueAtTime(900, t);
     low.frequency.exponentialRampToValueAtTime(200, t + dur);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.09 * body, t);
+    g.gain.setValueAtTime(0.08 * body, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     noise.connect(low);
     low.connect(g);
@@ -2224,52 +2224,57 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.5, dur + 0.02);
   }
 
-  // Quake Mortar impact: a ground-shaking boom. A sharp crack on top, a falling sub thump and a long
-  // low-passed rumble rolling off as the ring spreads. `size` 0.5 (a skip) .. 1.4 (Epicenter).
+  // Graviton Mortar burst: space-time pinches, then releases. A short rising suck-in, then a heavy sub
+  // "whomp" with two slightly detuned sines beating against each other (the wave's warble) and a dark
+  // low-passed swell rolling off as the wave spreads. `size` 0.5 (a rebound) .. 1.4 (Graviton Surge).
   playQuakeImpact(size = 1) {
     if (!this.enabled || !this.ctx) return;
     const dur = 0.45 + 0.3 * Math.min(1.4, size);
     if (!this.claimVoice('quakeImpact', 70, 3, dur)) return;
-    const t = this.ctx.currentTime;
+    const t0 = this.ctx.currentTime;
     const v = Math.min(1.4, Math.max(0.4, size));
-    const pitch = 0.94 + Math.random() * 0.12; // no two quakes sound quite alike
-    const crackNoise = this.noiseSource();
-    const crackBand = this.ctx.createBiquadFilter();
-    crackBand.type = 'bandpass';
-    crackBand.frequency.value = 2200 * pitch;
-    crackBand.Q.value = 0.9;
-    const crack = this.ctx.createGain();
-    crack.gain.setValueAtTime(0.1 * v, t);
-    crack.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-    crackNoise.connect(crackBand);
-    crackBand.connect(crack);
-    crack.connect(this.sfxGain);
-    crackNoise.start(t, Math.random() * 0.5, 0.09);
+    const pitch = 0.94 + Math.random() * 0.12; // no two bursts sound quite alike
+    const pinch = 0.06;
+    const suckNoise = this.noiseSource();
+    const suckBand = this.ctx.createBiquadFilter();
+    suckBand.type = 'bandpass';
+    suckBand.frequency.setValueAtTime(500 * pitch, t0);
+    suckBand.frequency.exponentialRampToValueAtTime(2600 * pitch, t0 + pinch);
+    suckBand.Q.value = 2;
+    const suck = this.ctx.createGain();
+    suck.gain.setValueAtTime(0.001, t0);
+    suck.gain.exponentialRampToValueAtTime(0.07 * v, t0 + pinch);
+    suck.gain.exponentialRampToValueAtTime(0.001, t0 + pinch + 0.03);
+    suckNoise.connect(suckBand);
+    suckBand.connect(suck);
+    suck.connect(this.sfxGain);
+    suckNoise.start(t0, Math.random() * 0.5, pinch + 0.05);
 
-    const sub = this.ctx.createOscillator();
-    const subGain = this.ctx.createGain();
-    sub.type = 'sine';
-    sub.frequency.setValueAtTime(85 * pitch / Math.sqrt(v), t);
-    sub.frequency.exponentialRampToValueAtTime(28, t + dur * 0.8);
-    subGain.gain.setValueAtTime(0.0001, t);
-    subGain.gain.exponentialRampToValueAtTime(0.2 * v, t + 0.012);
-    subGain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
-    sub.connect(subGain);
-    subGain.connect(this.sfxGain);
-    sub.start(t);
-    sub.stop(t + dur);
+    const t = t0 + pinch;
+    for (const detune of [1, 1.06]) {
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(92 * pitch * detune / Math.sqrt(v), t);
+      sub.frequency.exponentialRampToValueAtTime(26 * detune, t + dur * 0.8);
+      subGain.gain.setValueAtTime(0.0001, t);
+      subGain.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.01);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
+      sub.connect(subGain);
+      subGain.connect(this.sfxGain);
+      sub.start(t);
+      sub.stop(t + dur);
+    }
 
     const noise = this.noiseSource();
     const low = this.ctx.createBiquadFilter();
     low.type = 'lowpass';
-    low.frequency.setValueAtTime(1100, t);
-    low.frequency.exponentialRampToValueAtTime(90, t + dur);
-    low.Q.value = 1.2;
+    low.frequency.setValueAtTime(1400 * pitch, t);
+    low.frequency.exponentialRampToValueAtTime(80, t + dur);
+    low.Q.value = 4; // a resonant sweep: the wave "whooshes" down rather than rumbling like stone
     const roll = this.ctx.createGain();
     roll.gain.setValueAtTime(0.001, t);
-    roll.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.02);
-    // A few aftershock wobbles as the ring rolls out.
-    for (let k = 1; k <= 4; k++) roll.gain.setValueAtTime(0.13 * v * Math.pow(1 - k / 5, 1.6) * (0.7 + Math.random() * 0.3), t + k * dur * 0.16);
+    roll.gain.exponentialRampToValueAtTime(0.11 * v, t + 0.015);
     roll.gain.exponentialRampToValueAtTime(0.001, t + dur);
     noise.connect(low);
     low.connect(roll);
@@ -2277,27 +2282,26 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.2, dur + 0.02);
   }
 
-  // Fault Lines erupting: a gritty stutter of cracking stone.
+  // Spacetime Fractures snapping shut: a glassy crack, a falling ping and a soft low thud.
   playQuakeFault() {
     if (!this.enabled || !this.ctx) return;
-    const dur = 0.22;
+    const dur = 0.2;
     if (!this.claimVoice('quakeFault', 90, 2, dur)) return;
     const t = this.ctx.currentTime;
+    const pitch = 0.92 + Math.random() * 0.16;
     const noise = this.noiseSource();
     const band = this.ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.setValueAtTime(1500, t);
-    band.frequency.exponentialRampToValueAtTime(500, t + dur);
-    band.Q.value = 1.3;
+    band.type = 'highpass';
+    band.frequency.setValueAtTime(3200 * pitch, t);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.001, t);
-    for (let k = 0; k < 7; k++) g.gain.setValueAtTime((0.03 + Math.random() * 0.07) * (1 - k / 8), t + k * 0.028);
-    g.gain.setValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0.07, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
     noise.connect(band);
     band.connect(g);
     g.connect(this.sfxGain);
-    noise.start(t, Math.random() * 0.7, dur + 0.02);
-    this.tone(70, 0, 0.18, 0.06, 'sine', 40);
+    noise.start(t, Math.random() * 0.7, 0.08);
+    this.tone(1900 * pitch, 0, dur, 0.035, 'sine', 520 * pitch);
+    this.tone(70, 0, 0.16, 0.06, 'sine', 40);
   }
 
   // Missile salvo: a band-swept noise whoosh with a soft thump, plus a quick "fft" per extra

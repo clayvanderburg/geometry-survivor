@@ -71,7 +71,7 @@ test('every transform names its weapon in the summary', () => {
     shockfield: 'Electric Shield Field', raillance: 'Rail Lance',
     glaive: 'Glaive Disc',
     nanites: 'Nanite Swarm', harpoon: 'Claw Harpoon',
-    quake: 'Quake Mortar' };
+    quake: 'Graviton Mortar' };
   for (const id of Object.keys(TRANSFORMS)) assert.ok(NAMES[id], `${id} needs a name to check`);
   for (const [id, byLevel] of Object.entries(TRANSFORMS)) {
     for (const m of BREAKTHROUGH_LEVELS) assert.match(byLevel[m].summary, new RegExp(NAMES[id]), `${id} LV ${m}`);

@@ -112,9 +112,9 @@ export const WEAPONS = [
     summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
   },
   {
-    id: 'quake', name: 'Quake Mortar', hudName: 'Quake Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
+    id: 'quake', name: 'Graviton Mortar', hudName: 'Graviton Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
     color: '#ff8a5c',
-    summary: 'Lobs heavy shells at the densest packs. Each one lands as an expanding shockwave ring that hits everything it rolls over, knocks it back and cracks rocks.'
+    summary: 'Lobs graviton charges at the densest packs. Each one bursts into a gravity wave that ripples through space-time, hitting everything it rolls over and knocking it back.'
   }
 ];
 

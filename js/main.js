@@ -2187,7 +2187,7 @@ export class Game {
     this.updateHUD();
   }
 
-  // Weapons and explosions ONLY damage enemies — never asteroids! (The Quake Mortar's rings are the one
+  // Weapons and explosions ONLY damage enemies — never asteroids! (The Graviton Mortar's waves are the one
   // weapon that cracks rocks, on purpose: quake-mortar.js / AsteroidManager.quakeRock.)
   // `source` colours the damage numbers; `knock` is the radial knockback impulse at the blast.
   // Blasts deal full damage to anything touching the center and fade linearly toward the rim

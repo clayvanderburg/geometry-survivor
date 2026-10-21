@@ -27,7 +27,7 @@ export const DAMAGE_SOURCE_COLORS = {
   glaive: '#ffa45c',      // Glaive Disc hits and Boomerang Recall slices
   nanite: '#c4ff7a',      // Nanite Swarm bites (daughters and plague swarms too)
   harpoon: '#ffd84a',     // Claw Harpoon throws, crushes, slams, spins and leaps
-  quake: '#ff8a5c',       // Quake Mortar rings, skips, fault lines and Epicenter slams
+  quake: '#ff8a5c',       // Graviton Mortar waves, rebounds, fractures and surges
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   corrode: '#9dff4a',     // CORROSIVE acid ticks (damage over time)
   shock: '#f4ff52',       // SHOCK ticks while touching another enemy (damage over time)
