@@ -1,4 +1,4 @@
-// RADIO: non-pausing talking-head lines during play (#radio-box, bottom-left): the same portrait,
+// RADIO: non-pausing talking-head lines during play (#radio-box, bottom centre, near the ship): the same portrait,
 // name tag, typewriter and voice blips as the cutscene dialogue box (js/dialogue.js), but it never
 // takes input or stops the game. A line types out, holds for a read, then slides away. At most one line
 // waits behind the one on air (a newer one replaces it), so the radio never builds a backlog.
@@ -10,10 +10,10 @@ import { DialogueBox, readHold } from './dialogue.js';
 
 export const RADIO_IDS = Object.freeze({ root: 'radio-box', name: 'radio-name', text: 'radio-text', portrait: 'radio-portrait' });
 const OUT_TIME = 0.25; // s for the slide-out before the next line comes on
-export const RADIO_CPS = 30; // typing speed: slower than cutscenes, the player is busy flying
+export const RADIO_CPS = 15; // typing speed: slower than cutscenes, the player is busy flying (30 before v0.44.1)
 // How long a radio line stays up once typed: paced for slow readers, since the player reads it mid-fight.
 export function radioHold(text) {
-  return Math.max(readHold(text) + 0.8, 1.5 + String(text).length * 0.055);
+  return Math.max(readHold(text) + 1.6, 3 + String(text).length * 0.11); // twice the v0.44.0 hold
 }
 
 export class RadioBox {
