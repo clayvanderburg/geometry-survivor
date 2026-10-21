@@ -33,6 +33,7 @@ const target = (e) => !e.dead && !e.invulnerable;
 const RELEASE_GRACE = 0.6; // s
 // A catch that survives the crush is flung this far past the ship's hull, so it doesn't land on it.
 const RELEASE_FLING = 26; // px
+const SLAM_KNOCK = 3; // Seismic Slam knockback, px/tick, always away from the ship
 // Small enough to yank (never a boss or a lieutenant, never an armored plate).
 export const hookable = (e, size) => !e.isBoss && !e.isLieutenant && !e.deflect && !e.leader && e.type !== 'gate' && (e.radius || 0) <= size;
 
@@ -475,7 +476,7 @@ export class ClawHarpoon {
       const r = (p.radius || 15);
       const cx = p.x + nx * r * 1.8, cy = p.y + ny * r * 1.8;
       const rad = W.slamRadius * areaMult(p);
-      game.damageEnemiesInRadius(cx, cy, rad, this.dmg * W.slamShare, HARPOON_HUE, 'harpoon', 3, undefined, 'harpoonslam');
+      this.slam(game, cx, cy, rad, this.dmg * W.slamShare);
       game.particles.spawnShockwave?.(cx, cy, rad, HARPOON_HUE, 4, 0.26);
       game.particles.spawnShockwave?.(cx, cy, rad * 0.55, 170, 2, 0.18);
       game.grid?.applyImpulse?.(cx, cy, 40, rad * 1.2, HARPOON_HUE);
@@ -486,6 +487,25 @@ export class ClawHarpoon {
     this.setPhase('ready');
     this.tipX = this.socket.x;
     this.tipY = this.socket.y;
+  }
+
+  // Seismic Slam's blast at the nose. Same reach and falloff as Game.damageEnemiesInRadius, but the
+  // knockback points away from the SHIP, not the blast centre: centred on the nose, a radial shove threw
+  // anything beside or behind it back across the hull, into the ship.
+  slam(game, cx, cy, rad, dmg) {
+    const p = game.player;
+    const falloff = TUNING.splashEdgeFalloff ?? 0.4;
+    for (const e of [...game.enemyManager.enemies].reverse()) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - cx, e.y - cy);
+      if (d > rad + e.radius) continue;
+      const reach = Math.max(0, Math.min(1, (d - e.radius) / rad));
+      let ox = e.x - p.x, oy = e.y - p.y;
+      const od = Math.hypot(ox, oy);
+      if (od > 1e-6) { ox /= od; oy /= od; } else { ox = Math.cos(p.angle); oy = Math.sin(p.angle); }
+      game.hitEnemy(e, dmg * (1 - falloff * reach), 'harpoon', ox * SLAM_KNOCK, oy * SLAM_KNOCK, 1, 'harpoonslam');
+    }
+    game.grid?.ripple?.(cx, cy, rad, HARPOON_HUE);
   }
 
   // A catch that survives the crush is thrown clear of the ship (past the claws and the shield) and moving
