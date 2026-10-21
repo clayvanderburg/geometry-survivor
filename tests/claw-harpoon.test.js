@@ -255,3 +255,20 @@ test('a hooked catch never hurts the ship: no contact while reeled in, and a sur
   assert.ok(!shieldTouches(p, TUNING, foe.x, foe.y, foe.radius) || foe.noContactUntil > g.elapsedTime,
     'the survivor ends up clear of the shield, or still inside its grace');
 });
+
+test('Seismic Slam knocks enemies away from the ship, never back across it', () => {
+  // Foes hugging the ship between its hull and the blast centre at the nose, plus some round it. Shoved
+  // away from the nose (the old radial knock), the inner ones were thrown straight back into the hull.
+  const foes = [{ x: 18, y: 6 }, { x: 18, y: -6 }, { x: 14, y: 16 }, { x: 14, y: -16 }, { x: 30, y: 26 }, { x: 5, y: 40 }, { x: 60, y: 0 }];
+  const s = harpoonGame({ bt: { 6: 'transform' }, foes });
+  const p = s.p;
+  const knocks = [];
+  const hit = s.g.hitEnemy;
+  s.g.hitEnemy = function (e, dmg, source, kx = 0, ky = 0, flash, stat = source) {
+    if (stat === 'harpoonslam') knocks.push((e.x - p.x) * kx + (e.y - p.y) * ky);
+    return hit.call(this, e, dmg, source, kx, ky, flash, stat);
+  };
+  oneThrow(s.g);
+  assert.ok(knocks.length >= 4, `the slam hit the foes round the nose (${knocks.length})`);
+  for (const k of knocks) assert.ok(k >= 0, 'every slam knock points away from the ship');
+});
