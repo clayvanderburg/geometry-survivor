@@ -329,9 +329,10 @@ test('cards that do several separate things name all of them in the headline, no
   assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
   assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
   assert.equal(headline('magnet'), '+44% PICKUP · +15% XP · +1 BOMB');
-  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH + SHOCKWAVE');
+  assert.equal(headline('thrusters'), 'FASTER DASH + SHOCKWAVE');
   applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
-  assert.equal(headline('thrusters'), '+16% SPEED · FASTER DASH, BIGGER SHOCKWAVE');
+  assert.equal(headline('thrusters'), 'FASTER DASH, BIGGER SHOCKWAVE');
+  assert.equal(headline('move_speed'), '+10% MOVE SPEED', 'move speed is its own card');
   assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
 });
 

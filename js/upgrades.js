@@ -140,6 +140,8 @@ const STATUS_CARDS = [
 // while any of them is equipped, removed when the last one is discarded); evolutions also name
 // `ownersAll`. Lines without owners are general upgrades (passives such as Volatile Shatter included).
 // Tag cards need an equipped weapon or an owned passive with the tag.
+// Ion Drive: move speed per card level (5 levels, x1.61 in all).
+export const MOVE_SPEED_STEP = 1.1;
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
@@ -231,15 +233,28 @@ export const UPGRADE_POOL = [
     }
   },
   {
+    // Move speed is its own card (v0.44.0); Phase Nova Thrusters keeps only the dash shockwave.
+    id: 'move_speed',
+    name: 'Ion Drive',
+    category: 'UTILITY',
+    maxLevel: 5,
+    weight: 0.5, // Ion Drive and Phase Nova Thrusters split the one old thrusters card's share of hands
+    headline: 'moveSpeed',
+    summary: 'Faster hull. Only move speed.',
+    apply(player) {
+      player.stats.moveSpeed *= MOVE_SPEED_STEP;
+    }
+  },
+  {
     id: 'thrusters',
     name: 'Phase Nova Thrusters',
     category: 'UTILITY',
     tags: ['area'],
     maxLevel: 5,
-    headline: 'moveSpeed',
-    summary: 'Faster hull, and Phase Dash unleashes a damaging shockwave.',
+    weight: 0.5,
+    headline: 'novaDamage',
+    summary: 'Phase Dash recharges faster and unleashes a damaging shockwave.',
     apply(player) {
-      player.stats.moveSpeed *= 1.16;
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
   },
@@ -549,7 +564,8 @@ export function loadoutAllows(player, u) {
 // x 2 between them (a 4-card weapon offers each at 1.5), so the weapons you carry keep climbing (and roll
 // their +3/+4/+5 jumps). A weapon's element cards share TUNING.elementCardWeight between the ones on
 // offer (all four while it has no element, then its one rank-up card). Evolutions are semi-rare:
-// TUNING.evolutionWeight (1) x luck. Every weight is a TUNING value.
+// TUNING.evolutionWeight (1) x luck. A general card may set its own `weight` (default 1). Every other
+// weight is a TUNING value.
 export function cardWeight(u, luck = 1, player = null) {
   switch (upgradeKind(u)) {
     case 'weapon': return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[STAT_CARD_BY_ID[u.id].weapon].length || 1);
@@ -559,7 +575,7 @@ export function cardWeight(u, luck = 1, player = null) {
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
     case 'tag': return TUNING.tagCardWeight ?? 0.7;
     case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
-    default: return 1;
+    default: return u.weight ?? 1;
   }
 }
 

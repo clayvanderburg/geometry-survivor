@@ -38,8 +38,7 @@ import { readGamepad, MenuNavigator, PAD } from './gamepad.js';
 import {
   UPGRADE_BY_ID, RARITY, rarityFor, rollUpgrades, rollLevelUpHand, cardInclusionOdds, rollWeaponPicks, applyUpgradeLevels, acquireWeapon,
   discardWeapon, snapshotBase, runStartPlayer, HIT_INVULN_BASE, xpToNextLevel, weaponUpgradeLines, applyBreakthrough, pendingBreakthroughs, markBreakthroughOffered,
-  MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE
-} from './upgrades.js';
+  MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE, MOVE_SPEED_STEP } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
@@ -1145,7 +1144,7 @@ export class Game {
     if (p) {
       const bonuses = this.progression.getBonuses();
       const liveStats = (upgLv, weapons) => ({
-        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(1.16, upgLv.thrusters || 0),
+        moveSpeed: TUNING.moveSpeed * bonuses.moveSpeedMult * Math.pow(MOVE_SPEED_STEP, upgLv.move_speed || 0),
         // Autocannon stat cards (Prism Split, Hyper-Capacitor, Phase Piercer) never touch base stats:
         // their ranks are read from the weapon build when firing, so the base stays tunable.
         fireRate: TUNING.fireRate * (weapons.pulsarHelix ? 1.15 : 1),
