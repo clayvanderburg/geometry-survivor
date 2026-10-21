@@ -43,8 +43,9 @@ test('the first rift waits for its delay, opens near the ship and seals on its o
   assert.equal(r.phase, 'tear');
   tick(g, Math.ceil((RIFT.tearTime + TUNING.riftOpenTime + RIFT.sealTime) / DT) + 5);
   assert.equal(g.rifts.active, null, 'sealed and gone');
-  // The countdown keeps ticking for the few frames after the seal, so allow that much below the minimum.
-  assert.ok(g.rifts.timer >= TUNING.riftIntervalMin - 10 * DT && g.rifts.timer <= TUNING.riftIntervalMax, 'next one is on the interval');
+  // The countdown keeps ticking after the seal: up to 10 frames from when the rift opened inside the
+  // 70-tick window, plus the 5 spare ticks above, so allow 20 frames below the minimum.
+  assert.ok(g.rifts.timer >= TUNING.riftIntervalMin - 20 * DT && g.rifts.timer <= TUNING.riftIntervalMax, 'next one is on the interval');
   reset();
 });
 
