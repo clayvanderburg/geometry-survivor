@@ -338,7 +338,7 @@ export const WEAPON_SCALING = {
   // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
-  turretCharges: (b) => 2 + (b.t4 ? 1 : 0),
+  turretCharges: (b) => 2 + (b.r?.charges || 0) + (b.t4 ? 1 : 0), // r.charges: REPLICATOR ARRAY ranks (no card)
   turretReload: (b) => 6 / rateMult(b.r.reload),
   turretDuration: () => 10,
   turretStillTime: 0.5,
