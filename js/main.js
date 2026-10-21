@@ -6171,7 +6171,7 @@ export class Game {
     };
   }
 
-  // Keyboard: [1-6] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  // Keyboard: [1-8] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
   handleStartPickKey(e, onControl) {
     const code = e.code;
     if (e.repeat) return;
