@@ -132,11 +132,27 @@ export class LineBag {
   }
 }
 
+// The first space-time rift of a save: she explains it's a GOOD thing (a shortcut), then celebrates the
+// first jump through one. Each plays once per save (localStorage), never in BLITZ (no story there).
+export const PIXIE_RIFT_LINES = Object.freeze([
+  ['WHOA, a space-time rift! Don\'t panic, it\'s GOOD!', 'eureka'],
+  ['It\'s a shortcut! Fly in and it flings you far away!', 'eureka'],
+  ['You\'re safe mid-jump, I promise. And I get DATA!', 'smug']
+]);
+export const PIXIE_RIFT_JUMP_LINE = Object.freeze(['Data acquired! You\'re fine! Probably!', 'oops']);
+export const PIXIE_RIFT_SEEN_KEY = 'vexolith_pixie_rift_seen';
+export const PIXIE_RIFT_JUMP_KEY = 'vexolith_pixie_rift_jump_seen';
+const seen = (storage, key) => { try { return !!storage?.getItem(key); } catch { return false; } };
+const markSeen = (storage, key) => { try { storage?.setItem(key, '1'); } catch { /* blocked: once per page load */ } };
+const defaultStorage = () => { try { return globalThis.localStorage || null; } catch { return null; } };
+
 // Picks Dr. Pixie's lines and puts them on the radio. `radio` takes { who, text, mood, onStart, cut };
 // `sound` plays the Eureka flourish.
 export class PixieDirector {
-  constructor({ radio = null, sound = null, rng = Math.random } = {}) {
+  constructor({ radio = null, sound = null, rng = Math.random, storage = defaultStorage() } = {}) {
     this.radio = radio;
+    this.storage = storage;
+    this.told = new Set(); // in memory too, for blocked storage
     this.sound = sound;
     this.rng = rng;
     this.resetRun();
@@ -178,6 +194,26 @@ export class PixieDirector {
     // She stays up beside the cards until the pick (picked() cuts her short); no rush to read.
     this.radio?.say({ ...line, hold: 600, onStart: () => { if (!isReduceEffects()) this.sound?.playEureka?.(); } }); // REDUCE EFFECTS skips the chime
     return line;
+  }
+
+  // A one-time story beat: plays `lines` (first one hurries whatever is on air) unless `key` was seen
+  // in this save, the radio is off (headless) or the mode has no story (BLITZ).
+  once(key, lines, mode, { after = false } = {}) {
+    if (!this.radio || mode === 'blitz' || this.told.has(key) || seen(this.storage, key)) return false;
+    this.told.add(key);
+    markSeen(this.storage, key);
+    const [first, ...rest] = lines.map(([text, mood]) => ({ who: 'pixie', text, mood }));
+    if (after) this.radio.append({ ...first, then: rest });
+    else this.radio.say({ ...first, cut: true, then: rest });
+    return true;
+  }
+
+  riftOpened(mode) { return this.once(PIXIE_RIFT_SEEN_KEY, PIXIE_RIFT_LINES, mode); }
+
+  // The first jump: only after she has explained rifts (else it's a non sequitur).
+  riftJumped(mode) {
+    if (!this.told.has(PIXIE_RIFT_SEEN_KEY) && !seen(this.storage, PIXIE_RIFT_SEEN_KEY)) return false;
+    return this.once(PIXIE_RIFT_JUMP_KEY, [PIXIE_RIFT_JUMP_LINE], mode, { after: true }); // after her explanation
   }
 
   // Cuts her discovery line short (the player already chose) and queues the reaction.

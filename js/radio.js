@@ -21,7 +21,8 @@ export class RadioBox {
 
   get onAir() { return !!this.current; }
 
-  // { who, text, mood?, hold?, onStart?, cut? }. Replaces whatever was waiting behind the current line;
+  // { who, text, mood?, hold?, onStart?, cut?, then? }. `then` is a list of lines that follow this one
+  // (a short explanation in a few beats; a newer say() still replaces the rest). Replaces whatever was waiting behind the current line;
   // `cut` also hurries the line on air (typed out at once, a short hold) so this one follows quickly.
   say(line) {
     if (!line?.text) return false;
@@ -34,6 +35,15 @@ export class RadioBox {
       if (this.box.typing) this.box.advance();
       this.current.hold = Math.min(this.current.hold, 0.7);
     }
+    return true;
+  }
+
+  // Plays `line` after everything already lined up (the line on air, its `then` lines, the queued one).
+  append(line) {
+    if (!line?.text) return false;
+    if (!this.current) return this.say(line);
+    const tail = this.queued || this.current;
+    tail.then = [...(tail.then || []), line];
     return true;
   }
 
@@ -60,7 +70,8 @@ export class RadioBox {
   }
 
   next() {
-    const line = this.queued;
+    const [follow, ...rest] = this.current?.then || [];
+    const line = this.queued || (follow ? { ...follow, then: rest } : null);
     this.queued = null;
     this.current = null;
     if (line) this.start(line);

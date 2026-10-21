@@ -6224,6 +6224,10 @@ export class Game {
     return this;
   }
 
+  // Story hooks from js/rifts.js: Dr. Pixie explains the first rift of a save and cheers the first jump.
+  onRiftOpened() { this.pixie?.riftOpened(this.mode); }
+  onRiftJump() { this.pixie?.riftJumped(this.mode); }
+
   // A non-pausing radio line: say('pixie', 'EUREKA!', { mood: 'eureka' }). False when the radio is off.
   say(who, text, opts = {}) {
     return this.radioOn ? this.radio.say({ who, text, ...opts }) : false;
