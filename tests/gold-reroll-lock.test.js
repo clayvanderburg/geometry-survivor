@@ -158,6 +158,8 @@ test('rerolls do not advance the NEW WEAPON pity counter (it counts level-ups)',
 
 test('a locked card passed over is guaranteed in the next hand, with one fewer random card', () => {
   const g = freshGame(100);
+  // No element cards: taking one sets its weapon's element and rightly drops a locked sibling element card.
+  g.player.banished = Object.fromEntries(UPGRADE_POOL.filter((u) => u.elementCard).map((u) => [u.id, true]));
   plainHand(g);
   g.toggleCardLock(2);
   const locked = g.currentChoices[2];
