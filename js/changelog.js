@@ -23,7 +23,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'balance', text: 'Score rewards progress: each wave survived pays 1,000 × wave², a win pays 100,000,000. Mining upgrades are gentler; Rotary Claw Drive ranks are refunded.' },
       { type: 'balance', text: 'Weapon floor: you need 2/3/4/5/6 weapons by LV 6/12/18/24/30, or a level-up is a forced CHOOSE A WEAPON pick. Move speed is its own card, Ion Drive. XP geoms no longer vanish.' },
       { type: 'balance', text: 'Sentry Turret works like DRG: Survivor: hold 2 charges, stand still to drop them, one reloads every 6 s. Bolts pierce, with new cards. Volatile Shatter shards deal 0.3x damage.' },
-      { type: 'new', text: 'Juicier cards, pickups and shields, plus a REDUCE EFFECTS setting. New opening cutscene (🎬 INTRO). Dr. Pixie radios in on every Breakthrough and explains your first rift.' },
+      { type: 'new', text: 'Juicier cards, pickups and shields, plus REDUCE EFFECTS. New intro cutscene (🎬 INTRO). Dr. Pixie radios in on Breakthroughs, your first rift, low shield and the first boss.' },
     ]
   },
   {
