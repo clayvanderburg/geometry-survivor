@@ -58,7 +58,7 @@ const CORE_INFO = {
   glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
   nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
   harpoon: { headline: 'harpoonRange', summary: 'Fires one of your drill-claws on a tether where you aim: it pierces every enemy on its line, drills through rock (mining it as it goes) and yanks small enemies back into your other claw, which crushes them.' },
-  quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over, shoving it back and cracking rocks (broken rocks count as mined).' }
+  quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over and shoving it back. Tidal Shear cards and Spacetime Fractures let it break rocks too.' }
 };
 
 // The card preview row (upgrade-cards.js elementRows) an element card leads with.

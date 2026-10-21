@@ -3,8 +3,9 @@
 // packs in range (or around the ship when nothing is in range). A charge arcs over the field with a
 // targeting reticle under it, then bursts into a GRAVITY WAVE: space-time pinches in, then a ring rolls
 // out through the warp grid. Every enemy the wave front passes takes one hit (full at the burst, a
-// little less at the rim) and is shoved outward, and every rock it passes takes tidal-shear damage, so
-// the waves crack rocks and break them (a broken rock counts as mined, ore and all).
+// little less at the rim) and is shoved outward. The base weapon never touches rocks: with Tidal Shear
+// cards every rock a wave passes takes mining damage, and Spacetime Fractures shear the rocks they cross,
+// so mining is an opt-in upgrade (a broken rock counts as mined, ore and all).
 //
 // Breakthroughs: Rebound Pulse (a burst charge rebounds to the next pack twice, pulsing again in smaller
 // waves), Spacetime Fractures (every main burst tears three seams in space-time that snap shut a moment
@@ -175,7 +176,9 @@ export class QuakeMortar {
     const radius = quakeRadius(p, b);
     const found = this.pickPacks(game, p.x, p.y, 0, range, radius, n);
     const damage = weaponDamage(p, 'quake', b);
-    const rock = W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75;
+    const mine = (p.stats.miningSpeed || 75) / 75;
+    const rock = W.quakeRockDamage(b) * mine;
+    this.faultRock = (W.faultRockDamage + W.quakeRockDamage(b)) * mine;
     const lead = W.quakeFlight * 60 * LEAD;
     for (let k = 0; k < n && this.shellCount < SHELL_POOL; k++) {
       let tx, ty;
@@ -376,7 +379,7 @@ export class QuakeMortar {
       f.age = 0;
       f.delay = W.faultDelay * (0.85 + 0.3 * Math.random());
       f.damage = s.damage * W.faultShare;
-      f.rock = s.rock;
+      f.rock = this.faultRock || 0;
       f.erupted = false;
       for (let j = 0; j < f.jag.length; j++) f.jag[j] = (Math.random() - 0.5) * 2;
     }

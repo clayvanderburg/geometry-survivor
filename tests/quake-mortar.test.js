@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 // previews, pools and the registry wiring.
 const h = await import('../tools/balance/harness.mjs');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, LV1_TRIM, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, WEAPON_CLASS, weaponDamage, quakeRadius } = await import('../js/weapon-scaling.js');
-const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, BREAKTHROUGH_LEVELS, levelBuild, weaponBuild, weaponElement } = await import('../js/weapon-levels.js');
+const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, BREAKTHROUGH_LEVELS, makeBuild, levelBuild, weaponBuild, weaponElement } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon } = await import('../js/upgrades.js');
 const { WEAPON_BY_ID, WEAPONS, weaponTags } = await import('../js/loadout.js');
 const { describeWeaponPick, describeUpgrade, describeBreakthrough } = await import('../js/upgrade-cards.js');
@@ -101,8 +101,26 @@ test('the ring hits every enemy once as its front passes, full at the impact and
   assert.equal(qm.ringCount, 0, 'the ring is gone after its life');
 });
 
-test('waves crack rocks: mining damage per wave, a broken rock counts as mined, bedrock never cracks; Tidal Shear only adds rock damage', () => {
-  const { g, p, qm } = quakeGame({ foes: [{ x: 600, y: 0 }] });
+test('the base weapon never mines: real volleys leave rocks alone until Tidal Shear (card ranks only, not the boost) turns it on', () => {
+  const foes = [];
+  for (let k = 0; k < 6; k++) foes.push({ x: 250 + k * 8, y: 0 });
+  const { g, p } = quakeGame({ foes });
+  const am = g.asteroidManager;
+  const rock = am.makeRock(p.x + 290, p.y + 60, 22, 'rock');
+  am.rebuildSpatialHash();
+  assert.equal(W.quakeRockDamage(weaponBuild(p, 'quake')), 0);
+  for (let v = 0; v < 3; v++) volley(g);
+  assert.ok(g.quakeMortar.ringsFired >= 3, 'the waves went off right next to it');
+  assert.equal(rock.hp, rock.maxHp, 'base waves pass rocks by');
+  assert.equal(W.quakeRockDamage(makeBuild('quake', 6, {}, { 6: 'boost' })), 0, 'Across the Board does not turn mining on');
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.quake_bore, levelJump: 1 });
+  assert.equal(W.quakeRockDamage(weaponBuild(p, 'quake')), 25);
+  volley(g);
+  assert.ok(rock.hp < rock.maxHp, 'Tidal Shear waves tear at the rock');
+});
+
+test('Tidal Shear waves crack rocks: mining damage per wave, a broken rock counts as mined, bedrock never cracks; only rock damage', () => {
+  const { g, p, qm } = quakeGame({ cards: [['quake_bore', 1]], foes: [{ x: 600, y: 0 }] });
   const am = g.asteroidManager;
   const rock = am.makeRock(p.x + 60, p.y, 22, 'rock');
   const bed = am.addBedrock(p.x - 60, p.y, 30);
@@ -111,7 +129,7 @@ test('waves crack rocks: mining damage per wave, a broken rock counts as mined, 
   const per = W.quakeRockDamage(weaponBuild(p, 'quake')) * (p.stats.miningSpeed || 75) / 75;
   qm.quake(g, p.x, p.y, 120, 1, per, 0, 'quake', false);
   tick(g, 40);
-  assert.ok(Math.abs((rock.maxHp - rock.hp) - per) < 1e-6, 'one ring, one rock hit');
+  assert.ok(Math.abs((rock.maxHp - rock.hp) - per) < 1e-6, 'one wave, one rock hit');
   assert.equal(bed.hp, bed.maxHp, 'bedrock untouched');
   while (am.asteroids.includes(rock)) {
     qm.quake(g, p.x, p.y, 120, 1, per, 0, 'quake', false);
@@ -119,12 +137,22 @@ test('waves crack rocks: mining damage per wave, a broken rock counts as mined, 
   }
   assert.equal(g.rocksMined, mined + 1, 'counted as mined');
   assert.ok(am.asteroids.includes(bed));
-  const b0 = levelBuild('quake', 1);
   const b = weaponBuild(p, 'quake');
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.quake_bore, levelJump: 2 });
-  const b2 = weaponBuild(p, 'quake');
-  assert.equal(W.quakeRockDamage(b2), W.quakeRockDamage(b0) * 2);
-  assert.equal(W.quakeDamageMult(b2), W.quakeDamageMult(b), 'Tidal Shear adds no damage');
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.quake_bore, levelJump: 5 });
+  const b6 = weaponBuild(p, 'quake');
+  assert.ok(W.quakeRockDamage(b6) >= 85, 'six ranks break a plain rock in one wave');
+  assert.equal(W.quakeDamageMult(b6), W.quakeDamageMult(b), 'Tidal Shear adds no damage');
+});
+
+test('Spacetime Fractures shatter the rocks they cross, even without Tidal Shear', () => {
+  const { g, p, qm } = quakeGame({ cards: [['quake_damage', 11]], bt: { 6: 'boost', 12: 'transform' }, foes: [{ x: 300, y: 0 }] });
+  const am = g.asteroidManager;
+  const rocks = [];
+  for (let k = 0; k < 12; k++) rocks.push(am.makeRock(p.x + 300 + Math.cos(k * 0.52) * 150, p.y + Math.sin(k * 0.52) * 150, 18, 'rock'));
+  am.rebuildSpatialHash();
+  qm.timer = 0;
+  tick(g, Math.ceil((W.quakeFlight * 1.1 + W.faultDelay * 1.3 + W.quakeRingTime) / DT));
+  assert.ok(rocks.some((r) => r.hp < r.maxHp || !am.asteroids.includes(r)), 'a fracture sheared a rock');
 });
 
 test('Rebound Pulse: every burst charge rebounds twice, each rebound a smaller wave', () => {

@@ -114,7 +114,7 @@ export const WEAPONS = [
   {
     id: 'quake', name: 'Graviton Mortar', hudName: 'Graviton Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
     color: '#ff8a5c',
-    summary: 'Lobs graviton charges at the densest packs. Each one bursts into a gravity wave that ripples through space-time, hitting everything it rolls over, knocking it back and cracking rocks.'
+    summary: 'Lobs graviton charges at the densest packs. Each one bursts into a gravity wave that ripples through space-time, hitting everything it rolls over and knocking it back.'
   }
 ];
 

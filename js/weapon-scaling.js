@@ -732,12 +732,19 @@ export const WEAPON_SCALING = {
   // quakeRange (quake-mortar.js). Each charge flies quakeFlight s, then bursts into a gravity wave that
   // rolls out to quakeRadius over quakeRingTime s: every enemy the front passes takes one hit (full at the
   // burst, quakeEdgeFalloff less at the rim) and is shoved outward, and every rock it passes takes
-  // quakeRockDamage of mining damage (tidal shear cracks rocks, and breaks them: they count as mined).
-  // Tidal Shear (stat `bore`) is the rock damage only (UTILITY). A wave is valued at one hit per target.
+  // quakeRockDamage of mining damage, but only with Tidal Shear (stat `bore`, UTILITY): the base weapon
+  // never mines (Clay). Only card ranks count, not Across the Board's free utility rank, so taking the
+  // boost never turns mining on. Spacetime Fractures shatter rock on their own (faultRockDamage, plus any
+  // Tidal Shear). Rocks broken either way count as mined. A wave is valued at one hit per target.
   quakeShells: (b) => 2 + b.r.count,
   quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
   quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
-  quakeRockDamage: (b) => 25 * (1 + 0.5 * (b?.r?.bore || 0)), // x the ship's mining speed / 75: a plain rock (~85 HP) takes 4 rings, 1 with 6 Bore ranks
+  // x the ship's mining speed / 75: 0 without Tidal Shear; a plain rock (~85 HP) takes 4 waves at 1 rank, 1 at 6.
+  quakeRockDamage: (b) => {
+    const r = Math.max(0, (b?.r?.bore || 0) - (b?.atb || 0));
+    return r > 0 ? 25 * (1 + 0.5 * (r - 1)) : 0;
+  },
+  faultRockDamage: 45, // a fracture snapping shut shears any rock it crosses (x mining speed / 75), Tidal Shear adds to it
   quakeRange: 480,
   quakeFlight: 0.85,
   quakeRingTime: 0.5,

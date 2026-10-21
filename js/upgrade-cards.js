@@ -333,7 +333,7 @@ export const STAT_ROWS = [
   { id: 'quakeDamage', label: 'Gravity wave damage', get: (p) => wb(p, 'quake', (b) => weaponDamage(p, 'quake', b)), fmt: dec1, headline: 'pct', unit: 'GRAVITY WAVE DAMAGE' },
   { id: 'quakeCooldown', label: 'Volley interval', get: (p) => wb(p, 'quake', W.quakeCooldown), fmt: secs, headline: 'pct', unit: 'MORTAR VOLLEY INTERVAL' },
   { id: 'quakeRadius', label: 'Gravity wave radius', get: (p) => wb(p, 'quake', (b) => quakeRadius(p, b)), fmt: int, headline: 'count', unit: 'WAVE RADIUS' },
-  { id: 'quakeRock', label: 'Rock damage / wave', get: (p) => wb(p, 'quake', (b) => W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75), fmt: int, headline: 'pct', unit: 'ROCK DAMAGE' },
+  { id: 'quakeRock', label: 'Rock damage / wave', get: (p) => wb(p, 'quake', (b) => (W.quakeRockDamage(b) > 0 ? W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75 : null)), fmt: int, headline: 'pct', unit: 'ROCK DAMAGE', newText: (a) => `WAVES TEAR ROCKS // ${a} DMG` },
   { id: 'quakeSkip', label: 'Rebounds / charge', get: (p) => wb(p, 'quake', (b) => (b.t4 ? W.skipBounces : null)), fmt: int, newText: (a) => `CHARGES REBOUND // ${a} MORE PULSES` },
   { id: 'quakeFault', label: 'Fractures / burst', get: (p) => wb(p, 'quake', (b) => (b.t8 ? W.faultCount : null)), fmt: int, newText: (a) => `BURSTS TEAR // ${a} FRACTURES` },
   { id: 'quakeEpicenter', label: 'Graviton Surge radius', get: (p) => wb(p, 'quake', (b) => (b.t12 ? quakeRadius(p, b) * W.epicenterRadiusMult : null)), fmt: int, newText: (a) => `GRAVITON SURGE // ${a} RADIUS` }
