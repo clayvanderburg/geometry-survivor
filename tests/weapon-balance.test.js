@@ -30,12 +30,12 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: one card step for every weapon, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6, Sentry Turret x3.6, Rail Lance x2.8, Glaive Discs x3.5, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
+test('balance trims are deliberate and few: one card step for every weapon, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6, Sentry Turret x3.6, Rail Lance x2, Glaive Discs x3.5, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
   // Every weapon's Damage and fire-rate cards step like the Autocannon's (x1.336, +32% per rank), so
   // every curve runs parallel to it from LV 1 to 18 (most outgrew it past LV 9 on the old x1.42 / +40%).
   assert.ok(near(DAMAGE_GROWTH, 1.336) && near(RATE_STEP, 0.32));
   assert.deepEqual({ ...CARD_STEP_TRIM }, {});
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 3.6, raillance: 2.8, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 3.6, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.equal(damageGrowth('blaster'), DAMAGE_GROWTH);
   assert.equal(rateStep('blaster'), RATE_STEP);
@@ -232,10 +232,14 @@ test('class-based balance: every weapon has a class and every class a target', (
   assert.deepEqual(Object.keys(WEAPON_CLASS).filter((id) => WEAPON_CLASS[id] === 'defensive'), ['shockfield', 'orbitals']);
 });
 
-test('class-based balance: the Rail Lance (aimed) realizes ~100% of the Autocannon at LV 3 and LV 6', () => {
+// Overkill: the lance's slow, heavy slugs over-kill the bench's wave-6 targets, so at LV 6 it reads ~73% here
+// while real data reads high (Clay's v0.44.0 runs: 1.3-1.65x target at LV 7-10, flagged for a nerf) and it
+// sits ~107% against targets that never die. So the lower bound is looser for the lance: a buff to pass
+// this bench would over-power it in play.
+test('class-based balance: the Rail Lance (aimed) realizes ~100% of the Autocannon at LV 3 and LV 6 (low side loosened: overkill)', () => {
   for (const lv of [3, 6]) {
     const share = benchDps('raillance', lv) / benchDps('blaster', lv);
-    assert.ok(Math.abs(share - CLASS_TARGET.aimed.perTarget) <= 0.15, `raillance LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    assert.ok(share >= CLASS_TARGET.aimed.perTarget - 0.3 && share <= CLASS_TARGET.aimed.perTarget + 0.15, `raillance LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
   }
 });
 

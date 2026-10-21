@@ -48,14 +48,14 @@ export const RATE_STEP = 0.32;    // fire rate / reload / cooldown cards: +32% a
 // their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 3.6, Sentry
 // Turret 3.6 and Glaive Discs 3.5 hold the automatic class at its WEAPON_CLASS target (below) at every level
 // (drones 2.7 and turret 2.8 on the old card steps, which sat at 63-68% at LV 1 and 135-137% at LV 18
-// against targets that never die). Rail Lance 2.8 (2 on the old steps) holds its aimed LV 3 / 6 check:
-// its heavy slugs overkill, so against targets that never die it reads ~150%. The turret was 4.2 before its
+// against targets that never die). Rail Lance stays at 2 on the shared steps (~107% of
+// the Autocannon against targets that never die; real data already reads it high). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
 // pierce, so less of the curve is lost to overkill. Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
 export const CARD_STEP_TRIM = Object.freeze({});
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 3.6, raillance: 2.8, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 3.6, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 

@@ -79,7 +79,7 @@ test('LV 1: charges ~0.8 s and fires about once a second, on the curve times its
   assert.ok(near(W.railCharge(b), 0.8));
   assert.ok(near(W.railCycle(b), 1));
   assert.equal(W.railLances(b), 1);
-  assert.equal(LV1_TRIM.raillance, 2.8); // 2 on the old x1.42 / +40% card steps (card-step audit)
+  assert.equal(LV1_TRIM.raillance, 2);
   assert.ok(near(POTENTIAL_DPS.raillance(b), DPS_TARGET(1) * LV1_TRIM.raillance));
   // Capacitor Bank is capped so even a maxed lance still charges visibly.
   const caps = Object.fromEntries(STAT_CARDS.raillance.map((c) => [c.stat, c.maxLevel]));
