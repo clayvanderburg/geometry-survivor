@@ -24,10 +24,10 @@ import {
 //   'weapon'  one weapon's damage output: weapon POWER stat cards, element cards, equip / pick cards,
 //             Breakthroughs and evolutions. The default look, no marker.
 //   'utility' adds no DPS: weapon UTILITY stats (size, radius, pull, reach, pierce... weapon-levels.js
-//             POWER_STATS lists the rest) and ship utility (magnet, luck, mining, thrusters, dash, shield).
+//             POWER_STATS lists the rest) and ship utility (magnet, luck, mining, move speed, thrusters, dash, shield).
 //   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives.
 export const CARD_SCOPES = ['weapon', 'utility', 'global'];
-const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
+const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'move_speed', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
 const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage']);
 export function cardScope(upg) {
   const stat = STAT_CARD_BY_ID[upg.id];
@@ -389,10 +389,7 @@ const BUNDLE_HEADLINES = {
     r.xpMultiplier && `${pctUp(r.xpMultiplier)} XP`,
     r.bombs && `+${r.bombs.a - r.bombs.b} BOMB`
   ].filter(Boolean).join(' · '),
-  thrusters: (r) => [
-    r.moveSpeed && `${pctUp(r.moveSpeed)} SPEED`,
-    r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
-  ].filter(Boolean).join(' · ')
+  thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
 };
 
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
