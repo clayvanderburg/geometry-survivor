@@ -2941,6 +2941,30 @@ export class SoundEngine {
     osc.stop(t + 0.15);
   }
 
+  // A Blinker starts its wind-up: a rising glassy shimmer (two detuned voices and a high chirp), pitch
+  // jittered so a pack doesn't drone. Rate-limited so ten blinkers charging at once read as one cue.
+  playBlinkCharge() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastBlinkCharge || 0) < 160) return;
+    this.lastBlinkCharge = now;
+    const k = 0.92 + Math.random() * 0.16;
+    this.tone(520 * k, 0, 0.42, 0.045, 'triangle', 1560 * k);
+    this.tone(528 * k, 0.01, 0.4, 0.03, 'sine', 1620 * k);
+    this.tone(2200 * k, 0.3, 0.09, 0.025, 'square', 2600 * k);
+  }
+
+  // The blink itself: a quick downward zip, so the arrival lands with a snap.
+  playBlinkWarp() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastBlinkWarp || 0) < 120) return;
+    this.lastBlinkWarp = now;
+    const k = 0.9 + Math.random() * 0.2;
+    this.tone(1800 * k, 0, 0.13, 0.05, 'sawtooth', 220 * k);
+    this.tone(90 * k, 0.02, 0.12, 0.06, 'sine', 55 * k);
+  }
+
   // A single enveloped oscillator note into the SFX bus (procedural fallbacks and sparkles).
   tone(freq, start, dur, vol, type = 'triangle', glideTo = 0) {
     const t = this.ctx.currentTime + start;

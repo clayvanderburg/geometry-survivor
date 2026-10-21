@@ -827,6 +827,7 @@ export class GuidePreview {
     drawPlayerShield(ctx, this.player, 0, TUNING, this.t * 1.4, now);
     drawCrabShip(ctx, this.player, TUNING, false, now);
     this.particles.draw(ctx);
+    this.manager.drawTopTelegraphs(ctx);
     ctx.restore();
   }
 

@@ -5596,7 +5596,8 @@ export class Game {
         continue;
       }
       // Contact uses the same hull-hugging outline the shield draws.
-      if (shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
+      // A Blinker that just landed (arriveT) can't hit: only its lunge can (js/archetypes.js BLINKER).
+      if (!(e.arriveT > 0) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
@@ -6922,6 +6923,7 @@ export class Game {
 
     // 5. Draw Sparks, Shatter Shards, Shockwaves & Lightning in World Space
     this.particles.draw(ctx, this.camX, this.camY, this.width, this.height);
+    this.enemyManager.drawTopTelegraphs(ctx, this.camX, this.camY, this.width, this.height); // Blinker marks read over the sparks
     this.damageNumbers.draw(ctx, this.camX, this.camY, this.width, this.height);
 
     // Close Camera Transform

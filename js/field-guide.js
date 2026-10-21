@@ -146,8 +146,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'blinker', name: 'BLINKER', group: 'archetype', unlockWave: ARCHETYPE_INFO.blinker.unlockWave,
-    what: () => `An orchid star that collapses for ${secs(BLINKER.telegraph)} while a ring marks its landing point, then teleports to your flank (${BLINKER.minDist}–${BLINKER.maxDist} px away, never into rock) and lunges.`,
-    tip: 'Watch for the ring and keep moving: the lunge is aimed where you were when it landed.'
+    what: () => `An orchid star that shimmers and collapses for ${secs(BLINKER.telegraph)} while a reticle and tether mark its landing point (it turns white just before the jump), then teleports to your flank (${BLINKER.minDist}–${BLINKER.maxDist} px away, never into rock or right on top of you) and lunges.`,
+    tip: 'Watch for the reticle and keep moving: when it turns white, step off the tether line. The lunge is aimed where you were when it landed.'
   },
   {
     id: 'conduit', name: 'CONDUIT', group: 'archetype', unlockWave: ARCHETYPE_INFO.conduit.unlockWave,
