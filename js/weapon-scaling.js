@@ -103,8 +103,11 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
 // Escort Drones flying at once (deployables.js pool size): a front pair and a back row of 3.
-export const DRONE_MAX = 5;
-const DRONE_FRONT = 2;
+export const DRONE_MAX = 8;
+// Drones in the FRONT row for a formation of n (the rest fly in the BACK row). One balanced fill order for
+// every drone, from Wingmen cards and the LV 6 Escort Squadron alike: 1 front centre, then the front pair,
+// the back row up to 3, the front centre (6), then the back row's outer sides (7, 8): 3 in front, 5 behind.
+export const droneFrontFor = (n) => (n <= 2 ? n : n <= 5 ? 2 : 3);
 export const TURRET_MAX_ACTIVE = 12; // 10 s lifetime / 1.43 s fastest reload (7 out) + a full bank of 3, with room
 
 export const WEAPON_SCALING = {
@@ -362,12 +365,13 @@ export const WEAPON_SCALING = {
   turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, W.turretShotUnits),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
-  // Formation: a front pair beside the nose and a back row of 3 behind the hull, DRONE_MAX in all. Wingmen
-  // ranks fill the front pair, then the back row; Escort Squadron (LV 6) brings the whole back row at once.
-  // Drones past DRONE_MAX are never wasted: droneSquad counts them and their guns ride on the others.
+  // Formation: up to 3 in front of the nose and 5 behind the hull, DRONE_MAX in all, filled in one balanced
+  // order (droneFrontFor): Wingmen ranks give up to 5 (front pair + back row of 3), Escort Squadron (LV 6)
+  // adds 3 more (front centre + the back row's sides). Drones past DRONE_MAX are never wasted: droneSquad
+  // counts them and their guns ride on the others.
   droneSquad: (b) => 1 + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
   droneCount: (b) => Math.min(DRONE_MAX, W.droneSquad(b)),
-  droneFront: (b) => (b.t4 ? Math.min(DRONE_FRONT, 1 + b.r.wingmen) : Math.min(DRONE_FRONT, W.droneCount(b))),
+  droneFront: (b) => droneFrontFor(W.droneCount(b)),
   squadronRow: 3,
   // The first drone is the flight LEAD; every drone after it is a lighter WINGMAN whose bolts hit for
   // droneWingHitShare of the lead's. A formation picks a target per drone, so it wastes far less on overkill
@@ -578,7 +582,7 @@ export const WEAPON_SCALING = {
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
   railSpread: 0.12,                               // rad between Split Rails lances
-  railWidth: (b) => 6 * (1 + 0.3 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull)
+  railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
   railKnock: 1.6,
   // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it

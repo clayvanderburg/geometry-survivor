@@ -24,7 +24,7 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W, DRONE_MAX, POTENTIAL_DPS } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, DRONE_MAX, POTENTIAL_DPS, droneFrontFor } = await import('../js/weapon-scaling.js');
 const { levelBuild, weaponBuild, makeBuild, BT_TRANSFORM_DPS } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
@@ -210,7 +210,9 @@ test('escort drones fly in formation round the hull, fire drone bolts, and never
   assert.equal(d.droneCount, 1);
 });
 
-test('escort drones: up to 5 (a front pair and a back row of 3); Escort Squadron brings the whole back row', () => {
+test('escort drones: up to 5 from Wingmen (2 front, 3 behind); Escort Squadron adds 3 in the same balanced order (3 front, 5 behind)', () => {
+  // One fill order for every drone: front centre, front pair, back row to 3, front centre, back sides.
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8].map(droneFrontFor), [1, 2, 2, 2, 2, 3, 3, 3]);
   const g = arena();
   const docks = [];
   g.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => docks.push(slot) : () => {}) });
@@ -218,40 +220,46 @@ test('escort drones: up to 5 (a front pair and a back row of 3); Escort Squadron
   g.player.upgradeLevels.drones_wingmen = 4;
   tick(g, 2);
   let f = formation(g);
-  assert.equal(g.deployables.droneCount, DRONE_MAX);
+  assert.equal(g.deployables.droneCount, 5);
   assert.equal(f.front.length, 2);
   assert.equal(f.back.length, 3);
   assert.deepEqual(docks, [0, 1, 2, 3, 4]);
 
-  // LV 6 Escort Squadron with no Wingmen ranks: one front drone, then the back row peels off one by one.
+  // LV 6 Escort Squadron on the full 5: 3 more peel off one by one, to 8 (3 in front, 5 behind).
+  g.player.weapons.drones = 6;
+  g.player.breakthroughs = { drones: { 6: 'transform' } };
+  tick(g, DT);
+  assert.equal(g.deployables.droneCount, DRONE_MAX);
+  assert.equal(DRONE_MAX, 8);
+  assert.ok(g.deployables.drones[7].launch > g.deployables.drones[6].launch, 'the squadron launches one drone at a time');
+  tick(g, 2);
+  f = formation(g);
+  assert.equal(f.front.length, 3);
+  assert.equal(f.back.length, 5);
+  const y = (u) => u.y - g.player.y;
+  assert.ok(Math.abs(f.front.reduce((a, u) => a + y(u), 0)) < 12 && Math.abs(f.back.reduce((a, u) => a + y(u), 0)) < 12, 'both rows balanced port and starboard');
+  assert.ok(g.deployables.drones.slice(0, 8).every((u) => u.pop === 0 && u.docked));
+
+  // The squadron with no Wingmen ranks follows the same order: 4 drones are the front pair + 2 behind.
   const s = arena();
-  const sdocks = [];
-  s.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => sdocks.push(slot) : () => {}) });
   s.player.weapons.drones = 6;
-  tick(s, 1);
-  assert.equal(s.deployables.droneCount, 1);
   s.player.breakthroughs = { drones: { 6: 'transform' } };
-  tick(s, DT);
-  assert.equal(s.deployables.droneCount, 4);
-  assert.ok(s.deployables.drones[3].launch > s.deployables.drones[2].launch, 'the squadron launches one drone at a time');
   tick(s, 2);
   f = formation(s);
-  assert.equal(f.front.length, 1);
-  assert.equal(f.back.length, 3);
-  assert.deepEqual(sdocks, [0, 1, 2, 3], 'each new drone docks with its own rising chirp');
-  assert.ok(s.deployables.drones.slice(0, 4).every((u) => u.pop === 0 && u.docked));
+  assert.equal(s.deployables.droneCount, 4);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 2);
 
-  // Drones past the 5 never go to waste: their guns ride on the rest, so the squadron still adds its full share.
-  const full = makeBuild('drones', 9, { wingmen: 3 }, { 6: 'transform' });
-  assert.equal(W.droneSquad(full), 7);
-  assert.equal(W.droneCount(full), DRONE_MAX);
-  assert.ok(Math.abs(W.droneWingDamageMult(full) / W.droneDamageMult(full) - W.droneWingHitShare * 6 / 4) < 1e-12, 'the 2 surplus guns ride on the 4 wingmen');
-  // A full formation of 5 taking the squadron: all 3 are surplus, so the same 5 drones hit x1.22 harder.
+  // Drones past 8 never go to waste: their guns ride on the rest (a Replicator rank on a full squadron).
+  const over = makeBuild('drones', 10, { wingmen: 5 }, { 6: 'transform' });
+  assert.equal(W.droneSquad(over), 9);
+  assert.equal(W.droneCount(over), DRONE_MAX);
+  assert.ok(Math.abs(W.droneWingDamageMult(over) / W.droneDamageMult(over) - W.droneWingHitShare * 8 / 7) < 1e-12, 'the surplus gun rides on the 7 wingmen');
+  // The squadron is the same damage step as before: each extra drone is a wingman gun.
   const five = makeBuild('drones', 10, { wingmen: 4 });
   const five6 = makeBuild('drones', 10, { wingmen: 4 }, { 6: 'transform' });
-  assert.equal(W.droneCount(five6), W.droneCount(five));
+  assert.equal(W.droneCount(five6), 8);
   assert.ok(Math.abs(POTENTIAL_DPS.drones(five6) / POTENTIAL_DPS.drones(five) - BT_TRANSFORM_DPS) < 1e-9);
-  assert.ok(W.droneWingDamageMult(five6) > W.droneWingDamageMult(five));
 });
 
 test('deployables freeze under hit-stop and pause, and never join the enemy list', () => {
