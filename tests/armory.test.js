@@ -139,7 +139,7 @@ test('every armory stat reaches the run', () => {
   near(p.stats.moveSpeed, b.stats.moveSpeed * 1.08, 'move speed');
   near(p.stats.coreDropMult, b.stats.coreDropMult * 1.2, 'core gain');
   near(p.stats.xpMultiplier, b.stats.xpMultiplier * 1.1, 'xp');
-  near(p.stats.miningSpeed, b.stats.miningSpeed * 1.3, 'mining speed');
+  near(p.stats.miningSpeed, b.stats.miningSpeed * 1.15, 'mining speed');
   near(p.stats.miningRange, b.stats.miningRange * 1.2, 'drill reach');
   near(p.stats.luck, b.stats.luck + 0.2, 'luck');
   near(p.stats.magnetRadius, b.stats.magnetRadius * 1.2, 'pickup radius');
@@ -298,3 +298,14 @@ test('the v0.43.3 rework refunds Plasma Overcharge and Aegis Shield Matrix ranks
   assert.deepEqual(save.refundNotes.map((n) => n.id).sort(), ['damage', 'maxHp']);
 });
 
+
+test('v0.44.0 mining trim: Rotary Claw Drive is +1.5% per rank and refunds ranks bought at +3%', () => {
+  assert.equal(META_BY_ID.mining.per, 0.015);
+  assert.ok((ARMORY_REVISIONS.mining || 1) >= 2);
+  const old = { armory: ARMORY_VERSION, cores: 0, ranks: { mining: 5, luck: 2 }, paid: { mining: 80, luck: 30 }, armoryRevs: { mining: 1, luck: 1 } };
+  const save = normalizeSave(old);
+  assert.equal(save.cores, 80);
+  assert.equal(save.ranks.mining, 0);
+  assert.equal(save.ranks.luck, 2);
+  assert.deepEqual(save.refundNotes.map((n) => n.id), ['mining']);
+});

@@ -19,7 +19,7 @@ export const SUB_SOURCES = Object.freeze({
   burn: 'blaster',        // burn ticks from before v0.34 (only Autocannon could burn)
   // Status DoT ticks (FIRE burn, CORROSIVE acid, SHOCK while touching), credited to the weapon whose
   // hits applied the stacks (status-effects.js): burn_<weapon>, corrode_<weapon>, shock_<weapon>.
-  ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray']
+  ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray', 'nanites']
     .flatMap((id) => ['burn', 'corrode', 'shock'].map((dot) => [`${dot}_${id}`, id]))),
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
@@ -32,7 +32,19 @@ export const SUB_SOURCES = Object.freeze({
   shatter: 'cryospray',   // Cryo Sprayer Shatter bursts
   meltdown: 'acidspray',  // Acid Sprayer Meltdown splashes
   fieldlash: 'shockfield',   // Arc Lash arcs (Electric Shield Field Breakthrough)
-  thunderclap: 'shockfield'  // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  thunderclap: 'shockfield', // Thunderclap Overcharge bursts (Electric Shield Field Breakthrough)
+  ionwake: 'raillance',      // Ion Wake ticks (Rail Lance Breakthrough)
+  overload: 'raillance',      // Overload Shot beams (Rail Lance Breakthrough)
+  glaive_recall: 'glaive',   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
+  nanite_fission: 'nanites', // Nanite Swarm: Fission Bloom daughter swarms
+  nanite_plague: 'nanites',   // Nanite Swarm: Nanite Plague swarms
+  harpooncrush: 'harpoon',  // Claw Harpoon: a reeled-in catch crushed in the other claw
+  harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
+  harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
+  harpoonchain: 'harpoon',   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
+  quake_skip: 'quake',       // Graviton Mortar: Rebound Pulse waves
+  quake_fault: 'quake',      // Graviton Mortar: Spacetime Fractures snapping shut
+  quake_epicenter: 'quake'   // Graviton Mortar: Graviton Surge waves
 });
 
 // Damage that is not a loadout weapon's.

@@ -159,6 +159,7 @@ export const DEFAULT_TUNING = {
   spawnWeightRepulsor: 7,
   spawnWeightLancer: 9,
   spawnWeightBorer: 10,
+  spawnWeightHatchery: 8,
   enemyBulletSpeed: 4.2,
   enemyBulletDamage: 12,
   lieutenantHpShare: 0.4,
@@ -216,6 +217,9 @@ export const DEFAULT_TUNING = {
   newWeaponChanceBy5: 0.3,
   newWeaponPityOne: 2,
   newWeaponPity: 4,
+  // Weapon floor (js/weapon-floor.js): by every weaponFloorStep-th player level you carry one more weapon
+  // (2 at LV 6, 3 at 12 ... all 6 at 30); a level-up below it is a forced CHOOSE A WEAPON pick.
+  weaponFloorStep: 6,
   // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
   slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
@@ -235,11 +239,12 @@ export const DEFAULT_TUNING = {
   waveHpGrowth: 1.1, // 1.06 before v0.31 (enemy HP outgrew even maxed-armory builds)
   waveHpGrowthFrom: 8, // 18 before v0.31, 12 before v0.31.1
   waveHpGrowthRamp: 10, // 14 before v0.31.1: full compounding by ~wave 18, when weapons hit LV15
-  // Late-campaign HP stage: a second compounding stage on top from waveHpLateFrom, eased in over
-  // waveHpLateRamp waves. Off (1) in v0.43.2: late difficulty leans on contact damage, density and bosses
-  // until the Armory rework sets each tier's power (then it may flatten the late curve instead).
-  waveHpLateFrom: 30,
-  waveHpLateGrowth: 1,
+  // Late-campaign HP stage: a second compounding factor on top from waveHpLateFrom, eased in over
+  // waveHpLateRamp waves. 0.96 softens HP growth past wave 35 from ×1.10 to ~×1.056 a wave (v0.43.4), so a
+  // full Void Armory (~3× power) can carry a run to wave 50; late difficulty leans on contact damage,
+  // density and bosses instead (1 before v0.43.4).
+  waveHpLateFrom: 35,
+  waveHpLateGrowth: 0.96,
   waveHpLateRamp: 10,
   // Seconds between packs ease from spawnIntervalStart toward spawnIntervalMin (63% of the way after
   // spawnIntervalTau waves) instead of dropping in a straight line to a hard floor.
@@ -459,6 +464,7 @@ export const TUNING_SCHEMA = [
       { key: 'spawnWeightRepulsor', label: 'Pack Weight: Repulsor + Escort (wave 40+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightLancer', label: 'Pack Weight: Lancers (wave 45+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'spawnWeightBorer', label: 'Pack Weight: Borers (wave 15+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
+      { key: 'spawnWeightHatchery', label: 'Pack Weight: Hatchery (wave 35+)', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'enemyBulletSpeed', label: 'Gunner Orb Speed', type: 'range', min: 1.5, max: 9.0, step: 0.1, unit: 'px/t' },
       { key: 'enemyBulletDamage', label: 'Gunner Orb Damage (pre-wave scaling)', type: 'range', min: 1, max: 40, step: 1, unit: '' },
       { key: 'lieutenantHpShare', label: 'Lieutenant HP (share of boss HP)', type: 'range', min: 0.1, max: 1.0, step: 0.05, unit: 'x' },
@@ -517,6 +523,7 @@ export const TUNING_SCHEMA = [
       { key: 'newWeaponChanceBy5', label: 'NEW WEAPON Chance / Hand (5+ Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponPityOne', label: 'NEW WEAPON Guaranteed Every N Hands (1 Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
       { key: 'newWeaponPity', label: 'NEW WEAPON Guaranteed Every N Hands (2+ Owned)', type: 'range', min: 1, max: 12, step: 1, unit: '' },
+      { key: 'weaponFloorStep', label: 'Weapon Floor: +1 Weapon Required Every N Levels', type: 'range', min: 1, max: 30, step: 1, unit: '' },
       { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
@@ -537,7 +544,7 @@ export const TUNING_SCHEMA = [
       { key: 'waveHpGrowthFrom', label: 'Enemy HP: Compound Growth From Wave', type: 'range', min: 1, max: 80, step: 1, unit: '' },
       { key: 'waveHpGrowthRamp', label: 'Enemy HP: Waves to Reach Full Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'waveHpLateFrom', label: 'Enemy HP: Late Compounding From Wave', type: 'range', min: 1, max: 100, step: 1, unit: '' },
-      { key: 'waveHpLateGrowth', label: 'Enemy HP: Late Compound Growth / Wave (on top)', type: 'range', min: 1, max: 1.2, step: 0.002, unit: 'x' },
+      { key: 'waveHpLateGrowth', label: 'Enemy HP: Late Compound Growth / Wave (on top; < 1 softens)', type: 'range', min: 0.85, max: 1.2, step: 0.002, unit: 'x' },
       { key: 'waveHpLateRamp', label: 'Enemy HP: Waves to Reach Full Late Compounding', type: 'range', min: 0, max: 40, step: 1, unit: '' },
       { key: 'spawnIntervalStart', label: 'Pack Spawn Interval at Wave 0', type: 'range', min: 0.3, max: 6, step: 0.05, unit: 's' },
       { key: 'spawnIntervalTau', label: 'Pack Spawn Interval: Waves to Close 63% of the Gap', type: 'range', min: 1, max: 30, step: 0.5, unit: '' },

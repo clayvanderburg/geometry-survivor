@@ -7,7 +7,7 @@ const h = await import('../tools/balance/harness.mjs');
 const { Game } = await import('../js/main.js');
 const { PAD } = await import('../js/gamepad.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
-const { eligibleUpgrades, applyUpgradeLevels, discardWeapon, acquireWeapon, UPGRADE_BY_ID } = await import('../js/upgrades.js');
+const { eligibleUpgrades, applyUpgradeLevels, discardWeapon, acquireWeapon, UPGRADE_BY_ID, UPGRADE_POOL } = await import('../js/upgrades.js');
 const { ownedWeapons, unownedWeapons } = await import('../js/loadout.js');
 const {
   GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround
@@ -158,6 +158,8 @@ test('rerolls do not advance the NEW WEAPON pity counter (it counts level-ups)',
 
 test('a locked card passed over is guaranteed in the next hand, with one fewer random card', () => {
   const g = freshGame(100);
+  // No element cards: taking one sets its weapon's element and rightly drops a locked sibling element card.
+  g.player.banished = Object.fromEntries(UPGRADE_POOL.filter((u) => u.elementCard).map((u) => [u.id, true]));
   plainHand(g);
   g.toggleCardLock(2);
   const locked = g.currentChoices[2];
@@ -360,6 +362,8 @@ test('the level-up modal shows the gold counter, reroll cost and lock toggles', 
 
 test('a carried-over lock is still the only lock: locking another card in the new hand moves it', () => {
   const g = freshGame(100);
+  // No element cards: taking one sets its weapon's element and rightly drops a locked sibling element card.
+  g.player.banished = Object.fromEntries(UPGRADE_POOL.filter((u) => u.elementCard).map((u) => [u.id, true]));
   plainHand(g);
   g.toggleCardLock(2);
   const first = g.currentChoices[2];

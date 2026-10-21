@@ -12,6 +12,21 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.44.0',
+    date: '2026-10-20',
+    title: 'Big Guns, Bigger Bosses',
+    notes: [
+      { type: 'new', text: 'Five new weapons: Rail Lance (piercing), Claw Harpoon (mines rock), Glaive Discs (ricochet), Nanite Swarm (corrosive), Graviton Mortar (gravity waves). The first 3 can start a run.' },
+      { type: 'new', text: 'All 10 bosses reworked: bigger, faster, new looks and sounds, and a telegraphed signature attack that escalates in later phases. Red lanes and marked zones: get out.' },
+      { type: 'new', text: 'Wave 50 is a FINAL STAND: the Prism brings one last surge, then spawns stop. Clear the field for VICTORY. Past wave 35, enemy HP now grows about half as fast.' },
+      { type: 'new', text: 'New enemy: the HATCHERY (wave 35) breeds diving HATCHLINGS. Blinkers now telegraph their jump clearly and never land on you; small enemies stand out in crowds.' },
+      { type: 'balance', text: 'Score rewards progress: each wave survived pays 1,000 × wave², a win pays 100,000,000. Mining upgrades are gentler; Rotary Claw Drive ranks are refunded.' },
+      { type: 'balance', text: 'Weapon floor: you need 2/3/4/5/6 weapons by LV 6/12/18/24/30, or a level-up is a forced CHOOSE A WEAPON pick. Move speed is its own card, Ion Drive. XP geoms no longer vanish.' },
+      { type: 'balance', text: 'Sentry Turret works like DRG: Survivor: hold 2 charges, stand still to drop them, one reloads every 6 s. Bolts pierce, with new cards. Volatile Shatter shards deal 0.3x damage.' },
+      { type: 'new', text: 'Juicier cards, pickups and shields, plus REDUCE EFFECTS. New intro cutscene (🎬 INTRO). Dr. Pixie radios in on Breakthroughs, your first rift, low shield and the first boss.' },
+    ]
+  },
+  {
     version: '0.43.3',
     date: '2026-10-20',
     title: 'Stronger Armory',

@@ -24,8 +24,8 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
-const { levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
+const { WEAPON_SCALING: W, RATE_STEP } = await import('../js/weapon-scaling.js');
+const { levelBuild, weaponBuild, makeBuild } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
 const silent = new Proxy({}, { get: () => () => {} });
@@ -109,9 +109,10 @@ test('a sentry turret deploys at the ship, skips targets behind cover, and fires
   const rock = { x: 2050, y: 2000, radius: 20, hp: 100 };
   const g = arena({ enemies: [blocked, clear], rocks: [rock] });
   g.player.weapons.turret = 1;
-  tick(g, 0.8);
+  tick(g, W.turretStillTime + 0.1);
   const d = g.deployables;
-  assert.equal(d.turretCount, 1);
+  assert.equal(d.turretCount, 1, 'standing still plants the first charge');
+  d.turretTimer = 99; // just this turret
   assert.deepEqual([d.turrets[0].x, d.turrets[0].y], [2000, 2000]);
   tick(g, 0.5);
   assert.equal(d.turrets[0].target, clear, 'nearest enemy is behind a rock, so the turret takes the clear shot');
@@ -125,6 +126,7 @@ test('a sentry turret deploys at the ship, skips targets behind cover, and fires
   rock.hp = 0;
   tick(g, 0.25);
   assert.equal(d.turrets[0].target, blocked);
+  d.turretReloadT = -99; // no reload overflow in this test
   tick(g, W.turretDuration(L('turret')));
   assert.equal(d.turretCount, 0, 'turret expires after its lifetime');
 });
@@ -137,11 +139,12 @@ test('turret line of sight uses the bolt width, so it never fires forever into a
   const rock = { x: 2100, y: 2022, radius: 20, hp: 100 };
   const g = arena({ enemies: [grazed, clear], rocks: [rock] });
   g.player.weapons.turret = 1;
-  tick(g, 0.9);
+  tick(g, W.turretStillTime + 0.1);
   const d = g.deployables;
+  d.turretTimer = 99; // just this turret: the other charge would plant elsewhere with a clear line
+  tick(g, 0.3);
   assert.equal(d.turretCount, 1);
   assert.equal(d.turrets[0].target, clear);
-  d.turretTimer = 99; // just this turret: the other two would plant elsewhere with a clear line
   for (let t = 0; t < 60; t++) { d.update(DT, g); g.updateBullets(DT); }
   assert.ok(clear.hp < clear.maxHp, 'the visible target takes the bolts');
   assert.equal(grazed.hp, grazed.maxHp);
@@ -262,14 +265,17 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   const g = arena();
   const p = g.player;
   assert.equal(describeUpgrade(p, byId('mines')).headline, `PROXIMITY MINES // ${W.mineMaxActive(L('mines'))} ACTIVE`);
-  assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretMaxActive(L('turret'))} ACTIVE`);
+  assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretCharges(L('turret'))} CHARGES`);
   assert.equal(describeUpgrade(p, byId('drones')).headline, '+1 ESCORT DRONE');
   applyUpgradeLevels(p, byId('turret'));
   // A stat card shows only its own stat.
-  const life = describeUpgrade(p, byId('turret_lifetime'));
-  assert.equal(life.headline, '+1.5s TURRET LIFETIME');
-  assert.deepEqual(life.rows.map((r) => r.id), ['turretDuration']);
-  assert.deepEqual(life.rows[0], { id: 'turretDuration', label: 'Turret lifetime', before: '10.0s', after: '11.5s' });
+  const punch = describeUpgrade(p, byId('turret_pierce'));
+  assert.equal(punch.headline, '+1 TURRET PIERCE');
+  assert.deepEqual(punch.rows.map((r) => r.id), ['turretPierce']);
+  assert.deepEqual(punch.rows[0], { id: 'turretPierce', label: 'Turret bolt pierce', before: '2', after: '3' });
+  const bolts = describeUpgrade(p, byId('turret_redeploy'));
+  assert.deepEqual(bolts.rows.map((r) => r.id), ['turretReload']);
+  assert.deepEqual(bolts.rows[0], { id: 'turretReload', label: 'Turret charge reload', before: '6.00s', after: '4.55s' });
   applyUpgradeLevels(p, byId('drones'));
   assert.equal(describeUpgrade(p, byId('drones_wingmen')).headline, '+1 ESCORT DRONE');
   for (const id of ['mines', 'turret', 'drones', 'evo_siege']) {
@@ -344,17 +350,17 @@ test('the sentry turret is twice its old size: body, placement clearance and muz
   assert.equal(g2.deployables.turretSpotClear(g2, 2000, 2000, 0), true);
 });
 
-test('three turrets out fire at the base rate each, and their bolts carry the card damage', () => {
+test('two turrets out fire at the base rate each, and their bolts carry the card damage', () => {
   const target = enemy(2200, 2000);
   const g = arena({ enemies: [target] });
   g.player.weapons.turret = 1;
-  tick(g, 1.6);
-  assert.equal(g.deployables.turretCount, 3);
+  tick(g, 1);
+  assert.equal(g.deployables.turretCount, 2);
   g.bullets = [];
   tick(g, 2);
   const bolts = g.bullets.filter((b) => b.source === 'turret');
-  // 3 turrets x 2 s x 6.1 bolts/s.
-  assert.ok(Math.abs(bolts.length - 3 * 2 * W.turretFireRate(L('turret'))) <= 3, `${bolts.length} bolts in 2 s`);
+  // 2 turrets x 2 s x 6.1 bolts/s.
+  assert.ok(Math.abs(bolts.length - 2 * 2 * W.turretFireRate(L('turret'))) <= 3, `${bolts.length} bolts in 2 s`);
   for (const b of bolts) assert.equal(b.damage, 10 * W.turretDamageMult(L('turret')));
 });
 
@@ -367,31 +373,55 @@ test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
   assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
 });
 
-test('Sentry Turrets: carry 3; parked you plant them in quick succession, moving one at a time; slots recharge', () => {
+test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held charge; charges reload; a full bank overflows', () => {
   const lv = L('turret');
-  assert.equal(W.turretMaxActive(lv), 3);
-  const target = enemy(2300, 2000);
-  const parked = arena({ enemies: [target] });
+  assert.equal(W.turretCharges(lv), 2);
+  assert.equal(W.turretReload(lv), 6);
+  assert.equal(W.turretDuration(lv), 10);
+  const parked = arena({ enemies: [enemy(2300, 2000)] });
   parked.player.weapons.turret = 1;
-  tick(parked, 0.8 + 2 * W.turretDropStill + 0.05);
-  assert.equal(parked.deployables.turretCount, 3, 'parked: all three down within about half a second');
-  tick(parked, 1);
-  assert.equal(parked.deployables.turretCount, 3, 'never more than carried');
+  tick(parked, W.turretStillTime - 0.1);
+  assert.equal(parked.deployables.turretCount, 0, 'nothing until the ship has stood still turretStillTime');
+  tick(parked, 0.15 + W.turretDropStill);
+  assert.equal(parked.deployables.turretCount, 2, 'then every held charge goes down, turretDropStill apart');
+  assert.equal(parked.deployables.turretCharges, 0);
+  tick(parked, 6 - (W.turretStillTime + 0.05 + W.turretDropStill) + 0.05);
+  assert.equal(parked.deployables.turretCount, 3, 'a reloaded charge goes straight down while you stand still');
 
+  // On the move nothing is planted while the bank is short of full, and a charge that comes back to a
+  // full bank deploys by itself.
   const moving = arena({ enemies: [enemy(2300, 2000)] });
   moving.player.weapons.turret = 1;
   moving.player.vx = 3;
-  tick(moving, 0.85);
-  assert.equal(moving.deployables.turretCount, 1);
-  tick(moving, W.turretDropMoving * 0.9);
-  assert.equal(moving.deployables.turretCount, 1, 'on the move the next waits turretDropMoving');
-  tick(moving, W.turretDropMoving * 0.2);
-  assert.equal(moving.deployables.turretCount, 2);
+  tick(moving, 5.9);
+  assert.equal(moving.deployables.turretCount, 0, 'moving: charges stay in the bank');
+  assert.equal(moving.deployables.turretCharges, 2);
+  tick(moving, 0.2);
+  assert.equal(moving.deployables.turretCount, 1, 'overflow: the reload past a full bank deploys');
+  assert.equal(moving.deployables.turretCharges, 2);
 
-  // Expired turrets recharge before they can be planted again.
-  const d = parked.deployables;
-  tick(parked, W.turretDuration(lv));
-  assert.ok(d.turretCount === 0 && d.turretRecharge.length === 3, 'all expired and recharging');
-  tick(parked, W.turretCooldown(lv) + 1);
-  assert.equal(d.turretCount, 3, 'recharged and planted again');
+  // A turret breaks down after its lifetime; Loosen Bolts reloads faster.
+  tick(moving, 6);
+  assert.equal(moving.deployables.turretCount, 2);
+  tick(moving, 4.1);
+  assert.equal(moving.deployables.turretCount, 1, 'the first expired after 10 s');
+  assert.ok(Math.abs(W.turretReload(makeBuild('turret', 3, { reload: 2 })) - 6 / (1 + 2 * RATE_STEP)) < 1e-9);
+});
+
+test('Sentry Turret: Extra Capacity adds a charge, Add Punch pierces, the HUD chip shows the bank', () => {
+  assert.equal(W.turretCharges(makeBuild('turret', 6, {}, { 6: 'transform' })), 3);
+  assert.equal(W.turretPierce(makeBuild('turret', 3, { pierce: 2 })), 4, 'two enemies per bolt, +1 per Add Punch');
+  const g = arena({ enemies: [enemy(2300, 2000)] });
+  g.player.weapons.turret = 1;
+  g.player.vx = 3;
+  assert.equal(g.deployables.turretHudCharge(g.player), null, 'nothing before the turret runs');
+  tick(g, 0.1);
+  assert.equal(g.deployables.turretHudCharge(g.player), 1, 'a full bank');
+  g.player.vx = 0;
+  tick(g, W.turretStillTime + W.turretDropStill + 0.1);
+  assert.equal(g.deployables.turretHudCharge(g.player), 0, 'both planted');
+  tick(g, 2.5);
+  assert.equal(g.deployables.turretHudCharge(g.player), 0.2, 'the next charge is past a third of its reload: a fifth of the bank');
+  const b = g.bullets.find((x) => x.source === 'turret') || (g.deployables.fireTurretBolt(g, g.deployables.turrets[0], L('turret')), g.bullets.at(-1));
+  assert.equal(b.pierce, 2);
 });

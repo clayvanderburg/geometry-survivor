@@ -63,7 +63,7 @@ export const RANGE_MOD_GROUPS = [
   // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.
   { id: 'status', label: 'STATUS', ids: ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'fire_damage', 'frost_damage', 'corrode_damage', 'shock_damage'] },
   { id: 'synergies', label: 'SYNERGIES', ids: ['evo_pulsar', 'evo_tempest', 'evo_siege', 'evo_emp', 'evo_supercrit'] },
-  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'thrusters'] }
+  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] }
 ];
 export const RANGE_MOD_IDS = RANGE_MOD_GROUPS.flatMap((g) => g.ids);
 
@@ -74,7 +74,7 @@ const STAT_LABELS = {
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades', gas: 'Gas Trail', gas_pocket: 'Gas Pockets', gas_shroud: 'Toxic Shroud',
   burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
   burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', corrode: 'Acid', shock: 'Shock Arcs', cryo: 'Cryo Sprayer', acid: 'Acid Sprayer', fireball: 'Fireballs', shatter: 'Shatter', meltdown: 'Meltdown',
-  corrode_gas: 'Gas Trail Acid', shock_shockfield: 'Shock Field Arcs', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  corrode_gas: 'Gas Trail Acid', shock_shockfield: 'Shock Field Arcs', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', rail: 'Rail Lance', ionwake: 'Ion Wake', overload: 'Overload Shot', glaive: 'Glaive Discs', glaive_recall: 'Boomerang Recall', nanite: 'Nanite Swarm', nanite_fission: 'Fission Swarms', nanite_plague: 'Nanite Plague', harpoon: 'Claw Harpoon', harpooncrush: 'Harpoon Crush', harpoonslam: 'Seismic Slam', harpoonspin: 'Drill Spin', harpoonchain: 'Chain Harpoon', quake: 'Graviton Mortar', quake_skip: 'Rebound Pulse', quake_fault: 'Spacetime Fractures', quake_epicenter: 'Graviton Surge', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
 // Status DoT ticks: '<weapon> Burn' / '<weapon> Acid' / '<weapon> Shock' unless named above.
 const DOT_LABEL = { burn: 'Burn', corrode: 'Acid', shock: 'Shock' };

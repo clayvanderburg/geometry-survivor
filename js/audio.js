@@ -10,6 +10,7 @@
 //   intensity and cross-fades track to track, a boss theme), and the procedural score is the fallback.
 // Everything no-ops safely without an AudioContext (node tests, very old browsers).
 import { TUNING, VOLUME_REF } from './config.js';
+import { playBossCue } from './boss-sfx.js';
 
 const MASTER_VOL_KEY = 'vexolith_master_vol';
 const LEGACY_MASTER_VOL_KEY = 'vectra_master_vol';
@@ -245,6 +246,7 @@ export class SoundEngine {
     this.fileMode = false;
     this.filePulse = 0;
     this.lowAvg = 0;
+    this.musicDuck = 1; // cutscene dialogue ducks the music bus (setMusicDuck)
   }
 
   getMasterGainValue() {
@@ -268,7 +270,7 @@ export class SoundEngine {
     this.bpm = this.baseBpm + (SONGS[this.songIndex]?.bpmOffset || 0);
     if (this.ctx) {
       if (this.musicGain) {
-        this.musicGain.gain.setTargetAtTime(musicBusGain(), this.ctx.currentTime, 0.03);
+        this.musicGain.gain.setTargetAtTime(musicBusGain() * this.musicDuck, this.ctx.currentTime, 0.03);
       }
       if (this.sfxGain) {
         this.sfxGain.gain.setTargetAtTime(sfxBusGain(), this.ctx.currentTime, 0.03);
@@ -332,7 +334,7 @@ export class SoundEngine {
     this.musicFilter.Q.value = 0.8;
 
     this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = musicBusGain();
+    this.musicGain.gain.value = musicBusGain() * this.musicDuck;
     this.musicFilter.connect(this.musicGain);
     this.musicGain.connect(this.masterGain);
 
@@ -382,6 +384,12 @@ export class SoundEngine {
     }
     this.musicScene = scene;
     this.updateFileMusic();
+  }
+
+  // Cutscenes duck the soundtrack under dialogue: 1 = full volume, 0.35 = well under the voices.
+  setMusicDuck(level = 1) {
+    this.musicDuck = Math.max(0, Math.min(1, Number(level) || 0));
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(musicBusGain() * this.musicDuck, this.ctx.currentTime, 0.25);
   }
 
   getBeatPulse() {
@@ -1591,6 +1599,32 @@ export class SoundEngine {
     });
   }
 
+  // Named-boss entrance stings and attack tells (procedural, js/boss-sfx.js).
+  playBossCue(name) {
+    if (!this.enabled || !this.ctx) return false;
+    return playBossCue(this, name);
+  }
+
+  // FINAL STAND cleared: one deep sub-bass hit with a long tail into the silence before VICTORY.
+  playSectorClear() {
+    if (!this.enabled || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (const [f, vol, dur] of [[48, 0.5, 2.4], [96, 0.18, 1.2]]) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * 1.6, t);
+      osc.frequency.exponentialRampToValueAtTime(f, t + 0.18);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
+    this.proceduralExplosion(0.8);
+  }
+
   // Lieutenant arrival: a short rising two-tone brass sweep over a sub thump (smaller than the boss sting).
   playLieutenantArrival() {
     if (!this.enabled || !this.ctx) return;
@@ -1793,6 +1827,483 @@ export class SoundEngine {
     sub.stop(t + 0.52);
   }
 
+  // Rail Lance charge: a capacitor whine rising over the charge time (two detuned saws through a
+  // tightening band-pass, a faint tremolo near the top), so the discharge lands on the peak.
+  // An Overload Shot charges an octave lower and louder.
+  playRailCharge(dur = 0.8, overload = false) {
+    if (!this.enabled || !this.ctx) return;
+    dur = Math.max(0.05, Math.min(1.5, dur));
+    if (!this.claimVoice('railcharge', 60, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const vary = 0.96 + Math.random() * 0.08; // a little pitch variety shot to shot
+    const base = (overload ? 110 : 220) * vary;
+    const peak = (overload ? 1300 : 2200) * vary;
+    const vol = overload ? 0.05 : 0.035;
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(base * 2, t);
+    band.frequency.exponentialRampToValueAtTime(peak * 1.5, t + dur);
+    band.Q.setValueAtTime(2, t);
+    band.Q.linearRampToValueAtTime(9, t + dur);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol * 0.4, t + dur * 0.3);
+    gain.gain.exponentialRampToValueAtTime(vol, t + dur * 0.97);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.03);
+    band.connect(gain);
+    gain.connect(this.sfxGain);
+    for (const detune of [-9, 9]) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(base, t);
+      osc.frequency.exponentialRampToValueAtTime(peak, t + dur);
+      osc.detune.value = detune;
+      osc.connect(band);
+      osc.start(t);
+      osc.stop(t + dur + 0.05);
+    }
+    // Lock-on: a bright two-tone click right at the top of the charge, so the shot lands on a cue.
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    click.type = 'triangle';
+    click.frequency.setValueAtTime(peak * 1.2, t + dur - 0.05);
+    click.frequency.setValueAtTime(peak * 1.6, t + dur - 0.025);
+    clickGain.gain.setValueAtTime(0.0001, t);
+    clickGain.gain.setValueAtTime(0.0001, t + dur - 0.05);
+    clickGain.gain.exponentialRampToValueAtTime(vol * 0.9, t + dur - 0.045);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    click.connect(clickGain);
+    clickGain.connect(this.sfxGain);
+    click.start(t);
+    click.stop(t + dur + 0.02);
+  }
+
+  // Rail Lance discharge: a hard supersonic crack (high-passed noise snap), a falling metallic zing
+  // (square through a ringing band) and a short sub punch. An Overload Shot adds a long low boom.
+  playRailFire(overload = false, hits = 0) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = overload ? 0.6 : 0.32;
+    if (!this.claimVoice('railfire', 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const body = (overload ? 1.25 : 1) * (0.9 + Math.min(0.25, hits * 0.03));
+    const vary = 0.95 + Math.random() * 0.1;
+
+    const noise = this.noiseSource();
+    const high = this.ctx.createBiquadFilter();
+    high.type = 'highpass';
+    high.frequency.setValueAtTime(2600, t);
+    const snap = this.ctx.createGain();
+    snap.gain.setValueAtTime(0.22 * body, t);
+    snap.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    noise.connect(high);
+    high.connect(snap);
+    snap.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.09);
+
+    const zing = this.ctx.createOscillator();
+    const ring = this.ctx.createBiquadFilter();
+    const zingGain = this.ctx.createGain();
+    zing.type = 'square';
+    zing.frequency.setValueAtTime((overload ? 1800 : 3200) * vary, t);
+    zing.frequency.exponentialRampToValueAtTime((overload ? 140 : 320) * vary, t + dur * 0.8);
+    ring.type = 'bandpass';
+    ring.frequency.setValueAtTime(2400, t);
+    ring.frequency.exponentialRampToValueAtTime(600, t + dur * 0.8);
+    ring.Q.value = 6;
+    zingGain.gain.setValueAtTime(0.11 * body, t);
+    zingGain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.8);
+    zing.connect(ring);
+    ring.connect(zingGain);
+    zingGain.connect(this.sfxGain);
+    zing.start(t);
+    zing.stop(t + dur);
+
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(overload ? 120 : 170, t);
+    sub.frequency.exponentialRampToValueAtTime(overload ? 30 : 50, t + (overload ? 0.5 : 0.18));
+    subGain.gain.setValueAtTime(0.13 * body, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + (overload ? 0.55 : 0.2));
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + (overload ? 0.57 : 0.22));
+
+    // Impact: a dull meaty thud a beat after the crack when the lance connects, heavier the more it pierced.
+    if (hits > 0) {
+      const thud = this.ctx.createOscillator();
+      const thudGain = this.ctx.createGain();
+      const ti = t + 0.025;
+      thud.type = 'triangle';
+      thud.frequency.setValueAtTime(95 * vary, ti);
+      thud.frequency.exponentialRampToValueAtTime(42, ti + 0.12);
+      thudGain.gain.setValueAtTime(0.0001, t);
+      thudGain.gain.setValueAtTime((0.09 + Math.min(0.08, hits * 0.015)) * body, ti);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, ti + 0.14);
+      thud.connect(thudGain);
+      thudGain.connect(this.sfxGain);
+      thud.start(t);
+      thud.stop(ti + 0.15);
+    }
+
+    if (overload) {
+      const boom = this.noiseSource();
+      const low = this.ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.setValueAtTime(900, t);
+      low.frequency.exponentialRampToValueAtTime(110, t + dur);
+      const roll = this.ctx.createGain();
+      roll.gain.setValueAtTime(0.001, t);
+      roll.gain.exponentialRampToValueAtTime(0.12, t + 0.03);
+      roll.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      boom.connect(low);
+      low.connect(roll);
+      roll.connect(this.sfxGain);
+      boom.start(t, Math.random() * 0.3, dur + 0.02);
+    }
+  }
+
+  // Claw Harpoon throw: a metal "chunk" as the claw kicks out of its socket, a cable zip falling in pitch
+  // and a short band-passed whoosh.
+  playHarpoonLaunch() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('harpoonLaunch', 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const chunk = this.ctx.createOscillator();
+    const chunkGain = this.ctx.createGain();
+    chunk.type = 'square';
+    chunk.frequency.setValueAtTime(190 * (0.92 + Math.random() * 0.16), t); // a little pitch variety per throw
+    chunk.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+    chunkGain.gain.setValueAtTime(0.05, t);
+    chunkGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    chunk.connect(chunkGain);
+    chunkGain.connect(this.sfxGain);
+    chunk.start(t);
+    chunk.stop(t + 0.08);
+
+    const zip = this.ctx.createOscillator();
+    const zipGain = this.ctx.createGain();
+    zip.type = 'sawtooth';
+    zip.frequency.setValueAtTime(1500 + Math.random() * 150, t + 0.01);
+    zip.frequency.exponentialRampToValueAtTime(420, t + dur);
+    zipGain.gain.setValueAtTime(0.0001, t);
+    zipGain.gain.exponentialRampToValueAtTime(0.022, t + 0.02);
+    zipGain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    zip.connect(zipGain);
+    zipGain.connect(this.sfxGain);
+    zip.start(t);
+    zip.stop(t + dur + 0.01);
+
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(900, t);
+    band.frequency.exponentialRampToValueAtTime(2600, t + dur);
+    band.Q.value = 1.2;
+    const whoosh = this.ctx.createGain();
+    whoosh.gain.setValueAtTime(0.0001, t);
+    whoosh.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
+    whoosh.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(whoosh);
+    whoosh.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.6, dur + 0.02);
+  }
+
+  // Claw Harpoon impacts: 'enemy' a dull thunk, 'hook' a thunk with a bright clamp click, 'rock' a short
+  // gritty crunch as the bit bites in, 'bedrock' a ringing metal clang.
+  playHarpoonHit(kind = 'enemy') {
+    if (!this.enabled || !this.ctx) return;
+    const dur = kind === 'bedrock' ? 0.35 : 0.14;
+    if (!this.claimVoice(`harpoon_${kind}`, kind === 'enemy' ? 45 : 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const tone = (type, f0, f1, vol, len, at = 0) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t + at);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + at + len);
+      g.gain.setValueAtTime(vol, t + at);
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + len);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + len + 0.01);
+    };
+    if (kind === 'bedrock') {
+      tone('triangle', 920, 900, 0.05, 0.32);
+      tone('triangle', 1385, 1370, 0.035, 0.26);
+      tone('sine', 240, 120, 0.05, 0.08);
+      return;
+    }
+    if (kind === 'rock') {
+      const noise = this.noiseSource();
+      const low = this.ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.setValueAtTime(1800, t);
+      low.frequency.exponentialRampToValueAtTime(300, t + dur);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.09, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      noise.connect(low);
+      low.connect(g);
+      g.connect(this.sfxGain);
+      noise.start(t, Math.random() * 0.6, dur + 0.02);
+      tone('square', 110, 60, 0.03, 0.08);
+      return;
+    }
+    tone('sine', 230, 70, 0.08, 0.1);
+    if (kind === 'hook') tone('square', 2400, 1700, 0.018, 0.03, 0.01);
+  }
+
+  // Claw Harpoon tether whipping taut: a plucked steel-cable twang (a falling triangle with its octave) and
+  // a bright tick. Heavier and lower with a catch on the line.
+  playHarpoonSnap(loaded = false) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('harpoonSnap', 60, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const f = (loaded ? 150 : 210) * (0.94 + Math.random() * 0.12);
+    for (const [mult, vol] of [[1, 0.06], [2.02, 0.025]]) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f * mult * 1.25, t);
+      o.frequency.exponentialRampToValueAtTime(f * mult, t + 0.03);
+      g.gain.setValueAtTime(vol * (loaded ? 1.3 : 1), t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + dur + 0.01);
+    }
+    const tick = this.ctx.createOscillator();
+    const tg = this.ctx.createGain();
+    tick.type = 'square';
+    tick.frequency.setValueAtTime(3100, t);
+    tg.gain.setValueAtTime(0.015, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    tick.connect(tg);
+    tg.connect(this.sfxGain);
+    tick.start(t);
+    tick.stop(t + 0.03);
+  }
+
+  // Claw Harpoon winch: one ratchet click (the reel calls it every ~60 ms while it winds in).
+  playHarpoonReel() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.025;
+    if (!this.claimVoice('harpoonReel', 40, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 3200 + Math.random() * 600;
+    band.Q.value = 3;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, dur + 0.01);
+  }
+
+  // A reeled-in catch crushed in the other claw: a heavy low crunch.
+  playHarpoonCrush() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.2;
+    if (!this.claimVoice('harpoonCrush', 80, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(2400, t);
+    low.frequency.exponentialRampToValueAtTime(220, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.6, dur + 0.02);
+    const o = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(130 * (0.9 + Math.random() * 0.2), t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.15);
+    og.gain.setValueAtTime(0.05, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(og);
+    og.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.17);
+  }
+
+  // Seismic Slam: the claws snap shut in a thud (sub drop under a clack).
+  playHarpoonSlam() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.3;
+    if (!this.claimVoice('harpoonSlam', 120, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const sub = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(120, t);
+    sub.frequency.exponentialRampToValueAtTime(34, t + 0.26);
+    subGain.gain.setValueAtTime(0.14, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    sub.connect(subGain);
+    subGain.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.3);
+    const clack = this.ctx.createOscillator();
+    const clackGain = this.ctx.createGain();
+    clack.type = 'square';
+    clack.frequency.setValueAtTime(700, t);
+    clack.frequency.exponentialRampToValueAtTime(240, t + 0.04);
+    clackGain.gain.setValueAtTime(0.04, t);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    clack.connect(clackGain);
+    clackGain.connect(this.sfxGain);
+    clack.start(t);
+    clack.stop(t + 0.06);
+  }
+
+  // Drill Spin: a rising drill whine with a gritty buzz for the length of the spin.
+  playHarpoonSpin(len = 0.12) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = Math.max(0.06, Math.min(0.4, len));
+    if (!this.claimVoice('harpoonSpin', 60, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(380, t);
+    o.frequency.exponentialRampToValueAtTime(900, t + dur);
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 1400;
+    band.Q.value = 0.9;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.04, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + dur + 0.01);
+  }
+
+  // Graviton Mortar volley (weapon id quake; method names kept): a deep "thoom" with a chest-deep recoil
+  // under it and a rising graviton whoop as the charge leaves the tube. More barrels sound heavier.
+  playQuakeLaunch(shells = 2) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.26;
+    if (!this.claimVoice('quakeLaunch', 120, 2, dur)) return;
+    const body = 0.85 + Math.min(0.3, Math.max(0, shells - 2) * 0.08);
+    const pitch = 0.95 + Math.random() * 0.1;
+    this.tone(120 * pitch, 0, 0.2, 0.16 * body, 'sine', 42);
+    this.tone(62 * pitch, 0.015, 0.26, 0.1 * body, 'sine', 30); // recoil under the thoom
+    this.tone(260 * pitch, 0.02, 0.16, 0.04, 'triangle', 780 * pitch); // the charge whooping away
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(900, t);
+    low.frequency.exponentialRampToValueAtTime(200, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.08 * body, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.5, dur + 0.02);
+  }
+
+  // Graviton Mortar burst: space-time pinches, then releases. A short rising suck-in, then a heavy sub
+  // "whomp" with two slightly detuned sines beating against each other (the wave's warble) and a dark
+  // low-passed swell rolling off as the wave spreads. `size` 0.5 (a rebound) .. 1.4 (Graviton Surge).
+  playQuakeImpact(size = 1) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.45 + 0.3 * Math.min(1.4, size);
+    if (!this.claimVoice('quakeImpact', 70, 3, dur)) return;
+    const t0 = this.ctx.currentTime;
+    const v = Math.min(1.4, Math.max(0.4, size));
+    const pitch = 0.94 + Math.random() * 0.12; // no two bursts sound quite alike
+    const pinch = 0.06;
+    const suckNoise = this.noiseSource();
+    const suckBand = this.ctx.createBiquadFilter();
+    suckBand.type = 'bandpass';
+    suckBand.frequency.setValueAtTime(500 * pitch, t0);
+    suckBand.frequency.exponentialRampToValueAtTime(2600 * pitch, t0 + pinch);
+    suckBand.Q.value = 2;
+    const suck = this.ctx.createGain();
+    suck.gain.setValueAtTime(0.001, t0);
+    suck.gain.exponentialRampToValueAtTime(0.07 * v, t0 + pinch);
+    suck.gain.exponentialRampToValueAtTime(0.001, t0 + pinch + 0.03);
+    suckNoise.connect(suckBand);
+    suckBand.connect(suck);
+    suck.connect(this.sfxGain);
+    suckNoise.start(t0, Math.random() * 0.5, pinch + 0.05);
+
+    const t = t0 + pinch;
+    for (const detune of [1, 1.06]) {
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(92 * pitch * detune / Math.sqrt(v), t);
+      sub.frequency.exponentialRampToValueAtTime(26 * detune, t + dur * 0.8);
+      subGain.gain.setValueAtTime(0.0001, t);
+      subGain.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.01);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
+      sub.connect(subGain);
+      subGain.connect(this.sfxGain);
+      sub.start(t);
+      sub.stop(t + dur);
+    }
+
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(1400 * pitch, t);
+    low.frequency.exponentialRampToValueAtTime(80, t + dur);
+    low.Q.value = 4; // a resonant sweep: the wave "whooshes" down rather than rumbling like stone
+    const roll = this.ctx.createGain();
+    roll.gain.setValueAtTime(0.001, t);
+    roll.gain.exponentialRampToValueAtTime(0.11 * v, t + 0.015);
+    roll.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(roll);
+    roll.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.2, dur + 0.02);
+  }
+
+  // Spacetime Fractures snapping shut: a glassy crack, a falling ping and a soft low thud.
+  playQuakeFault() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.2;
+    if (!this.claimVoice('quakeFault', 90, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const pitch = 0.92 + Math.random() * 0.16;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'highpass';
+    band.frequency.setValueAtTime(3200 * pitch, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.07, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.08);
+    this.tone(1900 * pitch, 0, dur, 0.035, 'sine', 520 * pitch);
+    this.tone(70, 0, 0.16, 0.06, 'sine', 40);
+  }
+
   // Missile salvo: a band-swept noise whoosh with a soft thump, plus a quick "fft" per extra
   // missile (up to 3) so the volley sounds like several launches.
   playMissileLaunch(count = 1) {
@@ -1918,11 +2429,54 @@ export class SoundEngine {
     osc.stop(t + 0.05);
   }
 
-  // Sentry turret bolt.
+  // Short band-passed noise burst (clanks, chatter, servo hiss) at `start` s from now.
+  noiseHit(start, dur, vol, freq, q = 1, glideTo = 0) {
+    const t = this.ctx.currentTime + start;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(freq, t);
+    if (glideTo) band.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+    band.Q.value = q;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8);
+    noise.stop(t + dur + 0.01);
+  }
+
+  // Sentry turret LMG: a dry mechanical "chk" (noise crack over a low square pop), a little pitch
+  // variety per round so a burst chatters instead of droning.
   playTurretShot() {
     if (!this.enabled || !this.ctx) return;
     if (this.playSample('turret_shot')) return;
-    this.playLaser(0.72);
+    if (!this.claimVoice('turret', 55, 3, 0.07)) return;
+    const v = 0.94 + Math.random() * 0.12;
+    this.noiseHit(0, 0.035, 0.07, 2600 * v, 1.3);
+    this.tone(210 * v, 0, 0.055, 0.045, 'square', 85 * v);
+  }
+
+  // Sentry turret planted: a heavy clunk as it lands, a servo whirr as it unfolds, a ready chirp.
+  playTurretDeploy() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('turretDeploy', 90, 3, 0.4)) return;
+    this.tone(150, 0, 0.2, 0.2, 'sine', 42);
+    this.noiseHit(0, 0.07, 0.12, 900, 1.6);
+    this.tone(320, 0.07, 0.16, 0.025, 'sawtooth', 960);
+    this.tone(1320, 0.25, 0.08, 0.045, 'sine', 1980);
+  }
+
+  // Sentry turret breaks down: the servo winds down, a soft clunk as it folds, then a falling blip.
+  playTurretPackUp() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('turretPack', 120, 2, 0.4)) return;
+    this.tone(900, 0, 0.22, 0.022, 'sawtooth', 240);
+    this.tone(120, 0.18, 0.16, 0.12, 'sine', 48);
+    this.noiseHit(0.18, 0.05, 0.06, 700, 1.4);
+    this.tone(880, 0.26, 0.12, 0.03, 'sine', 440);
   }
 
   // Proximity mine laid: a clank and an arming chirp.
@@ -1983,6 +2537,83 @@ export class SoundEngine {
     band.connect(g);
     g.connect(this.sfxGain);
     noise.start(t, Math.random() * 0.7, 0.24);
+  }
+
+  // Nanite Swarm canister launch: a soft pneumatic "thup" (low sine drop + a puff of noise) under a quick
+  // rising digital chirp, so a launch reads as "something small and clever just left the ship".
+  playNaniteLaunch() {
+    if (!this.claimVoice('naniteLaunch', 160, 2, 0.3)) return;
+    this.tone(190, 0, 0.12, 0.06, 'sine', 80);
+    this.tone(900, 0.03, 0.09, 0.025, 'square', 2200);
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(1400, t);
+    band.Q.value = 0.9;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.035, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    noise.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.16);
+  }
+
+  // The canister bursting into a swarm: a dry fizzing crackle (high-passed noise in a few quick bursts).
+  playNaniteBurst() {
+    if (!this.claimVoice('naniteBurst', 140, 2, 0.3)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(3200, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    for (let i = 0; i < 4; i++) {
+      g.gain.linearRampToValueAtTime(0.045 - i * 0.008, t + 0.01 + i * 0.05);
+      g.gain.linearRampToValueAtTime(0.004, t + 0.04 + i * 0.05);
+    }
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    noise.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.7, 0.28);
+  }
+
+  // Swarm feeding: a quiet insect-like chitter of three tiny square clicks at random high pitches
+  // (throttled by nanites.js and here, so a field of swarms never buzzes constantly).
+  playNaniteChitter() {
+    if (!this.claimVoice('naniteChitter', 300, 1, 0.12)) return;
+    for (let i = 0; i < 3; i++) this.tone(2600 + Math.random() * 1800, i * 0.035, 0.025, 0.012, 'square');
+  }
+
+  // A swarm swallowing a kill: a soft wet "gulp" (a sine dipping fast) under a bright glassy note that
+  // climbs a pentatonic scale with each kill in a feeding run (`combo`), so a swarm chewing through a
+  // pack plays a rising little melody. Throttled so a big pack stays musical, not a buzz.
+  playNaniteFeed(combo = 0) {
+    if (!this.claimVoice('naniteFeed', 55, 3, 0.16)) return;
+    const steps = [0, 2, 4, 7, 9];
+    const n = Math.min(combo, 14);
+    const semis = steps[n % 5] + 12 * Math.floor(n / 5);
+    const f = 660 * Math.pow(2, semis / 12) * (0.99 + Math.random() * 0.02);
+    this.tone(320, 0, 0.09, 0.05, 'sine', 120);
+    this.tone(f, 0.012, 0.12, 0.03, 'triangle');
+    this.tone(f * 2, 0.012, 0.06, 0.008, 'sine');
+  }
+
+  // A swarm reaching full size: a bright two-note chime with a shimmer on top.
+  playNaniteGorged() {
+    if (!this.claimVoice('naniteGorged', 250, 1, 0.4)) return;
+    this.tone(1046, 0, 0.22, 0.04, 'triangle');
+    this.tone(1568, 0.06, 0.3, 0.04, 'triangle');
+    this.tone(3136, 0.06, 0.18, 0.01, 'sine');
+  }
+
+  // Fission Bloom bud / Nanite Plague burst: a small glassy up-arpeggio.
+  playNaniteBloom() {
+    if (!this.claimVoice('naniteBloom', 180, 2, 0.25)) return;
+    [1320, 1760, 2349].forEach((f, i) => this.tone(f, i * 0.04, 0.1, 0.022, 'triangle'));
   }
 
   // Sprayers: one soft looping roar per kind ('flame' Flamethrower, 'cryo' Cryo Sprayer, 'acid' Acid
@@ -2120,6 +2751,141 @@ export class SoundEngine {
     noise.start(t, Math.random() * 0.8, 0.05);
   }
 
+  // Glaive Discs throw: a quick rising whirr (filtered noise swept up under a detuned square), a touch
+  // fuller for bigger throws. Throttled so a fast launcher never stacks into a drone.
+  playGlaiveThrow(discs = 2) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.16;
+    if (!this.claimVoice('glaive_throw', 90, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const body = 0.8 + Math.min(0.4, discs * 0.06);
+    const noise = this.noiseSource();
+    const band = this.ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.setValueAtTime(900, t);
+    band.frequency.exponentialRampToValueAtTime(3800, t + dur);
+    band.Q.value = 3;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.001, t);
+    ng.gain.linearRampToValueAtTime(0.07 * body, t + 0.05);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(band);
+    band.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, dur + 0.02);
+
+    const whirr = this.ctx.createOscillator();
+    const wg = this.ctx.createGain();
+    whirr.type = 'square';
+    whirr.frequency.setValueAtTime(180, t);
+    whirr.frequency.exponentialRampToValueAtTime(520, t + dur);
+    wg.gain.setValueAtTime(0.012 * body, t);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    whirr.connect(wg);
+    wg.connect(this.sfxGain);
+    whirr.start(t);
+    whirr.stop(t + dur + 0.01);
+  }
+
+  // Glaive Disc ricochet, layered for weight: a noise "tick" transient (the edge biting), a bell-like
+  // ping of inharmonic partials and, on enemies, a short low thump under it. Pitch climbs a semitone per
+  // hit along the chain plus a random +-1.5 semitone jitter, so a ricochet run never sounds like a loop.
+  // `kind`: 'enemy' (bright ping), 'rock' (lower, longer clang with grit) or 'plate' (dull deflect clank).
+  playGlaiveRicochet(hits = 1, kind = 'enemy') {
+    if (!this.enabled || !this.ctx) return;
+    const rock = kind === 'rock';
+    const plate = kind === 'plate';
+    const dur = rock ? 0.2 : plate ? 0.1 : 0.16;
+    if (!this.claimVoice('glaive_hit', 38, 4, dur)) return;
+    const t = this.ctx.currentTime;
+    const jitter = Math.pow(2, (Math.random() * 3 - 1.5) / 12);
+    const base = (rock ? 430 : plate ? 760 : 1180 * Math.pow(2, Math.min(12, hits) / 12)) * jitter;
+    const partials = rock ? [[1, 0.05, 0.2], [2.32, 0.026, 0.12], [3.9, 0.014, 0.07]]
+      : plate ? [[1, 0.04, 0.08], [1.48, 0.03, 0.06]]
+        : [[1, 0.045, 0.16], [2.76, 0.022, 0.09], [5.4, 0.01, 0.05]];
+    for (const [ratio, vol, decay] of partials) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = rock || plate ? 'triangle' : 'sine';
+      o.frequency.setValueAtTime(base * ratio * 1.03, t);
+      o.frequency.exponentialRampToValueAtTime(base * ratio, t + 0.02); // a tiny downward bend: struck metal
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + decay);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + decay + 0.02);
+    }
+    // Transient: a few ms of filtered noise for the bite (grittier and lower off rock).
+    const noise = this.noiseSource();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = rock ? 'bandpass' : 'highpass';
+    hp.frequency.value = rock ? 1800 : 4500;
+    const ng = this.ctx.createGain();
+    const nd = rock ? 0.045 : 0.018;
+    ng.gain.setValueAtTime(rock ? 0.06 : 0.045, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + nd);
+    noise.connect(hp);
+    hp.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, nd + 0.01);
+    if (kind === 'enemy') {
+      // Weight: a quick low thump under the ping.
+      const th = this.ctx.createOscillator();
+      const tg = this.ctx.createGain();
+      th.type = 'sine';
+      th.frequency.setValueAtTime(190, t);
+      th.frequency.exponentialRampToValueAtTime(80, t + 0.06);
+      tg.gain.setValueAtTime(0.05, t);
+      tg.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      th.connect(tg);
+      tg.connect(this.sfxGain);
+      th.start(t);
+      th.stop(t + 0.08);
+    }
+  }
+
+  // Fission Discs split: two bright pings a fifth apart, 25 ms apart, like a blade snapping in two.
+  playGlaiveSplit() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('glaive_split', 70, 2, 0.14)) return;
+    const t = this.ctx.currentTime;
+    const f = 1600 * Math.pow(2, (Math.random() * 2 - 1) / 12);
+    [[f, 0], [f * 1.5, 0.025]].forEach(([freq, at]) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t + at);
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.linearRampToValueAtTime(0.04, t + at + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + at + 0.11);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + 0.12);
+    });
+  }
+
+  // Boomerang Recall catch: a short rising "shink" as a disc slots back into the hull.
+  playGlaiveCatch() {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('glaive_catch', 60, 2, 0.1)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(640 * Math.pow(2, (Math.random() * 2 - 1) / 12), t);
+    o.frequency.exponentialRampToValueAtTime(1300, t + 0.07);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.035, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.09);
+    o.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+
   // Elite grinding through rock: a low, gritty scrape tick, heavily throttled (one voice, ~9/s) and
   // well under the blade grind. `vol` (0-1) falls off with the grind point's distance from the ship.
   playEliteGrind(vol = 1) {
@@ -2179,6 +2945,30 @@ export class SoundEngine {
     osc.stop(t + 0.15);
   }
 
+  // A Blinker starts its wind-up: a rising glassy shimmer (two detuned voices and a high chirp), pitch
+  // jittered so a pack doesn't drone. Rate-limited so ten blinkers charging at once read as one cue.
+  playBlinkCharge() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastBlinkCharge || 0) < 160) return;
+    this.lastBlinkCharge = now;
+    const k = 0.92 + Math.random() * 0.16;
+    this.tone(520 * k, 0, 0.42, 0.045, 'triangle', 1560 * k);
+    this.tone(528 * k, 0.01, 0.4, 0.03, 'sine', 1620 * k);
+    this.tone(2200 * k, 0.3, 0.09, 0.025, 'square', 2600 * k);
+  }
+
+  // The blink itself: a quick downward zip, so the arrival lands with a snap.
+  playBlinkWarp() {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastBlinkWarp || 0) < 120) return;
+    this.lastBlinkWarp = now;
+    const k = 0.9 + Math.random() * 0.2;
+    this.tone(1800 * k, 0, 0.13, 0.05, 'sawtooth', 220 * k);
+    this.tone(90 * k, 0.02, 0.12, 0.06, 'sine', 55 * k);
+  }
+
   // A single enveloped oscillator note into the SFX bus (procedural fallbacks and sparkles).
   tone(freq, start, dur, vol, type = 'triangle', glideTo = 0) {
     const t = this.ctx.currentTime + start;
@@ -2194,6 +2984,59 @@ export class SoundEngine {
     gain.connect(this.sfxGain);
     osc.start(t);
     osc.stop(t + dur + 0.02);
+  }
+
+  // Dialogue typewriter blip in a speaker's voice ({ wave, freq, jitter, vol, dur, glide }): one short
+  // tone per couple of letters, pitch wobbling a little so speech reads as speech.
+  playDialogueBlip(voice = {}) {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const t = this.ctx.currentTime;
+    const dur = voice.dur ?? 0.045;
+    const f = (voice.freq ?? 300) * (1 + ((Math.random() * 2 - 1) * (voice.jitter ?? 0.1)));
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = voice.wave || 'square';
+    osc.frequency.setValueAtTime(f, t);
+    if (voice.glide) osc.frequency.exponentialRampToValueAtTime(f * voice.glide, t + dur);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(voice.vol ?? 0.05, t + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  // Dr. Pixie's EUREKA: a bright rising major arpeggio with a bell on top and a little sparkle tail.
+  playEureka() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    [1046.5, 1318.5, 1568, 2093].forEach((f, i) => this.tone(f, 0.06 + i * 0.055, 0.22 + (i === 3 ? 0.35 : 0), 0.07, 'triangle'));
+    this.tone(2093, 0.28, 0.6, 0.035, 'sine', 2637);
+    this.tone(523.25, 0.06, 0.3, 0.05, 'square', 1046.5);
+    this.sparkle(0.32, 5);
+  }
+
+  // Warp-in sting: a dissonant brass stab (D minor over an E-flat) on a sub drop and a rising rift tear.
+  playWarpSting() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const t = this.ctx.currentTime;
+    [146.83, 174.61, 220, 155.56, 311.13].forEach((f, k) => {
+      [1, 1.006].forEach((det) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f * det, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.045 - k * 0.004, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        osc.start(t);
+        osc.stop(t + 1.65);
+      });
+    });
+    this.tone(70, 0, 1.1, 0.35, 'sine', 28);
+    this.playRiftOpen();
   }
 
   // Quick high pings on top of a fanfare.

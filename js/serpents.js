@@ -129,6 +129,14 @@ export function traceSegment(ctx, e, r) {
   ctx.closePath();
   ctx.moveTo(-r * 0.35, 0);
   ctx.lineTo(r * 0.35, 0);
+  if (e.bossBody === 'ouroboros') {
+    // The Ouroboros's plates carry a pair of swept dorsal spines.
+    for (const s of [-1, 1]) {
+      ctx.moveTo(r * 0.35, s * r * 0.8);
+      ctx.lineTo(-r * 0.55, s * r * 1.3);
+      ctx.lineTo(-r * 0.25, s * r * 0.8);
+    }
+  }
 }
 
 // Serpent head: an arrowhead with two eye slits.

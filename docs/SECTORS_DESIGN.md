@@ -157,12 +157,12 @@ Each hazard is its own later PR; a sector ships first with only palette, terrain
 ## 5. Story campaign
 
 ### 5.1 How story is delivered
-The cutscene and talking-head system is built by the cutscene lane (PR #167); the story uses it as is:
+The cutscene and talking-head system is being built by the cutscene lane in **PR #167 (open, not on master yet)**; the story uses it as is:
 
 | Tool | When | Rules |
 |---|---|---|
 | **Cutscene** (`Game.playCutscene(id)`, scenes in `SCENES`, `js/story.js`) | Run start (first time), **inside each portal transit**, VICTORY, the Endless tag | Scripts are plain data (`{ do: 'say', who, text }` plus stage actions). The world keeps simulating but nothing can hurt the ship. Lines auto-advance after a read hold; A / click / Space speeds them up; **one press skips** (Esc, SKIP, pad Start). Under ~30 s; run clock and score frozen. For mid-run scenes the new sector holds its spawns until the scene ends, and the ship stays invulnerable. |
-| **Radio lines** (non-pausing `say(speaker, line)`, *planned* with the Dr. Pixie Breakthrough work) | Wave starts, boss warnings, objective updates, a few reactions (first Vortex, low shield) | **Never pauses.** Portrait plus one line in a bottom corner, 3–4 s, typewriter bleeps; at most one queued line; muted during the boss title card and level-up hands. |
+| **Radio lines** (`Game.say(speaker, text, { mood })`, in **PR #177 (open, stacked on #167)**) | Wave starts, boss warnings, objective updates, a few reactions (first Vortex, low shield) | **Never pauses**, click-through. Portrait plus one line in a bottom corner, 3–4 s, typewriter bleeps; at most one queued line; muted during the boss title card and level-up hands. |
 
 - Speakers and portraits go through `registerSpeaker` (name, colour, portrait, voice) and `registerPortrait`
   (72×72 canvas pixel art). The VEX don't speak: their glyphs are read out by Dee's translator.
@@ -278,7 +278,7 @@ lost.
 | 9 | **Hazards**, one PR each (meteor drift, gravity currents, energy gates, prism beams) + Field Guide. | new modules | **Yes** |
 | 10 | **Endless loops** the sectors with remixed palettes. | `js/sectors.js`, `js/victory.js` | **Yes** |
 | 11 | **Sector Atlas + feats** (after the Hangar feat engine): "Reach Sector 3 in HARDCORE", etc. | Hangar & Progression | No / Yes |
-| 12 | **Story data + hooks.** Chapter scenes in `SCENES`, `save.story.seen` (replaces `vexolith_intro_seen`), STORY setting; portal cutscenes and radio lines wired to sector events. Needs PR #167 and the radio-line API. | `js/story.js`, `js/progression.js`, `main.js` (few lines) | Content |
+| 12 | **Story data + hooks.** Chapter scenes in `SCENES`, `save.story.seen` (replaces `vexolith_intro_seen`), STORY setting; portal cutscenes and radio lines wired to sector events. Needs PR #167 and PR #177 merged. | `js/story.js`, `js/progression.js`, `main.js` (few lines) | Content |
 | 13 | **Chapter objectives**, one PR each (shards, crew pods, rifts, gates, twins) with HUD tracker and score bonus. | new `js/objectives.js` | **Yes** |
 | 14 | **Victory / Endless story:** CLOCK OUT / ONE MORE SHIFT labels, ending cutscene, Endless banter. | `js/victory.js`, `js/story.js` | Content |
 | 15 | *(Later, if wanted)* **Branching** (structure B): second sector per tier, two portals. | all of the above | **Yes** |

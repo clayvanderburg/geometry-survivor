@@ -418,6 +418,12 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.lineTo(4, 8.5);
       ctx.stroke();
 
+      // Claw Harpoon: the port drill is out on its tether (js/claw-harpoon.js), so only the empty jaws show.
+      if (arm === 0 && p.harpoonOut) {
+        ctx.restore();
+        continue;
+      }
+
       // Conical Rotary Drill Bit Outline (Base at x=0, sharp drill point at x=16)
       const drillLen = 16.5;
       const drillHalfW = 6.2;

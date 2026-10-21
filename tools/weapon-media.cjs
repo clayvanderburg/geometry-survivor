@@ -42,12 +42,16 @@ const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that fo
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
   shockfield: { drift: true, dash: 60, dummies: CHASERS },
+  harpoon: { dummies: { ...CHASERS, count: 20 }, frames: 48 }, // chasers to skewer, yank and crush
   // Mines drop behind the ship: it circles outside a ring of still targets under a fixed camera, laying a
   // ring of armed mines in shot; a second in, the targets are released and charge through them.
   mines: { orbit: 170, fixedCam: true, zoom: 1.4, warmup: 360, frames: 60, release: 15, dummies: { count: 10 } },
   lightning: { frames: 60 }, // strikes are spaced out: a longer loop catches more of them
+  quake: { frames: 60 }, // a volley every ~2.6 s: a longer loop catches two of them
   // The blade ring orbits outside the default close ring: 32 targets spread the close ring onto the blades' path.
-  orbitals: { dummies: { count: 32 } }
+  orbitals: { dummies: { count: 32 } },
+  // Swarms fly out to the packs: a wider ring under a wider frame shows the launches and the spread.
+  nanites: { zoom: 1, dummies: { formation: 'ring', count: 24 } }
 };
 
 (async () => {
@@ -122,6 +126,7 @@ async function capture(browser, clip, tmp) {
     try {
       localStorage.setItem('vexolith_weapon_range', range);
       localStorage.setItem('vexolith_tutorial_seen', '1');
+      localStorage.setItem('vexolith_intro_seen', '1');
       localStorage.setItem('vexolith_slot_tip_seen', '1');
     } catch {}
   }, JSON.stringify(range));

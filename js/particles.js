@@ -29,6 +29,9 @@ export class ParticleSystem {
     // Live tuning source ({ vfxIntensity, vfxLinger }); main.js points this at TUNING. Missing
     // values fall back to 1 so standalone systems (Field Guide previews, tests) look the same.
     this.tuning = null;
+    // Spark budget (0..1) set each frame from js/juice.js particleDensity(): fewer sparks in dense
+    // waves and with REDUCE EFFECTS on. Standalone systems keep 1.
+    this.density = 1;
   }
 
   // Brightness/width multiplier and lifetime multiplier for weapon effects (user knobs).
@@ -116,6 +119,7 @@ export class ParticleSystem {
 
   // Burst of velocity-stretched neon line sparks (Geometry Wars signature explosion)
   spawnExplosionSparks(x, y, count, hue, speedMin = 3, speedMax = 16, size = 2.2) {
+    count = Math.ceil(count * this.density);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = speedMin + Math.pow(Math.random(), 0.7) * (speedMax - speedMin);
@@ -136,6 +140,7 @@ export class ParticleSystem {
 
   // Directional spray (bullet impacts, thruster exhaust)
   spawnDirectionalSparks(x, y, baseAngle, spread, count, hue, speedMax = 10) {
+    count = Math.ceil(count * this.density);
     for (let i = 0; i < count; i++) {
       const angle = baseAngle + (Math.random() - 0.5) * spread;
       const speed = 2 + Math.random() * speedMax;
