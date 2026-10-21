@@ -10,6 +10,8 @@
 // the wave's damage ramp, is skipped during a dash's invulnerability and lands in the run stats.
 // Timers are seconds; speeds are px per fixed 60 Hz tick.
 
+import { flashScale } from './juice.js'; // REDUCE EFFECTS dims the blast glow
+
 export const HAZARD = {
   cap: 64,           // live hazards at once (a new one past the cap is skipped)
   live: 0.14,        // s a zone / lane stays live after it detonates (the hit window)
@@ -130,7 +132,7 @@ export class BossTelegraphs {
         if (((h.age * 60) | 0) % 3 === 0) {
           const x = h.x + (h.x2 - h.x) * k;
           const y = h.y + (h.y2 - h.y) * k;
-          fx.particles.spawnFlash?.(x, y, h.w * 1.3, 28, 0.16);
+          fx.particles.spawnFlash?.(x, y, h.w * 1.3 * flashScale(), 28, 0.16);
           fx.particles.spawnExplosionSparks?.(x, y, 4, 28, 2, 7, 2);
         }
       }
@@ -141,7 +143,7 @@ export class BossTelegraphs {
   detonate(h, fx) {
     const p = fx.particles;
     if (h.kind === 'zone') {
-      p?.spawnFlash?.(h.x, h.y, h.r * 1.6, h.hue, 0.2);
+      p?.spawnFlash?.(h.x, h.y, h.r * 1.6 * flashScale(), h.hue, 0.2);
       p?.spawnShockwave?.(h.x, h.y, h.r * 1.25, h.hue, 4, 0.3);
       p?.spawnExplosionSparks?.(h.x, h.y, 12, h.hue, 2, 9, 2.2);
       fx.grid?.applyImpulse?.(h.x, h.y, 26, h.r * 1.6, h.hue);
