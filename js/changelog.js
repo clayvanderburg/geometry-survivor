@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-20',
     title: 'Big Guns, Bigger Bosses',
     notes: [
-      { type: 'new', text: 'Five new weapons: Rail Lance (a piercing line), Glaive Discs (ricochets), Nanite Swarm (corrosive swarms), Claw Harpoon (a tethered drill-claw that mines) and Quake Mortar.' },
+      { type: 'new', text: 'Five new weapons: Rail Lance (piercing line), Glaive Discs (ricochets), Nanite Swarm (corrosive swarms), Claw Harpoon (a drill-claw that mines) and Graviton Mortar (gravity waves).' },
       { type: 'new', text: 'All 10 bosses reworked: bigger, faster, new looks and sounds, and a telegraphed signature attack that escalates in later phases. Red lanes and marked zones: get out.' },
       { type: 'new', text: 'Wave 50 is a FINAL STAND: the Prism brings one last surge, then spawns stop. Clear the field for VICTORY. Past wave 35, enemy HP now grows about half as fast.' },
       { type: 'new', text: 'New enemy: the HATCHERY (wave 35) breeds diving HATCHLINGS. Blinkers now telegraph their jump clearly and never land on you; small enemies stand out in crowds.' },
