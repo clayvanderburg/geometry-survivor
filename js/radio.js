@@ -67,6 +67,33 @@ export class RadioBox {
     else this.box.hide();
   }
 
+  // Docks the box into a cell appended to `container` (the Breakthrough card grid's free column), so a
+  // big Dr. Pixie sits beside the cards instead of over them; undock() puts it back in its corner.
+  dock(container) {
+    const root = this.box.bind?.() ? this.box.root : null;
+    const doc = globalThis.document;
+    if (!root || !container || !doc) return false;
+    this.undock();
+    this.home ??= { parent: root.parentNode, next: root.nextSibling };
+    this.dockEl = doc.createElement('div');
+    this.dockEl.className = 'radio-dock';
+    container.appendChild(this.dockEl);
+    this.dockEl.appendChild(root);
+    root.classList.add('radio-docked');
+    return true;
+  }
+
+  undock() {
+    if (!this.dockEl) return;
+    const root = this.box.root;
+    root.classList.remove('radio-docked');
+    this.home?.parent?.insertBefore(root, this.home.next?.parentNode === this.home.parent ? this.home.next : null);
+    this.dockEl.remove?.();
+    this.dockEl = null;
+  }
+
+  get docked() { return !!this.dockEl; }
+
   // Off air at once (the run ended, back to the title).
   clear() {
     this.current = this.queued = null;
