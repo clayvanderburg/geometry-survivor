@@ -151,8 +151,8 @@ test('headlines are computed from the rolled level jump', () => {
   const p = makePlayer();
   assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 1 }).headline, '+2 AUTOCANNON PROJECTILES');
   assert.equal(describeUpgrade(p, { ...byId('multishot'), levelJump: 2 }).headline, '+4 AUTOCANNON PROJECTILES');
-  assert.equal(describeUpgrade(p, byId('mining_speed')).headline, '+12% MINING SPEED');
-  assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+25% MINING SPEED');
+  assert.equal(describeUpgrade(p, byId('mining_speed')).headline, '+6% MINING SPEED');
+  assert.equal(describeUpgrade(p, { ...byId('mining_speed'), levelJump: 2 }).headline, '+12% MINING SPEED');
   assert.equal(describeUpgrade(p, byId('luck_boost')).headline, '+25% LUCK');
   assert.equal(describeUpgrade(p, byId('pierce')).headline, '+1 AUTOCANNON PIERCE');
   assert.equal(describeUpgrade(p, byId('blaster_damage')).headline, '+34% AUTOCANNON DAMAGE');

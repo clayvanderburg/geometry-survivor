@@ -143,16 +143,22 @@ const STATUS_CARDS = [
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
+// Drill-claw numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
+export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
+export const TECTONIC_MINING_SPEED = 1.18;
+export const TECTONIC_MINING_RANGE = 1.15;
+export const TECTONIC_DRILL_SCALE = 1.15;
+
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
     name: 'Rotary Claw Overclock',
     category: 'DRILL CLAWS',
-    maxLevel: 6,
+    maxLevel: 10,
     headline: 'miningSpeed',
     summary: 'Spins the twin drill-claws faster. Only mining speed.',
     apply(player) {
-      player.stats.miningSpeed *= 1.12;
+      player.stats.miningSpeed *= MINING_SPEED_STEP;
     }
   },
   {
@@ -383,9 +389,9 @@ export const UPGRADE_POOL = [
     summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
-      player.stats.miningSpeed *= 1.9;
-      player.stats.miningRange *= 1.3;
-      player.stats.drillScale = (player.stats.drillScale || 1.0) * 1.25;
+      player.stats.miningSpeed *= TECTONIC_MINING_SPEED;
+      player.stats.miningRange *= TECTONIC_MINING_RANGE;
+      player.stats.drillScale = (player.stats.drillScale || 1.0) * TECTONIC_DRILL_SCALE;
     }
   },
   {
