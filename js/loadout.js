@@ -142,7 +142,7 @@ export const STARTING_WEAPONS = ['blaster'];
 
 // The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
 // is remembered on this device and pre-selected next time.
-export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles'];
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive'];
 export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
 export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
 export function readStartWeapon(storage) {
