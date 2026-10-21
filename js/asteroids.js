@@ -1024,8 +1024,8 @@ export class AsteroidManager {
     return false;
   }
 
-  // A Quake Mortar ring or fissure from (fx, fy) hits a rock for `dmg` mining damage: the same hp drain,
-  // cracks, chips and flash as the drill, from the face toward the quake. Returns true when it broke the
+  // A Graviton Mortar wave or fracture from (fx, fy) hits a rock for `dmg` mining damage: the same hp drain,
+  // cracks, chips and flash as the drill, from the face toward the burst. Returns true when it broke the
   // rock (the caller removes it and runs the shatter path; it counts as mined). Bedrock never cracks.
   quakeRock(rock, fx, fy, dmg, particles) {
     if (rock.unbreakable || rock.hp <= 0) return false;

@@ -1,22 +1,25 @@
-// Quake Mortar: an autonomous slot weapon. Every volley interval the mortar lobs `count` heavy shells at
-// the densest packs in range (or around the ship when nothing is in range). A shell flies a high arc with
-// a landing marker under it, then lands as a SHOCKWAVE RING that rolls out over the ground: every enemy
-// the ring front passes takes one hit (full at the impact, a little less at the rim) and is shoved
-// outward, and every rock it passes takes mining damage, so the rings crack rocks and break them (a
-// broken rock counts as mined, ore and all). The ring also sends its wave through the warp grid.
+// Graviton Mortar (weapon id 'quake', kept from its first name so saves and run stats keep working): an
+// autonomous slot weapon. Every volley interval the mortar lobs `count` graviton charges at the densest
+// packs in range (or around the ship when nothing is in range). A charge arcs over the field with a
+// targeting reticle under it, then bursts into a GRAVITY WAVE: space-time pinches in, then a ring rolls
+// out through the warp grid. Every enemy the wave front passes takes one hit (full at the burst, a
+// little less at the rim) and is shoved outward, and every rock it passes takes tidal-shear damage, so
+// the waves crack rocks and break them (a broken rock counts as mined, ore and all).
 //
-// Breakthroughs: Skipping Shells (a landed shell skips on to the next pack twice, quaking again in
-// smaller rings), Fault Lines (every main impact tears three fissures that erupt a moment later) and
-// Epicenter (every third volley the hull itself slams a huge ring out around the ship).
+// Breakthroughs: Rebound Pulse (a burst charge rebounds to the next pack twice, pulsing again in smaller
+// waves), Spacetime Fractures (every main burst tears three seams in space-time that snap shut a moment
+// later) and Graviton Surge (every third volley the hull itself releases a huge wave around the ship).
 //
-// Shells, rings and fissures live in fixed pools (each ring keeps its own reusable hit sets, so an enemy
-// or rock is hit once per ring) and are simulated only from Game.update, so pause, hit-stop and slow-mo
-// freeze them with the rest of the world. Damage goes through Game.hitEnemy (source 'quake').
+// Charges, waves and fractures live in fixed pools (each wave keeps its own reusable hit sets, so an
+// enemy or rock is hit once per wave) and are simulated only from Game.update, so pause, hit-stop and
+// slow-mo freeze them with the rest of the world. Damage goes through Game.hitEnemy (source 'quake').
 import { WEAPON_SCALING as W, weaponDamage, quakeRadius } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { isDeployableTarget } from './deployables.js';
 
-const HUE = 22;            // magma amber; the ring front burns white-hot
+const HUE = 32;            // graviton amber-gold; the wave front burns white-hot
+const LENS = 300;          // magenta ghost ring a few px out: the wave lensing the light behind it
+const SEAM = 186;          // cyan edge of a spacetime fracture (gold on the other side)
 const SHELL_POOL = 48;     // shells in flight: up to 6 per volley (+2 skips each), a volley every ~0.5 s at max rate
 const RING_POOL = 40;      // live rings (each ~0.5 s), skips and Epicenter slams included
 const FAULT_POOL = 36;     // fissures waiting to erupt or fading (3 per main impact)
@@ -24,8 +27,9 @@ const MAX_CANDIDATES = 24; // nearest enemies scored as pack centres for a volle
 const LEAD = 0.6;          // share of a target's motion over the flight the shell leads
 
 const ease = (k) => 1 - (1 - k) * (1 - k); // the ring rolls out fast, then slows as it spreads
-// Shell height along the flight: it climbs quickly, hangs near the apex, then drops hard onto the
-// marker (the last third falls faster than it rose), so every landing reads as a heavy slam.
+// Charge height along the flight (the top-down view's arc over the field): it climbs quickly, hangs near
+// the apex, then drops hard onto the reticle (the last third falls faster than it rose), so every burst
+// reads as a heavy slam.
 const shellHeight = (h, k) => {
   const q = Math.pow(Math.min(1, Math.max(0, k)), 0.72);
   return h * 4 * q * (1 - q);
@@ -230,7 +234,7 @@ export class QuakeMortar {
     if (s.skips > 0) this.skip(game, s);
   }
 
-  // A ring starts at (x, y). `big` rings (Epicenter) draw heavier.
+  // A gravity wave bursts at (x, y). `big` waves (Graviton Surge) draw heavier.
   quake(game, x, y, radius, damage, rock, knock, stat, big) {
     if (this.ringCount < RING_POOL) {
       const r = this.rings[this.ringCount++];
@@ -256,14 +260,17 @@ export class QuakeMortar {
     }
     const fx = game.particles;
     const small = radius / 120;
+    const heft = Math.min(1.6, small);
+    // Pinch, then release: space-time snaps inward onto the burst point (an inward ring and an implosion
+    // of the warp grid), then the wave rolls out (a white-hot flash, a gold ring and the grid ripple).
+    fx.spawnShockwave(x, y, radius * 0.42, LENS, 2.5 * heft + 1, 0.12, true);
+    game.grid?.applyImplosion?.(x, y, big ? 26 : 14 * heft, radius * 0.7, HUE, 0.15);
     fx.spawnFlash?.(x, y, radius * 0.45, HUE + 12, 0.18);
-    fx.spawnShockwave(x, y, radius * 0.35, 48, 3, 0.2);
+    fx.spawnShockwave(x, y, radius * 0.18, 50, 5 * heft + 1, 0.12);
+    fx.spawnShockwave(x, y, radius * 0.35, HUE, 3, 0.2);
     fx.spawnExplosionSparks(x, y, Math.round(8 + 8 * small), HUE, 2, 9, 2.2);
-    // Ground chunks thrown out of the crater, and a quick white-hot flash ring: the slam has weight.
-    fx.spawnPolygonShatter?.(x, y, 10 + 10 * Math.min(1.6, small), 5, Math.random() * Math.PI * 2, HUE, 0.8 + 0.4 * Math.min(1.6, small));
-    fx.spawnShockwave(x, y, radius * 0.18, 45, 5 * Math.min(1.6, small) + 1, 0.12);
-    game.grid?.applyImpulse(x, y, big ? 70 : 40 * Math.min(1.5, small), radius * 1.2, HUE);
-    game.grid?.ripple?.(x, y, radius, HUE, big ? 1.6 : 1.1);
+    game.grid?.applyImpulse(x, y, big ? 80 : 46 * Math.min(1.5, small), radius * 1.3, HUE);
+    game.grid?.ripple?.(x, y, radius, HUE, big ? 1.8 : 1.2);
     game.sound.playQuakeImpact?.(big ? 1.4 : Math.min(1, 0.55 + 0.45 * small));
     game.addShake?.(big ? 8 : 1.5 + 2 * Math.min(1, small * small)); // a skip barely nudges, a full shell thuds
   }
@@ -404,23 +411,24 @@ export class QuakeMortar {
         if (t >= -rock.radius && t <= len + rock.radius && side <= W.faultWidth + rock.radius) this.crackRock(game, rock, f.x1 + ux * t, f.y1 + uy * t, f.rock);
       }
     }
+    // The seam snaps shut: light spills off both edges and the warp grid kinks along its whole length.
     const fx = game.particles;
     for (let k = 1; k <= 4; k++) {
       const q = k / 4;
       const x = f.x1 + dx * q, y = f.y1 + dy * q;
-      fx.spawnDirectionalSparks?.(x, y, Math.atan2(ux, -uy), 0.6, 2, HUE + 10, 7);
-      fx.spawnDirectionalSparks?.(x, y, Math.atan2(-ux, uy), 0.6, 2, HUE + 10, 7);
+      fx.spawnDirectionalSparks?.(x, y, Math.atan2(ux, -uy), 0.6, 2, SEAM, 7);
+      fx.spawnDirectionalSparks?.(x, y, Math.atan2(-ux, uy), 0.6, 2, HUE, 7);
+      game.grid?.applyImpulse(x, y, 16, 70, SEAM);
     }
-    fx.spawnFlash?.(f.x2, f.y2, 26, HUE + 15, 0.14);
-    game.grid?.applyImpulse((f.x1 + f.x2) / 2, (f.y1 + f.y2) / 2, 22, len * 0.6, HUE);
+    fx.spawnFlash?.(f.x2, f.y2, 26, SEAM, 0.14);
     game.sound.playQuakeFault?.();
   }
 
-  // Epicenter: the hull slams a huge ring out around the ship.
+  // Graviton Surge: the hull itself releases a huge gravity wave around the ship.
   epicenter(game, damage, radius, rock) {
     const p = game.player;
     this.quake(game, p.x, p.y, radius, damage, rock, W.quakeKnock * W.epicenterKnockMult, 'quake_epicenter', true);
-    game.particles.spawnShockwave(p.x, p.y, radius * 0.6, 48, 5, 0.3);
+    game.particles.spawnShockwave(p.x, p.y, radius * 0.6, LENS, 5, 0.3);
     game.requestHitStop?.(1);
   }
 
@@ -429,12 +437,12 @@ export class QuakeMortar {
     return x > game.camX - pad && x < game.camX + game.width + pad && y > game.camY - pad && y < game.camY + game.height + pad;
   }
 
-  // Ground layer (under enemies): landing markers, fissures and the shockwave rings.
+  // Field layer (under enemies): targeting reticles, spacetime fractures and the gravity waves.
   drawGround(ctx, game) {
     if (this.activeCount === 0) return;
     const t = this.time;
-    // Landing markers: a crosshair diamond at the landing spot that closes in as the shell drops, and a
-    // faint ghost of the ring it will throw.
+    // Reticles: a crosshair diamond at the burst point that closes in as the charge drops, and a faint
+    // ghost of the wave it will throw.
     for (let i = 0; i < this.shellCount; i++) {
       const s = this.shells[i];
       if (!this.inView(game, s.lx, s.ly, s.radius)) continue;
@@ -456,110 +464,112 @@ export class QuakeMortar {
       ctx.stroke();
       ctx.setLineDash?.([]);
     }
-    // Fissures: a jagged glowing crack that runs out from the impact, then flares as it erupts.
+    // Fractures: a seam that tears out from the burst, split into a gold and a cyan edge that drift apart
+    // as it opens; when it snaps shut it flares white and fades.
     for (let i = 0; i < this.faultCount; i++) {
       const f = this.faults[i];
       if (!this.inView(game, (f.x1 + f.x2) / 2, (f.y1 + f.y2) / 2, Math.hypot(f.x2 - f.x1, f.y2 - f.y1))) continue;
       const run = Math.min(1, f.age / f.delay);
       const after = f.erupted ? Math.min(1, (f.age - f.delay) / 0.35) : 0;
       const dx = f.x2 - f.x1, dy = f.y2 - f.y1;
-      const nx = -dy * 0.06, ny = dx * 0.06;
+      const len = Math.hypot(dx, dy) || 1;
+      const px = -dy / len, py = dx / len;
+      const nx = -dy * 0.03, ny = dx * 0.03;
       const segs = f.jag.length;
-      ctx.beginPath();
-      ctx.moveTo(f.x1, f.y1);
-      for (let j = 1; j <= segs; j++) {
-        const q = (j / segs) * run;
-        const jit = j < segs ? f.jag[j - 1] : 0;
-        ctx.lineTo(f.x1 + dx * q + nx * jit, f.y1 + dy * q + ny * jit);
-      }
-      if (f.erupted) {
-        ctx.strokeStyle = `hsla(${HUE + 20}, 100%, 70%, ${0.5 * (1 - after)})`;
-        ctx.lineWidth = 9 * (1 - after) + 2;
+      const gap = f.erupted ? 0 : 1 + 3 * run; // the edges part while the seam is open
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.moveTo(f.x1, f.y1);
+        for (let j = 1; j <= segs; j++) {
+          const q = (j / segs) * run;
+          const jit = j < segs ? f.jag[j - 1] : 0;
+          const o = gap * side * Math.sin(Math.PI * Math.min(1, j / segs));
+          ctx.lineTo(f.x1 + dx * q + nx * jit + px * o, f.y1 + dy * q + ny * jit + py * o);
+        }
+        if (f.erupted) {
+          ctx.strokeStyle = `hsla(${side < 0 ? SEAM : HUE}, 100%, 75%, ${0.45 * (1 - after)})`;
+          ctx.lineWidth = 8 * (1 - after) + 2;
+          ctx.stroke();
+          ctx.strokeStyle = `hsla(0, 0%, 100%, ${0.85 * (1 - after)})`;
+          ctx.lineWidth = 1.6;
+        } else {
+          ctx.strokeStyle = `hsla(${side < 0 ? SEAM : HUE}, 100%, 66%, ${0.35 + 0.55 * run})`;
+          ctx.lineWidth = 1.6;
+        }
         ctx.stroke();
       }
-      ctx.strokeStyle = `hsla(${HUE}, 100%, ${f.erupted ? 85 : 62}%, ${f.erupted ? 0.9 * (1 - after) : 0.4 + 0.5 * run})`;
-      ctx.lineWidth = f.erupted ? 3 : 1.8;
-      ctx.stroke();
     }
-    // Rings: a soft heat band behind the front, the white-hot front, and a second ripple trailing it.
+    // Gravity waves: a thin white-hot front with a gold glow, a magenta ghost just outside it (lensing),
+    // and a cyan echo trailing inside, all fading as the wave spreads.
     for (let i = 0; i < this.ringCount; i++) {
       const r = this.rings[i];
       if (!this.inView(game, r.x, r.y, r.radius + 20)) continue;
       const k = Math.min(1, r.age / r.life);
       const cur = r.radius * ease(k);
       const fade = 1 - k;
-      const w = (r.big ? 1.6 : 1) * (1 + 1.4 * Math.max(0, 1 - k / 0.18)); // a fat, punchy front at the impact that thins as it spreads
-      ctx.fillStyle = `hsla(${HUE}, 100%, 55%, ${0.08 * fade})`;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, cur, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = `hsla(${HUE}, 100%, 58%, ${0.35 * fade})`;
-      ctx.lineWidth = 12 * w * fade + 2;
+      const w = (r.big ? 1.6 : 1) * (1 + 1.4 * Math.max(0, 1 - k / 0.18)); // a fat, punchy front at the burst that thins as it spreads
+      ctx.strokeStyle = `hsla(${HUE}, 100%, 58%, ${0.5 * fade})`;
+      ctx.lineWidth = 12 * w * fade + 3;
       ctx.beginPath();
       ctx.arc(r.x, r.y, cur, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = `hsla(${HUE + 25}, 100%, 88%, ${0.95 * fade})`;
-      ctx.lineWidth = 2.5 * w;
+      ctx.strokeStyle = `hsla(${HUE + 12}, 100%, 92%, ${Math.min(1, 1.2 * fade)})`;
+      ctx.lineWidth = 3.2 * w;
       ctx.stroke();
-      // Trailing ripple and the octagon of the impact crater, so the ring reads as a ground quake.
-      ctx.strokeStyle = `hsla(${HUE}, 100%, 65%, ${0.45 * fade})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, cur * 0.72, 0, Math.PI * 2);
-      ctx.stroke();
-      const c = Math.min(cur, r.radius * 0.22);
-      ctx.beginPath();
-      for (let s = 0; s < 8; s++) {
-        const a = (s * Math.PI) / 4 + Math.PI / 8;
-        if (s === 0) ctx.moveTo(r.x + Math.cos(a) * c, r.y + Math.sin(a) * c);
-        else ctx.lineTo(r.x + Math.cos(a) * c, r.y + Math.sin(a) * c);
-      }
-      ctx.closePath();
-      ctx.strokeStyle = `hsla(${HUE}, 100%, 70%, ${0.6 * fade})`;
+      ctx.strokeStyle = `hsla(${LENS}, 100%, 70%, ${0.6 * fade})`;
       ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, cur + 4 + 6 * k, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = `hsla(${SEAM}, 100%, 72%, ${0.5 * fade})`;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, cur * 0.7, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
 
-  // Air layer (over enemies): shells in flight, lifted by their arc, with a shadow on the ground.
+  // Air layer (over enemies): charges in flight, lifted by their arc.
   drawAir(ctx, game) {
     if (this.shellCount === 0) return;
     for (let i = 0; i < this.shellCount; i++) {
       const s = this.shells[i];
       if (!this.inView(game, s.x, s.y - s.z, 40)) continue;
-      // Ember trail: a few fading points back along the arc, so the shell's weight and drop read in motion.
+      // Trail: a few fading points back along the arc, so the charge's weight and drop read in motion.
       const kk = Math.min(1, s.age / s.flight);
       for (let j = 1; j <= 4; j++) {
         const kj = Math.max(0, kk - j * 0.035);
         const tx = s.sx + (s.lx - s.sx) * kj, ty = s.sy + (s.ly - s.sy) * kj - shellHeight(s.h, kj);
-        ctx.fillStyle = `hsla(${HUE + 10}, 100%, 62%, ${0.45 - j * 0.1})`;
+        ctx.fillStyle = `hsla(${j % 2 ? HUE : LENS}, 100%, 66%, ${0.45 - j * 0.1})`;
         ctx.beginPath();
         ctx.arc(tx, ty, (5 - j) * s.scale, 0, Math.PI * 2);
         ctx.fill();
       }
       const lift = 1 + s.z / 160;
-      const r = 7 * s.scale * lift;
-      ctx.fillStyle = `hsla(${HUE}, 100%, 50%, 0.16)`;
-      ctx.beginPath();
-      ctx.ellipse(s.x, s.y, r, r * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const r = 6.5 * s.scale * lift;
       const y = s.y - s.z;
+      // A graviton charge: a hot core in a soft halo, with a tilted orbit ring spinning round it.
+      ctx.fillStyle = `hsla(${HUE}, 100%, 55%, 0.22)`;
+      ctx.beginPath();
+      ctx.arc(s.x, y, r * 1.9, 0, Math.PI * 2);
+      ctx.fill();
       ctx.save();
       ctx.translate(s.x, y);
       ctx.rotate(s.spin);
-      // A heavy diamond shell with a glowing core and stabilizer fins.
-      ctx.strokeStyle = `hsla(${HUE}, 100%, 64%, 0.95)`;
-      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = `hsla(${LENS}, 100%, 72%, 0.9)`;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.moveTo(0, -r * 1.3); ctx.lineTo(r, 0); ctx.lineTo(0, r * 1.3); ctx.lineTo(-r, 0); ctx.closePath();
-      ctx.moveTo(-r * 1.4, -r * 0.4); ctx.lineTo(-r, 0); ctx.lineTo(-r * 1.4, r * 0.4);
-      ctx.moveTo(r * 1.4, -r * 0.4); ctx.lineTo(r, 0); ctx.lineTo(r * 1.4, r * 0.4);
+      ctx.ellipse(0, 0, r * 1.6, r * 0.55, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = `hsla(${HUE + 25}, 100%, 80%, 0.95)`;
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
-      ctx.fill();
       ctx.restore();
+      ctx.strokeStyle = `hsla(${HUE}, 100%, 66%, 0.95)`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `hsla(${HUE + 15}, 100%, 88%, 0.95)`;
+      ctx.beginPath();
+      ctx.arc(s.x, y, r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }

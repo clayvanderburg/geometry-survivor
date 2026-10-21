@@ -45,7 +45,7 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
 // pierce, so less of the curve is lost to overkill. Glaive Discs also take the Autocannon's 0.8 card steps, so
-// they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Quake Mortar 0.33: its rings
+// they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
@@ -727,13 +727,13 @@ export const WEAPON_SCALING = {
   // Damage of one throw hit on the first enemy on its line.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
-  // --- Quake Mortar (stats: damage, count, rate, radius, bore) --------------------------------------
-  // Autonomous: every volley interval the mortar lobs `count` heavy shells at the densest packs within
-  // quakeRange (quake-mortar.js). Each shell flies quakeFlight s, then lands as a shockwave ring that rolls
-  // out to quakeRadius over quakeRingTime s: every enemy the front passes takes one hit (full at the
-  // impact, quakeEdgeFalloff less at the rim) and is shoved outward, and every rock it passes takes
-  // quakeRockDamage of mining damage (the ring cracks rocks, and breaks them: they count as mined).
-  // Bore Charge is the rock damage only (UTILITY). A ring is valued at one hit per target.
+  // --- Graviton Mortar, id quake (stats: damage, count, rate, radius, bore) -------------------------
+  // Autonomous: every volley interval the mortar lobs `count` graviton charges at the densest packs within
+  // quakeRange (quake-mortar.js). Each charge flies quakeFlight s, then bursts into a gravity wave that
+  // rolls out to quakeRadius over quakeRingTime s: every enemy the front passes takes one hit (full at the
+  // burst, quakeEdgeFalloff less at the rim) and is shoved outward, and every rock it passes takes
+  // quakeRockDamage of mining damage (tidal shear cracks rocks, and breaks them: they count as mined).
+  // Tidal Shear (stat `bore`) is the rock damage only (UTILITY). A wave is valued at one hit per target.
   quakeShells: (b) => 2 + b.r.count,
   quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
   quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
@@ -743,12 +743,13 @@ export const WEAPON_SCALING = {
   quakeRingTime: 0.5,
   quakeEdgeFalloff: 0.3,
   quakeKnock: 3.2,
-  // Transforms: Skipping Shells (a landed shell skips on to the next pack skipBounces times, each skip a
-  // quake skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Fault Lines (every
-  // main impact tears faultCount fissures faultLengthMult x the ring radius long that erupt faultDelay s
-  // later for faultShare, valued at faultHitShare), Epicenter (every epicenterEvery-th volley the hull
-  // itself slams a ring of epicenterRadiusMult x the radius for epicenterShare of a whole volley, valued
-  // at epicenterHitShare: it lands on whatever is crowding the ship).
+  // Transforms: Rebound Pulse (a burst charge rebounds to the next pack skipBounces times, each rebound a
+  // wave skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Spacetime Fractures
+  // (every main burst tears faultCount seams faultLengthMult x the wave radius long that snap shut
+  // faultDelay s later for faultShare, valued at faultHitShare), Graviton Surge (every epicenterEvery-th
+  // volley the hull releases a wave of epicenterRadiusMult x the radius for epicenterShare of a whole
+  // volley, valued at epicenterHitShare: it lands on whatever is crowding the ship). The ids (skip, fault,
+  // epicenter) are kept from the weapon's first theme.
   skipBounces: 2,
   skipShare: 0.5,
   skipRadiusFrac: 0.65,
@@ -991,7 +992,7 @@ export const POTENTIAL_DPS = {
   glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b),
   nanites: (b) => W.naniteDamageMult(b) * W.naniteUnits(b) * W.naniteUptime(b) / W.naniteTick(b),
   harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b),
-  // One volley: every shell's ring, skips and fault lines, plus its share of the Epicenter slam.
+  // One volley: every charge's wave, rebounds and fractures, plus its share of the Graviton Surge.
   quake: (b) => W.quakeShells(b) * W.quakeDamageMult(b) * W.quakeUnits(b) / W.quakeCooldown(b)
 };
 

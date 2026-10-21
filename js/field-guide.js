@@ -478,7 +478,7 @@ export const MECHANIC_ENTRIES = [
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
-      `${WEAPON_BY_ID.quake.name} shells land as shockwave rings instead: the ring hits each enemy once as it rolls past, shoves it outward and cracks rocks (rocks it breaks count as mined; bedrock never cracks).`,
+      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward and shearing rocks apart (rocks it breaks count as mined; bedrock never cracks).`,
       'Field Amplifier makes every AREA weapon reach further.'
     ]
   },

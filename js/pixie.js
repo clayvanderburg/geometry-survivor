@@ -70,7 +70,7 @@ export const PIXIE_WEAPON_LINES = Object.freeze({
   glaive: [['Frisbees of DOOM. Patent pending!', 'smug']],
   nanites: [['The nanites ate my lunch. Promising!', 'eureka']],
   harpoon: [['Your claw has a leash now. Good claw!', 'eureka']],
-  quake: [['Quake Mortar! I felt that in my coffee.', 'smug']]
+  quake: [['Graviton Mortar! Space-time just hiccuped.', 'smug']]
 });
 
 // After the pick: Breakthrough-specific reactions ("weapon:transform id").

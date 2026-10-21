@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Quake Mortar: an autonomous EXPLOSIVE AREA weapon. Volleys go to the densest packs, each shell lands as
-// an expanding shockwave ring that hits every enemy once as its front passes, shoves it outward and
+// Graviton Mortar (weapon id quake): an autonomous EXPLOSIVE AREA weapon. Volleys go to the densest packs,
+// each charge bursts into a gravity wave that hits every enemy once as its front passes, shoves it outward and
 // cracks rocks (a broken rock counts as mined, bedrock never cracks). The three Breakthroughs, card
 // previews, pools and the registry wiring.
 const h = await import('../tools/balance/harness.mjs');
@@ -52,9 +52,9 @@ function addFoe(g, { x, y, hp = 1e7, ...extra }) {
 const tick = (g, n = 1) => { for (let i = 0; i < n; i++) g.quakeMortar.update(DT, g); };
 const volley = (g) => { g.quakeMortar.timer = 0; tick(g, Math.ceil((W.quakeFlight * 1.1 + W.quakeRingTime * 1.4) / DT)); };
 
-test('Quake Mortar is an AUTONOMOUS slot weapon: source quake, EXPLOSIVE + AREA, area class, five single-stat cards', () => {
+test('Graviton Mortar is an AUTONOMOUS slot weapon: source quake, EXPLOSIVE + AREA, area class, five single-stat cards', () => {
   const w = WEAPON_BY_ID.quake;
-  assert.equal(w.name, 'Quake Mortar');
+  assert.equal(w.name, 'Graviton Mortar');
   assert.equal(w.category, 'AUTONOMOUS');
   assert.deepEqual(WEAPON_TAGS.quake, ['explosive', 'area']);
   for (const t of weaponTags('quake')) assert.ok(TAG_INFO[t], t);
@@ -66,8 +66,8 @@ test('Quake Mortar is an AUTONOMOUS slot weapon: source quake, EXPLOSIVE + AREA,
   assert.deepEqual(STAT_CARDS.quake.map((c) => c.stat), ['damage', 'count', 'rate', 'radius', 'bore']);
   assert.deepEqual(STAT_CARDS.quake.map((c) => POWER_STATS.has(c.stat)), [true, true, true, false, false]);
   assert.equal(ELEMENT_CARDS.quake, undefined, 'no element cards');
-  for (const c of STAT_CARDS.quake) assert.match(c.summary, /^Quake Mortar:/);
-  for (const m of BREAKTHROUGH_LEVELS) assert.match(TRANSFORMS.quake[m].summary, /Quake Mortar/);
+  for (const c of STAT_CARDS.quake) assert.match(c.summary, /^Graviton Mortar:/);
+  for (const m of BREAKTHROUGH_LEVELS) assert.match(TRANSFORMS.quake[m].summary, /Graviton Mortar/);
   assert.equal(LV1_TRIM.quake, 0.33);
   assert.ok(Math.abs(POTENTIAL_DPS.quake(levelBuild('quake', 1)) / (DPS_TARGET(1) * 0.33) - 1) < 1e-9);
 });
@@ -101,7 +101,7 @@ test('the ring hits every enemy once as its front passes, full at the impact and
   assert.equal(qm.ringCount, 0, 'the ring is gone after its life');
 });
 
-test('rings crack rocks: mining damage per ring, a broken rock counts as mined, bedrock never cracks; Bore Charge only adds rock damage', () => {
+test('waves crack rocks: mining damage per wave, a broken rock counts as mined, bedrock never cracks; Tidal Shear only adds rock damage', () => {
   const { g, p, qm } = quakeGame({ foes: [{ x: 600, y: 0 }] });
   const am = g.asteroidManager;
   const rock = am.makeRock(p.x + 60, p.y, 22, 'rock');
@@ -124,10 +124,10 @@ test('rings crack rocks: mining damage per ring, a broken rock counts as mined, 
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.quake_bore, levelJump: 2 });
   const b2 = weaponBuild(p, 'quake');
   assert.equal(W.quakeRockDamage(b2), W.quakeRockDamage(b0) * 2);
-  assert.equal(W.quakeDamageMult(b2), W.quakeDamageMult(b), 'Bore Charge adds no damage');
+  assert.equal(W.quakeDamageMult(b2), W.quakeDamageMult(b), 'Tidal Shear adds no damage');
 });
 
-test('Skipping Shells: every landed shell skips on twice, each skip a smaller quake', () => {
+test('Rebound Pulse: every burst charge rebounds twice, each rebound a smaller wave', () => {
   const foes = [];
   for (let k = 0; k < 4; k++) foes.push({ x: 300 + k * 6, y: 0 }, { x: 300 + 220 + k * 6, y: 40 }, { x: 300 + 420, y: 80 + k * 6 });
   const { g, bySource, qm } = quakeGame({ cards: [['quake_damage', 5]], bt: { 6: 'transform' }, foes });
@@ -139,7 +139,7 @@ test('Skipping Shells: every landed shell skips on twice, each skip a smaller qu
   assert.equal(qm.ringsFired, shells * (1 + W.skipBounces), 'each shell quakes three times');
 });
 
-test('Fault Lines: each main impact tears three fissures that erupt along their length', () => {
+test('Spacetime Fractures: each main burst tears three seams that snap shut along their length', () => {
   const { g, p, bySource, qm } = quakeGame({ cards: [['quake_damage', 11]], bt: { 6: 'boost', 12: 'transform' }, foes: [{ x: 300, y: 0 }] });
   const r = quakeRadius(p);
   const along = addFoe(g, { x: 300 + r * 1.6, y: 0 });
@@ -152,7 +152,7 @@ test('Fault Lines: each main impact tears three fissures that erupt along their 
   assert.ok(along.quakeHits >= 1);
 });
 
-test('Epicenter: every third volley the hull slams a ring twice the radius', () => {
+test('Graviton Surge: every third volley the hull releases a wave twice the radius', () => {
   const { g, p, bySource, qm } = quakeGame({ cards: [['quake_damage', 11]], bt: { 6: 'boost', 12: 'boost', 18: 'transform' }, foes: [{ x: 300, y: 0 }] });
   const close = addFoe(g, { x: quakeRadius(p) * 1.5, y: -200 });
   for (let v = 0; v < 2; v++) volley(g);

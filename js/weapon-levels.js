@@ -168,11 +168,11 @@ export const STAT_CARDS = {
     card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
   ],
   quake: [
-    card('quake', 'quake_damage', 'damage', 'Quake Mortar Shell Charge', 'quakeDamage', 'Quake Mortar: heavier shells. Only shockwave damage.'),
-    card('quake', 'quake_count', 'count', 'Quake Mortar Barrels', 'quakeShells', 'Quake Mortar: one more shell per volley, aimed at the next pack.', cap(4)),
-    card('quake', 'quake_rate', 'rate', 'Quake Mortar Autoloader', 'quakeCooldown', 'Quake Mortar: fires volleys more often. Only fire rate.', cap(8)),
-    card('quake', 'quake_radius', 'radius', 'Quake Mortar Shockwave Size', 'quakeRadius', 'Quake Mortar: the rings roll out wider. Only ring size.'),
-    card('quake', 'quake_bore', 'bore', 'Quake Mortar Bore Charge', 'quakeRock', 'Quake Mortar: the rings crack rocks harder and break them sooner (they count as mined). Only rock damage.', cap(6))
+    card('quake', 'quake_damage', 'damage', 'Graviton Mortar Dense Core', 'quakeDamage', 'Graviton Mortar: denser charges. Only gravity wave damage.'),
+    card('quake', 'quake_count', 'count', 'Graviton Mortar Barrels', 'quakeShells', 'Graviton Mortar: one more charge per volley, aimed at the next pack.', cap(4)),
+    card('quake', 'quake_rate', 'rate', 'Graviton Mortar Autoloader', 'quakeCooldown', 'Graviton Mortar: fires volleys more often. Only fire rate.', cap(8)),
+    card('quake', 'quake_radius', 'radius', 'Graviton Mortar Wave Radius', 'quakeRadius', 'Graviton Mortar: the gravity waves ripple out wider. Only wave size.'),
+    card('quake', 'quake_bore', 'bore', 'Graviton Mortar Tidal Shear', 'quakeRock', 'Graviton Mortar: the waves tear at rocks harder and break them sooner (they count as mined). Only rock damage.', cap(6))
   ]
 };
 
@@ -314,7 +314,7 @@ export const WEAPON_BADGE = {
   glaive: 'GLAIVE DISCS',
   nanites: 'NANITE SWARM',
   harpoon: 'CLAW HARPOON',
-  quake: 'QUAKE MORTAR'
+  quake: 'GRAVITON MORTAR'
 };
 
 // Transforms: one per weapon per milestone, each changing how the weapon works.
@@ -416,9 +416,9 @@ export const TRANSFORMS = {
     18: tf('chain', 'Chain Harpoon', 'At the end of every throw the Claw Harpoon leaps on to up to 3 more enemies near its tip, skewering each one before it reels back.')
   },
   quake: {
-    6: tf('skip', 'Skipping Shells', 'Quake Mortar shells skip on after they land: each one bounces to the next pack twice, quaking again in smaller rings.'),
-    12: tf('fault', 'Fault Lines', 'Every Quake Mortar impact tears three glowing fissures across the ground that erupt a moment later, hitting everything along them and splitting rocks.'),
-    18: tf('epicenter', 'Epicenter', 'Every third Quake Mortar volley your own hull becomes the epicenter: a huge ring slams out around the ship, hurling back everything close and cracking the rocks around you.')
+    6: tf('skip', 'Rebound Pulse', 'Graviton Mortar charges rebound after they burst: each one springs to the next pack twice, pulsing again in smaller gravity waves.'),
+    12: tf('fault', 'Spacetime Fractures', 'Every Graviton Mortar burst tears three seams in space-time that snap shut a moment later, hitting everything along them and splitting rocks.'),
+    18: tf('epicenter', 'Graviton Surge', 'Every third Graviton Mortar volley your own hull releases a huge gravity wave around the ship, hurling back everything close and cracking the rocks around you.')
   }
 };
 
