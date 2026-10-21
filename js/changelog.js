@@ -19,11 +19,11 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Five new weapons: Rail Lance (a piercing line), Glaive Discs (ricochets), Nanite Swarm (corrosive swarms), Claw Harpoon (a tethered drill-claw that mines) and Quake Mortar.' },
       { type: 'new', text: 'All 10 bosses reworked: bigger, faster, new looks and sounds, and a telegraphed signature attack that escalates in later phases. Red lanes and marked zones: get out.' },
       { type: 'new', text: 'Wave 50 is a FINAL STAND: the Prism brings one last surge, then spawns stop. Clear the field for VICTORY. Past wave 35, enemy HP now grows about half as fast.' },
-      { type: 'new', text: 'New enemy: the HATCHERY (wave 35) breeds diving HATCHLINGS until you kill it. Plus an opening cutscene (🎬 INTRO), and Dr. Pixie radios in on every Breakthrough.' },
+      { type: 'new', text: 'New enemy: the HATCHERY (wave 35) breeds diving HATCHLINGS. Blinkers now telegraph their jump clearly and never land on you; small enemies stand out in crowds.' },
       { type: 'balance', text: 'Score rewards progress: every wave survived pays 1,000 × the wave number squared, and winning the campaign pays 100,000,000.' },
       { type: 'balance', text: 'Weapon floor: by LV 6 / 12 / 18 / 24 / 30 you need 2 / 3 / 4 / 5 / 6 weapons. Below that, a level-up is a CHOOSE A WEAPON pick (gold can reroll it).' },
       { type: 'balance', text: 'Sentry Turret works like DRG: Survivor: hold 2 charges, stand still to drop them, one reloads every 6 s. Bolts pierce, with new cards. Volatile Shatter shards deal 0.3x damage.' },
-      { type: 'new', text: 'Juicier feel: cards deal in and snap, pickups sparkle, dashes streak, shields crackle. New REDUCE EFFECTS setting turns off shake and calms flashes and particles.' }
+      { type: 'new', text: 'Juicier feel: cards snap, pickups sparkle, shields crackle, plus a REDUCE EFFECTS setting. New opening cutscene (🎬 INTRO) and Dr. Pixie radios in on every Breakthrough.' },
     ]
   },
   {
