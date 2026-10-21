@@ -86,6 +86,7 @@ test('a volley goes to the densest pack, not the nearest straggler', () => {
 
 test('the ring hits every enemy once as its front passes, full at the impact and less at the rim, and shoves it outward', () => {
   const { g, p, qm } = quakeGame({ foes: [{ x: 200, y: 0 }] });
+  p.stats.critChance = 0; // no crits, so the impact hit reads its plain damage
   const r = quakeRadius(p);
   const center = addFoe(g, { x: 0, y: 260 });
   const rim = addFoe(g, { x: r - 4, y: 260 });
@@ -96,7 +97,7 @@ test('the ring hits every enemy once as its front passes, full at the impact and
   assert.equal(center.quakeHits, 1);
   assert.equal(rim.quakeHits, 1, 'the rim is hit exactly once');
   assert.equal(outside.quakeHits, undefined, 'nothing past the ring');
-  assert.ok(Math.abs((1e7 - center.hp) - dmg) / dmg < 0.35, 'about full damage at the impact (crits aside)');
+  assert.ok(Math.abs((1e7 - center.hp) - dmg) / dmg < 0.35, 'about full damage at the impact');
   assert.ok(rim.knockX > 0, 'shoved outward');
   assert.equal(qm.ringCount, 0, 'the ring is gone after its life');
 });
