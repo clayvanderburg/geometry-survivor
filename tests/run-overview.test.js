@@ -60,7 +60,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   for (const id of ['damage', 'maxHp', 'critChance', 'moveSpeed']) assert.equal(r[id].run, '—', `${id}: no cards yet`);
 
   install(p, 'overdrive', 2);   // x1.12 damage per level
-  install(p, 'thrusters');      // +16% speed, a Phase Nova level (dash -0.14 s)
+  install(p, 'thrusters');      // a Phase Nova level (dash -0.14 s)
+  install(p, 'move_speed');     // +10% speed
   install(p, 'shield_capacitor'); // +20 shield
   install(p, 'crit_chance', 2); // +5% each
   install(p, 'tag_explosive');
@@ -68,7 +69,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   r = rowsById(p);
   assert.equal(r.damage.run, '+25%');
   assert.equal(r.damage.permanent, '+15%', 'the armory share is unchanged by cards');
-  assert.equal(r.moveSpeed.run, '+16%');
+  assert.equal(r.moveSpeed.run, '+10%');
   assert.equal(r.maxHp.run, '+20');
   assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 10 + 20)));
   assert.equal(r.critChance.run, '+10%');

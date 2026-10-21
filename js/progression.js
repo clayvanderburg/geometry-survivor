@@ -45,7 +45,7 @@ const BASE_META_UPGRADES = [
   { id: 'xpGain', cat: 'economy', name: 'Geom Resonator', icon: '⬡', color: '#6dff9e', stat: 'XP gain', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
   { id: 'goldGain', cat: 'economy', name: 'Gold Assayer', icon: '◆', color: '#ffcc00', stat: 'gold from gold veins', per: 0.04, fmt: 'pct', maxRank: 20, baseCost: 15, growth: 1.15 },
   { id: 'startGold', cat: 'economy', name: 'Prospector Stake', icon: '⛁', color: '#ffe14d', stat: 'starting gold', per: 2, fmt: 'flat', maxRank: 15, baseCost: 18, growth: 1.17 },
-  { id: 'mining', cat: 'economy', name: 'Rotary Claw Drive', icon: '⚙', color: '#00f3ff', stat: 'mining speed', per: 0.03, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
+  { id: 'mining', cat: 'economy', name: 'Rotary Claw Drive', icon: '⚙', color: '#00f3ff', stat: 'mining speed', per: 0.015, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
   // UTILITY
   { id: 'luck', cat: 'utility', name: 'Quantum Fortune', icon: '🍀', color: '#9d4edd', stat: 'luck', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'magnet', cat: 'utility', name: 'Vacuum Array', icon: '⊛', color: '#b6ff4a', stat: 'pickup radius', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
@@ -66,7 +66,9 @@ export const META_BY_ID = Object.fromEntries(META_UPGRADES.map((u) => [u.id, u])
 export const ARMORY_REVISIONS = Object.freeze({
   // v0.43.3, toward a full Armory of ~3x power (see armoryPower):
   damage: 2, // +1.5% per rank (was +1%)
-  maxHp: 2 // +2 shield per rank (was +1.5)
+  maxHp: 2, // +2 shield per rank (was +1.5)
+  // v0.44.0: Rotary Claw Drive +1.5% per rank (was +3%); mining was stacking to ~6x.
+  mining: 2
 });
 const MAX_REFUND_NOTES = 24;
 

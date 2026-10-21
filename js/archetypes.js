@@ -2,7 +2,7 @@
 //   BRUISER  — slow, heavy, shrugs off knockback; winds up, then charges down a telegraphed lane.
 //   GUNNER   — holds range and fires slow plasma orbs after a visible aim (js/enemy-bullets.js).
 //   SHIELDER — frontal shield plates eat projectiles; flank it or use area damage.
-//   BLINKER  — flickers, shows its destination ring, then teleports to your flank.
+//   BLINKER  — shimmers, marks its landing point with a reticle and tether, then teleports to your flank.
 //   CONDUIT  — support: beams link nearby allies (less damage taken, more speed). Kill it first.
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick, like the rest of the sim.
 import { TUNING } from './config.js';
@@ -28,7 +28,13 @@ export const HP_RING_TYPES = new Set(['splitter', 'bruiser', 'shielder', 'condui
 export const BRUISER = { windup: 0.8, charge: 0.5, recover: 0.9, cooldown: 3.2, chargeSpeed: 8.5, triggerRange: 380, knockMult: 0.25, turnRate: 2.2 };
 export const GUNNER = { range: 380, band: 60, aimTime: 0.6, cooldown: 2.6, fireRange: 720, volleySpread: 0.2 };
 export const SHIELDER = { arcHalf: 1.05, turnRate: 0.9, plateGap: 11, plates: 3 };
-export const BLINKER = { cooldown: 2.6, telegraph: 0.6, minDist: 130, maxDist: 250, lunge: 1.6 };
+// telegraph: 1.0 s (was 0.6). In a dense late wave a pilot needs ~0.3 s to spot the reticle and ~0.25 s
+// to react; at 0.6 s that left almost no time to move, at 1.0 s it leaves ~0.45 s (~130 px at base
+// speed), enough to step off the landing line without making the blink harmless.
+// landClear: the ship can drift onto the marked point during the wind-up, so the arrival is pushed out
+// to at least this far from the ship, and arriveGrace keeps the hull from dealing contact damage for a
+// moment after it lands: the blink itself never hits, only the lunge that follows.
+export const BLINKER = { cooldown: 2.6, telegraph: 1.0, minDist: 130, maxDist: 250, lunge: 1.6, landClear: 110, arriveGrace: 0.25 };
 export const CONDUIT = { linkRadius: 240, maxLinks: 4, armor: 0.3, haste: 0.2, keepAway: 320, linkHold: 0.25 };
 
 // Archetypes a lieutenant can be built from at this wave (fodder and vortexes never lead).
@@ -247,6 +253,12 @@ function updateBlinker(e, m, env) {
     e.vy *= 0.75;
     e.aiTimer -= dt;
     if (e.aiTimer <= 0) {
+      if (!clearLanding(e, m, env)) {
+        // The ship's shove left no clear spot: fizzle and try again shortly.
+        e.state = 'drift';
+        e.aiTimer = 0.4;
+        return;
+      }
       const fromX = e.x;
       const fromY = e.y;
       e.x = e.blinkX;
@@ -254,6 +266,7 @@ function updateBlinker(e, m, env) {
       e.trail.length = 0;
       e.state = 'drift';
       e.aiTimer = BLINKER.cooldown * (0.8 + Math.random() * 0.4);
+      e.arriveT = BLINKER.arriveGrace;
       // Lunge out of the blink so the arrival is a threat, not a free target.
       const ldx = player.x - e.x;
       const ldy = player.y - e.y;
@@ -263,6 +276,7 @@ function updateBlinker(e, m, env) {
       env.particles?.spawnShockwave?.(fromX, fromY, e.radius * 3, e.hue, 2, 0.22, true);
       env.particles?.spawnShockwave?.(e.x, e.y, e.radius * 3.2, e.hue, 3, 0.3);
       env.grid?.applyImpulse(e.x, e.y, 18, 90, e.hue);
+      env.sound?.playBlinkWarp?.();
     }
     return;
   }
@@ -274,10 +288,32 @@ function updateBlinker(e, m, env) {
     if (pickBlinkTarget(e, m, env)) {
       e.state = 'telegraph';
       e.aiTimer = BLINKER.telegraph;
+      env.sound?.playBlinkCharge?.();
     } else {
       e.aiTimer = 0.3; // nowhere safe to land: try again shortly
     }
   }
+}
+
+// At the moment of the blink: if the ship drifted onto the marked point, push the landing out to
+// BLINKER.landClear along the ship → mark line. False when that spot is rock or off the arena.
+export function clearLanding(e, m, env) {
+  const { player, width, height } = env;
+  const dx = e.blinkX - player.x;
+  const dy = e.blinkY - player.y;
+  const d = Math.hypot(dx, dy);
+  if (d >= BLINKER.landClear) return true;
+  // Dead on top of the mark: push out on the side the blinker came from.
+  const ux = d > 1e-6 ? dx / d : (e.x - player.x) / (Math.hypot(e.x - player.x, e.y - player.y) || 1);
+  const uy = d > 1e-6 ? dy / d : (e.y - player.y) / (Math.hypot(e.x - player.x, e.y - player.y) || 1);
+  const x = player.x + ux * BLINKER.landClear;
+  const y = player.y + uy * BLINKER.landClear;
+  const pad = e.radius + 30;
+  if (x < pad || y < pad || x > width - pad || y > height - pad) return false;
+  if (terrainBlocked(m.terrain, x, y, e.radius + 6)) return false;
+  e.blinkX = x;
+  e.blinkY = y;
+  return true;
 }
 
 // Flank landing point: swung 40–85° around the ship, 130–250 px out, clear of rock and walls.
@@ -358,6 +394,7 @@ export function updateArchetype(e, m, env) {
   e.sinceHit = (e.sinceHit || 0) + dt;
   if (e.shieldFlash > 0) e.shieldFlash = Math.max(0, e.shieldFlash - dt * 5);
   if (e.shieldArc) e.shieldAngle = turnToward(e.shieldAngle, Math.atan2(env.dirY, env.dirX), SHIELDER.turnRate * e.cadence * dt);
+  if (e.arriveT > 0) e.arriveT = Math.max(0, e.arriveT - dt);
   if (e.regen > 0 && e.sinceHit > 1.5 && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
   const ai = AI[e.type];
   if (!ai) return false;
@@ -460,7 +497,7 @@ export function drawConduitLinks(ctx, e) {
 export function drawArchetypeOverlay(ctx, e, r) {
   if (e.type === 'bruiser' && e.state === 'windup') drawChargeLane(ctx, e);
   else if (e.type === 'gunner' && e.state === 'aim') drawGunnerAim(ctx, e);
-  else if (e.type === 'blinker' && e.state === 'telegraph') drawBlinkTarget(ctx, e);
+  else if (e.type === 'blinker' && e.state === 'telegraph') drawBlinkShimmer(ctx, e, r);
   if (e.shieldArc) drawShieldPlates(ctx, e);
   // The HP ring stays up while the hull is damaged: bright for 2 s after a hit, then a dimmer steady ring.
   if (HP_RING_TYPES.has(e.type) && !e.isLieutenant && e.hp < e.maxHp) {
@@ -528,31 +565,105 @@ function drawGunnerAim(ctx, e) {
   ctx.fill();
 }
 
-function drawBlinkTarget(ctx, e) {
-  const t = 1 - Math.max(0, e.aiTimer) / BLINKER.telegraph;
-  const ringR = e.radius * (3 - t * 1.8);
-  ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.35 + t * 0.6})`;
-  ctx.lineWidth = 2.2;
+// Wind-up progress 0..1 and the "locked" last 30% (the reticle turns white and strobes).
+function blinkCharge(e) {
+  const t = Math.min(1, Math.max(0, 1 - e.aiTimer / BLINKER.telegraph));
+  return { t, locked: t >= 0.7 };
+}
+
+// Pre-blink shimmer on the hull: a flickering white-hot halo and four sparkle rays that grow as it charges.
+function drawBlinkShimmer(ctx, e, r) {
+  const { t, locked } = blinkCharge(e);
+  const flick = 0.55 + 0.45 * Math.sin(e.aiTimer * (locked ? 70 : 38));
+  ctx.strokeStyle = `hsla(${e.hue}, 100%, ${78 + 22 * t}%, ${(0.35 + 0.5 * t) * flick})`;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(e.blinkX, e.blinkY, ringR, 0, Math.PI * 2);
-  // Crosshair ticks lock on to the landing point.
+  ctx.arc(e.x, e.y, r * (2.1 - 0.6 * t), 0, Math.PI * 2);
+  const ray = r * (1.4 + 1.6 * t);
   for (let k = 0; k < 4; k++) {
-    const a = (k * Math.PI) / 2 + t * 1.5;
-    ctx.moveTo(e.blinkX + Math.cos(a) * (ringR + 7), e.blinkY + Math.sin(a) * (ringR + 7));
-    ctx.lineTo(e.blinkX + Math.cos(a) * (ringR - 5), e.blinkY + Math.sin(a) * (ringR - 5));
+    const a = Math.PI / 4 + (k * Math.PI) / 2 + e.aiTimer * 3;
+    ctx.moveTo(e.x + Math.cos(a) * r * 0.9, e.y + Math.sin(a) * r * 0.9);
+    ctx.lineTo(e.x + Math.cos(a) * ray, e.y + Math.sin(a) * ray);
   }
   ctx.stroke();
-  // Faint dotted path from the blinker to its destination.
-  ctx.strokeStyle = `hsla(${e.hue}, 100%, 70%, ${0.15 + t * 0.3})`;
-  ctx.lineWidth = 1.2;
+}
+
+// Landing telegraph, drawn above the hulls AND the particles (EnemyManager.drawTopTelegraphs) so a crowd
+// or an explosion never hides it: a dark backing disc that cuts the clutter under the mark, a reticle
+// ring that closes in and turns white for the last 30%, corner brackets, a filling core, and a
+// dark-backed tether with dashes marching from the blinker to the mark.
+export function drawBlinkTelegraph(ctx, e) {
+  const { t, locked } = blinkCharge(e);
+  const ease = 1 - (1 - t) * (1 - t);
+  const x = e.blinkX;
+  const y = e.blinkY;
+  const R = e.radius * (4.4 - 2.2 * ease);
+  const strobe = locked ? 0.5 + 0.5 * Math.cos(e.aiTimer * 50) : 1;
+  const bright = locked ? `rgba(255, 255, 255, ${0.7 + 0.3 * strobe})` : `hsla(${e.hue}, 100%, 78%, ${0.75 + 0.25 * t})`;
+  const dx = x - e.x;
+  const dy = y - e.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  // Tether endpoints stop at the hull and the ring, so the line never crosses either.
+  const sx = e.x + ux * e.radius * 1.6;
+  const sy = e.y + uy * e.radius * 1.6;
+  const ex = x - ux * (R + 4);
+  const ey = y - uy * (R + 4);
+
+  // 1. Dark backing: disc under the mark plus a dark under-stroke for the tether and ring.
+  ctx.fillStyle = `rgba(3, 2, 10, ${0.45 + 0.2 * t})`;
   ctx.beginPath();
-  const dx = e.blinkX - e.x;
-  const dy = e.blinkY - e.y;
-  for (let k = 0; k < 6; k++) {
-    const a0 = (k + 0.2) / 6;
-    const a1 = (k + 0.6) / 6;
-    ctx.moveTo(e.x + dx * a0, e.y + dy * a0);
-    ctx.lineTo(e.x + dx * a1, e.y + dy * a1);
+  ctx.arc(x, y, R + 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(3, 2, 10, 0.75)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.moveTo(x + R, y);
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 2. Tether: dashes marching toward the mark, brightening with the charge.
+  ctx.strokeStyle = `hsla(${e.hue}, 100%, 80%, ${0.45 + 0.45 * t})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const segLen = len - e.radius * 1.6 - R - 4;
+  if (segLen > 0) {
+    const dash = 14;
+    const phase = ((1 - e.aiTimer) * 90) % (dash * 2);
+    for (let d0 = phase - dash * 2; d0 < segLen; d0 += dash * 2) {
+      const a0 = Math.max(0, d0);
+      const a1 = Math.min(segLen, d0 + dash);
+      if (a1 <= a0) continue;
+      ctx.moveTo(sx + ux * a0, sy + uy * a0);
+      ctx.lineTo(sx + ux * a1, sy + uy * a1);
+    }
+  }
+  ctx.stroke();
+
+  // 3. Filling core: the landing spot fills up as the blink charges.
+  ctx.fillStyle = locked ? `rgba(255, 255, 255, ${0.25 + 0.25 * strobe})` : `hsla(${e.hue}, 100%, 70%, ${0.12 + 0.3 * t})`;
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(1, R * (0.2 + 0.55 * ease)), 0, Math.PI * 2);
+  ctx.fill();
+
+  // 4. Reticle ring and four corner brackets that rotate in and lock square.
+  ctx.strokeStyle = bright;
+  ctx.lineWidth = locked ? 3.2 : 2.6;
+  ctx.beginPath();
+  ctx.arc(x, y, R, 0, Math.PI * 2);
+  const spin = (1 - ease) * 1.6;
+  const B = R + 8;
+  for (let k = 0; k < 4; k++) {
+    const a = Math.PI / 4 + (k * Math.PI) / 2 + spin;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    // A chevron pointing in at the mark.
+    ctx.moveTo(x + ca * (B + 7) - sa * 7, y + sa * (B + 7) + ca * 7);
+    ctx.lineTo(x + ca * B, y + sa * B);
+    ctx.lineTo(x + ca * (B + 7) + sa * 7, y + sa * (B + 7) - ca * 7);
   }
   ctx.stroke();
 }

@@ -628,7 +628,7 @@ test('the Conductor links hostiles, is shielded while four links hold, and plays
   c.aiTimer = 0; // call the choir back
   step(m, g.player, 4);
   m.enemyBullets.clear();
-  step(m, g.player, Math.ceil(COND.crescendoEvery * 60) + 2);
+  step(m, g.player, Math.ceil((COND.crescendoEvery + COND.introTime) * 60) + 2); // it holds through its entrance
   assert.ok(c.enraged && m.enemyBullets.count > 0, 'linked hulls fire orbs');
 });
 
@@ -681,7 +681,7 @@ test('Eclipse Twins: a tethered pair; kill one and the other enrages, and its tw
   assert.equal(g.chests.length, 1, 'both down: one payout');
 });
 
-test('The Prism: swarm ring, then gate cages, then a gravity well with orb rings and a sweeping beam', async () => {
+test('The Prism: fans beams, then spins spokes and throws orb fans, then pulls and charges novas', async () => {
   resetTuning();
   const { PRISM } = await import('../js/bosses.js');
   const { bossBuilt: built } = await import('../js/bosses.js');
@@ -692,27 +692,44 @@ test('The Prism: swarm ring, then gate cages, then a gravity well with orb rings
   step(m, g.player, 5);
   const p = m.enemies.find(e => e.type === 'prism');
   assert.equal(p.bossTier, 'major');
-  assert.equal(m.enemies.filter(e => e.anchor === p).length, PRISM.ring, 'phase 1: a shard ring');
+  assert.ok(p.radius >= 60, 'a big crystal');
   const hue0 = p.hue;
   step(m, g.player, 30);
   assert.notEqual(p.hue, hue0, 'it cycles through the spectrum');
+  const lines = () => (m.bossHazards || []).filter(h => h.kind === 'line' && h.from === 'prism');
+  for (let i = 0; i < 60 * 5 && !lines().length; i++) step(m, g.player, 1);
+  assert.equal(lines().length, 3, 'phase I: a fan of three beams');
+  assert.ok(p.castT > 0, 'planted while it fans');
+  // Phase II: a refraction (untouchable for a moment), then three spinning spokes.
   p.hp = p.maxHp * 0.6;
   step(m, g.player, 1);
   assert.equal(p.phase, 1);
-  assert.equal(m.enemies.filter(e => e.anchor === p).length, 0, 'the ring breaks');
-  step(m, g.player, 150);
-  assert.ok(m.enemies.some(e => e.cage && e.builder === p), 'phase 2: gate cages');
+  assert.ok(p.deflect && p.shiftT > 0, 'refracting between phases');
+  assert.equal(lines().length, 0, 'the old phase\'s beams are cancelled');
+  step(m, g.player, Math.ceil(PRISM.shiftTime * 60) + 2);
+  assert.equal(p.deflect, false);
+  assert.equal(p.spokes.length, PRISM.spokes);
+  const a0 = Math.atan2(p.spokes[0].y2 - p.y, p.spokes[0].x2 - p.x);
+  step(m, g.player, 30);
+  assert.ok(Math.abs(Math.atan2(p.spokes[0].y2 - p.y, p.spokes[0].x2 - p.x) - a0) > 0.1, 'the spokes turn');
+  step(m, g.player, Math.ceil(PRISM.orbFanEvery * 60));
+  assert.ok(m.enemyBullets.count >= PRISM.orbFan, 'orb fans');
+  // Phase III: a gravity well with fewer, faster spokes and a nova that blasts and throws a ring.
   p.hp = p.maxHp * 0.3;
   step(m, g.player, 1);
   assert.equal(p.phase, 2);
-  assert.ok(g.collectGravityWells().includes(p), 'phase 3: a gravity well');
-  step(m, g.player, Math.ceil(PRISM.beamWarmup * 60) + 2);
-  assert.ok(p.beam, 'with a sweeping beam');
-  const a0 = Math.atan2(p.beam.y2 - p.y, p.beam.x2 - p.x);
-  step(m, g.player, 30);
-  assert.ok(Math.abs(Math.atan2(p.beam.y2 - p.y, p.beam.x2 - p.x) - a0) > 0.1, 'the beam turns');
-  step(m, g.player, Math.ceil(PRISM.breathEvery * 60));
-  assert.ok(m.enemyBullets.count >= PRISM.orbRing, 'orb rings');
+  assert.ok(g.collectGravityWells().includes(p), 'phase III: a gravity well');
+  m.enemyBullets.clear();
+  for (let i = 0; i < 60 * 8 && !(m.bossHazards || []).some(h => h.kind === 'blast'); i++) step(m, g.player, 1);
+  assert.equal(p.spokes.length, PRISM.novaSpokes);
+  const nova = m.bossHazards.find(h => h.kind === 'blast');
+  assert.equal(nova.r, PRISM.novaR, 'a nova ring charges round it');
+  step(m, g.player, Math.ceil(PRISM.novaFuse * 60) + 2);
+  assert.ok(m.enemyBullets.count >= PRISM.novaRing, 'the nova throws a ring of orbs');
+  // Death: the spokes go out with it.
+  g.killEnemy(p);
+  step(m, g.player, 2);
+  assert.equal(lines().length, 0);
 });
 
 test('Ouroboros arrives coiled round its head, holds a beat, then unwinds', async () => {

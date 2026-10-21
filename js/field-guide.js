@@ -12,6 +12,7 @@ import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, CON
 import { LANCE } from './lancers.js';
 import { RAM } from './boss-ram.js';
 import { BORER } from './borers.js';
+import { HATCHERY, HATCHLING } from './hatcheries.js';
 import { GATE } from './gates.js';
 import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
@@ -24,6 +25,7 @@ import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
 import { handSizeFor, slotDamageBonus } from './slot-rewards.js';
+import { weaponFloor, weaponFloorStep } from './weapon-floor.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
 
@@ -53,6 +55,14 @@ function eliteGrindText() {
   if (!(eliteMiningDps() > 0)) return '';
   return ` It grinds through asteroids at ${eliteGrindSpeed()}, unaffected by your drill upgrades, instead of going round, and the broken rock drops its ore for you.`;
 }
+// The late HP stage (enemies.js lateHpScaleAt): how fast HP compounds once it is fully in.
+function lateHpText() {
+  const late = TUNING.waveHpLateGrowth ?? 1;
+  if (late === 1) return '';
+  const rate = ((TUNING.waveHpGrowth ?? 1.09) * late - 1) * 100;
+  return `, ${late < 1 ? 'easing' : 'rising'} to ${rate.toFixed(1).replace(/\.0$/, '')}% per wave from wave ${TUNING.waveHpLateFrom ?? 30}`;
+}
+
 // The shared boss RAM (js/boss-ram.js), for bosses whose def carries a ram config.
 function ramText(id, note = '') {
   const ram = BOSS_DEFS[id]?.ram;
@@ -110,6 +120,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Keep moving in curves and let them overshoot, or sweep them as they bunch up behind you.'
   },
   {
+    id: 'hatchling', name: 'HATCHLING', group: 'swarm', unlockWave: unlockWaveOf('hatchling'),
+    what: () => `A small scarlet dart bred by a hatchery. It circles you about ${HATCHLING.orbit} px out, then brakes and flares a dashed tick at you for ${secs(HATCHLING.cue)} and dives straight through where you are. It never steers mid-dive and pops if it connects (under half a normal hit). It withers when its hatchery dies.`,
+    tip: 'When one flares, sidestep: the dive cannot turn. Better still, kill the hatchery and the whole brood dies.'
+  },
+  {
     id: 'blackhole', name: 'VORTEX', group: 'hazard', unlockWave: unlockWaveOf('blackhole'),
     what: () => `A crimson singularity. Inside its ${TUNING.blackholePullRadius ?? 200} px dashed rim it drags enemies, sparks, Geoms and your shots into orbit and tugs your ship. It collapses in a 175 px burst that damages nearby hostiles when it dies.`,
     tip: () => `The tug is ${pct(TUNING.blackholePlayerPullEdge ?? 0.5)} of your thrust at the rim, rising to ${pct(TUNING.blackholePlayerPullInner ?? 0.75)} from ${pct(TUNING.blackholePlayerPullInnerAt ?? 0.5)} of the way in. It never matches your thrust, so holding away always escapes. Kill it near a crowd to use the collapse.`
@@ -131,8 +146,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'blinker', name: 'BLINKER', group: 'archetype', unlockWave: ARCHETYPE_INFO.blinker.unlockWave,
-    what: () => `An orchid star that collapses for ${secs(BLINKER.telegraph)} while a ring marks its landing point, then teleports to your flank (${BLINKER.minDist}–${BLINKER.maxDist} px away, never into rock) and lunges.`,
-    tip: 'Watch for the ring and keep moving: the lunge is aimed where you were when it landed.'
+    what: () => `An orchid star that shimmers and collapses for ${secs(BLINKER.telegraph)} while a reticle and tether mark its landing point (it turns white just before the jump), then teleports to your flank (${BLINKER.minDist}–${BLINKER.maxDist} px away, never into rock or right on top of you) and lunges.`,
+    tip: 'Watch for the reticle and keep moving: when it turns white, step off the tether line. The lunge is aimed where you were when it landed.'
   },
   {
     id: 'conduit', name: 'CONDUIT', group: 'archetype', unlockWave: ARCHETYPE_INFO.conduit.unlockWave,
@@ -180,6 +195,11 @@ export const HOSTILE_ENTRIES = [
     tip: 'Rock is no cover from it: keep it in open space, sidestep the red lane and punish it while it vents after a charge.'
   },
   {
+    id: 'hatchery', name: 'HATCHERY', group: 'archetype', unlockWave: unlockWaveOf('hatchery'),
+    what: () => `A slow scarlet hive ringed with egg pods. It creeps to about ${HATCHERY.hold} px from you and sits there, breeding: every ${secs(HATCHERY.hatchEvery)} a ring closes in on it for ${secs(HATCHERY.incubate)} while ${HATCHERY.hatch} pods swell, then they burst into hatchlings. Up to ${HATCHERY.maxBrood} of its brood at once and ${HATCHERY.broodTotal} in its life (the pods show what is left). Kill it and its whole brood withers with it. Off-screen, a HIVE arrow points to it once it has hatched. Debuts with the Progenitor.`,
+    tip: 'It is the priority target: dive through the brood and burn the hive down, and they all pop at once. Every second you leave it is more hatchlings.'
+  },
+  {
     id: 'lieutenant', name: 'LIEUTENANT', group: 'elite', unlockWave: () => TUNING.lieutenantFirstWave ?? 2,
     what: () => `One elite per non-boss wave, from wave ${TUNING.lieutenantFirstWave ?? 2}: a bigger copy of an unlocked archetype with a generated name, silver rank brackets and ${Math.max(1, Math.round(TUNING.lieutenantMaxMods ?? 2))} modifier${(TUNING.lieutenantMaxMods ?? 2) > 1 ? 's' : ''} at most. HP is ${pct(TUNING.lieutenantHpShare ?? 0.4)} of that wave's boss (×0.85–1.5 by archetype), and it moves ${pct((TUNING.lieutenantSpeedMult ?? 1.35) - 1)} faster than its archetype (never as fast as your ship).${eliteGrindText()}`,
     tip: () => `Worth it: +${Math.round(TUNING.lieutenantCoreReward ?? 1)} Void Core, gold Geoms and 8× score. It survives a Supernova (−40% max HP) and ramming.`,
@@ -187,53 +207,53 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'brood_queen', name: BOSS_DEFS.brood_queen.name, group: 'boss', boss: true, unlockWave: bossWave('brood_queen'),
-    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. She hatches replacements while the ring is short. At ${pct(QUEEN.rageAt)} HP the whole brood scatters, she speeds up and births divers instead. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${ramText('brood_queen')}${bossGrindText()}`,
-    tip: 'The ring is her shield: sweep it with area damage, then hit her while it rebuilds. Back off when she hits half HP, and keep moving through the final mayfly burst.'
+    what: () => `${BOSS_DEFS.brood_queen.epithet}. A giant winged swarmer that arrives inside a ring of ${QUEEN.ring} circling swarmers. Every ${secs(QUEEN.peelEvery)} the ones nearest you peel off: half dive straight in, half circle you first. SWARM SPEAR: every ${secs(QUEEN.spearEvery)} she screeches, holds still and lines up to ${QUEEN.spearCount} of her brood behind a red lane aimed at you, then hurls the whole line down it. At ${pct(QUEEN.rageAt)} HP the brood scatters, she speeds up, births divers and lobs EGG CLUTCHES: ${QUEEN.eggs} marked circles round you (one under you) that burst after ${secs(QUEEN.eggWarn)} and hatch a swarmer each. She dies in a burst of ${QUEEN.deathMayflies} mayflies.${ramText('brood_queen')}${bossGrindText()}`,
+    tip: 'When she screeches, step sideways off the red lane: the spear flies straight. At half HP keep moving, the egg circles always land where you are.'
   },
   {
     id: 'ouroboros', name: BOSS_DEFS.ouroboros.name, group: 'boss', boss: true, unlockWave: bossWave('ouroboros'),
-    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant serpent: a crowned head and ${OURO.segments} armored plates that block every shot. Healthy, it winds after you and every ${secs(OURO.shedEvery)} sheds its tail as a small serpent. From ${pct(OURO.coilAt)} HP it hunts: it coils round you in a tightening ring, rears up behind a red strike lane, strikes down it, then winds free and coils again.${bossGrindText()}`,
-    tip: 'Only the head counts. When it starts to coil, dash out through the gap where head meets tail before the ring closes, and step off the red lane before it strikes.'
+    what: () => `${BOSS_DEFS.ouroboros.epithet}. A giant horned serpent: a crowned head and ${OURO.segments} spined plates that block every shot. It hunts you down, and when it gets within ${OURO.strikeRange} px it rattles, rears up behind a red strike lane with its jaws open, and strikes down it. Every ${secs(OURO.shedEvery)} it sheds its tail as a small serpent. At ${pct(OURO.coilAt)} HP it molts and goes for THE NOOSE: it coils round you in a tightening ring (a red noose marks it, green chevrons mark the gap between head and tail), then constricts, every other plate spitting venom inward, and strikes.${bossGrindText()}`,
+    tip: 'Only the head counts. Step off the red lane when it rattles. When the noose appears, fly out through the green chevrons before it closes.'
   },
   {
     id: 'wing_commander', name: BOSS_DEFS.wing_commander.name, group: 'boss', boss: true, unlockWave: bossWave('wing_commander'),
-    what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad amber delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, and the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
-    tip: 'Do not stand in its lane: sidestep the run, then cross its mine lines through the gaps. Thin the escort between passes so it has fewer wingmen to call back.'
+    what: () => `${BOSS_DEFS.wing_commander.epithet}. A broad afterburning delta leading a V of ${WING.escort} Kestrels on strafing runs. Every pass lays a line of slow drifting mines out of both sides, and each new run calls in replacement wingmen. AIRSTRIKE: every ${secs(WING.strikeEvery)} a siren sounds and a ${WING.strikeLen} px bombing lane is marked through you; ${secs(WING.strikeWarn)} later a blast front carpet-bombs it end to end. At ${pct(WING.rageAt)} HP the escort scrambles to hunt alone, the Commander flies faster runs that open with an aimed ${WING.fan}-orb fan, and its strikes come as CROSSFIRE: two lanes crossing on you in an X. It bursts in a ring of orbs when it dies.${bossGrindText()}`,
+    tip: 'Hear the siren, leave the marked lane sideways (in a crossfire, get out of the X diagonally). Thin the escort between passes so it has fewer wingmen to call back.'
   },
   {
     id: 'hive_carrier', name: BOSS_DEFS.hive_carrier.name, group: 'boss', boss: true, unlockWave: bossWave('hive_carrier'),
-    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge mothership with ${HIVE.bays} launch bays on its hull. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs and launches gunner pods every ${secs(HIVE.podEvery)}.${ramText('hive_carrier')}${bossGrindText()}`,
-    tip: 'Take the bays out one at a time while dodging the drones; area damage hits several. Once the core is exposed, circle wide through the gaps in the spiral.'
+    what: () => `${BOSS_DEFS.hive_carrier.epithet}. A huge armored mothership with ${HIVE.bays} launch bays. While any bay stands, the core is shielded and shots spark off it, and every bay launches homing drones. Every ${secs(HIVE.shellEvery)} it flies a BOMBING RUN: its lights flash red, then each standing bay lobs a shell at a red target circle on and around where you are heading; they burst when the circles fill. Destroy the bays and the core is exposed: it spins up, sprays a double spiral of orbs, launches gunner pods every ${secs(HIVE.podEvery)} and walks a carpet of ${HIVE.carpetShells} shells along your path every ${secs(HIVE.carpetEvery)}.${ramText('hive_carrier')}${bossGrindText()}`,
+    tip: 'Change direction when the lights flash red: the shells land where you were heading. Fewer bays means fewer shells, so take them out one at a time. Once the core is exposed, turn off the carpet line and circle wide through the spiral.'
   },
   {
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
-    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. Every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) and exhales a ring of ${HORIZON.ring} orbs. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes and breathes faster. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
-    tip: 'Fight it from the edge of its pull and kill things away from it so it cannot feed. Shoot from close range so the bend has less time to steer your shots off.'
+    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. GRAVITY WAVE: every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) while green spokes mark ${HORIZON.gaps} safe gaps, then exhales an expanding ring that hits anything it crosses outside the gaps, with ${HORIZON.ring} orbs riding it. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes, breathes faster, and each wave is a double ripple whose second ring turns its gaps. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
+    tip: 'When it inhales, slide onto a green spoke and let the wave pass round you, or dash through the ring. Kill things away from it so it cannot feed.'
   },
   {
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
-    what: () => `${BOSS_DEFS.architect.epithet}. A yellow drafting triangle that hangs back about ${ARCH.range} px and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. At ${pct(ARCH.rageAt)} HP it builds faster and drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in.${ramText('architect')}${bossGrindText()}`,
-    tip: 'Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early, and the blast takes the rest of the ring.'
+    what: () => `${BOSS_DEFS.architect.epithet}. A big drafting triangle that keeps about ${ARCH.range} px away and beams a laser gate into place round you every ${secs(ARCH.buildEvery)} (up to ${ARCH.maxGates}), guarded by ${ARCH.guards} Aegis Shielders. Every ${secs(ARCH.printEvery)} it draws a BLUEPRINT: ${ARCH.printLines} dashed yellow lines crossing where you are going, which print into laser walls ${secs(ARCH.printFuse)} later. At ${pct(ARCH.rageAt)} HP the lattice opens: blueprints come as ${ARCH.ragePrintLines}-line stars every ${secs(ARCH.ragePrintEvery)}, and it drops a CAGE every ${secs(ARCH.cageEvery)}: ${ARCH.cageGates} gates in a ring round you that close in. When it dies, every gate it built goes up with it.${ramText('architect')}${bossGrindText()}`,
+    tip: 'Get off the dashed lines before they print, away from where they cross. Its gates are your best weapon: drag its guards next to one and fly through. Caught in a cage? Break out through a beam early.'
   },
   {
     id: 'progenitor', name: BOSS_DEFS.progenitor.name, group: 'boss', boss: true, unlockWave: bossWave('progenitor'),
-    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${ramText('progenitor', ' of any piece')}${bossGrindText()}`,
-    tip: 'Keep up the pressure on every piece: one left alone heals and finds a partner. Finish the smallest ones before they merge.'
+    what: () => `${BOSS_DEFS.progenitor.epithet}. A giant cell that splits like an asteroid: kill it and it divides into ${PROG.children}, each of those into ${PROG.children} more, and the last generation bursts into Mitosis Cells. Pieces left unhit for ${secs(PROG.mergeAfter)} heal, drift together and merge back into the generation above. It is beaten when its last piece dies. PSEUDOPOD LASH: a cell stops, its cilia bristle, and ${PROG.gens[0].spokes} green spokes are marked out of its membrane (one always on you); a moment later they whip out. Every piece lashes on its own clock with fewer, shorter spokes. The first cell buds a Mitosis Cell every ${secs(PROG.budEvery)}.${ramText('progenitor', ' of any piece')}${bossGrindText()}`,
+    tip: 'When a cell bristles, step between its spokes. Keep up the pressure on every piece: one left alone heals and finds a partner.'
   },
   {
     id: 'conductor', name: BOSS_DEFS.conductor.name, group: 'boss', boss: true, unlockWave: bossWave('conductor'),
-    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that hangs back and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: linked hulls take less damage and move faster, and while ${COND.shieldLinks} or more links hold, the Conductor is untouchable. Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor. At ${pct(COND.rageAt)} HP it plays the crescendo: every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${ramText('conductor')}${bossGrindText()}`,
-    tip: 'Follow the beams: thin its choir below four links and its shield drops. Take out the Repulsors first, then burst it while the choir regroups.'
+    what: () => `${BOSS_DEFS.conductor.epithet}. An aqua podium that keeps its distance and beam-links up to ${COND.links} hostiles within ${COND.linkRange} px: each linked hull is ringed and joined to it by a beam, takes less damage and moves faster. Its SHIELD: ${COND.shieldLinks} pips above it light up, one per link; while all ${COND.shieldLinks} are lit it is untouchable. Kill its linked hulls and the shield breaks (SHIELD DOWN). Every ${secs(COND.choirEvery)} it calls in a choir led by a Repulsor to relink. Its DOWNBEAT: it plants, its baton ticks three times, then a shock ring with ${COND.ringGaps} gaps rolls out from it. At ${pct(COND.rageAt)} HP it plays the CRESCENDO: double rings at a faster tempo, and every ${secs(COND.crescendoEvery)} each linked hull fires an orb at you.${ramText('conductor')}${bossGrindText()}`,
+    tip: () => `Watch the pips: kill the ringed hulls until fewer than ${COND.shieldLinks} are lit, then burst it while the choir regroups. On the third tick, line up with a gap in the ring (or dash through it).`
   },
   {
     id: 'eclipse_twins', name: BOSS_DEFS.eclipse_twins.name, group: 'boss', boss: true, unlockWave: bossWave('eclipse_twins'),
-    what: () => `SOL and LUNA, a sun and a crescent, circle a point that trails after you, ${TWINS.orbitR} px out and roughly opposite each other, joined by a burning tether that sweeps back and forth across the ring. Kill one and the survivor enrages, spinning faster and firing lancer beams, and unless it dies within ${secs(TWINS.reviveTime)} its twin returns at ${pct(TWINS.reviveHp)} HP. Beaten when both are down.${bossGrindText()}`,
-    tip: 'Keep moving so the ring\'s centre never sits on you, and cross the tether where it is far from both twins. Bring both down to low HP, then finish them back to back.'
+    what: () => `SOL and LUNA, a sun and a crescent, circle a point that trails after you, ${TWINS.orbitR} px out and roughly opposite each other, joined by a burning tether that sweeps back and forth across the ring. ECLIPSE: every ${secs(TWINS.eclipseEvery)} the point jumps onto you, the twins rush together over it and a ${TWINS.novaR} px disc is marked; ${secs(TWINS.novaWarn)} later it bursts in a nova with a ring of ${TWINS.novaOrbs} orbs. At ${pct(TWINS.phaseAt)} of their combined HP the ring tightens and spins faster, eclipses come every ${secs(TWINS.phaseEclipseEvery)} and each nova fires two rings. Kill one and the survivor enrages, spinning faster and firing lancer beams, and unless it dies within ${secs(TWINS.reviveTime)} its twin returns at ${pct(TWINS.reviveHp)} HP. Beaten when both are down.${bossGrindText()}`,
+    tip: 'When the twins converge, run straight out of the disc. Cross the tether where it is far from both twins, and bring both low before finishing them back to back.'
   },
   {
     id: 'prism', name: BOSS_DEFS.prism.name, group: 'boss', boss: true, unlockWave: bossWave('prism'),
-    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a spinning prism that cycles through every color and fights with the campaign's moves, one phase per third of its HP. SWARM: a ring of shard swarmers that peel off to dive or circle you. LATTICE: closing cages of laser gates. SINGULARITY: a gravity well that exhales rings of ${PRISM.orbRing} orbs while a lighthouse beam sweeps round it.${ramText('prism', ' in the first two phases')} Past wave ${CAMPAIGN_WAVES} the run goes on, and bosses come in pairs.${bossGrindText()}`,
-    tip: 'Phase one: sweep the ring with area damage. Phase two: break each cage early through a beam. Phase three: stay outside the beam\'s reach and circle with it, slipping through the orb rings.'
+    what: () => `${BOSS_DEFS.prism.epithet}. The finale: a huge crystal prism that cycles through every color, with three phases, one per third of its HP. Each opens with a refraction (it shrugs off shots for ${secs(PRISM.shiftTime)}). I REFRACTION: it plants and fans three colored beams at you (dashed lines first, then they fire). II DISPERSION: ${PRISM.spokes} beams spin round it like spokes while it throws ${PRISM.orbFan}-orb fans. III SUPERNOVA: white-hot and faster, it pulls you in like a gravity well, ${PRISM.novaSpokes} spokes spin faster, and every ${secs(PRISM.novaEvery)} it charges a NOVA: a ${PRISM.novaR} px ring fills round it, then blasts and throws a ring of ${PRISM.novaRing} orbs.${ramText('prism', ' in the first two phases')} Beat it to win the campaign; past wave ${CAMPAIGN_WAVES} the run goes on, and bosses come in pairs.${bossGrindText()}`,
+    tip: 'Phase I: step out of the fan before it fires. Phase II: circle the same way the spokes turn. Phase III: when the ring appears round it, get out before it fills, then slip through the orb ring.'
   }
 ];
 
@@ -377,7 +397,7 @@ export const MECHANIC_ENTRIES = [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
       `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
       `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
-      `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}.`
+      `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}${lateHpText()}.`
     ]
   },
   {
@@ -396,6 +416,7 @@ export const MECHANIC_ENTRIES = [
       `${WEAPON_BY_ID.cryospray.name} and ${WEAPON_BY_ID.acidspray.name} are the Flamethrower's twins: the same spinning cone (rocks block it), born FROST and CORROSIVE. Deep Freeze and Etching Agent cards raise their element rank. All three sprayers take Extra Nozzle cards (up to 4 streams). At LV 6 the Flamethrower lobs Fireballs, the Cryo Sprayer Shatters frozen enemies and the Acid Sprayer makes corroded kills Melt Down; LV 12 / 18 drop puddles / slicks / pools and roll out a ring.`,
       `${WEAPON_BY_ID.lightning.name} is born SHOCK (it's lightning; no element cards): every arc zap-stuns, sometimes long-stuns, and charges enemies that touch so shock arcs between them. Its shock rank grows by 1 at LV 6, 12 and 18, and it counts as a SHOCK weapon for STATUS cards and the Shock Amplifier.`,
       `${WEAPON_BY_ID.shockfield.name} is born SHOCK (no element cards): every discharge stuns through the usual SHOCK rules, its Stun Coils cards rank the stun, and it counts as a SHOCK weapon for STATUS cards and the Shock Amplifier.`,
+      `${WEAPON_BY_ID.nanites.name} is born CORROSIVE (no element cards): every bite corrodes, its corrode rank grows by 1 at LV 6, 12 and 18, and it counts as a CORROSIVE weapon for STATUS cards and the Corrosive Amplifier. Each swarm flies to the densest pack in range, follows it and grows with every kill; a new launch picks a pack no swarm already holds.`,
       `STACKS: every hit of an element weapon piles on stacks of its status (more for bigger hits and higher ranks). Every ${W.statusTick} s the stacks act, then ${pct(W.statusDecay)} of them wear off; a target you keep hitting builds them up, one you stop hitting cools off in a few seconds.`,
       `BURN (FIRE): the big damage over time, ticking every ${W.statusTick} s; a burning enemy may set the enemy beside it alight (${pct(W.burnSpreadChance)} a tick). COLD (FROST): no damage, but the target slows as cold builds (up to ${pct(W.chillSlow(1))} at rank 1; bosses feel ${pct(TUNING.chillBossMult ?? 0.4)}) until it FREEZES solid for ${W.freezeDuration(1)} s, takes +${pct(W.frozenDamageTaken)} damage, then can't freeze for ${W.freezeImmunity} s. Tough hulls take more cold to freeze. CORRODE (CORROSIVE): a light acid tick, and every stack makes the target take more damage from every source (up to +${pct(W.corrodeCap(1))} at rank 1).`,
       `SHOCK: every hit is a quick ${W.shockStun(1)} s zap stun, or ${pct(W.shockLongChance(1))} of the time a long ${W.shockLongStun} s stun: the hull crackles yellow, stops moving and can't attack (touching it still hurts). Then it is stun-immune for ${W.stunImmunity} s. Shock stacks arc between enemies that TOUCH: the charged one takes a zap of damage and passes ${pct(W.shockConductShare)} of its charge to the hulls it touches, stunning them too (pack them with a Vortex Singularity). Shocked targets are easier to crit. Bosses keep ${pct(TUNING.shockBossMult ?? 0.2)} of a stun or freeze (stun-immune ${W.stunImmunityBoss} s), lieutenants ${pct(TUNING.shockLieutenantMult ?? 0.5)} (${W.stunImmunityLieutenant} s).`,
@@ -407,6 +428,7 @@ export const MECHANIC_ENTRIES = [
     body: () => [
       `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the crab's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
       `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
+      `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${[1, 2, 3, 4, 5].map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
       `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',
       'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
@@ -456,6 +478,7 @@ export const MECHANIC_ENTRIES = [
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
+      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures shatter any rock they cross (broken rocks count as mined; bedrock never cracks).`,
       'Field Amplifier makes every AREA weapon reach further.'
     ]
   },
@@ -475,7 +498,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, glaive discs orange, nanite swarm pale lime, claw harpoon yellow, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
@@ -483,6 +506,7 @@ export const MECHANIC_ENTRIES = [
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
       'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
+      `The ${WEAPON_BY_ID.harpoon.name} is the one weapon that mines: it throws one of your drill-claws, which drills through the rock on its line (Rock Drill cards bore deeper, drill-speed upgrades help too) and bites to a stop in rock it can't finish. Rock it breaks counts as yours, ore and all.`,
       'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),

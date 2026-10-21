@@ -54,7 +54,7 @@ export const WEAPONS = [
   {
     id: 'turret', name: 'Sentry Turret', hudName: 'Sentry Turret', levelId: 'turret', levelKey: 'turret', category: 'DEPLOYABLE', tagSources: ['turret'],
     color: '#5aa8ff',
-    summary: 'Temporary auto-turrets that shoot the nearest enemy they can see.'
+    summary: 'Stand still to plant turret charges; each turret shoots the nearest enemy it can see for a while. Charges reload over time.'
   },
   {
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
@@ -90,6 +90,31 @@ export const WEAPONS = [
     id: 'shockfield', name: 'Electric Shield Field', hudName: 'Shock Field', levelId: 'shockfield', levelKey: 'shockfield', category: 'DEFENSIVE', tagSources: ['shockfield'],
     color: '#9ff4ff',
     summary: 'A charged field round your hull. When enemies get close it discharges: it zaps and SHOCKs everything inside, then recharges. A weapon, not shield: it never repairs your shield.'
+  },
+  {
+    id: 'raillance', name: 'Rail Lance', hudName: 'Rail Lance', levelId: 'raillance', levelKey: 'raillance', category: 'PRIMARY', tagSources: ['rail'],
+    color: '#9d8cff',
+    summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and rock to the edge of the screen. Slow fire, huge hits.'
+  },
+  {
+    id: 'glaive', name: 'Glaive Discs', hudName: 'Glaive Discs', levelId: 'glaive', levelKey: 'glaive', category: 'AUTONOMOUS', tagSources: ['glaive'],
+    color: '#ff8a3d',
+    summary: 'Spinning discs flung at the nearest enemies. Each one ricochets from enemy to enemy, and off rocks, losing a little speed every bounce.'
+  },
+  {
+    id: 'nanites', name: 'Nanite Swarm', hudName: 'Nanite Swarm', levelId: 'nanites', levelKey: 'nanites', category: 'DEPLOYABLE', tagSources: ['nanite'],
+    color: '#c4ff7a',
+    summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
+  },
+  {
+    id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
+    color: '#ffcc00',
+    summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
+  },
+  {
+    id: 'quake', name: 'Graviton Mortar', hudName: 'Graviton Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
+    color: '#ff8a5c',
+    summary: 'Lobs graviton charges at the densest packs. Each one bursts into a gravity wave that ripples through space-time, hitting everything it rolls over and knocking it back.'
   }
 ];
 
@@ -117,7 +142,7 @@ export const STARTING_WEAPONS = ['blaster'];
 
 // The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
 // is remembered on this device and pre-selected next time.
-export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles'];
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive'];
 export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
 export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
 export function readStartWeapon(storage) {

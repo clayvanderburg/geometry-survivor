@@ -11,11 +11,11 @@ import { POWER_STATS } from '../../js/weapon-levels.js';
 import { WEAPONS, START_WEAPON_CHOICES } from '../../js/loadout.js';
 
 export const NAMED_STRATEGIES = [
-  { name: 'projectile', desc: 'Autocannon lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['blaster_damage', 'multishot', 'firerate', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'magnet'], weapons: ['drones', 'turret'] },
-  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters'], weapons: ['missiles', 'lightning', 'rockets', 'mines'] },
-  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
-  { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters'], weapons: ['singularity', 'mines'] },
-  { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters'], pilot: { mineBias: 1.0 } },
+  { name: 'projectile', desc: 'Autocannon lines (Prism Split, Hyper-Capacitor, Phase Piercer) into Pulsar Helix; kinetic drones and turret', priorities: ['blaster_damage', 'multishot', 'firerate', 'evo_pulsar', 'new_weapon', 'overdrive', 'drones', 'turret', 'tag_kinetic', 'thrusters', 'move_speed', 'magnet'], weapons: ['drones', 'turret'] },
+  { name: 'explosive', desc: 'Swarm Missiles + Tesla Arc into Storm Protocol, rockets and explosive damage', priorities: ['new_weapon', 'missiles', 'lightning', 'evo_tempest', 'rockets', 'tag_explosive', 'overdrive', 'shrapnel', 'thrusters', 'move_speed'], weapons: ['missiles', 'lightning', 'rockets', 'mines'] },
+  { name: 'orbital', desc: 'Aegis Blades + Phase Nova Thrusters (defensive melee), shatter', priorities: ['new_weapon', 'orbitals', 'thrusters', 'move_speed', 'overdrive', 'shrapnel', 'magnet'], weapons: ['orbitals', 'drones'] },
+  { name: 'singularity', desc: 'Vortex Singularity first, then damage and fire rate', priorities: ['new_weapon', 'singularity', 'overdrive', 'firerate', 'mines', 'thrusters', 'move_speed'], weapons: ['singularity', 'mines'] },
+  { name: 'mining', desc: 'Rotary Claw + Tectonic Bore, luck and magnet; pilot drills rocks when calm', priorities: ['mining_speed', 'evo_tectonic', 'luck_boost', 'magnet', 'thrusters', 'move_speed'], pilot: { mineBias: 1.0 } },
   { name: 'prospector', desc: 'Random card picks; the pilot drills toward nearby gold veins when calm: a regular gold miner without a mining build', priorities: [], pilot: { mineBias: 0.6, goldPull: 200 } },
   { name: 'random', desc: 'Uniformly random card picks (NEW WEAPON included)', priorities: [] }
 ];

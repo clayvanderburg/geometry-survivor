@@ -24,7 +24,7 @@ globalThis.document = {
 };
 
 const { Game } = await import('../js/main.js');
-const { EnemyManager, damageRampAt, emergeFactor } = await import('../js/enemies.js');
+const { EnemyManager, damageRampAt, emergeFactor, isSmallHull } = await import('../js/enemies.js');
 const { EnemyBulletPool } = await import('../js/enemy-bullets.js');
 const { DamageNumbers } = await import('../js/damage-numbers.js');
 const {
@@ -314,6 +314,50 @@ test('blinker shows its landing ring for the full telegraph, then lands on a cle
   step(manager, player, 3);
   assert.equal(b.state, 'drift');
   assert.ok(Math.hypot(b.x - dest.x, b.y - dest.y) < b.speed * 4, 'teleported to the marked ring');
+});
+
+test('blinker wind-up is long enough to react to in a crowd, and plays its charge cue', () => {
+  resetTuning();
+  assert.ok(BLINKER.telegraph >= 0.9 && BLINKER.telegraph <= 1.2, 'about 1 s between the mark and the jump (was 0.6 s)');
+  const { manager } = arena();
+  const cues = [];
+  manager.sound = { playBlinkCharge: () => cues.push('charge'), playBlinkWarp: () => cues.push('warp') };
+  const b = addEnemy(manager, 'blinker', 2400, 2000);
+  b.aiTimer = 0;
+  step(manager, { x: 2000, y: 2000 });
+  assert.equal(b.state, 'telegraph');
+  assert.deepEqual(cues, ['charge']);
+  step(manager, { x: 2000, y: 2000 }, Math.round(BLINKER.telegraph * 60) + 2);
+  assert.deepEqual(cues, ['charge', 'warp']);
+});
+
+test('blinker never lands on the ship: a drifted-onto mark is pushed out, and the arrival cannot hit', () => {
+  resetTuning();
+  const { manager } = arena();
+  const b = addEnemy(manager, 'blinker', 2400, 2000);
+  b.aiTimer = 0;
+  const player = { x: 2000, y: 2000 };
+  step(manager, player);
+  assert.equal(b.state, 'telegraph');
+  // The ship flies right onto the marked point during the wind-up.
+  player.x = b.blinkX + 10;
+  player.y = b.blinkY;
+  step(manager, player, Math.round(BLINKER.telegraph * 60) + 1);
+  assert.equal(b.state, 'drift');
+  assert.ok(Math.hypot(b.x - player.x, b.y - player.y) >= BLINKER.landClear - b.speed * 3, 'landed clear of the ship');
+  assert.ok(b.arriveT > 0, 'arrival grace is running');
+  step(manager, player, Math.ceil(BLINKER.arriveGrace * 60) + 1);
+  assert.equal(b.arriveT, 0, 'grace ends, the lunge is a real threat again');
+});
+
+test('small hulls are the late-wave readability set: fodder yes, big hulls and bosses no', () => {
+  const { manager } = arena();
+  for (const type of ['swarmer', 'mini_splitter', 'mayfly', 'hatchling', 'blinker']) {
+    assert.ok(isSmallHull(addEnemy(manager, type, 2000, 2000)), type);
+  }
+  for (const type of ['bruiser', 'splitter', 'shielder']) {
+    assert.ok(!isSmallHull(addEnemy(manager, type, 2000, 2000)), type);
+  }
 });
 
 test('conduit links nearby allies: they take 30% less damage and move faster until the link breaks', () => {
