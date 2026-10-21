@@ -10,10 +10,15 @@ import { DialogueBox, readHold } from './dialogue.js';
 
 export const RADIO_IDS = Object.freeze({ root: 'radio-box', name: 'radio-name', text: 'radio-text', portrait: 'radio-portrait' });
 const OUT_TIME = 0.25; // s for the slide-out before the next line comes on
+export const RADIO_CPS = 30; // typing speed: slower than cutscenes, the player is busy flying
+// How long a radio line stays up once typed: paced for slow readers, since the player reads it mid-fight.
+export function radioHold(text) {
+  return Math.max(readHold(text) + 0.8, 1.5 + String(text).length * 0.055);
+}
 
 export class RadioBox {
   constructor({ sound = null, box = null } = {}) {
-    this.box = box || new DialogueBox({ sound, ids: RADIO_IDS, cps: 52 });
+    this.box = box || new DialogueBox({ sound, ids: RADIO_IDS, cps: RADIO_CPS });
     this.current = null;
     this.queued = null;
     this.outT = 0;
@@ -48,7 +53,7 @@ export class RadioBox {
   }
 
   start(line) {
-    this.current = { ...line, hold: line.hold ?? readHold(line.text) + 0.8 };
+    this.current = { ...line, hold: line.hold ?? radioHold(line.text) };
     this.outT = 0;
     this.box.show(this.current);
     this.box.root?.classList.remove('radio-out');

@@ -9,6 +9,7 @@
 // A boss wave whose boss is not defined here gets the Prismatic Dreadnought ('boss', js/enemies.js).
 // Timers are seconds; speeds and steering are px per fixed 60 Hz tick.
 import { TUNING } from './config.js';
+import { flashScale } from './juice.js'; // REDUCE EFFECTS dims boss glow flashes
 import { SERPENT, spawnSerpent, spawnBody, coilPath, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 import { launchDrones, traceCell } from './hostiles.js';
@@ -43,7 +44,7 @@ function arriveFx(e, m, sting) {
   e.introT = BOSS_INTRO;
   const env = m.aiEnv || {};
   env.particles?.spawnShockwave?.(e.x, e.y, e.radius * 6, e.hue, 4, 0.6);
-  env.particles?.spawnFlash?.(e.x, e.y, e.radius * 3, e.hue, 0.3);
+  env.particles?.spawnFlash?.(e.x, e.y, e.radius * 3 * flashScale(), e.hue, 0.3);
   cue(m, sting);
 }
 
@@ -53,7 +54,7 @@ function phaseShift(e, m, env, reach = 320) {
   e.phaseFlash = 1;
   env.particles?.spawnShockwave?.(e.x, e.y, reach, e.hue, 6, 0.55);
   env.particles?.spawnShockwave?.(e.x, e.y, reach * 0.55, 0, 3, 0.4);
-  env.particles?.spawnFlash?.(e.x, e.y, e.radius * 4, e.hue, 0.25);
+  env.particles?.spawnFlash?.(e.x, e.y, e.radius * 4 * flashScale(), e.hue, 0.25);
   env.particles?.spawnExplosionSparks?.(e.x, e.y, 30, e.hue, 3, 14, 2.4);
   env.grid?.applyImpulse?.(e.x, e.y, 70, reach, e.hue);
   cue(m, 'boss_phase');
@@ -67,7 +68,7 @@ function deathBloom(e, m, hues, sting) {
     p?.spawnShockwave?.(e.x, e.y, e.radius * (5 + i * 3), hue, 5 - i, 0.5 + i * 0.18);
     p?.spawnExplosionSparks?.(e.x, e.y, 26, hue, 2 + i, 16 + i * 4, 2.6);
   });
-  p?.spawnFlash?.(e.x, e.y, e.radius * 6, hues[0], 0.4);
+  p?.spawnFlash?.(e.x, e.y, e.radius * 6 * flashScale(), hues[0], 0.4);
   p?.spawnPolygonShatter?.(e.x, e.y, e.radius * 1.4, e.sides, e.rotation, hues[hues.length - 1], 1.6);
   m.aiEnv?.grid?.ripple?.(e.x, e.y, e.radius * 12, hues[0], 1.4);
   cue(m, sting);
@@ -95,7 +96,7 @@ function drawBossFlair(ctx, e, r, dt = 1 / 60) {
     e.introT = Math.max(0, e.introT - dt);
   }
   if (e.phaseFlash > 0) {
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * e.phaseFlash})`;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * e.phaseFlash * flashScale()})`;
     ctx.lineWidth = 3 + 5 * e.phaseFlash;
     ctx.beginPath();
     ctx.arc(e.x, e.y, r * (1.2 + (1 - e.phaseFlash) * 2.5), 0, Math.PI * 2);

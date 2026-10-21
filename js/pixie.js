@@ -140,6 +140,21 @@ export const PIXIE_RIFT_LINES = Object.freeze([
   ['You\'re safe mid-jump, I promise. And I get DATA!', 'smug']
 ]);
 export const PIXIE_RIFT_JUMP_LINE = Object.freeze(['Data acquired! You\'re fine! Probably!', 'oops']);
+// The first time a save's shield drops to 30%: back off, then go find a green vein to patch it.
+export const PIXIE_LOW_SHIELD_LINES = Object.freeze([
+  ['Eek! Your shield is down to 30%!', 'oops'],
+  ['Back off and dodge for a bit, okay?', 'neutral'],
+  ['Green veins in the rocks patch it up fast!', 'eureka']
+]);
+// The first boss of every run: she plugs the Supernova bombs she installed (replaces the banner).
+// "{key}" = the bomb button (E, B or TAP NOVA).
+export const PIXIE_NOVA_LINES = Object.freeze([
+  ['Big one! Try my new SUPERNOVA bombs! Press {key}!', 'eureka'],
+  ['I installed SUPERNOVA bombs! Hit {key} on that boss!', 'smug'],
+  ['Boss! Bombs away! Press {key} for a SUPERNOVA!', 'eureka']
+]);
+export const PIXIE_LOW_SHIELD_FRACTION = 0.3;
+export const PIXIE_LOW_SHIELD_KEY = 'vexolith_pixie_low_shield_seen';
 export const PIXIE_RIFT_SEEN_KEY = 'vexolith_pixie_rift_seen';
 export const PIXIE_RIFT_JUMP_KEY = 'vexolith_pixie_rift_jump_seen';
 const seen = (storage, key) => { try { return !!storage?.getItem(key); } catch { return false; } };
@@ -209,6 +224,18 @@ export class PixieDirector {
   }
 
   riftOpened(mode) { return this.once(PIXIE_RIFT_SEEN_KEY, PIXIE_RIFT_LINES, mode); }
+
+  // The first boss of a run: one bomb reminder on the radio. False (the banner shows instead) when the
+  // radio is off or the mode has no story (BLITZ).
+  novaReminder(mode, key) {
+    if (!this.radio || mode === 'blitz') return false;
+    const [text, mood] = PIXIE_NOVA_LINES[Math.floor(this.rng() * PIXIE_NOVA_LINES.length)];
+    this.radio.say({ who: 'pixie', text: fillLine(text, { key }), mood, cut: true });
+    return true;
+  }
+
+  // Not in HARDCORE: green veins don't repair there, so the tip waits for a mode where it's true.
+  lowShield(mode) { return mode !== 'hardcore' && this.once(PIXIE_LOW_SHIELD_KEY, PIXIE_LOW_SHIELD_LINES, mode); }
 
   // The first jump: only after she has explained rifts (else it's a non sequitur).
   riftJumped(mode) {
