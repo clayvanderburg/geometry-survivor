@@ -28,6 +28,11 @@ const MAX_SWEEP = 24;                // enemies one tick of flight can skewer (a
 
 // Enemies the claw can hit: alive and hittable.
 const target = (e) => !e.dead && !e.invulnerable;
+// A hooked catch can't ram the ship while the winch holds it, nor for this long after it lets go
+// (e.noContactUntil, checked by Game's contact loop): the claw hauls it inside the shield outline.
+const RELEASE_GRACE = 0.6; // s
+// A catch that survives the crush is flung this far past the ship's hull, so it doesn't land on it.
+const RELEASE_FLING = 26; // px
 // Small enough to yank (never a boss or a lieutenant, never an armored plate).
 export const hookable = (e, size) => !e.isBoss && !e.isLieutenant && !e.deflect && !e.leader && e.type !== 'gate' && (e.radius || 0) <= size;
 
@@ -112,7 +117,7 @@ export class ClawHarpoon {
       else if (this.phase === 'chain') this.leap(game, b);
       if (this.phase === 'back') this.reel(game, b);
     }
-    this.holdCatch(p);
+    this.holdCatch(game);
     p.harpoonOut = this.out;
   }
 
@@ -453,8 +458,9 @@ export class ClawHarpoon {
     const e = this.catch;
     const nx = Math.cos(p.angle), ny = Math.sin(p.angle);
     if (e && !e.dead) {
-      this.holdCatch(p);
+      this.holdCatch(game);
       game.hitEnemy(e, this.dmg * W.harpoonCrushShare, 'harpoon', nx * 4, ny * 4, 1, 'harpooncrush');
+      if (!e.dead) this.fling(game, e);
       this.crushes++;
       game.particles.spawnPolygonShatter?.(e.x, e.y, (e.radius || 10) * 0.7, 3, Math.atan2(ny, nx), HARPOON_HUE, 0.5);
       game.particles.spawnExplosionSparks?.(e.x, e.y, 10, HARPOON_HUE, 1.6, 7, 2);
@@ -482,11 +488,27 @@ export class ClawHarpoon {
     this.tipY = this.socket.y;
   }
 
-  // Pin the catch to the claw tip, kept just clear of the hull so it never rams the ship on the way in.
-  holdCatch(p) {
+  // A catch that survives the crush is thrown clear of the ship (past the claws and the shield) and moving
+  // away, so it can't hit the ship the moment the winch lets go.
+  fling(game, e) {
+    const p = game.player;
+    let dx = e.x - p.x, dy = e.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 1e-6) { dx /= d; dy /= d; } else { dx = Math.cos(p.angle); dy = Math.sin(p.angle); }
+    const out = (p.radius || 15) * 2.4 + (e.radius || 10) + RELEASE_FLING;
+    e.x = p.x + dx * Math.max(d, out);
+    e.y = p.y + dy * Math.max(d, out);
+    e.vx = dx * 5; e.vy = dy * 5;
+    e.noContactUntil = (game.elapsedTime || 0) + RELEASE_GRACE;
+  }
+
+  // Pin the catch to the claw tip, kept just clear of the hull, and keep it from ramming the ship while held.
+  holdCatch(game) {
+    const p = game.player;
     const e = this.catch;
     if (!e) return;
     if (e.dead) { this.catch = null; return; }
+    e.noContactUntil = (game.elapsedTime || 0) + RELEASE_GRACE;
     let x = this.tipX, y = this.tipY;
     const hold = (p.radius || 15) + (e.radius || 10) + 6;
     const dx = x - p.x, dy = y - p.y;

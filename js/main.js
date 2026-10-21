@@ -5623,7 +5623,8 @@ export class Game {
       }
       // Contact uses the same hull-hugging outline the shield draws.
       // A Blinker that just landed (arriveT) can't hit: only its lunge can (js/archetypes.js BLINKER).
-      if (!(e.arriveT > 0) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
+      // Nor can a Claw Harpoon catch while it's held or just flung (noContactUntil, js/claw-harpoon.js).
+      if (!(e.arriveT > 0) && !(e.noContactUntil > this.elapsedTime) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 

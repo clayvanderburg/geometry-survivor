@@ -233,3 +233,25 @@ test('a live fight: the harpoon deals damage through the normal game loop', () =
   }
   assert.ok(bySource.harpoon > 0);
 });
+
+test('a hooked catch never hurts the ship: no contact while reeled in, and a survivor is flung clear', async () => {
+  const { shieldTouches } = await import('../js/ship-renderer.js');
+  const { TUNING } = await import('../js/config.js');
+  const { g, p, foes: [foe] } = harpoonGame({ foes: [{ x: 160 }] }); // 10M HP: it survives the crush
+  p.invuln = 0;
+  const hp0 = p.hp;
+  let held = false;
+  // Fire one throw and run the whole game loop, so Game's contact check sees the catch the whole way in.
+  g.input = g.input || {};
+  tick(g, 1);
+  for (let i = 0; i < throwTicks(weaponBuild(p, 'harpoon')) + 30; i++) {
+    if (g.clawHarpoon.catch === foe) held = true;
+    g.update(DT);
+    p.invuln = 0; // no hit-invulnerability window to hide a ram
+  }
+  assert.ok(held, 'the harpoon hooked the swarmer');
+  assert.equal(p.hp, hp0, 'reeling in and crushing never damaged the ship');
+  assert.ok(!foe.dead, 'the 10M HP catch survived the crush (a ram would have popped it)');
+  assert.ok(!shieldTouches(p, TUNING, foe.x, foe.y, foe.radius) || foe.noContactUntil > g.elapsedTime,
+    'the survivor ends up clear of the shield, or still inside its grace');
+});
