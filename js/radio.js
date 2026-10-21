@@ -10,7 +10,7 @@ import { DialogueBox, readHold } from './dialogue.js';
 
 export const RADIO_IDS = Object.freeze({ root: 'radio-box', name: 'radio-name', text: 'radio-text', portrait: 'radio-portrait' });
 const OUT_TIME = 0.25; // s for the slide-out before the next line comes on
-export const RADIO_CPS = 15; // typing speed: slower than cutscenes, the player is busy flying (30 before v0.44.1)
+export const RADIO_CPS = 15; // typing speed: slower than cutscenes, the player is busy flying (30 before v0.45.0)
 // How long a radio line stays up once typed: paced for slow readers, since the player reads it mid-fight.
 export function radioHold(text) {
   return Math.max(readHold(text) + 1.6, 3 + String(text).length * 0.11); // twice the v0.44.0 hold

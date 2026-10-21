@@ -90,7 +90,7 @@ test('the opening scene: a valid script, about 60–90 s left alone (tap to go f
   const actions = new CutsceneStage({ sound: null }).actions();
   assert.deepEqual(validateScript(OPENING_SCENE, { actions }), []);
   const t = estimateDuration(OPENING_SCENE);
-  assert.ok(t >= 60 && t <= 90, `opening runs ${t.toFixed(1)} s`); // half-speed text since v0.44.1
+  assert.ok(t >= 60 && t <= 90, `opening runs ${t.toFixed(1)} s`); // half-speed text since v0.45.0
   const lines = OPENING_SCENE.steps.filter((s) => s.do === 'say');
   assert.deepEqual([...new Set(lines.map((s) => s.who))].sort(), ['dispatch', 'miner', 'vex']);
   for (const s of lines) assert.ok(CAST[s.who], s.who);

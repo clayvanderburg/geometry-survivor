@@ -16,14 +16,14 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-21',
     title: 'Squadron & Replicator',
     notes: [
-      { type: 'new', text: 'Escort Drones now fly up to 5: a front pair beside your nose and a back row of 3. The first is the flight lead with the heavy gun; wingmen carry lighter guns.' },
-      { type: 'new', text: 'New LV 6 drone Breakthrough, Escort Squadron: a whole back row of 3 drones joins at once. Drones past 5 add their firepower to the rest.' },
-      { type: 'new', text: 'New drones launch from the hull and snap into formation one by one.' },
+      { type: 'new', text: 'Escort Drones fly in formation: a front pair beside your nose and a back row of 3 (5 from cards). The first is the flight lead with the heavy gun; wingmen carry lighter guns.' },
+      { type: 'new', text: 'New LV 6 drone Breakthrough, Escort Squadron: 3 more drones join at once, up to 8 (3 in front, 5 behind). New drones launch and snap into formation one by one.' },
       { type: 'balance', text: 'Escort Drones hold about 85% of the Autocannon at every level (they pulled ahead past LV 12 before).' },
       { type: 'new', text: 'New global card, Replicator Array (always RARE or better, and rare in hands): each rank gives every equipped weapon one more of what it fires, up to its cap. Max 2 ranks.' },
       { type: 'balance', text: 'Replicator Array never raises a weapon\'s level, so your Breakthroughs stay on schedule. It adds +2 Autocannon streams, +2 Tesla Arc jumps or +1 of everything else.' },
-      { type: 'new', text: 'The starting pick now offers 8 weapons: Escort Drones and Sentry Turret join it.' },
-      { type: 'fix', text: 'REDUCE EFFECTS now also dims the minor bosses\' glow flashes.' }
+      { type: 'balance', text: 'Rail Lance: Flux Lens widens the line more (+6 per card, was +4). Upgrade cards show size and reach boosts as percentages instead of pixels.' },
+      { type: 'new', text: 'Dialogue types at half speed and stays up twice as long, and Dr. Pixie talks from the bottom centre, close to your ship.' },
+      { type: 'new', text: 'The starting pick now offers 8 weapons: Escort Drones and Sentry Turret join it. REDUCE EFFECTS also dims the minor bosses\' glow flashes.' }
     ]
   },
   {

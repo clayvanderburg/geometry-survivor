@@ -6,7 +6,7 @@
 // campaign beats add their own cast without touching this file; a script line is just { who, text }.
 // The typing maths are pure functions (tested in node); DialogueBox wires them into the DOM.
 
-export const TYPE_CPS = 22; // characters per second (44 before v0.44.1: Clay wanted every chat box about half as fast)
+export const TYPE_CPS = 22; // characters per second (44 before v0.45.0: Clay wanted every chat box about half as fast)
 // Extra beat after punctuation, so lines read with a rhythm instead of a ticker-tape stream.
 export const PUNCT_PAUSE = Object.freeze({ '.': 0.2, '!': 0.2, '?': 0.2, ',': 0.09, ';': 0.12, ':': 0.12, '…': 0.32, '—': 0.14 });
 export const PORTRAIT_SIZE = 72; // logical pixels; CSS scales the canvas up, pixel-crisp
@@ -53,7 +53,7 @@ export function typedLength(text, t, cps = TYPE_CPS) {
 
 // Seconds a finished line stays up before an auto-advancing script moves on: time to read it.
 export function readHold(text) {
-  return Math.min(5.2, 1.8 + String(text).length * 0.044); // twice the old read time (v0.44.1)
+  return Math.min(5.2, 1.8 + String(text).length * 0.044); // twice the old read time (v0.45.0)
 }
 
 // Does typing character `i` of `text` make a blip? Letters, digits and glyphs (alien speech), never
