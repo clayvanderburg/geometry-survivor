@@ -559,7 +559,7 @@ export const WEAPON_SCALING = {
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
   railSpread: 0.12,                               // rad between Split Rails lances
-  railWidth: (b) => 6 * (1 + 0.3 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull)
+  railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
   railKnock: 1.6,
   // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it
