@@ -121,6 +121,7 @@ export function radarSize(width, height, shortShare = 0.55) {
 
 const ARMORY_REFUND_CONFIRM_MS = 4000; // REFUND ALL disarms if the confirming click doesn't come in time
 const MAX_LOOSE_GEOMS = 400; // loose XP geoms on the field before the oldest start merging (see mergeLooseGeoms)
+const GEOM_MERGE_RADIUS = 15; // px: a geom only folds into a loose neighbour this close, so none seem to vanish across the field
 
 // Screens shorter than VIEW_MIN_SIDE px (on their short side) zoom out so a phone sees as much of the sector
 // as a small laptop window: enemies spawn just off screen, so a tiny view would put them on top of the ship.
@@ -5113,22 +5114,44 @@ export class Game {
   }
 
   // Geoms never expire, so a long run could pile up thousands. Past MAX_LOOSE_GEOMS loose XP geoms, the
-  // oldest folds into its nearest loose neighbour (no XP lost); merged geoms draw a little bigger.
+  // oldest fold into a loose neighbour within GEOM_MERGE_RADIUS (no XP lost); merged geoms draw a little
+  // bigger. A geom with no neighbour that close stays put, even past the cap: merging across the field read
+  // as geoms disappearing. Loose geoms are bucketed into GEOM_MERGE_RADIUS cells, so each lookup only scans
+  // the 3x3 cells around it.
   mergeLooseGeoms() {
     const loose = [];
     for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.magnetized) loose.push(g);
     let excess = loose.length - MAX_LOOSE_GEOMS;
-    for (let i = 0; excess > 0; i++, excess--) {
-      const g = loose[i];
-      let into = null, best = Infinity;
-      for (let j = i + 1; j < loose.length; j++) {
-        const d = (loose[j].x - g.x) ** 2 + (loose[j].y - g.y) ** 2;
-        if (d < best) { best = d; into = loose[j]; }
+    if (excess <= 0) return;
+    const r = GEOM_MERGE_RADIUS, cells = new Map();
+    const cellOf = (g) => `${Math.floor(g.x / r)},${Math.floor(g.y / r)}`;
+    for (const g of loose) {
+      const k = cellOf(g);
+      const cell = cells.get(k);
+      if (cell) cell.push(g); else cells.set(k, [g]);
+    }
+    const gone = new Set();
+    for (const g of loose) {
+      if (excess <= 0) break;
+      const cx = Math.floor(g.x / r), cy = Math.floor(g.y / r);
+      let into = null, best = r * r;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        for (const o of cells.get(`${cx + dx},${cy + dy}`) || []) {
+          if (o === g || gone.has(o)) continue;
+          const d = (o.x - g.x) ** 2 + (o.y - g.y) ** 2;
+          if (d <= best) { best = d; into = o; }
+        }
       }
+      if (!into) continue;
       into.xp += g.xp;
       into.merged = (into.merged || 0) + (g.merged || 0) + 1;
-      this.geoms.splice(this.geoms.indexOf(g), 1);
+      gone.add(g);
+      excess--;
     }
+    if (!gone.size) return;
+    let w = 0;
+    for (const g of this.geoms) if (!gone.has(g)) this.geoms[w++] = g;
+    this.geoms.length = w;
   }
 
   update(dt) {

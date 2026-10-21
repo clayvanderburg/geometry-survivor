@@ -40,10 +40,11 @@ test('dropped XP geoms, Void Cores and gold never expire', () => {
   assert.equal(game.player.xp, 3);
 });
 
-test('past the cap, the oldest loose XP geoms merge into neighbours without losing XP', () => {
+test('past the cap, the oldest loose XP geoms merge into close neighbours without losing XP', () => {
   const game = arena();
   const n = 500;
-  for (let k = 0; k < n; k++) game.geoms.push(geom(100 + (k % 50) * 20, 100 + Math.floor(k / 50) * 20, { xp: 3 }));
+  // 10 px apart: every geom has a neighbour inside GEOM_MERGE_RADIUS (15 px).
+  for (let k = 0; k < n; k++) game.geoms.push(geom(100 + (k % 50) * 10, 100 + Math.floor(k / 50) * 10, { xp: 3 }));
   const core = geom(4000, 4000, { isCore: true, coreAmount: 1, xp: 2 });
   game.geoms.push(core);
   game.mergeLooseGeoms();
@@ -52,4 +53,22 @@ test('past the cap, the oldest loose XP geoms merge into neighbours without losi
   assert.equal(loose.reduce((a, g) => a + g.xp, 0), n * 3, 'total XP kept');
   assert.ok(game.geoms.includes(core), 'Void Cores are never merged away');
   assert.ok(loose.some(g => g.merged > 0));
+});
+
+test('geoms never merge across the field: only into a neighbour within 15 px', () => {
+  const game = arena();
+  const n = 500;
+  // 40 px apart: no geom has a neighbour close enough, so none merge even though the cap is passed.
+  for (let k = 0; k < n; k++) game.geoms.push(geom(100 + (k % 50) * 40, 100 + Math.floor(k / 50) * 40, { xp: 3 }));
+  game.mergeLooseGeoms();
+  assert.equal(game.geoms.length, n, 'no far merges');
+  assert.ok(game.geoms.every(g => !g.merged));
+  // One close pair among them: only that pair folds, into the nearer geom.
+  game.geoms.push(geom(100.5 + 12, 100, { xp: 5 }));
+  game.mergeLooseGeoms();
+  assert.equal(game.geoms.length, n, 'the oldest geom folds into its 12 px neighbour');
+  assert.equal(game.geoms.reduce((a, g) => a + g.xp, 0), n * 3 + 5, 'total XP kept');
+  const merged = game.geoms.filter(g => g.merged > 0);
+  assert.equal(merged.length, 1);
+  assert.ok(Math.hypot(merged[0].x - 100, merged[0].y - 100) <= 15);
 });
