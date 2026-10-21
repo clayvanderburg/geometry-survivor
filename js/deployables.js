@@ -13,7 +13,7 @@ export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
 
 const MINE_POOL = 36;   // >= W.mineMaxActive at max level (capacity 11, x3 with Minefield Triad)
 const TURRET_POOL = TURRET_MAX_ACTIVE; // >= W.turretMaxActive at max level
-const DRONE_POOL = DRONE_MAX; // W.droneCount: a front pair and a back row of 3
+const DRONE_POOL = DRONE_MAX; // W.droneCount: up to 3 in front and 5 behind
 const TRAIL_LEN = 9;    // drone thruster trail samples (one per tick)
 const RETARGET_TIME = 0.2;       // seconds between nearest-target searches per turret/drone
 const LOS_CANDIDATES = 3;        // nearest targets tried before giving up on a blocked line of sight
@@ -35,15 +35,22 @@ const SIDESTEPS = [38, -38, 76, -76, 114, -114].map((v) => v * TURRET_SCALE); //
 const DRONE_BOLT_RADIUS = 2.6;
 const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
-// Formation (ship frame, x forward / y starboard, in units of droneFormationRadius): a FRONT PAIR off the
-// nose quarters and a BACK ROW of up to 3 in a shallow chevron behind the hull. Drones fill the front pair
-// first (port, then starboard), then the back row; the back row spreads to fit however many fly in it (1:
-// centre, 2: the wing slots, 3: all three). Escort Squadron (LV 6) brings the whole back row at once.
-const DRONE_FRONT_SLOTS = [[0.55, -1.05], [0.55, 1.05]];
-const DRONE_BACK_ROWS = [[], [[-1.35, 0]], [[-1.15, -0.8], [-1.15, 0.8]], [[-1.15, -1.15], [-1.4, 0], [-1.15, 1.15]]];
+// Formation (ship frame, x forward / y starboard, in units of droneFormationRadius): a FRONT ROW of up to 3
+// round the nose and a BACK ROW of up to 5 in a shallow chevron behind the hull. Each row spreads
+// symmetrically to fit however many fly in it; how many go in front is droneFrontFor (weapon-scaling.js):
+// up to 5 as a front pair + back row of 3, then Escort Squadron's 3 take the front centre and the back
+// row's outer sides (8: 3 in front, 5 behind).
+const DRONE_FRONT_ROWS = [[], [[1.45, 0]], [[0.55, -1.05], [0.55, 1.05]], [[0.55, -1.05], [1.45, 0], [0.55, 1.05]]]; // the centre slot clears the nose
+const DRONE_BACK_ROWS = [
+  [],
+  [[-1.35, 0]],
+  [[-1.15, -0.8], [-1.15, 0.8]],
+  [[-1.15, -1.15], [-1.4, 0], [-1.15, 1.15]],
+  [[-0.95, -1.75], [-1.3, -0.6], [-1.3, 0.6], [-0.95, 1.75]],
+  [[-0.85, -2.1], [-1.15, -1.15], [-1.4, 0], [-1.15, 1.15], [-0.85, 2.1]]
+];
 function droneSlot(i, front, back) {
-  if (i < front) return front === 1 ? DRONE_FRONT_SLOTS[0] : DRONE_FRONT_SLOTS[i];
-  return DRONE_BACK_ROWS[back][i - front];
+  return i < front ? DRONE_FRONT_ROWS[front][i] : DRONE_BACK_ROWS[back][i - front];
 }
 const DRONE_LAUNCH_GAP = 0.07; // s between drones launching together (a squadron peels off one by one)
 const DRONE_DOCK_DIST = 7;     // px from its slot where a launching drone docks (snap ring + chirp)
