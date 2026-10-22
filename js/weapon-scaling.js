@@ -347,10 +347,10 @@ export const WEAPON_SCALING = {
   frenzyDecay: 0.6,
   frenzyMax: 0.6,
   frenzyValue: 0.3, // bt-bench: blades rarely hold full heat between packs
-  frenzySize: 0.35, // blades grow up to this much at full heat (utility: more of the pack in reach)
+  frenzySize: 0.5, // blades grow up to this much at full heat (utility: more of the pack in reach)
   vortexBand: 90,
   vortexPull: 70,
-  vortexHitShare: 1.55, // bt-bench: the vortex keeps a whole pack grinding on the ring
+  vortexHitShare: 1.9, // bt-bench (blend): the vortex keeps a whole pack grinding on the ring
   orbitalExtraUnits: (b) => (b.tf?.has('frenzy') ? 1 + W.frenzyMax * W.frenzyValue : 1) * (b.tf?.has('vortex') ? W.vortexHitShare : 1),
   orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)) * W.orbitalExtraUnits(b),
   // A wider ring passes an enemy less often, so its blades hit harder per pass to match: Reach adds no DPS.
@@ -418,7 +418,7 @@ export const WEAPON_SCALING = {
   napalmMineLife: 2,
   napalmMineTick: 0.25,
   napalmMineRadiusFrac: 0.7,
-  napalmMineHitShare: 0.5,
+  napalmMineHitShare: 1.6, // bt-bench (blend): the pool sits where the pack trails through
   mineExtraUnits: (b) => (b.tf?.has('shock') ? W.shockMineHitShare : 1) * (1 + (b.tf?.has('napalm') ? W.napalmMineShare * W.napalmMineHitShare : 0)),
   mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) * W.mineExtraUnits(b),
   mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
@@ -503,7 +503,7 @@ export const WEAPON_SCALING = {
   overdriveTime: 1.5,
   overdriveMult: 3,
   overdriveHue: 46,
-  kamikazeEvery: 6, // bt-bench: the blast count, not its damage, sets what it realizes
+  kamikazeEvery: 5, // bt-bench: the blast count, not its damage, sets what it realizes
   kamikazeShare: 0.3,
   kamikazeHitShare: 1,
   kamikazeRange: 420,
@@ -550,7 +550,7 @@ export const WEAPON_SCALING = {
   // enemy rides it and hits it for stickyShare more on the blast, valued at stickyHitShare: not every grenade
   // lands beside one), Plasma Geyser (every blast erupts geyserBursts more times, geyserGap s apart, each
   // geyserShare of the blast in geyserRadiusFrac of it, valued at geyserHitShare).
-  stickyReach: 46,
+  stickyReach: 62,
   stickyShare: 0.6,
   stickyHitShare: 0.3, // bt-bench: few grenades land within reach of an enemy
   geyserBursts: 2,
