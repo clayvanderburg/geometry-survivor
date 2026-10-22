@@ -526,3 +526,128 @@ export function orbitalVortex(game, dt, b, cx, cy, radius) {
     game.particles.spawnShockwave(cx, cy, radius + W.vortexBand * 0.6, 150, 1, 0.35, true);
   }
 }
+
+// --- Vortex Singularity (main.js) -----------------------------------------------------------------------
+
+// Accretion Disk: every accretionEvery s a live core flings a homing debris bolt at a random enemy just outside
+// its pull (out to accretionReach x the pull), or inside it when nobody is out there.
+export function singularityAccretion(game, sg, dt) {
+  if (!sg.accretion) return;
+  sg.accretionT = (sg.accretionT ?? W.accretionEvery * Math.random()) - dt;
+  if (sg.accretionT > 0) return;
+  sg.accretionT += W.accretionEvery;
+  const r2 = sg.pullRadius * sg.pullRadius, o2 = r2 * W.accretionReach * W.accretionReach;
+  const inPull = [], outside = [];
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead) continue;
+    const dSq = (e.x - sg.x) ** 2 + (e.y - sg.y) ** 2;
+    if (dSq < r2) inPull.push(e);
+    else if (dSq < o2) outside.push(e);
+  }
+  const pool = outside.length ? outside : inPull;
+  if (!pool.length) return;
+  const e = pool[Math.floor(Math.random() * pool.length)];
+  // Thrown off the disk's edge, spinning along it, then curving in on the target.
+  const spin = Math.atan2(e.y - sg.y, e.x - sg.x) + Math.PI / 2;
+  const ox = sg.x + Math.cos(spin - Math.PI / 2) * sg.radius, oy = sg.y + Math.sin(spin - Math.PI / 2) * sg.radius;
+  game.bullets.push({ x: ox, y: oy, vx: Math.cos(spin) * W.accretionSpeed, vy: Math.sin(spin) * W.accretionSpeed, damage: sg.accretion, pierce: 1,
+    hue: 300, radius: 4.8, width: 1.6, life: 0.8, source: 'singularity', stat: 'singularity', knock: 0.3, homing: 0.22, target: e });
+  game.particles.spawnFlash?.(ox, oy, 12, 300, 0.1);
+  game.particles.spawnDirectionalSparks(ox, oy, spin, 0.5, 3, 300, 6);
+}
+
+// White Hole: whiteDelay s after the collapse, the core bounces back as an outward blast.
+export function whiteHole(game, sg, r) {
+  if (!sg.whiteHole) return;
+  game.weaponFx.schedule({ x: sg.x, y: sg.y, delay: W.whiteDelay, radius: r * W.whiteRadiusMult, damage: sg.whiteHole, hue: 200,
+    source: 'singularity', style: 'whitehole', knock: 2.4, falloff: 0.5, kind: 'collapse' });
+}
+
+// --- Nanite Swarm (js/nanites.js) --------------------------------------------------------------------
+
+// Nano Needles: every needleEvery s each swarm fires a needle at the nearest enemy just outside it.
+export function naniteNeedles(game, swarms, count, dt, state, damage) {
+  if (!state.needles) return;
+  state.needleT = (state.needleT || 0) - dt;
+  if (state.needleT > 0) return;
+  state.needleT += W.needleEvery;
+  const enemies = game.enemyManager.enemies;
+  for (let k = 0; k < count; k++) {
+    const s = swarms[k];
+    let best = null, bestSq = W.needleRange * W.needleRange;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dSq = (e.x - s.x) ** 2 + (e.y - s.y) ** 2;
+      if (dSq > s.r * s.r && dSq < bestSq) { bestSq = dSq; best = e; }
+    }
+    if (!best) continue;
+    const a = Math.atan2(best.y - s.y, best.x - s.x);
+    game.particles.spawnDirectionalSparks(s.x + Math.cos(a) * s.r * 0.6, s.y + Math.sin(a) * s.r * 0.6, a, 0.4, 3, 96, 6);
+    game.bullets.push({ x: s.x + Math.cos(a) * s.r * 0.6, y: s.y + Math.sin(a) * s.r * 0.6, vx: Math.cos(a) * 12, vy: Math.sin(a) * 12,
+      damage: damage * W.needleMult, pierce: 1, hue: 96, radius: 3.4, width: 1.3, life: 0.5, source: 'nanite', stat: 'nanite', knock: 0.2 });
+  }
+}
+
+// Ravenous Swarm: a swarm's bite and size grow with its age (0..1 of its life).
+export const ravenousBite = (state, s) => (state.ravenous ? 1 + W.ravenousMax * Math.min(1, s.age / s.life) : 1);
+export const ravenousSize = (state, s) => (state.ravenous ? 1 + W.ravenousGrow * Math.min(1, s.age / s.life) : 1);
+
+// --- Electric Shield Field (js/shock-field.js) -----------------------------------------------------------
+
+// Pulse Wave: a wave rolls out past the field; Capacitor Bank: a half-strength second discharge follows.
+export function fieldAfter(game, field, b, r, dmg) {
+  const p = game.player;
+  if (has(b, 'pulse')) {
+    game.particles.spawnShockwave(p.x, p.y, r + W.pulseReach, 52, 3, W.pulseDelay + 0.2);
+    game.weaponFx.schedule({ x: p.x, y: p.y, delay: W.pulseDelay, radius: 0, damage: 0, style: 'silent', after: (g) => {
+      const R = r + W.pulseReach;
+      for (const e of g.enemyManager.enemies) {
+        if (e.dead) continue;
+        const d = Math.hypot(e.x - g.player.x, e.y - g.player.y);
+        if (d <= r || d > R + (e.radius || 10)) continue;
+        g.hitEnemy(e, dmg * W.pulseShare, 'shockfield', (e.x - g.player.x) / d * 1.5, (e.y - g.player.y) / d * 1.5, 0.6, 'shockfield');
+        g.particles.spawnFlash?.(e.x, e.y, 8 + (e.radius || 10), 52, 0.08);
+      }
+    } });
+  }
+  if (has(b, 'capacitor')) {
+    game.weaponFx.schedule({ x: p.x, y: p.y, delay: W.capDelay, radius: 0, damage: 0, style: 'silent', after: (g) => {
+      const R = (field.radius || r) * W.capRadiusMult;
+      field.collect(g, g.player, R);
+      const n = field.strike(g, g.player, dmg * W.capShare, 0.8, false, 'shockfield');
+      g.particles.spawnShockwave(g.player.x, g.player.y, R, 190, 2.5, 0.22);
+      if (n) g.sound.playFieldDischarge?.(n);
+    } });
+  }
+}
+
+// --- Corrosive Gas Trail (js/gas-trail.js) ----------------------------------------------------------------
+
+// Toxic Tendrils: on a gas tick, the newest tendrilMax clouds lash the nearest enemy outside them.
+export function gasTendrils(game, gas) {
+  if (!gas.tendrils || gas.count === 0) return;
+  const enemies = game.enemyManager.enemies;
+  let lashed = 0;
+  for (let k = gas.count - 1; k >= 0 && lashed < W.tendrilMax; k--) {
+    const f = gas.puffs[k];
+    let best = null, bestSq = W.tendrilRange * W.tendrilRange;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dSq = (e.x - f.x) ** 2 + (e.y - f.y) ** 2;
+      if (dSq > f.r * f.r && dSq < bestSq) { bestSq = dSq; best = e; }
+    }
+    if (!best) continue;
+    lashed++;
+    game.particles.spawnLightning?.(f.x, f.y, best.x, best.y, 96, 1.4, 0.2);
+    game.hitEnemy(best, gas.damage * W.tendrilShare, 'gas', 0, 0, 0.3, 'gas');
+  }
+}
+
+// Spore Burst: a cloud fading out pops for sporeMult ticks in sporeRadiusMult of its size (one pop per SPORE_GAP).
+export const SPORE_GAP = 0.25; // s between spore pops: a moving ship vents a cloud every few frames
+export function gasSpore(game, gas, f) {
+  if (!gas.spores || gas.time - (gas.sporeAt ?? -1) < SPORE_GAP) return;
+  gas.sporeAt = gas.time;
+  game.weaponFx.schedule({ x: f.x, y: f.y, delay: 0, radius: Math.max(30, f.radius * W.sporeRadiusMult), damage: gas.damage * W.sporeMult,
+    hue: 96, source: 'gas', style: 'charge', step: 2, knock: 0.6 });
+}

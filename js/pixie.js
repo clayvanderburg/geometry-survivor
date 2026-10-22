@@ -111,7 +111,15 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'mines:shock': ['Shock Mines! Stunned AND exploded. Efficient!', 'smug'],
   'mines:napalm': ['Napalm Mines! The floor is lava. On purpose.', 'eureka'],
   'orbitals:frenzy': ['Blade Frenzy! They get sharper the more they cut!', 'eureka'],
-  'orbitals:vortex': ['Vortex Ring! Come closer. Closer. Into the blades.', 'smug']
+  'orbitals:vortex': ['Vortex Ring! Come closer. Closer. Into the blades.', 'smug'],
+  'singularity:accretion': ['Accretion Disk! The black hole throws things now!', 'eureka'],
+  'singularity:whitehole': ['White Hole! What goes in must come out. LOUDLY.', 'oops'],
+  'nanites:needles': ['Nano Needles! Tiny robots, tinier harpoons.', 'smug'],
+  'nanites:ravenous': ['Ravenous Swarm! Don\'t feed them after midnight.', 'oops'],
+  'shockfield:pulse': ['Pulse Wave! The field reaches out and touches someone.', 'smug'],
+  'shockfield:capacitor': ['Capacitor Bank! Zap, and then ZAP again.', 'eureka'],
+  'gas:tendrils': ['Toxic Tendrils! The gas has arms now. Gross. Great!', 'eureka'],
+  'gas:spores': ['Spore Burst! Pop goes the cloud.', 'smug']
 });
 
 // After the pick: any other transform, and Across the Board.

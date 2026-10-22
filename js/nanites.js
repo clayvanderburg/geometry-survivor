@@ -21,6 +21,7 @@ import { TUNING } from './config.js';
 import { WEAPON_SCALING as W, weaponDamage, naniteRadius } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { isDeployableTarget } from './deployables.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Nano Needles, Ravenous Swarm
 
 export const NANITE_HUE = 96;   // acid lime glow; the motes run chrome-mint, the rims pale lime
 const MOTE_HUE = 150;
@@ -110,6 +111,8 @@ export class NaniteSwarm {
       this.fission = b.t4;
       this.goo = b.t8;
       this.plague = b.t12;
+      this.needles = !!b.tf?.has('needles');
+      this.ravenous = !!b.tf?.has('ravenous');
       this.launchT -= dt;
       if (this.launchT <= 0) {
         // Ready: launch at the densest pack in range, or look again shortly when nothing is there.
@@ -290,8 +293,9 @@ export class NaniteSwarm {
         s.x += (dx / d) * step;
         s.y += (dy / d) * step;
       }
-      s.r = swarmRadius(s);
+      s.r = swarmRadius(s) * BTX.ravenousSize(this, s);
     }
+    BTX.naniteNeedles(game, this.swarms, this.count, dt, this, this.damage);
   }
 
   // Whether an enemy sits inside a swarm other than `s` (so `s` leaves it to that one).
@@ -332,7 +336,7 @@ export class NaniteSwarm {
         if (dx * dx + dy * dy > r * r) continue;
         if (this.plague && !e.naniteInfected) this.infect(e);
         if (this.plague) e.naniteInfected = this.time + W.plagueWindow;
-        game.hitEnemy(e, this.damage, 'nanite', 0, 0, 0.2, STATS[s.kind]);
+        game.hitEnemy(e, this.damage * BTX.ravenousBite(this, s), 'nanite', 0, 0, 0.2, STATS[s.kind]);
         bit = true;
         if (e.dead) this.fed(game, s, e);
         break;

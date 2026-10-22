@@ -349,3 +349,75 @@ test('Blade Frenzy builds with hits up to +frenzyMax and cools; Vortex Ring drag
   assert.ok(d1 < d0 && d1 >= 158, 'dragged onto the ring, not past it');
   assert.equal(Math.hypot(outside.x - p.x, outside.y - p.y), 600, 'outside the band: untouched');
 });
+
+test('Accretion Disk flings homing debris at enemies in the pull; White Hole schedules an outward blast after the collapse', () => {
+  const { g, p } = fight('singularity', { 6: 'accretion', 18: 'whitehole' }, [[60, 0], [900, 0]]);
+  const [inPull, far] = g.enemyManager.enemies;
+  const sg = { x: p.x, y: p.y, radius: 22, pullRadius: 250, accretion: 7, whiteHole: 40, accretionT: 0 };
+  g.bullets = [];
+  BTX.singularityAccretion(g, sg, 1 / 60);
+  assert.equal(g.bullets.length, 1);
+  assert.equal(g.bullets[0].target, inPull, 'in the pull when nobody stands just outside it');
+  assert.equal(g.bullets[0].damage, 7);
+  g.weaponFx.events = [];
+  BTX.whiteHole(g, sg, 200);
+  const ev = g.weaponFx.events[0];
+  assert.equal(ev.style, 'whitehole');
+  assert.equal(ev.damage, 40);
+  assert.ok(Math.abs(ev.radius - 200 * W.whiteRadiusMult) < 1e-9);
+  assert.ok(far);
+});
+
+test('Nano Needles fire at the nearest enemy outside each swarm; Ravenous Swarm bites up to 1 + ravenousMax by the end of its life', () => {
+  const { g } = fight('nanites', { 6: 'needles', 12: 'ravenous' }, [[150, 0]]);
+  const e = g.enemyManager.enemies[0];
+  const swarm = { x: e.x - 120, y: e.y, r: 60, age: 0, life: 4 };
+  g.bullets = [];
+  BTX.naniteNeedles(g, [swarm], 1, 1 / 60, { needles: true }, 10);
+  assert.equal(g.bullets.length, 1);
+  assert.ok(Math.abs(g.bullets[0].damage - 10 * W.needleMult) < 1e-9);
+  assert.ok(g.bullets[0].vx > 0, 'toward the enemy');
+  const st = { ravenous: true };
+  assert.equal(BTX.ravenousBite(st, swarm), 1);
+  swarm.age = 4;
+  assert.equal(BTX.ravenousBite(st, swarm), 1 + W.ravenousMax);
+  assert.equal(BTX.ravenousBite({}, swarm), 1);
+});
+
+test('Pulse Wave hits enemies past the field (not inside); Capacitor Bank fires a second, half-strength discharge', () => {
+  const { g, p } = fight('shockfield', { 6: 'pulse', 12: 'capacitor' }, [[60, 0], [200, 0], [600, 0]]);
+  const [inside, ring, far] = g.enemyManager.enemies;
+  const b = weaponBuild(p, 'shockfield');
+  const hits = [];
+  const hit = g.hitEnemy.bind(g);
+  g.hitEnemy = (e, d, ...r) => { hits.push([e, d]); return hit(e, d, ...r); };
+  g.weaponFx.events = [];
+  BTX.fieldAfter(g, g.shockField, b, 125, 10);
+  const timers = g.weaponFx.events.filter((e) => e.style === 'silent');
+  assert.equal(timers.length, 2);
+  timers.find((t) => t.delay === W.pulseDelay).after(g);
+  assert.deepEqual(hits.map(([e, d]) => [e, d]), [[ring, 10 * W.pulseShare]], 'the wave hits only between the field and its reach');
+  hits.length = 0;
+  g.shockField.radius = 125;
+  timers.find((t) => t.delay === W.capDelay).after(g);
+  assert.deepEqual(hits, [[inside, 10 * W.capShare]], 'the second discharge hits what is inside');
+  assert.ok(far);
+});
+
+test('Toxic Tendrils lash the nearest enemy outside a cloud; Spore Burst pops a fading cloud at most every SPORE_GAP', () => {
+  const { g } = fight('gas', { 6: 'tendrils', 12: 'spores' }, [[150, 0]]);
+  const e = g.enemyManager.enemies[0];
+  const gas = { tendrils: true, spores: true, damage: 4, count: 1, puffs: [{ x: e.x - 100, y: e.y, r: 40, radius: 46 }], time: 10 };
+  const hits = [];
+  g.hitEnemy = (x, d) => hits.push([x, d]);
+  BTX.gasTendrils(g, gas);
+  assert.deepEqual(hits, [[e, 4 * W.tendrilShare]]);
+  g.weaponFx.events = [];
+  BTX.gasSpore(g, gas, gas.puffs[0]);
+  BTX.gasSpore(g, gas, gas.puffs[0]);
+  assert.equal(g.weaponFx.events.length, 1, 'one pop per SPORE_GAP');
+  assert.equal(g.weaponFx.events[0].damage, 4 * W.sporeMult);
+  gas.time += BTX.SPORE_GAP;
+  BTX.gasSpore(g, gas, gas.puffs[0]);
+  assert.equal(g.weaponFx.events.length, 2);
+});
