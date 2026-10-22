@@ -24,7 +24,7 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W, DRONE_MAX, POTENTIAL_DPS, droneFrontFor } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, DRONE_MAX, DRONE_START, POTENTIAL_DPS, LV1_TRIM, droneFrontFor } = await import('../js/weapon-scaling.js');
 const { levelBuild, weaponBuild, makeBuild, BT_TRANSFORM_DPS } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
@@ -179,14 +179,14 @@ test('escort drones fly in formation round the hull, fire drone bolts, and never
   const g = arena({ enemies: [portal] });
   assert.equal(isDeployableTarget(portal), false);
   g.player.weapons.drones = 3;
-  g.player.upgradeLevels.drones_wingmen = 2; // the front pair and the back-row centre
+  g.player.upgradeLevels.drones_wingmen = 1; // the starting front pair and the back-row centre
   tick(g, 2);
   const d = g.deployables;
   assert.equal(d.droneCount, 3);
   assert.equal(d.droneCount, W.droneCount(weaponBuild(g.player, 'drones')));
   for (let i = 0; i < d.droneCount; i++) {
     const drone = d.drones[i];
-    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.6);
+    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.6 + 6);
   }
   const { front, back } = formation(g);
   assert.equal(front.length, 2);
@@ -207,7 +207,23 @@ test('escort drones fly in formation round the hull, fire drone bolts, and never
   assert.ok(g.bullets.some((b) => is(b.damage, lead)) && g.bullets.some((b) => is(b.damage, wing)));
   g.player.upgradeLevels.drones_wingmen = 0;
   tick(g, DT);
-  assert.equal(d.droneCount, 1);
+  assert.equal(d.droneCount, DRONE_START, 'LV 1 flies the lead and one wingman');
+});
+
+test('escort drones start as a front pair at LV 1, and every slot sits 6 px roomier than its formation radius', () => {
+  assert.equal(DRONE_START, 2);
+  assert.equal(W.droneCount(levelBuild('drones', 1)), 2);
+  // Two drones share the same LV 1 potential one drone had: the start adds coverage, not a DPS jump.
+  assert.ok(Math.abs(POTENTIAL_DPS.drones(levelBuild('drones', 1)) - 3 * LV1_TRIM.drones) < 1e-9);
+  const g = arena();
+  g.player.weapons.drones = 1;
+  tick(g, 2);
+  const f = formation(g);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 0);
+  // Pair slot (0.55, ±1.05) of the 54 px radius, pushed 6 px out (± the 3 px bob).
+  const want = Math.hypot(0.55, 1.05) * TUNING.droneFormationRadius + 6;
+  for (const u of f.front) assert.ok(Math.abs(Math.hypot(u.x - g.player.x, u.y - g.player.y) - want) < 4, `drone at ${Math.hypot(u.x - g.player.x, u.y - g.player.y).toFixed(1)} px`);
 });
 
 test('escort drones: up to 5 from Wingmen (2 front, 3 behind); Escort Squadron adds 3 in the same balanced order (3 front, 5 behind)', () => {
@@ -217,7 +233,7 @@ test('escort drones: up to 5 from Wingmen (2 front, 3 behind); Escort Squadron a
   const docks = [];
   g.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => docks.push(slot) : () => {}) });
   g.player.weapons.drones = 5;
-  g.player.upgradeLevels.drones_wingmen = 4;
+  g.player.upgradeLevels.drones_wingmen = 3;
   tick(g, 2);
   let f = formation(g);
   assert.equal(g.deployables.droneCount, 5);
@@ -240,24 +256,24 @@ test('escort drones: up to 5 from Wingmen (2 front, 3 behind); Escort Squadron a
   assert.ok(Math.abs(f.front.reduce((a, u) => a + y(u), 0)) < 12 && Math.abs(f.back.reduce((a, u) => a + y(u), 0)) < 12, 'both rows balanced port and starboard');
   assert.ok(g.deployables.drones.slice(0, 8).every((u) => u.pop === 0 && u.docked));
 
-  // The squadron with no Wingmen ranks follows the same order: 4 drones are the front pair + 2 behind.
+  // The squadron with no Wingmen ranks follows the same order: 5 drones are the front pair + 3 behind.
   const s = arena();
   s.player.weapons.drones = 6;
   s.player.breakthroughs = { drones: { 6: 'transform' } };
   tick(s, 2);
   f = formation(s);
-  assert.equal(s.deployables.droneCount, 4);
+  assert.equal(s.deployables.droneCount, 5);
   assert.equal(f.front.length, 2);
-  assert.equal(f.back.length, 2);
+  assert.equal(f.back.length, 3);
 
   // Drones past 8 never go to waste: their guns ride on the rest (a Replicator rank on a full squadron).
-  const over = makeBuild('drones', 10, { wingmen: 5 }, { 6: 'transform' });
+  const over = makeBuild('drones', 10, { wingmen: 4 }, { 6: 'transform' });
   assert.equal(W.droneSquad(over), 9);
   assert.equal(W.droneCount(over), DRONE_MAX);
   assert.ok(Math.abs(W.droneWingDamageMult(over) / W.droneDamageMult(over) - W.droneWingHitShare * 8 / 7) < 1e-12, 'the surplus gun rides on the 7 wingmen');
   // The squadron is the same damage step as before: each extra drone is a wingman gun.
-  const five = makeBuild('drones', 10, { wingmen: 4 });
-  const five6 = makeBuild('drones', 10, { wingmen: 4 }, { 6: 'transform' });
+  const five = makeBuild('drones', 10, { wingmen: 3 });
+  const five6 = makeBuild('drones', 10, { wingmen: 3 }, { 6: 'transform' });
   assert.equal(W.droneCount(five6), 8);
   assert.ok(Math.abs(POTENTIAL_DPS.drones(five6) / POTENTIAL_DPS.drones(five) - BT_TRANSFORM_DPS) < 1e-9);
 });
@@ -333,7 +349,7 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   const p = g.player;
   assert.equal(describeUpgrade(p, byId('mines')).headline, `PROXIMITY MINES // ${W.mineMaxActive(L('mines'))} ACTIVE`);
   assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretCharges(L('turret'))} CHARGES`);
-  assert.equal(describeUpgrade(p, byId('drones')).headline, '+1 ESCORT DRONE');
+  assert.equal(describeUpgrade(p, byId('drones')).headline, '+2 ESCORT DRONES');
   applyUpgradeLevels(p, byId('turret'));
   // A stat card shows only its own stat.
   const punch = describeUpgrade(p, byId('turret_pierce'));

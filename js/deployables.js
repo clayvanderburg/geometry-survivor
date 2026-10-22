@@ -52,6 +52,7 @@ const DRONE_BACK_ROWS = [
 function droneSlot(i, front, back) {
   return i < front ? DRONE_FRONT_ROWS[front][i] : DRONE_BACK_ROWS[back][i - front];
 }
+const DRONE_SLOT_PUSH = 6;     // px every slot sits beyond its droneFormationRadius spot (Clay, v0.45: a roomier formation)
 const DRONE_LAUNCH_GAP = 0.07; // s between drones launching together (a squadron peels off one by one)
 const DRONE_DOCK_DIST = 7;     // px from its slot where a launching drone docks (snap ring + chirp)
 
@@ -438,7 +439,8 @@ export class Deployables {
       const d = this.drones[i];
       const damage = i === 0 ? leadDamage : wingDamage; // the flight lead carries the heavy gun
       const [fx, fy] = droneSlot(i, front, back);
-      const r = spacing + Math.sin(this.time * 3 + i * 2.1) * 3; // a gentle bob, out of phase per drone
+      const len = Math.hypot(fx, fy);
+      const r = (len * spacing + DRONE_SLOT_PUSH + Math.sin(this.time * 3 + i * 2.1) * 3) / len; // a gentle bob, out of phase per drone
       const tx = p.x + (fx * cos - fy * sin) * r;
       const ty = p.y + (fx * sin + fy * cos) * r;
       if (d.launch > 0) {
