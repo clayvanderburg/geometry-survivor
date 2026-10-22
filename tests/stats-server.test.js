@@ -193,6 +193,7 @@ test('a broken store returns 500 JSON, not an exception', async () => {
 });
 
 // --- Aggregation math ---------------------------------------------------------------------------------
+const round4 = (v) => Math.round(v * 1e4) / 1e4;
 
 // Weapon w at level L for `secs` seconds dealing `norm` base-damage units (target T).
 const weaponRun = (rows, extra = {}) => ({
@@ -236,6 +237,24 @@ test('DPS vs target, the same-level peer index and the ±20% outlier flags', () 
   assert.equal(flagFor(1.21), 'nerf');
   assert.equal(flagFor(0.79), 'buff');
   assert.equal(flagFor(null), null);
+});
+
+test('weapon shares leave out Supernova and ram (listed with their share of everything); bombs per run and kills per bomb', () => {
+  const run = (extra = {}) => weaponRun([['alpha', 4, 100, 2400, 24], ['beta', 4, 100, 2400, 24]], extra);
+  const withBomb = run();
+  withBomb.weapons.supernova = { dmg: 48000, kills: 60 };
+  for (const id of ['alpha', 'beta']) withBomb.weapons[id].lv[4].push(48000, 2); // weapon-only totals while at LV 4
+  withBomb.bombs = [3, 60];
+  const older = run(); // an older client: no weapon-only totals, no bombs
+  const s = aggregateRuns([withBomb, structuredClone(withBomb), withBomb, older], { version: GAME_VERSION });
+  const by = Object.fromEntries(s.weapons.map((w) => [w.id, w]));
+  assert.equal(by.alpha.dmgShare, 0.5, 'half of the weapon damage');
+  assert.equal(by.alpha.allDmgShare, round4(24000 * 4 / (24000 * 8 + 48000 * 3)), 'its share of everything is kept too');
+  assert.equal(by.supernova.isWeapon, false);
+  assert.equal(by.supernova.dmgShare, round4(48000 * 3 / (24000 * 8 + 48000 * 3)), 'Supernova: share of all damage');
+  const lv4 = by.alpha.levels.find((r) => r.level === 4);
+  assert.equal(lv4.dmgShare, round4(24000 * 4 / (48000 * 3 + 96000)), 'per level: weapon-only totals, older runs on all damage');
+  assert.deepEqual(s.bombs, { runs: 3, perRun: { median: 3, mean: 3 }, killsPerBomb: 20, weaponDamageShare: round4(24000 * 8 / (24000 * 8 + 48000 * 3)) });
 });
 
 test('low-sample weapon levels are reported but never flagged or used as the peer median', () => {

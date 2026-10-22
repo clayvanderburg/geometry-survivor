@@ -324,7 +324,7 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
     if (curve.length) {
       const lvls = [...new Set(curve.flatMap(w => w.levels.map(l => l.level)))].sort((a, b) => a - b).filter(l => l <= 10);
       out.push('\n## Weapon DPS vs DPS_TARGET (run stats; cell = realized share of potential · index vs same-level median; ⬆ needs buff, ⬇ needs nerf at ±20%)');
-      out.push(table(['weapon', 'runs', 'dmg share', ...lvls.map(l => `L${l}`), 'overall'], curve.map(w => [w.id, w.runs, pct(w.dmgShare || 0, 1), ...lvls.map(l => {
+      out.push(table(['weapon', 'runs', 'weapon dmg share', ...lvls.map(l => `L${l}`), 'overall'], curve.map(w => [w.id, w.runs, pct(w.dmgShare || 0, 1), ...lvls.map(l => {
         const r = w.levels.find(x => x.level === l);
         if (!r || r.vsTarget === null) return '—';
         const mark = r.flag === 'buff' ? ' ⬆' : r.flag === 'nerf' ? ' ⬇' : '';

@@ -2164,6 +2164,7 @@ export class Game {
     this.enemyManager.enemyBullets?.clear();
 
     const enemies = this.enemyManager.enemies;
+    const kills0 = this.kills;
     for (const e of [...enemies].reverse()) {
       if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
@@ -2181,6 +2182,7 @@ export class Game {
       }
     }
 
+    this.runStats?.bomb(this.kills - kills0);
     for (let i = 0; i < this.geoms.length; i++) {
       this.geoms[i].magnetized = true;
     }
