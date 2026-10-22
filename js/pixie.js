@@ -80,7 +80,7 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'singularity:twin': ['TWO black holes? I\'ll update the insurance.', 'oops'],
   'blaster:ricochet': ['Ricochet Rounds! Geometry is on OUR side now!', 'smug'],
   'rockets:mirv': ['MIRV Rockets! Rockets that make rockets!', 'eureka'],
-  'drones:wingman': ['Another wingman! I\'ll knit it a tiny scarf.', 'eureka'],
+  'drones:wingman': ['A whole squadron! I\'ll knit them tiny scarves.', 'eureka'],
   'lightning:strike': ['Thunderstrike! I cleared the forecast myself.', 'smug'],
   'orbitals:fling': ['Blade Fling! Keep your fingers inside the ship.', 'oops'],
   'flamethrower:ring': ['Inferno Ring! Fire, but in a circle. Elegant.', 'smug'],

@@ -227,6 +227,7 @@ export const DEFAULT_TUNING = {
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.7,
   statusCardWeight: 0.7,    // each global STATUS card
+  replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
@@ -529,6 +530,7 @@ export const TUNING_SCHEMA = [
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'replicatorWeight', label: 'Replicator Array Weight', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
       { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]
