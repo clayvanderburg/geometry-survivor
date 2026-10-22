@@ -29,6 +29,7 @@
 // is simulated from Game.update only, so pause, hit-stop and slow-mo freeze it with the world.
 import { WEAPON_SCALING as W, weaponDamage, flameRange, areaMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: the whirl and the pack-seeking nozzle
 
 export const FLAME_RAYS = 9;      // rays across one nozzle's cone, each clipped at the first rock
 const MAX_PUFFS = 240;
@@ -94,7 +95,7 @@ export class Flamethrower {
     const p = game.player;
     const k = this.kind;
     const owned = (p.weapons[k.weapon] || 0) > 0;
-    if (owned) this.swing(p, weaponBuild(p, k.weapon), dt);
+    if (owned) this.swing(p, weaponBuild(p, k.weapon), dt, game);
     // No aiming at all: the nozzle spins round the ship and sprays the whole time it's equipped.
     const firing = owned;
     if (!firing && this.count === 0 && this.heat === 0) {
@@ -164,9 +165,10 @@ export class Flamethrower {
 
   // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate. Each kind
   // starts a third of a turn apart (`phase`), so two or three sprayers fan out instead of stacking.
-  swing(p, b, dt) {
+  swing(p, b, dt, game = null) {
     if (this.swivel === null) this.swivel = p.angle + (this.kind.phase || 0);
-    this.swivel = wrap(this.swivel + W.flameTurnRate(b) * dt);
+    // Pool Breakthroughs (bt-extras.js) may whirl the nozzle or steer it at the pack.
+    this.swivel = wrap(this.swivel + (game ? BTX.sprayTurn(this, game, p, b, dt, flameRange(p, b)) : W.flameTurnRate(b) * dt));
   }
 
   // Place the nozzles on the turret and clip each ray of their cones at the first rock face.

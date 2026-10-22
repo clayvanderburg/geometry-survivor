@@ -266,7 +266,23 @@ export const WEAPON_SCALING = {
   strikeRadius: 55,
   strikeFalloff: 0.8, // hits hard at the struck enemy, fading to 20% at the rim
   strikeHitShare: 2, // a strike on a pack catches its neighbours too (a lone chain cannot): valued at this share
-  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
+  // Pool transforms (main.js via bt-extras.js): Arc Lattice (each chain's jump lines stay live for latticeZaps
+  // zaps latticeEvery s apart, each hitting what touches a line for latticeShare of a jump, valued at
+  // latticeHitShare), Conductor (an enemy a chain hits stays charged conductTime s; if it dies charged it arcs
+  // into its conductArcs nearest neighbours within conductRange for conductShare of a jump each, valued at
+  // conductHitShare: not every charged enemy dies in time). Both in jump units of one chain.
+  latticeZaps: 3,
+  latticeEvery: 0.15,
+  latticeShare: 0.25,
+  latticeWidth: 10,
+  latticeHitShare: 0.5,
+  conductTime: 1.2,
+  conductArcs: 2,
+  conductShare: 0.5,
+  conductRange: 200,
+  conductHitShare: 0.5,
+  lightningExtra: (b) => (b.tf?.has('lattice') ? W.latticeZaps * W.latticeShare * W.latticeHitShare : 0) + (b.tf?.has('conductor') ? W.conductArcs * W.conductShare * W.conductHitShare : 0),
+  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0) + W.lightningExtra(b)),
   lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
@@ -654,6 +670,14 @@ export const WEAPON_SCALING = {
   flameTfTurnRanks: 1,
   flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 ? W.flameTfTurnRanks : 0),
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
+  // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
+  // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
+  // whirlEvery s the nozzle adds one full turn over whirlTime s), Seeker (the nozzle swings toward the densest
+  // pack within its range at seekTurn rad/s instead of spinning; it spins on when nobody is in reach).
+  whirlEvery: 3,
+  whirlTime: 0.45,
+  seekTurn: 3.2,
+  seekEvery: 0.25,
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Extra Nozzle cards (POWER, like Prism Split): flameNozzles(b) identical streams spaced evenly round
@@ -1207,7 +1231,7 @@ export const POTENTIAL_DPS = {
     const chains = W.lightningChains(b) * W.lightningJumpUnits(b) * W.lightningDamageMult(b); // later jumps at lightningJumpShare
     const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;
     const orb = b.t8 ? W.orbShare * chains : 0;
-    return (chains + strikes + orb) / W.lightningCooldown(b);
+    return (chains + strikes + orb + W.lightningExtra(b) * chains) / W.lightningCooldown(b);
   },
   singularity: (b) => {
     const core = W.singularityDamageMult(b) * W.singularityLife(b) * 60 + W.singularityCollapseDamageMult(b);
