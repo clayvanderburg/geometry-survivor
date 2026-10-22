@@ -3654,7 +3654,8 @@ export class Game {
     const p = this.player;
     // Storm Protocol passes a plain level: no stat ranks or Breakthroughs.
     const bb = typeof level === 'object' ? level : levelBuild('lightning', level);
-    const damage = weaponDamage(p, 'lightning', bb);
+    // Storm Protocol (a plain level) keeps the arc damage of the slower pre-v0.46 discharge.
+    const damage = weaponDamage(p, 'lightning', bb) * (typeof level === 'object' ? 1 : W.stormArcScale);
     this.arcStat = stat; // fireArcChain credits its hits to this run-stats key
     const hitSet = new Set();
     let hits = 0;

@@ -35,7 +35,7 @@ export const TF_REALIZED = {
   blaster: { flak: [0.62, 1, 1], ricochet: [0.66, 0.93, 1], arc: [0.6, 0.9, 0.89], slug: [0.9, 0.93, 1], hotbarrel: [0.6, 1, 1] },
   rockets: { tandem: [1, 1, 1], napalm: [1, 1, 1], mirv: [1.08, 1.24, 1.17], shrapnel: [0.81, 0.88, 0.85], thunder: [0.69, 0.63, 0.81] },
   missiles: { cluster: [1, 1, 0.67], rain: [0.82, 0.77, 0.78], nuke: [0.64, 0.73, 0.68], hunter: [1, 1, 0.79], echo: [0.92, 1, 0.6] },
-  lightning: { fork: [1.7, 1.7, 1.57], orb: [1.23, 1.7, 1], strike: [1.7, 1.7, 1] },
+  lightning: { fork: [1, 1.7, 1], orb: [1, 1.1, 1], strike: [1, 1, 1] },
   singularity: { twin: [1.7, 1, 1], aftershock: [0.85, 0.6, 0.88], cascade: [0.6, 0.6, 0.75] },
   orbitals: { counter: [1, 1, 1], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6], frenzy: [0.8, 0.7, 0.85], vortex: [1.25, 1.3, 1.3] },
   mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 0.66], triad: [1.67, 1.61, 1.53], shock: [0.85, 0.8, 0.62], napalm: [1, 1.7, 0.7] },
@@ -58,9 +58,6 @@ export const TF_REALIZED = {
 // or the fix would cost more boss damage than BT_REALIZED_RANGE allows): flagged for a mechanics pass.
 const SPRAYER_REACH = 'puddles land where the cone already was: realized capped by reach, not damage (at the BT_REALIZED_RANGE floor)';
 export const BT_BENCH_EXEMPT = Object.freeze({
-  'lightning|fork|12': 'chains one-shot the bench pack: hit count, not damage, sets realized',
-  'lightning|orb|12': 'chains one-shot the bench pack: hit count, not damage, sets realized',
-  'lightning|strike|12': 'chains one-shot the bench pack: hit count, not damage, sets realized',
   'singularity|cascade|12': 'damage-insensitive in the bench',
   'orbitals|fling|12': 'damage-insensitive in the bench',
   'orbitals|nova|12': 'damage-insensitive in the bench',
