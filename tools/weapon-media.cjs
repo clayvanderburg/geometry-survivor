@@ -30,14 +30,15 @@ const BREAKTHROUGH_LEVELS = [6, 12, 18];
 const FRAMES = 40; // per clip, unless a tweak says otherwise
 const EVERY = 4; // sim ticks per frame: 15 fps
 const WARMUP = 120; // ticks before the first frame, so deployables, orbits and clouds are already out
-const ZOOM = 1.5;
+const ZOOM = 1.85; // close enough that the ship, the targets and the weapon's effect read at card size
 
 // The ship sits still in a close ring of still targets (wave HP, so they break and come back) and lets the
 // weapon work. Per-weapon tweaks: `drift` flies the ship in a slow loop (trails and dash effects need it),
 // `dash` dashes every N ticks (dash-triggered effects), `dummies` overrides the targets (CHASERS follow),
 // `orbit` circles the start point at that radius, `fixedCam` holds the camera on the start point, `release`
 // turns still targets into chasers at that frame, `frames` lengthens the loop, `warmup` the lead-in before
-// it, `zoom` frames closer.
+// it, `zoom` frames closer, `camShift` holds the camera that far off the start point (world px) so a
+// weapon that reaches far one way (a LINE of targets) keeps the ship and its whole reach in shot.
 const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that follow a moving ship
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
@@ -50,8 +51,14 @@ const TWEAKS = {
   quake: { frames: 60 }, // a volley every ~2.6 s: a longer loop catches two of them
   // The blade ring orbits outside the default close ring: 32 targets spread the close ring onto the blades' path.
   orbitals: { dummies: { count: 32 } },
-  // Swarms fly out to the packs: a wider ring under a wider frame shows the launches and the spread.
-  nanites: { zoom: 1, dummies: { formation: 'ring', count: 24 } }
+  // The vortex flies out and drags the ring after it: a wider frame keeps it in shot.
+  singularity: { zoom: 1.5 },
+  // Swarms fly out to a pack ahead of the ship: the frame holds both, so the launch, the flight and the
+  // feeding all read.
+  nanites: { zoom: 1.4, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'pack', count: 16 } },
+  // A piercing line reads best against a LINE of targets: the ship sits left of frame and every charge
+  // skewers the whole row to the edge.
+  raillance: { zoom: 1.5, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'line', count: 8 } }
 };
 
 (async () => {
@@ -185,7 +192,10 @@ async function capture(browser, clip, tmp) {
         }
         if (tweak.dash && t % tweak.dash === tweak.dash - 1) g.triggerDash?.();
         g.update(1 / 60);
-        if (tweak.fixedCam) { g.camX = g.capHome.x - g.width / 2; g.camY = g.capHome.y - g.height / 2; }
+        if (tweak.fixedCam) {
+          g.camX = g.capHome.x + (tweak.camShift?.x || 0) - g.width / 2;
+          g.camY = g.capHome.y + (tweak.camShift?.y || 0) - g.height / 2;
+        }
       }
       g.player.invuln = 1e9;
       g.draw();
