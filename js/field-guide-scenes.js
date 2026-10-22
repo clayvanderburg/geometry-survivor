@@ -124,9 +124,9 @@ const SCENES = {
       const p = s.player;
       if (b && ((b.state === 'windup' && b.aiTimer < BRUISER.windup * 0.4) || b.state === 'charge')) {
         // Lane locked: sidestep out of it.
-        if (b.state === 'windup' && !s.stepping) { s.stepping = true; s.dodge = -s.dodge; }
+        if (b.state === 'windup' && !s.stepping) { s.stepping = true; s.dodge = p.y > s.H * 0.5 ? -1 : 1; } // toward the middle
         p.y += s.dodge * 3.4;
-        p.y = Math.max(40, Math.min(s.H - 40, p.y));
+        p.y = Math.max(90, Math.min(s.H - 90, p.y));
       } else {
         s.stepping = false;
         p.y += (s.H * 0.5 - p.y) * 0.03;
@@ -142,7 +142,7 @@ const SCENES = {
     onSpawn(s, e) { if (e.type === 'gunner') e.aiTimer = 0.4; },
     tick(s) {
       const p = s.player;
-      p.y = s.H * 0.5 + Math.sin(s.t * 1.6) * s.H * 0.28;
+      p.y = s.H * 0.5 + Math.sin(s.t * 1.6) * s.H * 0.2;
       p.drillAngle = Math.sin(s.t * 1.6) > 0 ? Math.PI / 2 : -Math.PI / 2;
       p.walkCycle += 0.2;
       s.autoFire(0.45);
@@ -150,18 +150,18 @@ const SCENES = {
     }
   },
   shielder: {
-    w: 460, loop: 10,
+    w: 540, loop: 10,
     setup(s) { s.home(0.5, 0.5); s.spawn('shielder', s.W * 0.5, s.H * 0.5); },
     onSpawn(s, e) { if (e.type === 'shielder') e.speed = 0.35; },
     tick(s) {
       // Circle the plates faster than they can turn: front shots spark off, flank shots land.
-      const e = s.find('shielder');
-      const cx = e ? e.x : s.W * 0.5;
-      const cy = e ? e.y : s.H * 0.5;
+      // Round the frame's centre, not the hull: it creeps toward the ship, which would walk the orbit off-frame.
+      const cx = s.W * 0.5;
+      const cy = s.H * 0.5;
       const a = -0.3 + s.t * 1.15;
       const p = s.player;
       p.x = cx + Math.cos(a) * 165;
-      p.y = cy + Math.sin(a) * 105;
+      p.y = cy + Math.sin(a) * 80;
       p.drillAngle = a + Math.PI / 2;
       p.walkCycle += 0.25;
       s.autoFire(0.14);
@@ -198,7 +198,7 @@ const SCENES = {
     }
   },
   lieutenant: {
-    w: 560, loop: 10,
+    w: 560, loop: 10, frame: { min: 1, pad: 2.4 },
     setup(s) {
       s.home(0.82, 0.5);
       const lt = rollLieutenant(7, lieutenantTypes(7));
@@ -231,7 +231,7 @@ const SCENES = {
     noContactKill: true
   },
   brood_queen: {
-    w: 680, loop: 12,
+    w: 680, loop: 12, frame: {},
     // Its signature attack comes early so the preview shows it.
     onSpawn(s, e) { if (e.type === 'brood_queen') e.spearCd = 2.2; },
     setup(s) {
@@ -260,7 +260,7 @@ const SCENES = {
     noContactKill: true
   },
   ouroboros: {
-    w: 900, loop: 14,
+    w: 900, loop: 14, frame: {},
     setup(s) {
       s.home(0.62, 0.5);
       s.manager.queueSpawn('ouroboros', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -287,7 +287,7 @@ const SCENES = {
     }
   },
   wing_commander: {
-    w: 900, loop: 13,
+    w: 900, loop: 13, frame: {},
     // Its signature attack comes early so the preview shows it.
     onSpawn(s, e) { if (e.type === 'wing_commander') e.strikeT = 2.4; },
     setup(s) {
@@ -324,7 +324,7 @@ const SCENES = {
     }
   },
   hive_carrier: {
-    w: 900, loop: 14,
+    w: 900, loop: 14, frame: {},
     setup(s) {
       s.home(0.72, 0.5);
       s.manager.queueSpawn('hive_carrier', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -342,7 +342,7 @@ const SCENES = {
     noContactKill: true
   },
   event_horizon: {
-    w: 900, loop: 12,
+    w: 900, loop: 12, frame: {},
     // Its signature attack comes early so the preview shows it.
     onSpawn(s, e) { if (e.type === 'event_horizon') e.aiTimer = 1.6; },
     setup(s) {
@@ -379,7 +379,7 @@ const SCENES = {
     noContactKill: true
   },
   architect: {
-    w: 900, loop: 13,
+    w: 900, loop: 13, frame: {},
     setup(s) {
       s.home(0.5, 0.5);
       s.manager.queueSpawn('architect', s.W * 0.88, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -406,7 +406,7 @@ const SCENES = {
     }
   },
   progenitor: {
-    w: 900, loop: 14,
+    w: 900, loop: 14, frame: {},
     // Its signature attack comes early so the preview shows it.
     onSpawn(s, e) { if (e.type === 'progenitor' && !e.gen) e.lashT = 2; },
     setup(s) {
@@ -436,7 +436,7 @@ const SCENES = {
     }
   },
   conductor: {
-    w: 900, loop: 13,
+    w: 900, loop: 13, frame: {},
     setup(s) {
       s.home(0.85, 0.5);
       s.manager.queueSpawn('conductor', s.W * 0.25, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -509,7 +509,7 @@ const SCENES = {
     }
   },
   eclipse_twins: {
-    w: 900, loop: 14,
+    w: 900, loop: 14, frame: {},
     // Its signature attack comes early so the preview shows it.
     onSpawn(s, e) { if (e.type === 'eclipse_twins' && e.twinRole === 'sol') e.eclipseCd = 2.6; },
     setup(s) {
@@ -527,7 +527,7 @@ const SCENES = {
     noContactKill: true
   },
   prism: {
-    w: 900, loop: 17,
+    w: 900, loop: 17, frame: {},
     setup(s) {
       s.home(0.8, 0.5);
       s.manager.queueSpawn('prism', s.W * 0.35, s.H * 0.5, 1, { warmup: 1.2, wave: 1 });
@@ -582,6 +582,7 @@ export class GuidePreview {
     this.tug = 0;
     this.burstAt = null;
     this.stepping = false;
+    this.cam = { x: this.W / 2, y: this.H / 2, w: this.W };
     this.def.setup(this);
   }
 
@@ -794,25 +795,55 @@ export class GuidePreview {
     this.updateBolts();
     this.updateContacts();
     this.particles.update(dt, this.W, this.H);
+    this.updateCamera(dt);
     if (this.player.shieldFlash > 0) this.player.shieldFlash = Math.max(0, this.player.shieldFlash - dt * 4);
   }
 
-  drawBackdrop(ctx) {
+  // Scenes with a `frame` (bosses and lieutenants chase the kiting ship round the arena) get a camera that
+  // eases toward a box round the ship and every boss or lieutenant hull, padded for their rings, so the
+  // fight stays centred and nothing drifts off the edge. With no subject (before the arrival, after the
+  // kill) it drifts slowly back to the scene's own frame, so the death burst plays where it happens.
+  updateCamera(dt) {
+    const f = this.def.frame;
+    if (!f) return;
+    const p = this.player;
+    let x0 = p.x - 45, x1 = p.x + 45, y0 = p.y - 45, y1 = p.y + 45;
+    let found = false;
+    for (const e of this.manager.enemies) {
+      if (e.dead || !(e.isBoss || e.isLieutenant)) continue;
+      const r = e.radius * (f.pad ?? 3.4);
+      x0 = Math.min(x0, e.x - r); x1 = Math.max(x1, e.x + r);
+      y0 = Math.min(y0, e.y - r); y1 = Math.max(y1, e.y + r);
+      found = true;
+    }
+    const w = found ? Math.min(this.W * (f.max ?? 1.3), Math.max(this.W * (f.min ?? 0.85), Math.max(x1 - x0, (y1 - y0) / PREVIEW_ASPECT) * 1.1)) : this.W;
+    const k = 1 - Math.exp(-dt * (found ? 2.4 : 0.8));
+    this.cam.x += ((found ? (x0 + x1) / 2 : this.W / 2) - this.cam.x) * k;
+    this.cam.y += ((found ? (y0 + y1) / 2 : this.H / 2) - this.cam.y) * k;
+    this.cam.w += (w - this.cam.w) * k;
+  }
+
+  drawBackdrop(ctx, x0, y0, w, h) {
     ctx.fillStyle = BG;
-    ctx.fillRect(0, 0, this.W, this.H);
+    ctx.fillRect(x0, y0, w, h);
     ctx.strokeStyle = 'rgba(60, 110, 200, 0.12)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = 40; x < this.W; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, this.H); }
-    for (let y = 40; y < this.H; y += 40) { ctx.moveTo(0, y); ctx.lineTo(this.W, y); }
+    for (let x = Math.ceil(x0 / 40) * 40; x < x0 + w; x += 40) { ctx.moveTo(x, y0); ctx.lineTo(x, y0 + h); }
+    for (let y = Math.ceil(y0 / 40) * 40; y < y0 + h; y += 40) { ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); }
     ctx.stroke();
   }
 
-  // `scale` maps world px to canvas px (canvas width / W).
+  // `scale` maps world px to canvas px (canvas width / W); the camera pans and zooms within that.
   draw(ctx, scale) {
+    const { cam } = this;
+    const z = scale * this.W / cam.w;
+    const h = cam.w * PREVIEW_ASPECT;
+    const x0 = cam.x - cam.w / 2;
+    const y0 = cam.y - h / 2;
     ctx.save();
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    this.drawBackdrop(ctx);
+    ctx.setTransform(z, 0, 0, z, -x0 * z, -y0 * z);
+    this.drawBackdrop(ctx, x0, y0, cam.w, h);
     const v = this.def === SCENES.blackhole ? this.find('blackhole') : null;
     if (v) {
       ctx.fillStyle = 'rgba(1, 1, 5, 0.94)';

@@ -1,13 +1,43 @@
 // The MAJOR bosses (waves 10, 20, 30, 40, 50), each with one signature attack that is telegraphed and
 // dodgeable in a crowd, a phase change at half HP (the Prism has three phases), an entrance beat, phase
-// and death effects, and its own sound cues (js/boss-sfx-major.js). Area attacks are boss hazards
-// (js/boss-hazards.js): target circles, blueprint lines, shock rings. Registered in js/bosses.js
+// and death effects, and its own sound cues (js/boss-sfx-major.js). Area attacks are boss telegraphs
+// (js/boss-telegraphs.js, m.bossTelegraphs): target circles, blueprint lines, shock rings, plus callouts
+// and staged death fx. Registered in js/bosses.js
 // (BOSS_DEFS), which documents the def shape. Timers are seconds; speeds are px per 60 Hz tick.
 import { TUNING } from './config.js';
 import { spawnSerpent, spawnBody, coilPath, windToward, liveOf, turnToward } from './serpents.js';
-import { addBlast, addLine, addRing, addLabel, addFx, cue, hazardsOf, cancelHazard } from './boss-hazards.js';
+import { MAJOR_HIT } from './boss-telegraphs.js';
+import { queueBossCue as cue } from './boss-sfx-major.js';
 
 // --- Shared kit ------------------------------------------------------------------------------------
+
+// Hazard damage: an orb hit × these on the wave ramp (the game applies the ramp).
+export const HAZARD_MULT = { blast: 1.6, line: 1.4, ring: 1.4 };
+const hazardDamage = (mult) => (TUNING.enemyBulletDamage ?? 12) * mult;
+
+// A target circle that detonates after `fuse` s: the hit lands only as it goes off, with its cue (and a
+// shake that grows with its size).
+function addBlast(m, { x, y, r, fuse, hue, from, sound }) {
+  return m.bossTelegraphs?.zone(x, y, r, {
+    ...MAJOR_HIT, look: 'reticle', warn: fuse, live: 0, window: 0, hue, from, damage: hazardDamage(HAZARD_MULT.blast),
+    onFire: (h) => cue(m, sound, h, { shake: r > 150 ? 10 : 3 })
+  });
+}
+
+// A blueprint line that prints for `fuse` s, then burns as a laser wall for `burn` s. `rehit`: a held
+// beam (its owner moves the ends each tick) may hit again this many s after a hit.
+function addLine(m, { x1, y1, x2, y2, width, fuse, burn, hue, from, sound = null, owner = null, rehit = 0 }) {
+  return m.bossTelegraphs?.lane(x1, y1, x2, y2, width, {
+    ...MAJOR_HIT, look: 'blueprint', warn: fuse, live: burn, hue, from, owner, rehit, damage: hazardDamage(HAZARD_MULT.line),
+    onFire: sound ? (h) => cue(m, sound, { x: (h.x + h.x2) / 2, y: (h.y + h.y2) / 2 }) : null
+  });
+}
+
+// The boss's own lines (blueprints not yet printed, beams), taken off the field.
+function cancelLines(e, m) {
+  const pool = m.bossTelegraphs;
+  for (const h of pool?.active || []) if (h.from === e.type && h.kind === 'lane') pool.cancel(h);
+}
 
 function fireOrb(m, src, angle, speed, life = 4, from = src.type) {
   const b = m.enemyBullets?.spawn(src.x + Math.cos(angle) * src.radius, src.y + Math.sin(angle) * src.radius,
@@ -32,7 +62,7 @@ function phaseShift(e, m, env, label, hue = e.hue, sound = 'phase_roar') {
   env.particles?.spawnShockwave?.(e.x, e.y, 280, 0, 4, 0.45);
   env.particles?.spawnExplosionSparks?.(e.x, e.y, 36, hue, 3, 16, 2.4);
   env.grid?.applyImpulse?.(e.x, e.y, 95, 460, hue);
-  addLabel(m, e.x, e.y - e.radius * 2.4, label, hue, 2.2, e);
+  m.bossTelegraphs?.label(e.x, e.y - e.radius * 2.4, label, { hue, life: 2.2, follow: e });
   cue(m, sound, e, { shake: 14, hitStop: 3 });
 }
 
@@ -42,10 +72,10 @@ function majorDeath(e, m, hues, { blasts = 6, dur = 0.9, final = 900 } = {}) {
   for (let k = 0; k < blasts; k++) {
     const a = k * 2.4;
     const d = k ? e.radius * (0.5 + (k % 3) * 0.45) : 0;
-    addFx(m, { x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d, delay: (k / blasts) * dur, radius: 150 + k * 45, hue: hues[k % hues.length], width: 5, dur: 0.5, sparks: 16 });
+    m.bossTelegraphs?.fx(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, { delay: (k / blasts) * dur, radius: 150 + k * 45, hue: hues[k % hues.length], width: 5, dur: 0.5, sparks: 16 });
   }
-  addFx(m, { x: e.x, y: e.y, delay: dur, radius: final, hue: hues[0], width: 10, dur: 1.0, sparks: 60 });
-  addFx(m, { x: e.x, y: e.y, delay: dur + 0.12, radius: final * 0.6, hue: 48, width: 6, dur: 0.8 });
+  m.bossTelegraphs?.fx(e.x, e.y, { delay: dur, radius: final, hue: hues[0], width: 10, dur: 1.0, sparks: 60 });
+  m.bossTelegraphs?.fx(e.x, e.y, { delay: dur + 0.12, radius: final * 0.6, hue: 48, width: 6, dur: 0.8 });
 }
 
 // Entrance hold: the boss stays put for `time` s (restT: the shared RAM waits too) while its intro plays.
@@ -425,7 +455,7 @@ function bombingRun(e, m, env, bays) {
     const d = HIVE.shellSpread[0] + Math.random() * (HIVE.shellSpread[1] - HIVE.shellSpread[0]);
     shots.push({ x: tx + Math.cos(a) * d, y: ty + Math.sin(a) * d });
   }
-  shots.forEach((s, k) => addBlast(m, { x: s.x, y: s.y, r: HIVE.shellR, fuse: HIVE.shellFuse + k * 0.08, hue: 120, from: e.type, cue: 'shell_boom' }));
+  shots.forEach((s, k) => addBlast(m, { x: s.x, y: s.y, r: HIVE.shellR, fuse: HIVE.shellFuse + k * 0.08, hue: 120, from: e.type, sound: 'shell_boom' }));
   e.salvo = shots.map((s, k) => ({ x: s.x, y: s.y, from: bays[k - 1] || e }));
   e.salvoShowT = 0.6;
   cue(m, 'hive_launch', e);
@@ -441,7 +471,7 @@ function carpetBomb(e, m, env) {
   uy /= len;
   for (let k = 0; k < HIVE.carpetShells; k++) {
     const d = (k - 1.5) * HIVE.carpetStep;
-    addBlast(m, { x: player.x + ux * d, y: player.y + uy * d, r: HIVE.shellR * 0.9, fuse: HIVE.carpetFuse + k * HIVE.carpetStagger, hue: 95, from: e.type, cue: 'shell_boom' });
+    addBlast(m, { x: player.x + ux * d, y: player.y + uy * d, r: HIVE.shellR * 0.9, fuse: HIVE.carpetFuse + k * HIVE.carpetStagger, hue: 95, from: e.type, sound: 'shell_boom' });
   }
   cue(m, 'hive_launch', e);
 }
@@ -650,7 +680,7 @@ function blueprint(e, m, env) {
   for (let k = 0; k < n; k++) {
     const a = off + (k * Math.PI) / n;
     const dx = Math.cos(a) * ARCH.printLen / 2, dy = Math.sin(a) * ARCH.printLen / 2;
-    addLine(m, { x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy, width: ARCH.printWidth, fuse: ARCH.printFuse + k * ARCH.printStagger, burn: ARCH.printBurn, hue: e.hue, from: e.type, cue: 'arch_print' });
+    addLine(m, { x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy, width: ARCH.printWidth, fuse: ARCH.printFuse + k * ARCH.printStagger, burn: ARCH.printBurn, hue: e.hue, from: e.type, sound: 'arch_print' });
     e.draft.push({ x: cx + dx, y: cy + dy }, { x: cx - dx, y: cy - dy });
   }
   e.draftT = ARCH.printFuse;
@@ -814,9 +844,9 @@ const architect = {
       o.doomQueued = true;
       o.noReward = true;
       m.doomed.push(o);
-      addFx(m, { x: o.x, y: o.y, delay: 0.1 + k++ * 0.08, radius: 200, hue: e.hue, width: 5, dur: 0.4, sparks: 10 });
+      m.bossTelegraphs?.fx(o.x, o.y, { delay: 0.1 + k++ * 0.08, radius: 200, hue: e.hue, width: 5, dur: 0.4, sparks: 10 });
     }
-    for (const h of hazardsOf(m)) if (h.from === e.type && h.kind === 'line') cancelHazard(h); // unprinted blueprints
+    cancelLines(e, m); // unprinted blueprints
     majorDeath(e, m, [55, 205, 30]);
   }
 };
@@ -847,7 +877,11 @@ function downbeat(e, m, env) {
   for (let k = 0; k < rings; k++) {
     const off = Math.random() * Math.PI * 2;
     const gaps = Array.from({ length: COND.ringGaps }, (_, i) => off + (i * Math.PI * 2) / COND.ringGaps + (k ? Math.PI / COND.ringGaps : 0));
-    addRing(m, { x: e.x, y: e.y, r: e.radius, speed: COND.ringSpeed, width: COND.ringWidth, maxR: COND.ringMaxR, gaps, gapW: COND.gapW, hue: e.hue, from: e.type, delay: k * COND.ringDelay });
+    // Live at once (no warning: the count-in is its tell); it rolls until its outer edge reaches ringMaxR.
+    m.bossTelegraphs?.wave(e.x, e.y, {
+      ...MAJOR_HIT, look: 'shock', warn: 0, delay: k * COND.ringDelay, r0: e.radius, w: COND.ringWidth, speed: COND.ringSpeed,
+      rMax: COND.ringMaxR - COND.ringWidth, gaps, gapWidth: COND.gapW, hue: e.hue, from: e.type, damage: hazardDamage(HAZARD_MULT.ring)
+    });
   }
   e.batonSlam = 1;
   env.grid?.applyImpulse?.(e.x, e.y, 70, 320, e.hue);
@@ -898,7 +932,7 @@ const conductor = {
       }
       if (e.labelT <= 0 && !(e.introT > 0)) {
         e.labelT = COND.labelGap;
-        addLabel(m, e.x, e.y - e.radius * 2.4, e.deflect ? 'SHIELDED: KILL ITS LINKS' : 'SHIELD DOWN!', e.deflect ? e.hue : 0, 1.6, e);
+        m.bossTelegraphs?.label(e.x, e.y - e.radius * 2.4, e.deflect ? 'SHIELDED: KILL ITS LINKS' : 'SHIELD DOWN!', { hue: e.deflect ? e.hue : 0, life: 1.6, follow: e });
         cue(m, e.deflect ? 'cond_shield_up' : 'cond_shield_down', e);
       }
     }
@@ -1055,7 +1089,7 @@ const conductor = {
   },
   onDeath(e, m) {
     for (const o of e.links || []) o.linked = 0;
-    for (let k = 0; k < 3; k++) addFx(m, { x: e.x, y: e.y, delay: 0.2 + k * 0.25, radius: 300 + k * 160, hue: e.hue, width: 6, dur: 0.6 });
+    for (let k = 0; k < 3; k++) m.bossTelegraphs?.fx(e.x, e.y, { delay: 0.2 + k * 0.25, radius: 300 + k * 160, hue: e.hue, width: 6, dur: 0.6 });
     majorDeath(e, m, [165, 300, 48]);
   }
 };
@@ -1098,13 +1132,13 @@ export const PRISM = {
 export const PRISM_PHASE_NAMES = ['REFRACTION', 'DISPERSION', 'SUPERNOVA'];
 const SPECTRUM = [0, 30, 55, 120, 190, 240, 285];
 
-function clearSpokes(e) {
-  for (const s of e.spokes || []) cancelHazard(s);
+function clearSpokes(e, m) {
+  for (const s of e.spokes || []) m.bossTelegraphs?.cancel(s);
   e.spokes = [];
 }
 
 function startSpokes(e, m, n) {
-  clearSpokes(e);
+  clearSpokes(e, m);
   for (let k = 0; k < n; k++) {
     const h = addLine(m, { x1: e.x, y1: e.y, x2: e.x, y2: e.y, width: PRISM.spokeWidth, fuse: PRISM.spokeWarmup, burn: 1e9, hue: SPECTRUM[(k * 2) % SPECTRUM.length], from: e.type, rehit: PRISM.spokeRehit, owner: e });
     if (h) e.spokes.push(h);
@@ -1115,8 +1149,8 @@ function aimSpokes(e) {
   const n = e.spokes.length;
   e.spokes.forEach((h, k) => {
     const a = e.spokeA + (k * Math.PI * 2) / n;
-    h.x1 = e.x + Math.cos(a) * e.radius * 0.8;
-    h.y1 = e.y + Math.sin(a) * e.radius * 0.8;
+    h.x = e.x + Math.cos(a) * e.radius * 0.8;
+    h.y = e.y + Math.sin(a) * e.radius * 0.8;
     h.x2 = e.x + Math.cos(a) * PRISM.spokeLen;
     h.y2 = e.y + Math.sin(a) * PRISM.spokeLen;
   });
@@ -1151,8 +1185,8 @@ const prism = {
       e.castT = 0;
       e.burstSpeed = 0;
       e.ramState = null;
-      clearSpokes(e);
-      for (const h of hazardsOf(m)) if (h.from === e.type && h.kind === 'line') cancelHazard(h);
+      clearSpokes(e, m);
+      cancelLines(e, m);
       phaseShift(e, m, env, `${['I', 'II', 'III'][phase]} · ${PRISM_PHASE_NAMES[phase]}`, e.hue, 'prism_phase');
       for (let k = 0; k < 4; k++) env.particles?.spawnShockwave?.(e.x, e.y, 300 + k * 150, SPECTRUM[(k * 2 + phase) % SPECTRUM.length], 5, 0.5 + k * 0.12);
       if (phase === 2) {
@@ -1203,7 +1237,7 @@ const prism = {
           const b = a + k * PRISM.fanSpread;
           addLine(m, {
             x1: e.x + Math.cos(b) * e.radius, y1: e.y + Math.sin(b) * e.radius, x2: e.x + Math.cos(b) * PRISM.fanLen, y2: e.y + Math.sin(b) * PRISM.fanLen,
-            width: PRISM.fanWidth, fuse: PRISM.fanFuse, burn: PRISM.fanBurn, hue: [0, 120, 240][k + 1], from: e.type, cue: 'prism_beam'
+            width: PRISM.fanWidth, fuse: PRISM.fanFuse, burn: PRISM.fanBurn, hue: [0, 120, 240][k + 1], from: e.type, sound: 'prism_beam'
           });
         }
       }
@@ -1221,7 +1255,7 @@ const prism = {
         e.novaT = PRISM.novaEvery;
         e.castT = PRISM.novaFuse;
         e.novaAt = { x: e.x, y: e.y };
-        addBlast(m, { x: e.x, y: e.y, r: PRISM.novaR, fuse: PRISM.novaFuse, hue: 48, from: e.type, cue: 'nova_blast' });
+        addBlast(m, { x: e.x, y: e.y, r: PRISM.novaR, fuse: PRISM.novaFuse, hue: 48, from: e.type, sound: 'nova_blast' });
         cue(m, 'prism_charge', e);
       }
       if (e.novaAt && e.castT <= 0) {
@@ -1314,11 +1348,11 @@ const prism = {
     drawPhaseFlash(ctx, e, r);
   },
   onDeath(e, m) {
-    clearSpokes(e);
+    clearSpokes(e, m);
     e.gravityWell = false;
     // The light comes apart: rings in every color, then a white flash.
     for (let k = 0; k < SPECTRUM.length; k++) {
-      addFx(m, { x: e.x, y: e.y, delay: k * 0.14, radius: 260 + k * 110, hue: SPECTRUM[k], width: 6, dur: 0.7, sparks: 18 });
+      m.bossTelegraphs?.fx(e.x, e.y, { delay: k * 0.14, radius: 260 + k * 110, hue: SPECTRUM[k], width: 6, dur: 0.7, sparks: 18 });
     }
     majorDeath(e, m, [0, 120, 240, 55], { blasts: 9, dur: 1.2, final: 1300 });
   }

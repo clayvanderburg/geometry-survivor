@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -97,6 +97,10 @@ export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Ma
 const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new Set(), transforms: 0 });
 const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) / tfRealized(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
+// GLOBAL CARDS multipliers a build carries (weapon-levels.js GLOBAL_CARDS; 1 for bare builds, so LV 1 solves never move).
+const tempo = (b) => b?.g?.tempo ?? 1;
+const cdr = (b) => b?.g?.cooldown ?? 1;
+const persist = (b) => b?.g?.persistence ?? 1;
 // LV 1 hit damage of a weapon, solved once from its rank-0 build so LV 1 sits on DPS_TARGET(1).
 const lv1Cache = new Map();
 const lv1 = (key, id, solve) => {
@@ -123,7 +127,7 @@ export const WEAPON_SCALING = {
   // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
   blasterRateStep: rateStep('blaster'),
-  blasterRateMult: (b) => 1 + W.blasterRateStep * (b.r.rate || 0),
+  blasterRateMult: (b) => (1 + W.blasterRateStep * (b.r.rate || 0)) * tempo(b),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
@@ -161,7 +165,7 @@ export const WEAPON_SCALING = {
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload), // 0.65 s before the weapons pass, 1 s before v0.39.8
+  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / cdr(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 11, // 8.5 before v0.39.8
@@ -202,7 +206,7 @@ export const WEAPON_SCALING = {
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload), // 1.44 s before the weapons pass
+  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / cdr(b), // 1.44 s before the weapons pass
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
@@ -245,7 +249,7 @@ export const WEAPON_SCALING = {
   // bound by targets (a jump already killed most of what it landed on), so faster, lighter discharges waste
   // less on overkill and crackle more like lightning (card bench: 0.43-0.54x the Autocannon at LV 6-12 under
   // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
-  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)),
+  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / cdr(b),
   stormArcScale: 2,
   lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
   lightningChains: (b) => (b.t4 ? 2 : 1),
@@ -275,8 +279,8 @@ export const WEAPON_SCALING = {
   // pull fades hard toward the rim (gravity.js singularityPullScale) and the collapse falls to 25% at
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
   singularityPullRadius: (b) => 175 + 25 * b.r.pull + (b.t8 ? W.aftershockPull : 0),
-  singularityLife: (b) => 2.6 + 0.3 * b.r.duration,
-  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown),
+  singularityLife: (b) => (2.6 + 0.3 * b.r.duration) * persist(b),
+  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / cdr(b),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
@@ -379,10 +383,11 @@ export const WEAPON_SCALING = {
   shrapnelShards: (lv) => 1 + 3 * lv, // 4 at LV 1, +3 per level (25 at LV 8)
   shrapnelDamageMult: 0.3,
 
-  // Phase Nova Thrusters
+  // Phase Nova Thrusters (the dash shockwave). The dash cooldown is the Cooldown Matrix card's since v0.46
+  // (it was -0.14 s per Thrusters level): `mult` is that card's recharge multiplier (globalMult 'cooldown').
   novaRadius: (lv) => 140 + lv * 35,
   novaDamage: (lv) => 35 * lv,
-  dashCooldown: (lv, base) => Math.max(0.2, base - lv * 0.14),
+  dashCooldown: (mult, base) => Math.max(0.2, base / Math.max(1, mult || 1)),
   // Blink Drive: the dash becomes a teleport of blinkDistance(lv) px along the move direction (the aim
   // when parked), landing short of any rock in the way.
   blinkDistance: (lv) => 220 + 60 * (Math.max(1, lv) - 1),
@@ -399,9 +404,9 @@ export const WEAPON_SCALING = {
   // --- Proximity Mines (stats: damage, capacity, rate, radius, fuse) ------------------------------
   // Dropped behind the ship on a timer while a slot is free; they arm after TUNING.mineArmTime, burst
   // when an enemy enters the trigger ring, and self-detonate at the end of the fuse.
-  mineCooldown: (b) => 2 / rateMult(b.r.rate),
+  mineCooldown: (b) => 2 / rateMult(b.r.rate) / tempo(b),
   mineMaxActive: (b) => (3 + b.r.capacity) * (b.t12 ? W.triadCount : 1),
-  mineLifetime: (b) => 10.5 + 2 * (b?.r?.fuse || 0),
+  mineLifetime: (b) => (10.5 + 2 * (b?.r?.fuse || 0)) * persist(b),
   mineTriggerRadius: () => 48,
   mineBlastRadius: (b) => 120 * (1 + 0.12 * b.r.radius), // wide, but well inside the old 2x (180)
   // Transforms: Cluster Mines (3 bomblets at 25% each, valued at mineClusterHitShare), Seeker Mines
@@ -443,12 +448,12 @@ export const WEAPON_SCALING = {
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
   turretCharges: (b) => 2 + (b.r?.charges || 0) + (b.t4 ? 1 : 0), // r.charges: REPLICATOR ARRAY ranks (no card)
-  turretReload: (b) => 6 / rateMult(b.r.reload),
-  turretDuration: () => 10,
+  turretReload: (b) => 6 / rateMult(b.r.reload) / cdr(b),
+  turretDuration: (b) => 10 * persist(b),
   turretStillTime: 0.5,
   turretDropStill: 0.25,
   turretRange: () => 476, // +40% (was 340)
-  turretFireRate: (b) => 6.1 * rateMult(b.r.rate) * (b.t12 ? W.overloadRate : 1),
+  turretFireRate: (b) => 6.1 * rateMult(b.r.rate) * tempo(b) * (b.t12 ? W.overloadRate : 1),
   turretPierce: (b) => 2 + (b?.r?.pierce || 0), // enemies one bolt can hit (each one behind takes a little less)
   // Turrets out on average (the potential counts them; never above the pool).
   turretAverageActive: (b) => Math.min(TURRET_MAX_ACTIVE, W.turretDuration(b) / W.turretReload(b)),
@@ -496,7 +501,7 @@ export const WEAPON_SCALING = {
   droneWingHitShare: 0.6,
   droneValue: (b) => 1 + W.droneWingHitShare * (W.droneSquad(b) - 1),
   droneWingDamageMult: (b) => (W.droneCount(b) > 1 ? W.droneDamageMult(b) * W.droneWingHitShare * (W.droneSquad(b) - 1) / (W.droneCount(b) - 1) : 0),
-  droneFireRate: (b) => 7.6 * (1 + rateStep('drones') * (b.r.rate || 0)), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
+  droneFireRate: (b) => 7.6 * (1 + rateStep('drones') * (b.r.rate || 0)) * tempo(b), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
   droneRange: (b) => 784 + 35 * b.r.range, // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
   droneBoltSpeed: 15,
   // Transforms: Escort Squadron (the back row of 3), Homing Bolts, Micro-Missile Pods (each drone
@@ -531,7 +536,7 @@ export const WEAPON_SCALING = {
   // blinking light, then bursts. Its element (and hue) is the one its element card locked in
   // (grenades.js grenadeElement): FIRE burns, FROST chills, CORROSIVE corrodes, SHOCK stuns.
   grenadeCount: (b) => 2 + b.r.count,
-  grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate),
+  grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate) / tempo(b),
   grenadeBlastRadius: (b) => 95 * (1 + 0.12 * b.r.radius),
   grenadeRange: (b) => 330 + 40 * (b?.r?.range || 0),
   grenadeFlight: 0.5,
@@ -586,8 +591,8 @@ export const WEAPON_SCALING = {
   // Potential counts one tick per tick interval on one target; a trail usually holds several enemies,
   // so each tick is valued at gasHitShare (the per-tick damage is that much lower).
   gasRadius: (b) => 46 * (1 + 0.36 * b.r.radius), // +12% / rank before v0.38.1
-  gasLife: (b) => 2.6 + 1.2 * (b?.r?.linger || 0), // +0.4 s / rank before v0.38.1
-  gasTick: (b) => 0.3 / rateMult(b.r.rate),
+  gasLife: (b) => (2.6 + 1.2 * (b?.r?.linger || 0)) * persist(b), // +0.4 s / rank before v0.38.1
+  gasTick: (b) => 0.3 / rateMult(b.r.rate) / tempo(b),
   gasPuffSpacing: 0.7,
   // Every dash also vents one giant round cloud where the ship was: gasDashRadiusMult x the cloud radius,
   // lingering gasDashLifeMult x as long. Overlapping clouds never stack on one enemy, so it adds reach
@@ -640,7 +645,7 @@ export const WEAPON_SCALING = {
   // a rock shadows the slice of the cone behind it while the rest burns on (flamethrower.js).
   // Potential counts a scorch on flameHitShare targets: the cone always catches a pack and its burn is
   // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
-  flameTickRate: (b) => 8 * rateMult(b.r.rate),
+  flameTickRate: (b) => 8 * rateMult(b.r.rate) * tempo(b),
   flameRange: (b) => 280 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1, 254 base before v0.39.3
   flameConeHalf: (b) => 0.275 + 0.04 * (b?.r?.cone || 0), // radians either side of the nozzle (~32 deg wide at LV 1; 0.55 before v0.42.1, 0.3 before it spun); +0.09 per rank before v0.39.3
   flameBurnRank,
@@ -706,7 +711,7 @@ export const WEAPON_SCALING = {
   // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
   // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
   fieldRadius: (b) => 125 + 24 * (b?.r?.radius || 0), // +12 per rank before v0.39.7
-  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge),
+  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / cdr(b),
   fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
   fieldHitShare: 1,
   fieldKnock: 1.2, // a light outward shove on every discharge
@@ -753,7 +758,7 @@ export const WEAPON_SCALING = {
   // Bank (+RATE_STEP shots/s per rank), Split Rails (+1 lance per rank, fanned railSpread apart), Flux Lens
   // (a wider hit line; utility) and Penetrator Core (less lost per enemy pierced; utility). Potential counts
   // every lance on one target, like an Autocannon bolt.
-  railCycle: (b) => 1 / rateMult(b.r.rate),       // s per shot at LV 1: 0.8 s charge + 0.2 s vent
+  railCycle: (b) => 1 / rateMult(b.r.rate) / tempo(b),       // s per shot at LV 1: 0.8 s charge + 0.2 s vent
   railChargeShare: 0.8,
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
@@ -809,7 +814,7 @@ export const WEAPON_SCALING = {
   // (LV1_TRIM) is set from the card bench like the Drones' and Turret's.
   glaiveCount: (b) => 2 + (b.r.count || 0),
   glaiveBounces: (b) => 4 + (b.r.chain || 0),
-  glaiveCooldown: (b) => 1.2 / (1 + rateStep('glaive') * (b.r.rate || 0)), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
+  glaiveCooldown: (b) => 1.2 / (1 + rateStep('glaive') * (b.r.rate || 0)) / tempo(b), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
   glaiveSpeed: (b) => 560 * (1 + 0.12 * (b?.r?.speed || 0)), // px/s at launch
   glaiveSpeedLoss: 0.07,        // share of its speed a disc sheds per bounce
   glaiveMinSpeedShare: 0.4,     // ... and it fades once under this share of its launch speed
@@ -864,9 +869,9 @@ export const WEAPON_SCALING = {
   // targets per tick: a swarm only eats what it reaches, so more and longer-lived swarms are POWER
   // (Fabricator, Endurance) and only swarm size is UTILITY.
   naniteRadius: (b) => 66 * (1 + 0.12 * (b?.r?.radius || 0)),
-  naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)),
-  naniteTick: (b) => 0.25 / rateMult(b.r.rate),
-  naniteCooldown: (b) => 3 / rateMult(b.r.cooldown),
+  naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)) * persist(b),
+  naniteTick: (b) => 0.25 / rateMult(b.r.rate) / tempo(b),
+  naniteCooldown: (b) => 3 / rateMult(b.r.cooldown) / cdr(b),
   naniteUptime: (b) => W.naniteLife(b) / W.naniteCooldown(b),
   naniteRange: 460,
   naniteSpeed: 420,   // canister flight, px/s
@@ -924,7 +929,7 @@ export const WEAPON_SCALING = {
   // through rock: it breaks rock worth harpoonDrill rock HP per bit (x the ship's drill speed) and bites to
   // a stop in the first rock it can't break (bedrock always stops it). Nothing is pulled: every hit's
   // knockback points away from the ship. Potential counts one bit on one target, like an Autocannon bolt.
-  harpoonCooldown: (b) => 0.22 / (1 + rateStep('harpoon') * (b.r.rate || 0)),
+  harpoonCooldown: (b) => 0.22 / (1 + rateStep('harpoon') * (b.r.rate || 0)) / tempo(b),
   harpoonRange: (b) => 330 + 40 * (b?.r?.range || 0),
   harpoonSpeed: 1500, // px/s: a bit crosses its reach in about a fifth of a second
   harpoonPierceKeep: (b) => Math.min(1, 0.7 + 0.05 * (b?.r?.pierce || 0)), // share kept past each enemy that survives the hit
@@ -977,7 +982,7 @@ export const WEAPON_SCALING = {
   // boost never turns mining on. Spacetime Fractures shatter rock on their own (faultRockDamage, plus any
   // Tidal Shear). Rocks broken either way count as mined. A wave is valued at one hit per target.
   quakeShells: (b) => 2 + b.r.count,
-  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
+  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate) / tempo(b),
   quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
   // x the ship's mining speed / 75: 0 without Tidal Shear; a plain rock (~85 HP) takes 4 waves at 1 rank, 1 at 6.
   quakeRockDamage: (b) => {
@@ -1048,7 +1053,12 @@ export const WEAPON_SCALING = {
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
   tagDamageStep: { kinetic: 0.2, explosive: 0.3, electric: 0.3 },
-  areaStep: 0.15,
+  // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
+  // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
+  // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
+  // global card rule (one rank under one weapon card and under Overdrive). At +10% it sits under both with 2, 4
+  // and 6 weapons, and about level with them on an all-area build (sprayers and clouds), where area is reach.
+  areaStep: 0.1,
 
   // Elements (weapon-levels.js ELEMENT_CARDS): `lv` below is the rank of a weapon's element card (1-5).
   // STACKS (Deep Rock Galactic: Survivor style): every hit of an element weapon adds stacks of its status,
@@ -1314,6 +1324,11 @@ export function tagDamageMult(p, weapon) {
 }
 
 export const areaMult = (p) => p.stats.areaMult ?? 1;
+// VELOCITY COILS (global card): every flying shot (VELOCITY_WEAPONS) moves this much faster. Shots with a
+// fixed lifetime live that much shorter, so their reach stays the same: they just land sooner.
+export const projectileSpeedMult = (p) => globalMult(p, 'velocity');
+// Phase Dash cooldown in seconds: the base, the Cooldown Matrix card and the Void Armory's multiplier.
+export const dashCooldownFor = (p, base = TUNING.dashCooldownBase ?? 1.5) => W.dashCooldown(globalMult(p, 'cooldown'), base) * (p.dashCooldownMult ?? 1);
 
 // Damage source -> the slot weapon whose build sets its numbers.
 export const SOURCE_WEAPON = {

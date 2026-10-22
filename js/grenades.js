@@ -12,7 +12,7 @@
 // Grenades live in a fixed pool (nothing is allocated while throwing or simulating them) and are
 // simulated only from Game.update, so pause, hit-stop and slow-mo freeze them with the rest of the world.
 // Damage goes through Game.damageEnemiesInRadius / hitEnemy; bomblets and clouds run in weapon-fx.js.
-import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild, weaponElement } from './weapon-levels.js';
 import { wellPullScale } from './gravity.js';
 import { isDeployableTarget } from './deployables.js';
@@ -183,7 +183,8 @@ export class Grenades {
     const damage = weaponDamage(p, 'grenade', b);
     const el = grenadeElement(p);
     const emp = !!p.weapons.empGrenades && (p.weapons.lightning || 0) > 0;
-    const lead = W.grenadeFlight * 60 * LEAD;
+    const flight = W.grenadeFlight / projectileSpeedMult(p); // Velocity Coils: a quicker lob
+    const lead = flight * 60 * LEAD;
     for (let k = 0; k < n && this.count < POOL; k++) {
       let tx, ty;
       if (found > 0) {
@@ -219,7 +220,7 @@ export class Grenades {
       g.z = 0;
       g.h = 34 + Math.min(range, Math.hypot(dx, dy)) * 0.18;
       g.age = 0;
-      g.flight = W.grenadeFlight * (0.9 + 0.2 * (k / Math.max(1, n - 1)));
+      g.flight = flight * (0.9 + 0.2 * (k / Math.max(1, n - 1)));
       g.fuse = b.t12 ? W.gravityFuse : W.grenadeFuse;
       g.armedT = 0;
       g.landed = false;

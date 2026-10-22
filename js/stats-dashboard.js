@@ -213,7 +213,8 @@ function overview() {
       ${tile('Survive 30 min <small>(target)</small>', (d) => pct(d.run.reach30min, 1))}
       ${tile('Wave median', (d) => d.run.wave.median ?? '—')}
       ${tile('Gold earned / spent', (d) => `${num(d.gold.earned)} <small>/ ${num(d.gold.spent)}</small>`)}
-      ${tile('Rerolls · locks · banishes / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)}</small>`)}
+      ${tile('Rerolls · locks · banishes · skips / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)} · ${fix(d.gold.skips ?? 0, 1)}</small>`)}
+      ${tile('Supernova bombs / run · kills per bomb', (d) => (d.bombs?.runs ? `${fix(d.bombs.perRun.mean, 1)} <small>· ${fix(d.bombs.killsPerBomb, 0)}</small>` : '—'))}
       ${tile('Armory: none · partial · maxed · not recorded <small>(runs)</small>', (d) => (d.armoryTiers ? d.armoryTiers.map((t) => t.runs).join(' · ') : '—'))}
     </div></section>`;
 }
@@ -242,7 +243,7 @@ function weaponBalance() {
       const r = w.levels.find((x) => x.level === L);
       if (!r) return '<td class="cell muted">·</td>';
       const cls = !r.enough ? 'low' : r.flag || '';
-      const tip = `${weaponName(w.id)} LV ${L}: ${num(r.dps)} DPS, ${fix(r.normDps, 2)}x base/s vs target ${r.target ?? '—'}x (${pct(r.vsTarget)}), index ${fix(r.index)}, ${pct(r.dmgShare)} of damage, ${pct(r.killShare)} of kills, ${r.runs} runs / ${Math.round(r.seconds)} s`;
+      const tip = `${weaponName(w.id)} LV ${L}: ${num(r.dps)} DPS, ${fix(r.normDps, 2)}x base/s vs target ${r.target ?? '—'}x (${pct(r.vsTarget)}), index ${fix(r.index)}, ${pct(r.dmgShare)} of weapon damage, ${pct(r.killShare)} of weapon kills, ${r.runs} runs / ${Math.round(r.seconds)} s`;
       return `<td class="cell ${cls}" title="${esc(tip)}">${r.index !== null ? fix(r.index) : '—'}<small>${pct(r.vsTarget)}${r.enough ? '' : ' · n' + r.runs}</small></td>`;
     }).join('')}<td class="cell ${w.flag || ''}">${w.index !== null ? fix(w.index) : '—'}<small>${flagBadge(w.flag, w.index !== null)}</small></td></tr>`).join('');
     return `<div class="table-wrap"><table>${head}${body}</table></div>`;
@@ -251,12 +252,12 @@ function weaponBalance() {
   const detail = (s) => {
     const rows2 = state[s].weapons.filter((w) => w.isWeapon).flatMap((w) => w.levels.map((r) => `<tr><td>${esc(weaponName(w.id))}</td><td>${r.level}</td><td>${r.runs}</td><td>${Math.round(r.seconds)}</td><td>${num(r.dps)}</td><td>${fix(r.normDps, 2)}</td><td>${r.target ?? '—'}</td><td>${pct(r.vsTarget)}</td><td>${fix(r.index)}</td><td>${pct(r.dmgShare, 1)}</td><td>${pct(r.killShare, 1)}</td><td>${flagBadge(r.flag, r.enough)}</td></tr>`)).join('');
     return `<details><summary>${esc(s.toUpperCase())} · every weapon level (mean DPS, damage share, kill share, sample size)</summary><div class="table-wrap"><table>
-      <tr><th>Weapon</th><th>LV</th><th>Runs</th><th>Seconds</th><th>DPS</th><th>x base / s</th><th>Target</th><th>vs target</th><th>Index</th><th>Dmg share</th><th>Kill share</th><th></th></tr>${rows2}</table></div></details>`;
+      <tr><th>Weapon</th><th>LV</th><th>Runs</th><th>Seconds</th><th>DPS</th><th>x base / s</th><th>Target</th><th>vs target</th><th>Index</th><th>Weapon dmg share</th><th>Weapon kill share</th><th></th></tr>${rows2}</table></div></details>`;
   };
 
   const overviewTable = (s) => {
     const rows3 = state[s].weapons.map((w) => `<tr><td>${esc(weaponName(w.id))}${w.isWeapon ? '' : ' <span class="muted">(not a weapon)</span>'}</td><td>${pct(w.runShare)}</td><td>${pct(w.dmgShare, 1)}</td><td>${pct(w.killShare, 1)}</td><td>${w.dps !== null ? num(w.dps) : '—'}</td><td>${w.medianAcquiredAt !== null ? mmss(w.medianAcquiredAt) : '—'}</td><td>${pct(w.vsTarget)}</td><td>${w.index !== null ? fix(w.index) : '—'} ${flagBadge(w.flag, true)}</td></tr>`).join('');
-    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · source</th><th>In runs</th><th>Dmg share</th><th>Kill share</th><th>DPS owned</th><th>Picked at</th><th>vs target</th><th>Index</th></tr>${rows3}</table></div>`;
+    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · source</th><th title="Weapons: share of weapon damage / kills. Supernova, ram and other non-weapon sources: share of everything.">In runs</th><th>Dmg share</th><th>Kill share</th><th>DPS owned</th><th>Picked at</th><th>vs target</th><th>Index</th></tr>${rows3}</table></div>`;
   };
 
   return `<section><div class="section-head"><h2>Weapon balance · DPS vs DPS_TARGET at equal level</h2>${legend()}</div>

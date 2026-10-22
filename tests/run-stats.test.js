@@ -66,10 +66,52 @@ test('DPS per weapon level: seconds, damage, base-damage units and the share whi
   assert.equal(w.owned, 30);
   assert.equal(w.from, 0);
   assert.deepEqual(w.tl, [[0, 1], [10, 2]]);
-  // [secs, dmg, dmg / base, all damage, kills, all kills, DPS_TARGET]
-  assert.deepEqual(w.lv[1], [10, 300, 30, 400, 1, 1, Math.round(DPS_TARGET(1) * 100) / 100]);
-  assert.deepEqual(w.lv[2], [20, 400, 20, 400, 0, 0, Math.round(DPS_TARGET(2) * 100) / 100]);
+  // [secs, dmg, dmg / base, all damage, kills, all kills, DPS_TARGET, all weapon damage, all weapon kills]
+  assert.deepEqual(w.lv[1], [10, 300, 30, 400, 1, 1, Math.round(DPS_TARGET(1) * 100) / 100, 400, 1]);
+  assert.deepEqual(w.lv[2], [20, 400, 20, 400, 0, 0, Math.round(DPS_TARGET(2) * 100) / 100, 400, 0]);
   assert.equal(s.weapons.blaster.lv, undefined, 'damage without a level is a plain group');
+});
+
+test('Supernova bombs: counted with their kills, and left out of the weapon-only totals (ram too)', () => {
+  const rs = tracker();
+  rs.sync({ missiles: 1 }, 0, 10);
+  rs.damage('missile', 300);
+  rs.kill('missile', { type: 'swarmer' }, 1);
+  rs.damage('supernova', 900); // a bomb wipes the screen
+  rs.kill('supernova', { type: 'swarmer' }, 2);
+  rs.kill('supernova', { type: 'weaver' }, 2);
+  rs.bomb(2);
+  rs.damage('ram', 50);
+  const s = rs.finish({ time: 30 });
+  const row = s.weapons.missiles.lv[1];
+  assert.equal(row[3], 1250, 'all damage while at LV 1');
+  assert.equal(row[5], 3, 'all kills');
+  assert.equal(row[7], 300, 'weapon damage only: no Supernova, no ram');
+  assert.equal(row[8], 1, 'weapon kills only');
+  assert.deepEqual(s.bombs, [1, 2], '[bombs used, enemies they killed]');
+  assert.deepEqual(sanitizeRunStats(s).run.bombs, [1, 2]);
+  assert.deepEqual(sanitizeRunStats(s).run.weapons.missiles.lv[1], row, 'the new fields survive sanitizing');
+  // An older client: 7-field level rows and no bombs stay valid.
+  const old = structuredClone(s);
+  old.weapons.missiles.lv[1] = row.slice(0, 7);
+  delete old.bombs;
+  const clean = sanitizeRunStats(old).run;
+  assert.equal(clean.weapons.missiles.lv[1].length, 7);
+  assert.equal(clean.bombs, undefined);
+});
+
+test('the game reports every Supernova to run stats with the enemies it killed', () => {
+  const calls = [];
+  const g = Object.assign(Object.create(Game.prototype), {
+    player: { x: 0, y: 0, bombs: 2, invuln: 0 }, kills: 0, geoms: [],
+    enemyManager: { enemies: [{ x: 10, y: 0 }, { x: 20, y: 0 }, { x: 5000, y: 0 }], enemyBullets: { clear() {} } },
+    sound: { playSupernova() {} }, particles: new Proxy({}, { get: () => () => {} }), grid: { applyImpulse() {}, ripple() {} },
+    addShake() {}, requestHitStop() {}, updateHUD() {}, runStats: { bomb: (k) => calls.push(k) },
+    killEnemy(e) { this.enemyManager.enemies.splice(this.enemyManager.enemies.indexOf(e), 1); this.kills++; }
+  });
+  g.triggerSupernova();
+  assert.deepEqual(calls, [2], 'two enemies within reach, one far away');
+  assert.equal(g.player.bombs, 1);
 });
 
 test('a discarded weapon stops its clock; re-equipping starts a new segment', () => {
@@ -125,7 +167,7 @@ test('cards: offers vs picks, the locked card is not re-counted on a reroll, NEW
   assert.deepEqual(s.cards.new_weapon, [1, 1, 0, 0, 0]);
   assert.deepEqual(s.cards.magnet, [1, 0, 0, 0, 0]);
   assert.deepEqual(s.weaponPicks, { drones: [1, 0, 0, 0, 0], mines: [1, 1, 0, 0, 0] });
-  assert.deepEqual(s.gold, { earned: 40, spent: 25, rerolls: 1, locks: 1, banishes: 0 });
+  assert.deepEqual(s.gold, { earned: 40, spent: 25, rerolls: 1, locks: 1, banishes: 0, skips: 0 });
 });
 
 test('level timeline: each level-up is stamped once, skipped levels share the time', () => {

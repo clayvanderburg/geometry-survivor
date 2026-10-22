@@ -7,7 +7,8 @@ import {
 } from './loadout.js';
 import {
   STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, BT_FLATS, transformById, takenTransforms, transformEligible, btOptionId, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
-  levelCardWeapon, weaponElement, elementsOf, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks
+  levelCardWeapon, weaponElement, elementsOf, boostRanks, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks,
+  GLOBAL_CARDS, GLOBAL_MAX_RANKS, globalReaches
 } from './weapon-levels.js';
 import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
 
@@ -132,6 +133,26 @@ const STATUS_CARDS = [
   elementDamageCard('shock', 'Shock Amplifier')
 ];
 
+// Weapons a global card reaches right now (equipped ones with its stat).
+export const globalReach = (player, kind) => ownedWeapons(player).filter((id) => globalReaches(kind, id));
+function globalCards() {
+  const reaches = (kind) => (player) => globalReach(player, kind).length > 0;
+  const card = (kind, name, category, summary, extra = {}) => ({
+    id: GLOBAL_CARDS[kind].id, name, category, maxLevel: GLOBAL_MAX_RANKS, globalCard: kind, headline: `global_${kind}`,
+    // As often as Reactor Overdrive or a crit card: the weapon-share guard (handWeights) keeps weapon cards at
+    // TUNING.handWeaponShare of a hand, so these no longer have to stay light to protect weapon progression.
+    get weight() { return TUNING.globalCardWeight ?? 1; },
+    req: reaches(kind), summary, apply() {}, ...extra
+  });
+  return [
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks faster: fire, throw, drop and tick rates. Only attack rate.'),
+    // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
+    card('cooldown', 'Cooldown Matrix', 'POWER', 'Reloads, recharges and cooldowns run faster on every weapon, and on your Phase Dash. Only cooldowns.', { req: undefined }),
+    card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and armed mines last longer. Only lifetime.', { overcharge: false }),
+    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster: bolts, rockets, missiles, discs and grenades land sooner. Only shot speed.', { overcharge: false })
+  ];
+}
+
 // Each entry: headline (the STAT_ROWS id shown enlarged on its card, see upgrade-cards.js),
 // a number-free summary and optional tags (TAG_INFO keys in weapon-scaling.js, shown as chips:
 // the weapon families it belongs to or boosts). Exact numbers always come from the card preview.
@@ -151,6 +172,8 @@ export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
 export const TECTONIC_MINING_SPEED = 1.18;
 export const TECTONIC_MINING_RANGE = 1.15;
 export const TECTONIC_DRILL_SCALE = 1.15;
+// Pulsar Helix also speeds up the Autocannon (stats.fireRate, read by blasterFireRate).
+export const PULSAR_FIRE_RATE = 1.15;
 
 export const UPGRADE_POOL = [
   {
@@ -170,7 +193,7 @@ export const UPGRADE_POOL = [
     category: 'LUCK',
     maxLevel: 5,
     headline: 'luck',
-    summary: 'Raises the odds of lucky multi-level rolls, supply caches and cache jackpots.',
+    summary: 'Raises the odds of lucky multi-level rolls, evolution cards, supply caches and cache jackpots.',
     apply(player) {
       player.stats.luck += 0.25;
     }
@@ -204,6 +227,11 @@ export const UPGRADE_POOL = [
     req: (player) => ownedWeapons(player).some((id) => countRoom(player, id) > 0),
     apply() {} // its rank in upgradeLevels is read by every weaponBuild
   },
+  // GLOBAL CARDS (v0.46, weapon-levels.js GLOBAL_CARDS): one stat on every equipped weapon that has it, at
+  // about half a weapon card's step. Their ranks in upgradeLevels are read by weaponBuild (and the dash /
+  // shot speed), so apply() changes nothing. Each takes a quarter of a general card's hand weight (like Replicator
+  // Array): the four together weigh one general card, so weapon cards keep their share of hands (tests/loadout.test.js).
+  ...globalCards(),
   ...weaponGroup('rockets'),
   ...weaponGroup('missiles'),
   ...weaponGroup('orbitals'),
@@ -235,19 +263,33 @@ export const UPGRADE_POOL = [
       player.weapons.shrapnel = (player.weapons.shrapnel || 0) + 1;
     }
   },
-  // Geom Attractor Field, per level (compounding): LV 5 is half the old pickup radius (6.1x base, was 12.2x)
-  // and exactly 2x XP (was 3.05x). Armory Vacuum Array / Geom Resonator stack on top.
+  // Geom Attractor Field, per level (compounding): LV 5 is 6.1x the base pickup radius. Pickup radius only
+  // since v0.46: its XP went to Growth Lattice and its Supernova Bomb to a rare drop (main.js BOMB_DROP).
+  // The two cards split the old card's hand weight, like Ion Drive and Phase Nova Thrusters.
+  // Armory Vacuum Array / Geom Resonator stack on top.
   {
     id: 'magnet',
     name: 'Geom Attractor Field',
     category: 'UTILITY',
     maxLevel: 5,
+    weight: 0.5,
     headline: 'magnetRadius',
-    summary: 'Wider Geom vacuum, more XP per Geom, and a spare Supernova Bomb.',
+    summary: 'Wider Geom vacuum. Only pickup radius.',
     apply(player) {
       player.stats.magnetRadius *= MAGNET_RADIUS_STEP;
+    }
+  },
+  {
+    // Vampire Survivors' Crown: XP per Geom (exactly 2x at LV 5, as on the old Attractor card).
+    id: 'xp_growth',
+    name: 'Growth Lattice',
+    category: 'UTILITY',
+    maxLevel: 5,
+    weight: 0.5,
+    headline: 'xpMultiplier',
+    summary: 'More XP from every Geom, so you level up sooner. Only XP gain.',
+    apply(player) {
       player.stats.xpMultiplier *= MAGNET_XP_STEP;
-      player.bombs = Math.min(9, player.bombs + 1);
     }
   },
   {
@@ -271,7 +313,7 @@ export const UPGRADE_POOL = [
     maxLevel: 5,
     weight: 0.5,
     headline: 'novaDamage',
-    summary: 'Phase Dash recharges faster and unleashes a damaging shockwave.',
+    summary: 'Phase Dash unleashes a damaging shockwave. Only the dash nova.',
     apply(player) {
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
@@ -354,7 +396,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'KINETIC weapons hit harder: blaster bolts, helix bolts, shrapnel and orbit blades.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, claws and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }
@@ -369,7 +411,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'explosive') || player.weapons.tectonicBore >= 1;
     },
-    summary: 'EXPLOSIVE weapons hit harder: rockets, missile, grenade and mine blasts, and tectonic drill detonations.',
+    summary: 'Every weapon with the EXPLOSIVE chip hits harder: rockets, missiles, grenades, mines, mortar waves, Siege Battery shells and drill blasts.',
     apply(player) {
       addTagDamage(player, 'explosive');
     }
@@ -384,15 +426,19 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'electric');
     },
-    summary: 'ELECTRIC weapons hit harder: Tesla arcs, Storm Protocol chains and Shock Field discharges.',
+    summary: 'Every weapon with the ELECTRIC chip hits harder: Tesla arcs (Storm Protocol and EMP arcs too) and Shock Field discharges.',
     apply(player) {
       addTagDamage(player, 'electric');
     }
   },
   {
+    // The global AREA card (v0.46: it was an AREA specialist): every blast, cloud, cone, field and pull on
+    // every weapon grows, so it sits with the GLOBAL CARDS. Keeps its id; weighted like the other global cards.
     id: 'tag_area',
     name: 'Field Amplifier',
-    category: 'SPECIALIST',
+    category: 'UTILITY',
+    globalCard: 'area',
+    get weight() { return TUNING.globalCardWeight ?? 1; },
     tags: ['area'],
     maxLevel: 5,
     headline: 'areaSize',
@@ -400,7 +446,7 @@ export const UPGRADE_POOL = [
       const w = player.weapons;
       return hasTag(player, 'area') || w.dashNova >= 1 || w.tectonicBore >= 1;
     },
-    summary: 'AREA weapons reach further: rocket, missile, grenade and mine blasts, singularity pull and collapse, dash nova and drill blasts.',
+    summary: 'Every blast, cloud, cone, field and pull grows, on every weapon. Only area size.',
     apply(player) {
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }
@@ -439,10 +485,10 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
     headline: 'helixBolts',
-    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
+    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side. The Autocannon fires faster too.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
-      player.stats.fireRate *= 1.15;
+      player.stats.fireRate *= PULSAR_FIRE_RATE;
     }
   },
   {
@@ -597,6 +643,26 @@ export function cardWeight(u, luck = 1, player = null) {
   }
 }
 
+// HAND COMPOSITION: every equipped weapon brings its own 4-7 cards, so on raw weights the weapon cards' share
+// of a level-up hand followed the loadout (37% of offers with 1 weapon, 68% with 6: tools/hand-composition.mjs)
+// and global cards faded out just when builds should broaden. Level-up hands rescale the weapon cards (stat and
+// element cards) as one group so they hold TUNING.handWeaponShare of the total weight whatever you carry;
+// inside each group the usual weights still decide. Supply caches keep the raw weights.
+export const isWeaponCard = (u) => {
+  const kind = upgradeKind(u);
+  return kind === 'weapon' || kind === 'element';
+};
+export function handWeights(player, pool, luck = player.stats.luck || 1.0, { cache = false } = {}) {
+  const weights = pool.map((u) => cardWeight(u, luck, player));
+  const share = TUNING.handWeaponShare ?? 0.55;
+  if (cache || !(share > 0 && share < 1)) return weights;
+  let weapon = 0, other = 0;
+  pool.forEach((u, i) => { if (isWeaponCard(u)) weapon += weights[i]; else other += weights[i]; });
+  if (!(weapon > 0) || !(other > 0)) return weights; // only one group left: nothing to balance
+  const scale = (share / (1 - share)) * (other / weapon);
+  return pool.map((u, i) => (isWeaponCard(u) ? weights[i] * scale : weights[i]));
+}
+
 // Cumulative roll thresholds (roll < pentaChance → +5, < quadChance → +4, ...), all scaled by Luck.
 export function levelJumpChances(luck) {
   const pentaChance = Math.min(0.1, (TUNING.pentaLevelChance ?? 0.0025) * luck);
@@ -625,6 +691,8 @@ export function levelRoom(player, u) {
   let own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
   // A count card shares its cap with the REPLICATOR ARRAY ranks its weapon already gets.
   const sc = STAT_CARD_BY_ID[u.id];
+  // A capped UTILITY stat shares its cap with the ACROSS THE BOARD ranks the weapon already gets.
+  if (sc?.boostCapped) own -= boostRanks(player, sc.weapon);
   if (sc && COUNT_STATS[sc.weapon]?.card === u.id) own -= replicatorBonus(sc.weapon, player.upgradeLevels[u.id], replicatorRanks(player));
   const weapon = levelCardWeapon(u.id);
   if (!weapon && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
@@ -678,7 +746,9 @@ export function eligibleUpgrades(player, { cache = false } = {}) {
 // excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 4 slots, O(n^slots).
 export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   const luck = player.stats.luck || 1.0;
-  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck, player) }));
+  const cards = eligibleUpgrades(player).filter((u) => u.id !== excludeId);
+  const weights = handWeights(player, cards, luck);
+  const pool = cards.map((u, i) => ({ id: u.id, w: weights[i] }));
   const odds = new Map(pool.map((c) => [c.id, 0]));
   const k = Math.min(Math.max(0, Math.floor(slots)), 4, pool.length);
   const total = pool.reduce((a, c) => a + c.w, 0);
@@ -707,8 +777,10 @@ export function rollUpgrades(player, count = 3, { cache = false } = {}) {
   const luck = player.stats.luck || 1.0;
 
   // Weighted sample without replacement: one draw per candidate, key = r^(1/weight), highest keys win.
-  const shuffled = eligibleUpgrades(player, { cache })
-    .map((upgrade) => ({ upgrade, score: Math.pow(Math.random(), 1 / cardWeight(upgrade, luck, player)) }))
+  const pool = eligibleUpgrades(player, { cache });
+  const weights = handWeights(player, pool, luck, { cache });
+  const shuffled = pool
+    .map((upgrade, i) => ({ upgrade, score: Math.pow(Math.random(), 1 / weights[i]) }))
     .sort((a, b) => b.score - a.score)
     .map(({ upgrade }) => upgrade);
 

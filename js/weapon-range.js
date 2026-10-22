@@ -63,7 +63,8 @@ export const RANGE_MOD_GROUPS = [
   // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.
   { id: 'status', label: 'STATUS', ids: ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'fire_damage', 'frost_damage', 'corrode_damage', 'shock_damage'] },
   { id: 'synergies', label: 'SYNERGIES', ids: ['evo_pulsar', 'evo_tempest', 'evo_siege', 'evo_emp', 'evo_supercrit'] },
-  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] }
+  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] },
+  { id: 'globals', label: 'GLOBAL', ids: ['tempo_core', 'cooldown_matrix', 'persistence_field', 'velocity_coils', 'replicator_array'] }
 ];
 export const RANGE_MOD_IDS = RANGE_MOD_GROUPS.flatMap((g) => g.ids);
 

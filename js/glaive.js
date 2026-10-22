@@ -11,7 +11,7 @@
 // Simulated only from Game.update (pause, hit-stop and slow-mo freeze it); every number comes from
 // weapon-scaling.js so card previews stay exact. Damage goes through Game.hitEnemy (source 'glaive',
 // stat 'glaive_recall' for the way home). Discs live in a fixed pool; a full pool skips the extra discs.
-import { WEAPON_SCALING as W, weaponDamage } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import * as BTX from './bt-extras.js'; // pool Breakthroughs: Shatter Edge, Arc Discs
 import { shieldBlocks } from './archetypes.js';
@@ -116,7 +116,7 @@ export class GlaiveDiscs {
     const n = W.glaiveCount(b);
     const picks = this.pickTargets(game, p, n);
     if (!picks.length) return false;
-    const speed = W.glaiveSpeed(b);
+    const speed = W.glaiveSpeed(b) * projectileSpeedMult(p); // Velocity Coils
     for (let i = 0; i < n; i++) {
       const d = this.spawn();
       if (!d) break;

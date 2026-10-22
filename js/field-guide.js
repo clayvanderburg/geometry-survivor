@@ -5,6 +5,7 @@
 // Hostile entry ids are enemy `type` strings (bosses included), plus 'lieutenant' (any elite). Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING, DEFAULT_TUNING } from './config.js';
+import { EVOLUTION_RECIPES } from './evolution-recipes.js';
 import { EnemyManager, contactDamageAt, waveScaleAt } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
@@ -20,7 +21,7 @@ import { BOSS_SCHEDULE, BOSS_EVERY, MAJOR_BOSS_EVERY, CAMPAIGN_WAVES, unlockWave
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
-import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS } from './weapon-levels.js';
+import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS, BT_BOOST_DPS, BT_BOOST_RANKS, WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
@@ -438,16 +439,16 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'weaponlevels', icon: '⚛', title: 'WEAPON LEVELS & BREAKTHROUGHS',
     body: () => [
-      'Every weapon, Autocannon included, goes from LV 1 to LV 18. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
+      `Every weapon, Autocannon included, goes from LV 1 to LV ${WEAPON_MAX_LEVEL}. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that (Orbit Blade Reach also raises blade damage to match the longer lap; Vortex Pull also widens the collapse). Each card also adds a level.`,
       'Damage, fire rate and count cards add damage output. Size, radius, reach and pull cards add none: they make the weapon easier to land, so a weapon built purely for damage hits as hard as any other weapon built the same way.',
-      'At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+18% damage, and +1 to every size, reach and range stat of that weapon). A card that jumps past a milestone still triggers it.',
-      'EVOLUTIONS are semi-rare one-shot synergy cards that need two weapons (or a weapon and a passive). Every evolution names the weapons it upgrades.'
+      `At LV ${BREAKTHROUGH_LEVELS.join(', ').replace(/, (\d+)$/, ' and $1')} the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+${Math.round((BT_BOOST_DPS - 1) * 100)}% damage, and +${BT_BOOST_RANKS} rank in every UTILITY stat of that weapon: size, reach, range, pierce...). A card that jumps past a milestone still triggers it.`,
+      'EVOLUTIONS are semi-rare one-shot synergy cards. Most need two weapons; the rest need one card at LV 2 (Supercritical also needs a weapon with an element). Luck makes them turn up more often. Every evolution names what it upgrades, and the Field Guide lists its recipe.'
     ]
   },
   {
     id: 'rarity', icon: '★', title: 'UPGRADE RARITY = LEVEL JUMP',
     body: () => [
-      'Each level-up card rolls how many levels it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. EVOLUTION cards are one-shot synergies with their own magenta tier.',
+      'Each level-up card rolls how many steps it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. Weapon cards (and passives) jump in LEVELS; every other card in RANKS of its own. EVOLUTION cards are one-shot synergies with their own magenta tier. Replicator Array is the one exception: it always takes a single rank, but it is rare to find, so it always shows RARE and says so on the card.',
       `Odds at base luck: ${jumpOdds()}. Luck multiplies every chance; a jump never passes the level cap. Every card shows exact before → after numbers.`
     ],
     rarity: true
@@ -478,8 +479,8 @@ export const MECHANIC_ENTRIES = [
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
-      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures shatter any rock they cross (broken rocks count as mined; bedrock never cracks).`,
-      'Field Amplifier makes every AREA weapon reach further.'
+      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures crack any rock they cross (broken rocks count as mined; bedrock never cracks).`,
+      'Field Amplifier (a GLOBAL card) grows every blast, cloud, cone and field on every weapon.'
     ]
   },
   {
@@ -498,15 +499,15 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, glaive discs orange, nanite swarm pale lime, drill driver yellow, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, cryo sprayer ice blue, acid sprayer acid green, shock field pale cyan, rail lance lilac, glaive discs orange, nanite swarm pale lime, drill driver yellow, graviton mortar coral, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
   {
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
-      'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
-      `The ${WEAPON_BY_ID.harpoon.name} is the one weapon that mines: it fires spinning drill bits that bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
+      `Only your front drills mine. Weapons and bombs never break rock (except the ${WEAPON_BY_ID.harpoon.name}, and a ${WEAPON_BY_ID.quake.name} with Tidal Shear or Spacetime Fractures), so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.`,
+      `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it fires spinning drill bits that bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
       'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
@@ -541,22 +542,13 @@ export const MECHANIC_ENTRIES = [
 
 // --- Weapons: a thin adapter over UPGRADE_POOL / WEAPON_TAGS -------------------------------------
 // Categories are taken from the pool in order, so new cards and categories show up with no edits.
-// Recipes are optional hints for evolutions (unknown ids are simply skipped).
+// Evolutions carry their recipe id; field-guide-ui.js renders it from js/evolution-recipes.js.
 // The crab's starting weapons, straight from the loadout registry.
 export const STARTING_KIT = STARTING_WEAPONS.map((id) => ({
   key: id,
   name: WEAPON_BY_ID[id].name.toUpperCase(),
   text: WEAPON_BY_ID[id].summary
 }));
-
-const EVOLUTION_RECIPES = {
-  evo_tectonic: 'Rotary Claw Overclock LV 2',
-  evo_pulsar: 'Prism Split LV 2 or Hyper-Capacitor LV 2',
-  evo_tempest: 'Swarm Micro-Missiles + Tesla Arc Emitter',
-  evo_siege: 'Proximity Mines + Sentry Turret',
-  evo_emp: 'Plasma Grenades + Tesla Arc Emitter',
-  evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any weapon with an element'
-};
 
 const tagChips = (tags = []) => tags.filter(t => TAG_INFO[t]).map(t => ({ id: t, label: TAG_INFO[t].label, color: TAG_INFO[t].color }));
 
@@ -577,7 +569,7 @@ export function weaponGuide(levels = null, pool = UPGRADE_POOL) {
       maxLevel: u.maxLevel,
       evolution: !!u.isSynergy,
       weapon: !!WEAPON_BY_LEVEL_ID[u.id], // a slot weapon's own card (WEAPONS tab) vs an upgrade (UPGRADES tab)
-      recipe: EVOLUTION_RECIPES[u.id] || null,
+      recipe: EVOLUTION_RECIPES[u.id] ? u.id : null,
       tags: tagChips(u.tags),
       owned: levels ? (levels[u.id] || 0) : 0
     });

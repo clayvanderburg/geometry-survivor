@@ -9,8 +9,7 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
-import { applyBossHazards } from './boss-hazards.js';
-import { playBossCue } from './boss-sfx-major.js';
+import { playBossCues } from './boss-sfx-major.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
 import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
@@ -42,7 +41,8 @@ import {
   MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE, MOVE_SPEED_STEP } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement,
+  dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, rdLine, RD_LINES, drawBreakthroughOptions, btOption } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
@@ -58,7 +58,8 @@ import {
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, skipReward, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { readyEvolutions, evolutionName } from './evolution-recipes.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -176,6 +177,9 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
 const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges pulse red
+// Supernova bomb pickups (v0.46: the spare bomb left the Geom Attractor card): a rare drop, scaled by Luck.
+// Lieutenants drop one most often; void wells and hulks now and then. Bosses still add one straight away.
+export const BOMB_DROP = Object.freeze({ lieutenant: 0.35, blackhole: 0.04, hulk: 0.02, max: 9 });
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
@@ -993,6 +997,10 @@ export class Game {
     });
     document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
+    // Like the cards, a tap that lands as the hand appears (still firing / steering) doesn't skip it.
+    document.getElementById('btn-skip-hand')?.addEventListener('click', () => {
+      if (performance.now() - (this.choicesShownAt || 0) >= CHOICE_CLICK_GUARD_MS) this.skipHand();
+    });
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
     }
@@ -2084,7 +2092,7 @@ export class Game {
     // with the invulnerability to match.
     const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
     p.dashTimer = W.dashDuration * reach;
-    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
+    p.dashCooldown = dashCooldownFor(p, TUNING.dashCooldownBase ?? 1.5);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, W.dashInvuln + W.dashDuration * (reach - 1));
 
@@ -2165,6 +2173,7 @@ export class Game {
     this.enemyManager.enemyBullets?.clear();
 
     const enemies = this.enemyManager.enemies;
+    const kills0 = this.kills;
     for (const e of [...enemies].reverse()) {
       if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
@@ -2182,6 +2191,7 @@ export class Game {
       }
     }
 
+    this.runStats?.bomb(this.kills - kills0);
     for (let i = 0; i < this.geoms.length; i++) {
       this.geoms[i].magnetized = true;
     }
@@ -2450,6 +2460,13 @@ export class Game {
       });
     }
 
+    // A Supernova bomb pickup (BOMB_DROP), never while the bomb bay is full.
+    const bombChance = (e.isLieutenant ? BOMB_DROP.lieutenant : e.type === 'blackhole' ? BOMB_DROP.blackhole : e.type === 'hulk' ? BOMB_DROP.hulk : 0) * luck;
+    if (!bossPay && bombChance > 0 && this.player.bombs < BOMB_DROP.max && Math.random() < bombChance) {
+      const ba = Math.random() * Math.PI * 2;
+      this.geoms.push({ isBomb: true, x: e.x, y: e.y, vx: Math.cos(ba) * 3, vy: Math.sin(ba) * 3, xp: 0, rotation: 0, hue: 48, magnetized: fromBomb });
+    }
+
     const maxWaveCores = Math.ceil((TUNING.maxWaveCores ?? 3) * this.player.stats.coreDropMult);
     if (bossPay || this.coresDroppedThisWave < maxWaveCores) {
       const coreChance = (
@@ -2604,7 +2621,7 @@ export class Game {
     this.enemyBulletHit ||= (b) => {
       if (this.player.invuln > 0 || this.player.hp <= 0 || this.range?.active) return false; // range: orbs pass through
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
-      this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
+      this.damagePlayer(this.enemyBulletDamage(b), b.shake ?? 10, b.from);
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
@@ -3436,6 +3453,8 @@ export class Game {
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster bolts, same reach
+    const speed = p.stats.bulletSpeed * vel;
     for (const stream of prismStreams(blasterStreams(p, b))) {
       const a = p.angle + stream.angle;
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
@@ -3444,13 +3463,13 @@ export class Game {
       this.bullets.push(BTX.shapeBlasterBolt(this, b, {
         x: noseX,
         y: noseY,
-        vx: Math.cos(a) * p.stats.bulletSpeed,
-        vy: Math.sin(a) * p.stats.bulletSpeed,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
         damage,
         pierce,
         hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
         radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
-        life: 1.25,
+        life: 1.25 / vel,
         width: AUTOCANNON_DRAW_WIDTH,
         ...flak,
         ricochet: b.t8 ? 1 : 0,
@@ -3465,14 +3484,14 @@ export class Game {
         this.bullets.push({
           x: p.x,
           y: p.y,
-          vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
-          vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
+          vx: Math.cos(ha) * (speed * 0.85),
+          vy: Math.sin(ha) * (speed * 0.85),
           damage: weaponDamage(p, 'helix', b),
           pierce,
           hue: 305, // evolution magenta: reads apart from cyan Autocannon shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
-          life: 1.3
+          life: 1.3 / vel
         });
       }
     }
@@ -3490,6 +3509,7 @@ export class Game {
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const heading = p.hullAngle ?? p.drillAngle ?? p.angle; // hull heading: where the wing pods are
     const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
@@ -3518,13 +3538,13 @@ export class Game {
       this.bullets.push(BTX.shapeRocket(b, {
         x: wx,
         y: wy,
-        vx: fx * W.wingRocketSpeed,
-        vy: fy * W.wingRocketSpeed,
+        vx: fx * W.wingRocketSpeed * vel,
+        vy: fy * W.wingRocketSpeed * vel,
         damage,
         pierce: 1,
         hue: 354,
         radius: 4.5,
-        life: W.wingRocketLife,
+        life: W.wingRocketLife / vel,
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
@@ -3545,6 +3565,7 @@ export class Game {
   fireSwarmMissiles(b = weaponBuild(this.player, 'missiles'), { echo = false } = {}) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'missiles', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const salvo = W.missileSalvo(b);
     const damage = weaponDamage(p, 'missile', b) * (echo ? W.echoShare : 1);
     const blastRadius = missileBlastRadius(p, b);
@@ -3592,12 +3613,12 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: W.missileSpeed * (nuke ? 0.8 : 1),
+        speed: W.missileSpeed * vel * (nuke ? 0.8 : 1),
         damage: each,
         blastRadius: radius,
         hue: nuke ? 30 : hue,
         trail: [],
-        life: nuke ? W.missileLife * 1.25 : W.missileLife,
+        life: (nuke ? W.missileLife * 1.25 : W.missileLife) / vel,
         source: 'missile',
         nuke,
         cluster,
@@ -4209,6 +4230,7 @@ export class Game {
     this.lockNote = '';
     this.banishMode = false;
     this.banishArmed = -1;
+    this.skipArmed = false;
     // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
     this.handDrought = this.player.newWeaponDrought || 0;
     const carried = this.carriedLock;
@@ -4288,7 +4310,8 @@ export class Game {
   }
 
   // Level-up modal keys: [1]-[4] pick, Shift+[1]-[4] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels).
+  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels),
+  // [K] skips the hand for gold.
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
     if (this.slotTipOpen) {
@@ -4316,16 +4339,23 @@ export class Game {
       return true;
     }
     if (code === 'KeyR') return this.rerollHand();
+    if (code === 'KeyK') return this.skipHand();
     return false;
   }
 
   // Level-up modal controller extras (A still picks the focused card): X rerolls, Y locks or unlocks
-  // the focused card. Neither button does anything else in this modal.
+  // the focused card, RB twice banishes it, LB twice skips the hand (LB is also dash, so one press only
+  // arms it; any other button disarms).
   handleUpgradePad(gp) {
     if (this.state !== 'UPGRADE' || !gp) return false;
     if (this.slotTipOpen) {
       if ([PAD.A, PAD.B, PAD.X, PAD.Y, PAD.START].some((b) => gp.pressed(b))) this.closeSlotTip();
       return true; // nothing under the tip can be picked while it is open
+    }
+    if (gp.pressed(PAD.LB)) return this.skipHand(false);
+    if (this.skipArmed && [PAD.A, PAD.B, PAD.X, PAD.Y, PAD.RB].some((b) => gp.pressed(b))) {
+      this.skipArmed = false;
+      this.renderHandControls();
     }
     if (gp.pressed(PAD.X)) return this.rerollHand();
     if (gp.pressed(PAD.Y)) {
@@ -4371,6 +4401,50 @@ export class Game {
 
   canEditHand() {
     return this.state === 'UPGRADE' && this.handPhase === 'hand' && this.currentChoices.length > 0;
+  }
+
+  // SKIP: take no card and bank skipReward() gold (js/gold.js). A locked card carries into the next hand,
+  // as if another card had been picked. `confirmed` false (controller LB) only arms it the first time.
+  skipHand(confirmed = true) {
+    if (!this.canEditHand() || this.slotTipOpen) return false;
+    if (!confirmed && !this.skipArmed) {
+      this.skipArmed = true;
+      this.renderHandControls();
+      this.sound?.playUiSelect?.();
+      return true;
+    }
+    this.skipArmed = false;
+    if (this.handLock) this.carriedLock = { card: this.handLock.card, slot: this.handLock.slot };
+    this.handLock = null;
+    this.runStats?.skip?.();
+    const p = this.player;
+    const reward = skipReward();
+    this.gold += reward;
+    this.goldEarned += reward;
+    this.flashGold('gain');
+    // The hand is flicked away and the gold rings in: a warm ring, a spray of coin glints, a coin chord.
+    this.particles.spawnFloatText(p.x, p.y - 24, reward ? `SKIPPED // +${reward} ${GOLD_ICON} GOLD` : 'SKIPPED', '#ffcc00', 15);
+    burst(this, 'pick', p.x, p.y, { hue: 48, scale: 0.9 });
+    for (let i = 0; i < Math.min(6, Math.max(2, Math.round(reward / 2))); i++) {
+      const a = (i / 6) * Math.PI * 2;
+      burst(this, 'gold', p.x + Math.cos(a) * 26, p.y + Math.sin(a) * 26, { scale: 0.8 });
+    }
+    playPreset(this.sound, 'skipCash');
+    this.sound?.playGoldPickup?.();
+    this.closeUpgradeModal();
+    return true;
+  }
+
+  // EVOLUTION READY: an evolution whose recipe the last pick completed can now turn up in level-ups.
+  announceEvolutions(readyBefore) {
+    const p = this.player;
+    const fresh = readyEvolutions(p).filter((id) => !readyBefore.includes(id));
+    fresh.forEach((id, i) => {
+      this.particles.spawnFloatText(p.x, p.y - 46 - i * 18, `⚗ EVOLUTION READY: ${evolutionName(id).toUpperCase()}`, RARITY.evolution.color, 15);
+    });
+    if (!fresh.length) return;
+    burst(this, 'pick', p.x, p.y, { hue: hueOf(RARITY.evolution.color, 315), scale: 1.2 });
+    playPreset(this.sound, 'shimmer', { pitch: semis(3) });
   }
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
@@ -4484,6 +4558,17 @@ export class Game {
       reroll.title = inPick && !open ? 'No other weapons left to offer'
         : affordable ? `Reroll the ${inPick ? 'weapons on offer' : 'unlocked cards'} for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
     }
+    // SKIP (level-up hands only): no card, a little gold. Controller LB arms it, a second LB skips.
+    const skip = doc?.getElementById('btn-skip-hand');
+    if (skip) {
+      const sr = skipReward();
+      skip.classList?.[inHand ? 'remove' : 'add']('hidden');
+      skip.classList?.[this.skipArmed ? 'add' : 'remove']('armed');
+      skip.innerHTML = this.skipArmed
+        ? `⏭ CONFIRM SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">LB</span>`
+        : `⏭ SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">[K] / LB×2</span>`;
+      skip.title = `Take no card this level-up and bank ${sr} gold${this.handLock ? ' (your locked card comes back next level-up)' : ''}`;
+    }
     const note = doc?.getElementById('hand-lock-note');
     if (note && inPick) {
       note.textContent = this.canRerollWeaponPick() ? `↻ ${cost} ${GOLD_ICON} swaps these for different weapons` : 'Every weapon left is on offer';
@@ -4555,6 +4640,7 @@ export class Game {
     this.closeCardDetail();
     container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
     const shownAt = performance.now();
+    this.choicesShownAt = shownAt;
     this.choiceCardEls = [];
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
@@ -4741,6 +4827,7 @@ export class Game {
     const p = this.player;
     this.sound?.playUiConfirm?.();
     this.runStats?.picked(upg);
+    const readyBefore = readyEvolutions(p);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
     if (this.handPhase === 'hand' && this.handLock) {
@@ -4763,6 +4850,7 @@ export class Game {
     }
     if (upg.isWeaponPick) {
       acquireWeapon(p, upg.weaponId);
+      this.announceEvolutions(readyBefore);
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
@@ -4773,6 +4861,7 @@ export class Game {
     }
 
     const jump = this.applyUpgrade(upg);
+    this.announceEvolutions(readyBefore);
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
     const color = RARITY[rarityFor(upg, jump)].color;
     this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
@@ -5148,7 +5237,7 @@ export class Game {
   // the 3x3 cells around it.
   mergeLooseGeoms() {
     const loose = [];
-    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.magnetized) loose.push(g);
+    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.isBomb && !g.magnetized) loose.push(g);
     let excess = loose.length - MAX_LOOSE_GEOMS;
     if (excess <= 0) return;
     const r = GEOM_MERGE_RADIUS, cells = new Map();
@@ -5599,7 +5688,7 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
-    if (applyBossHazards(this, playBossCue)) return; // boss blasts, lines and rings that hit the ship; boss sound cues
+    playBossCues(this); // the major bosses' queued sound cues (with their shake and hit-stop)
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
@@ -5684,12 +5773,12 @@ export class Game {
     this.mergeLooseGeoms();
     for (let i = this.geoms.length - 1; i >= 0; i--) {
       const g = this.geoms[i];
-      g.rotation += g.isCore ? 0.12 : g.isGold ? 0.05 : 0.08;
+      g.rotation += g.isCore ? 0.12 : g.isGold || g.isBomb ? 0.05 : 0.08;
 
       const dx = p.x - g.x;
       const dy = p.y - g.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const attractR = g.isCore || g.isGold ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
+      const attractR = g.isCore || g.isGold || g.isBomb ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
 
       if (dist < attractR || g.magnetized) {
         g.magnetized = true;
@@ -5724,6 +5813,16 @@ export class Game {
           burst(this, 'gold', g.x, g.y);
           this.addGold(g.gold || 1);
           this.score += Math.round(10 * this.multiplier);
+          this.geoms.splice(i, 1);
+          continue;
+        }
+        if (g.isBomb) {
+          // A spare Supernova: a bright gold bloom, a chime on top of the core pickup, and the HUD count ticks up.
+          this.sound.playGeomPickup(true);
+          this.sound.playGoldPickup?.();
+          burst(this, 'core', g.x, g.y, { hue: 45, scale: 1.3 });
+          p.bombs = Math.min(BOMB_DROP.max, p.bombs + 1);
+          this.particles.spawnFloatText(p.x, p.y - 22, '+1 ✸ SUPERNOVA', '#ffcc00', 15);
           this.geoms.splice(i, 1);
           continue;
         }
@@ -5878,6 +5977,7 @@ export class Game {
     this.fieldGuide ||= new FieldGuideUI({
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
+      getPlayer: () => (this.state === 'PAUSED' ? this.player : null),
       onClose: () => this.onGuideClosed()
     });
     // Opening with unread entries jumps straight to the first one.
@@ -6856,6 +6956,27 @@ export class Game {
         ctx.rotate(Math.PI / 4);
         ctx.strokeStyle = `hsla(290, 100%, 75%, ${alpha})`;
         ctx.strokeRect(-pulseR * 0.55, -pulseR * 0.55, pulseR * 1.1, pulseR * 1.1);
+      } else if (g.isBomb) {
+        // Supernova bomb: an eight-point gold star with a pulsing halo (reads apart from coins and cores).
+        const r = 11 + Math.sin(performance.now() * 0.009 + i) * 1.4;
+        ctx.strokeStyle = `hsla(45, 100%, 62%, ${alpha * 0.5})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `hsla(48, 100%, 60%, ${alpha})`;
+        ctx.shadowColor = '#ffcc00';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        for (let s = 0; s < 16; s++) {
+          const a = (s * Math.PI) / 8;
+          const rr = s % 2 ? r * 0.42 : r;
+          if (s === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else if (g.isGold) {
         // Gold coin: a solid, glowing hexagon with a dark diamond stamped in (XP geoms are hollow outlines).
         const r = 8 + Math.sin(performance.now() * 0.008 + i) * 0.8;
