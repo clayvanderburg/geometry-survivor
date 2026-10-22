@@ -96,7 +96,7 @@ export function weaponsHTML(levels = null) {
 export function upgradesHTML(levels = null) {
   const g = weaponGuide(levels);
   const all = allCards(g).filter(x => !x.u.weapon);
-  const legend = `<section class="guide-section"><h4 class="guide-section-title">TAGS</h4><p class="guide-legend-text">Tag cards (Tungsten Penetrators, Shaped Charges, Overvolt Coils, Field Amplifier) boost every weapon that carries their tag.</p>
+  const legend = `<section class="guide-section"><h4 class="guide-section-title">TAGS</h4><p class="guide-legend-text">Tag cards (Tungsten Penetrators, Shaped Charges, Overvolt Coils) boost every weapon that carries their tag.</p>
     <div class="guide-chips guide-legend">${g.tags.map(chipHTML).join('')}</div></section>`;
   return cardSection('UPGRADE CARDS', all.filter(x => !x.u.evolution)) + cardSection('EVOLUTIONS', all.filter(x => x.u.evolution)) + legend;
 }
