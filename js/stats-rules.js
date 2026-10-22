@@ -9,12 +9,14 @@
 //   gold        { earned, spent, rerolls, locks, banishes, skips }
 //   loadout     [{ id, lv }] at the end of the run
 //   weapons     { group: { dmg, kills, owned?, from?, curve?, tl?: [[t, lv]], lv?: { L: [secs, dmg,
-//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L)] } } }
+//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L), allWeaponDmg?, allWeaponKills?] } } }
+//                 (the last two leave out the non-weapon groups: Supernova, ram, ...; older runs lack them)
 //   sources     { stat id: damage }  (sub-sources such as burn, helix, collapse, storm, siege)
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
 //   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
 //   armory      { upgrade id: rank } Void Armory ranks held during the run (ranks above 0 only)
 //   armorySpent cores spent on those ranks (js/progression.js armorySpent)
+//   bombs       [Supernova bombs used, enemies they killed] (older runs lack it)
 // Runs from older clients carry no armory fields: their Armory tier is 'unknown'.
 import { KNOWN_VERSIONS } from './changelog.js';
 import { normalizeMode } from './modes.js';
@@ -117,12 +119,14 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
         if (!(secs > 0)) continue;
         out.lv[level] = [secs, dec(row[1], L.MAX_DAMAGE, 0), dec(row[2], L.MAX_DAMAGE, 2), dec(row[3], L.MAX_DAMAGE, 0),
           int(row[4], L.MAX_COUNT), int(row[5], L.MAX_COUNT), dec(row[6], 1e9, 2)];
+        if (row.length >= 9) out.lv[level].push(dec(row[7], L.MAX_DAMAGE, 0), int(row[8], L.MAX_COUNT));
         n++;
       }
     }
     run.weapons[id] = out;
   }
   for (const [id, v] of entries(body.sources, L.MAX_SOURCES)) run.sources[id] = dec(v, L.MAX_DAMAGE, 0);
+  if (Array.isArray(body.bombs)) run.bombs = [int(body.bombs[0], 1e5), int(body.bombs[1], L.MAX_COUNT)];
   for (const [id, v] of entries(body.enemies, L.MAX_KINDS)) {
     if (!Array.isArray(v)) continue;
     const killed = int(v[1], L.MAX_COUNT);
