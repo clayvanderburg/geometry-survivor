@@ -9,8 +9,7 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
-import { applyBossHazards } from './boss-hazards.js';
-import { playBossCue } from './boss-sfx-major.js';
+import { playBossCues } from './boss-sfx-major.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
 import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
@@ -2620,7 +2619,7 @@ export class Game {
     this.enemyBulletHit ||= (b) => {
       if (this.player.invuln > 0 || this.player.hp <= 0 || this.range?.active) return false; // range: orbs pass through
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
-      this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
+      this.damagePlayer(this.enemyBulletDamage(b), b.shake ?? 10, b.from);
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
@@ -5687,7 +5686,7 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
-    if (applyBossHazards(this, playBossCue)) return; // boss blasts, lines and rings that hit the ship; boss sound cues
+    playBossCues(this); // the major bosses' queued sound cues (with their shake and hit-stop)
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;

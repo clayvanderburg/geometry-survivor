@@ -696,7 +696,7 @@ test('The Prism: fans beams, then spins spokes and throws orb fans, then pulls a
   const hue0 = p.hue;
   step(m, g.player, 30);
   assert.notEqual(p.hue, hue0, 'it cycles through the spectrum');
-  const lines = () => (m.bossHazards || []).filter(h => h.kind === 'line' && h.from === 'prism');
+  const lines = () => m.bossTelegraphs.active.filter(h => h.kind === 'lane' && h.from === 'prism');
   for (let i = 0; i < 60 * 5 && !lines().length; i++) step(m, g.player, 1);
   assert.equal(lines().length, 3, 'phase I: a fan of three beams');
   assert.ok(p.castT > 0, 'planted while it fans');
@@ -720,9 +720,9 @@ test('The Prism: fans beams, then spins spokes and throws orb fans, then pulls a
   assert.equal(p.phase, 2);
   assert.ok(g.collectGravityWells().includes(p), 'phase III: a gravity well');
   m.enemyBullets.clear();
-  for (let i = 0; i < 60 * 8 && !(m.bossHazards || []).some(h => h.kind === 'blast'); i++) step(m, g.player, 1);
+  for (let i = 0; i < 60 * 8 && !m.bossTelegraphs.active.some(h => h.look === 'reticle'); i++) step(m, g.player, 1);
   assert.equal(p.spokes.length, PRISM.novaSpokes);
-  const nova = m.bossHazards.find(h => h.kind === 'blast');
+  const nova = m.bossTelegraphs.active.find(h => h.look === 'reticle');
   assert.equal(nova.r, PRISM.novaR, 'a nova ring charges round it');
   step(m, g.player, Math.ceil(PRISM.novaFuse * 60) + 2);
   assert.ok(m.enemyBullets.count >= PRISM.novaRing, 'the nova throws a ring of orbs');
