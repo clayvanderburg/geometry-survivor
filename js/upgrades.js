@@ -6,7 +6,7 @@ import {
   WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
 } from './loadout.js';
 import {
-  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
+  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, BT_FLATS, transformById, takenTransforms, transformEligible, btOptionId, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
   levelCardWeapon, weaponElement, elementsOf, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks
 } from './weapon-levels.js';
 import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
@@ -24,7 +24,7 @@ export const RARITY = {
   weapon: { label: 'NEW WEAPON', color: '#ff8a3d' },
   // Breakthrough choices at weapon LV 6 / 12 / 18 (not level rolls either).
   transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
-  boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }
+  boost: { label: '⚛ FLAT BOOST', color: '#ffb347' } // the flats: Across the Board, Overtuned Core
 };
 
 const RARITY_BY_JUMP = ['common', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
@@ -968,14 +968,18 @@ export function markBreakthroughOffered(player, id, level) {
   (all[id] || (all[id] = {}))[level] = true;
 }
 
-// Record a Breakthrough choice ('transform' or 'boost') for a weapon at a milestone. Weapon formulas
-// read it straight from player.breakthroughs, so nothing else needs rebuilding.
-export function applyBreakthrough(player, id, level, kind) {
-  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level) || !['transform', 'boost'].includes(kind)) return false;
+// Record a Breakthrough choice for a weapon at a milestone: a flat ('boost' | 'overtuned'), a transform id
+// from its pool, or 'transform' (that milestone's home transform). Stored as given; a transform already
+// installed can't be taken twice, nor one before what it `requires`. Weapon formulas read it straight from player.breakthroughs,
+// so nothing else needs rebuilding.
+export function applyBreakthrough(player, id, level, option) {
+  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level)) return false;
+  const opt = btOptionId(id, level, option);
   const all = player.breakthroughs || (player.breakthroughs = {});
   const mine = all[id] || (all[id] = {});
-  if (mine[level]) return false;
-  mine[level] = kind;
+  if (mine[level] || !opt) return false;
+  if (!BT_FLATS[opt] && (!transformById(id, opt) || !transformEligible(transformById(id, opt), level, takenTransforms(id, mine)))) return false;
+  mine[level] = option;
   return true;
 }
 

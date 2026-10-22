@@ -119,7 +119,7 @@ test('Game: the Breakthrough pick and choice call Pixie; the radio is off unless
   assert.equal(g.say('pixie', 'hi'), true);
   const main = readFileSync(new URL('js/main.js', root), 'utf8');
   assert.match(main, /openNextBreakthrough\(\) \{[\s\S]*?this\.pixie\?\.offer\(id, name\)/);
-  assert.match(main, /applyBreakthrough\(p, upg\.weaponId, upg\.level, upg\.kind\);\s*this\.pixie\?\.picked\(upg\)/);
+  assert.match(main, /applyBreakthrough\(p, upg\.weaponId, upg\.level, upg\.option\);\s*this\.pixie\?\.picked\(upg\)/);
   assert.match(main, /\.showSplash\(\)\.enableStoryRadio\(\)/);
   const html = readFileSync(new URL('index.html', root), 'utf8');
   for (const id of ['radio-box', 'radio-portrait', 'radio-name', 'radio-text']) assert.match(html, new RegExp(`id="${id}"`));

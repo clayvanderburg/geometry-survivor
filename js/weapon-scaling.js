@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
@@ -27,7 +27,7 @@ import { loadoutDamageMult } from './slot-rewards.js';
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
@@ -83,11 +83,11 @@ export const CLASS_TARGET = Object.freeze({
 const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
-// Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
-export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
+// Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
 // transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make.
-const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, transforms: 0 });
+const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new Set(), transforms: 0 });
 const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
 // LV 1 hit damage of a weapon, solved once from its rank-0 build so LV 1 sits on DPS_TARGET(1).
@@ -244,7 +244,13 @@ export const WEAPON_SCALING = {
   singularityUnits: (b) => (b.t4 ? 1 + W.twinUnitShare : 1) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0)),
   // Damage of one core per cast (grind over its LV 1 lifetime + collapse), in base damage: the LV 1 value
   // times the build's hit multiplier. Grind is per tick, so a Lifetime card grinds longer at the same rate.
-  singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityUnits),
+  // Transforms are rescaled against the core as it really grinds (Lifetime ranks lengthen the grind but not
+  // the aftershock or the minis), so each one adds exactly BT_TRANSFORM_DPS at any Lifetime.
+  singularityTfUnits: (b) => {
+    const core = (1 - SINGULARITY_COLLAPSE_SHARE) * W.singularityLife(b) / lv1('singularityLife', 'singularity', W.singularityLife) + SINGULARITY_COLLAPSE_SHARE;
+    return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0));
+  },
+  singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityTfUnits),
   singularityDamageMult: (b) => W.singularityCastDamage(b) * (1 - SINGULARITY_COLLAPSE_SHARE) / (lv1('singularityLife', 'singularity', W.singularityLife) * 60),
   singularityCollapseDamageMult: (b) => W.singularityCastDamage(b) * SINGULARITY_COLLAPSE_SHARE,
   aftershockDamageMult: (b) => W.singularityCastDamage(b) * W.aftershockShare,

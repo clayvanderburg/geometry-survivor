@@ -12,7 +12,7 @@ Each weapon's pool holds two kinds of option:
   *home* milestone (today's `TRANSFORMS[id][6|12|18]`); new ones declare theirs.
 - **Flats** (shared by every weapon, no new mechanic; DRG's "clean/balanced" overclocks):
   - **Across the Board**: ×1.18 damage and +1 rank in every UTILITY stat (unchanged).
-  - **Overtuned Core**: ×1.22 damage, nothing else. Pure numbers, worth a transform.
+  - **Overtuned Core**: ×1.20 damage, nothing else. Pure numbers, a little under a transform.
   - Later (content PRs): weapon-specific flats, such as *Damage + Rate* or *Size + Damage*, where a weapon's own
     stats make them meaningful.
 
@@ -25,6 +25,8 @@ Each weapon's pool holds two kinds of option:
 
 Rules:
 - Every hand has at least 1 transform and 1 flat, and never the same option twice.
+- A transform that builds on another one (`requires: [...]`) is never drawn before it, and `notBefore: <milestone>`
+  keeps one at its home tier or later. None of today's 60 needs either.
 - A transform taken earlier in the run never comes back. Flats can be taken again at a later milestone
   (they stack, as Across the Board does today).
 - With 3+ transforms per weapon there is always one left (you take at most 2 before LV 18). If a pool ever runs
@@ -37,12 +39,12 @@ Rules:
 The potential-DPS model already treats every transform the same: each one multiplies the build's budget by
 `BT_TRANSFORM_DPS` (×1.22) and rescales its hit damage to land there (`tfScale` in `js/weapon-scaling.js`).
 So moving a transform to another milestone keeps the model intact. Flats are priced as DRG:S does it, a little
-under or level with a transform:
+under a transform, so the transforms stay the exciting pick (Director, Oct 22):
 
 | Option | Potential DPS | Plus |
 |---|---|---|
 | any transform | ×1.22 (`BT_TRANSFORM_DPS`) | a new mechanic |
-| Overtuned Core | ×1.22 | nothing |
+| Overtuned Core | ×1.20 (`BT_OVERTUNED_DPS`) | nothing |
 | Across the Board | ×1.18 (`BT_BOOST_DPS`) | +1 every UTILITY rank |
 
 `tests/breakthroughs.test.js` pins every option's `dpsGain` to its row. New transforms keep the class rule
