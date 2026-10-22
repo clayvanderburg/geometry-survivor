@@ -570,8 +570,15 @@ export const WEAPON_SCALING = {
   flameConeHalf: (b) => 0.275 + 0.04 * (b?.r?.cone || 0), // radians either side of the nozzle (~32 deg wide at LV 1; 0.55 before v0.42.1, 0.3 before it spun); +0.09 per rank before v0.39.3
   flameBurnRank,
   // The nozzle never aims: it spins round the ship at this many radians per second (one turn every
-  // ~5 s at LV 1), +35% per Spin Rotor rank.
-  flameTurnRate: (b) => 1.2 * (1 + 0.35 * (b?.r?.turn || 0)),
+  // ~5 s at LV 1), +35% per Spin Rotor rank. A swarm trails the ship on one side, so a slow cone spends
+  // most of its turn on empty space: spin, not damage, is what a sprayer's realized DPS rides on (reference
+  // bench). The Flamethrower spins flameTurnTrim faster (its fire burns out between passes; the Cryo and
+  // Acid Sprayers' lingering frost and acid carry them), and the LV 6 burst and the puddles transforms
+  // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
+  flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
+  flameTfTurnRanks: 1,
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 ? W.flameTfTurnRanks : 0),
+  flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Extra Nozzle cards (POWER, like Prism Split): flameNozzles(b) identical streams spaced evenly round
