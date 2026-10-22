@@ -104,6 +104,8 @@ const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
 // Escort Drones flying at once (deployables.js pool size): a front pair and a back row of 3.
 export const DRONE_MAX = 8;
+// Drones at LV 1: the flight lead and one wingman, the front pair (Clay, v0.45: a lone drone made a hard start).
+export const DRONE_START = 2;
 // Drones in the FRONT row for a formation of n (the rest fly in the BACK row). One balanced fill order for
 // every drone, from Wingmen cards and the LV 6 Escort Squadron alike: 1 front centre, then the front pair,
 // the back row up to 3, the front centre (6), then the back row's outer sides (7, 8): 3 in front, 5 behind.
@@ -366,10 +368,10 @@ export const WEAPON_SCALING = {
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   // Formation: up to 3 in front of the nose and 5 behind the hull, DRONE_MAX in all, filled in one balanced
-  // order (droneFrontFor): Wingmen ranks give up to 5 (front pair + back row of 3), Escort Squadron (LV 6)
+  // order (droneFrontFor): LV 1 flies the front pair (DRONE_START), Wingmen ranks fill the back row to 5, Escort Squadron (LV 6)
   // adds 3 more (front centre + the back row's sides). Drones past DRONE_MAX are never wasted: droneSquad
   // counts them and their guns ride on the others.
-  droneSquad: (b) => 1 + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
+  droneSquad: (b) => DRONE_START + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
   droneCount: (b) => Math.min(DRONE_MAX, W.droneSquad(b)),
   droneFront: (b) => droneFrontFor(W.droneCount(b)),
   squadronRow: 3,
