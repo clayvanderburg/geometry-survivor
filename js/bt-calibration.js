@@ -4,9 +4,10 @@
 // which made the pick in a 3-card Breakthrough hand obvious.
 //
 // TF_REALIZED[weapon][transform] = [LV 6, LV 12, LV 18]: how much more a transform realizes than the model
-// credits it with, measured on the reference bench (`node tools/balance/bt-bench.mjs --bench real --seeds 6`: a
-// chasing swarm as dense round the ship as in real runs, targets at the wave a weapon reaches that level). A weapon with that transform
-// hits 1 / value as hard (all its damage, so the transform's mechanics are untouched), and its potential
+// credits it with, measured on the blend bench (`node tools/balance/bt-bench.mjs --seeds 6`): the geometric mean
+// of two chasing swarms as dense round the ship as in real runs, one chasing a bot-like tight loop (`real`),
+// one a human-like wide kite (`kite`), so no option is an outlier under either play style; targets at the
+// wave a weapon reaches that level. A weapon with that transform hits 1 / value as hard (all its damage, so the transform's mechanics are untouched), and its potential
 // DPS counts the value back in, so the potential model still adds exactly BT_TRANSFORM_DPS. Between
 // milestones the value is interpolated on the weapon level (clamped outside LV 6-18). Values stay within
 // BT_REALIZED_RANGE so a transform's single-target (boss) damage never moves more than that.
@@ -31,26 +32,26 @@ export const BT_CONTROL = Object.freeze({
 });
 
 export const TF_REALIZED = {
-  blaster: { flak: [0.62, 1, 1], ricochet: [0.66, 1, 1], arc: [0.6, 0.9, 0.89], slug: [0.9, 0.93, 1], hotbarrel: [0.6, 1, 1] },
-  rockets: { tandem: [1, 1, 1], napalm: [1, 1, 1], mirv: [1, 1, 1], shrapnel: [0.81, 0.94, 0.85], thunder: [0.69, 0.69, 0.81] },
-  missiles: { cluster: [1, 1, 0.67], rain: [0.82, 1, 0.78], nuke: [1, 0.73, 0.68], hunter: [0.72, 1, 0.79], echo: [0.92, 1, 0.62] },
+  blaster: { flak: [0.62, 1, 1], ricochet: [0.66, 0.93, 1], arc: [0.6, 0.9, 0.89], slug: [0.9, 0.93, 1], hotbarrel: [0.6, 1, 1] },
+  rockets: { tandem: [1, 1, 1], napalm: [1, 1, 1], mirv: [1.08, 1.24, 1.17], shrapnel: [0.81, 0.88, 0.85], thunder: [0.69, 0.63, 0.81] },
+  missiles: { cluster: [1, 1, 0.67], rain: [0.82, 0.77, 0.78], nuke: [0.64, 0.73, 0.68], hunter: [1, 1, 0.79], echo: [0.92, 1, 0.6] },
   lightning: { fork: [1.7, 1.7, 1.57], orb: [1.23, 1.7, 1], strike: [1.7, 1.7, 1] },
-  singularity: { twin: [1.7, 1, 1], aftershock: [0.85, 0.6, 0.88], cascade: [0.73, 0.6, 0.75] },
-  orbitals: { counter: [0.87, 1, 0.92], fling: [0.6, 0.75, 0.64], nova: [0.6, 1, 0.6] },
-  mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 1], triad: [1, 1.61, 1] },
-  turret: { capacity: [0.6, 0.6, 0.78], mobile: [0.72, 0.8, 0.75], overload: [0.66, 0.66, 0.94] },
-  drones: { wingman: [1.12, 1.49, 1], homing: [0.89, 1, 1], pods: [1, 1, 0.82] },
-  grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.63, 0.6], gravity: [1, 1.7, 1.45] },
+  singularity: { twin: [1.7, 1, 1], aftershock: [0.85, 0.6, 0.88], cascade: [0.6, 0.6, 0.75] },
+  orbitals: { counter: [1, 1, 1], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6] },
+  mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 0.66], triad: [1.67, 1.61, 1.53] },
+  turret: { capacity: [0.6, 0.6, 0.78], mobile: [0.9, 1, 1], overload: [0.66, 0.66, 0.79] },
+  drones: { wingman: [1.12, 1.49, 1.15], homing: [1, 1, 1], pods: [1, 1, 0.82] },
+  grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.69, 0.6], gravity: [1.58, 1.7, 1.45] },
   gas: { seek: [0.6, 0.6, 0.6], pockets: [0.6, 0.6, 0.6], shroud: [0.6, 0.6, 0.6] },
-  flamethrower: { fireballs: [0.91, 1, 1], napalm: [0.6, 0.64, 0.6], ring: [1.14, 1.7, 1.53] },
-  cryospray: { shatter: [1, 0.91, 0.85], slicks: [0.6, 0.62, 0.6], blizzard: [0.77, 1.4, 1.07] },
-  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.05] },
+  flamethrower: { fireballs: [0.91, 1, 0.68], napalm: [0.6, 0.64, 0.6], ring: [1, 1.7, 1.53] },
+  cryospray: { shatter: [0.62, 0.82, 0.6], slicks: [0.6, 0.62, 0.6], blizzard: [0.71, 1, 0.95] },
+  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.4] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1] },
-  raillance: { magnet: [1, 1, 1], wake: [1, 1, 1], overload: [0.6, 1, 1] },
-  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.92], recall: [1, 1, 1] },
-  nanites: { fission: [0.6, 0.79, 1], goo: [0.6, 1, 1], plague: [0.6, 0.6, 0.83] },
-  harpoon: { slam: [1, 1, 0.78], spin: [0.89, 1, 0.84], chain: [0.86, 1, 0.6] },
-  quake: { skip: [0.79, 0.6, 0.72], fault: [0.92, 0.65, 0.75], epicenter: [1, 0.95, 0.95] }
+  raillance: { magnet: [1, 1, 1], wake: [1, 1.16, 1], overload: [0.6, 1, 1] },
+  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1] },
+  nanites: { fission: [0.6, 0.79, 0.85], goo: [0.6, 0.66, 0.7], plague: [0.6, 0.6, 0.6] },
+  harpoon: { slam: [0.93, 1, 0.78], spin: [0.89, 1, 0.92], chain: [1, 1.26, 0.6] },
+  quake: { skip: [0.79, 0.6, 0.72], fault: [1, 0.65, 0.75], epicenter: [1, 0.95, 0.95] }
 };
 
 // Cases outside their band that damage numbers can't fix (the bench barely moves when their damage does,
@@ -64,7 +65,6 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'orbitals|fling|12': 'damage-insensitive in the bench',
   'orbitals|nova|12': 'damage-insensitive in the bench',
   'orbitals|nova|18': 'damage-insensitive in the bench',
-  'singularity|cascade|6': 'damage-insensitive on the reference bench (at the BT_REALIZED_RANGE floor)',
   'mines|seeker|6': 'damage-insensitive: the mines crawl onto enemies, so more damage per blast changes little',
   'mines|seeker|18': 'damage-insensitive: the mines crawl onto enemies, so more damage per blast changes little',
   'nanites|plague|6': 'plague swarms need kills to spread; at the BT_REALIZED_RANGE floor',
@@ -78,11 +78,16 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'gas|shroud|6': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|12': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|18': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
-  ...Object.fromEntries(['flamethrower|napalm|6', 'cryospray|slicks|18', 'acidspray|pools|6', 'acidspray|pools|18'].map((k) => [k, SPRAYER_REACH])),
-  'flamethrower|ring|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
+  ...Object.fromEntries(['cryospray|slicks|18', 'acidspray|meltdown|18'].map((k) => [k, SPRAYER_REACH])),
+  // Defensive by design (CLASS_TARGET.defensive): under kiting its Across the Board baseline is tiny, so every
+  // ratio swings; its options stay at 1.
+  ...Object.fromEntries(['lash', 'repulse', 'overcharge'].flatMap((t) => [6, 12, 18].map((m) => [`shockfield|${t}|${m}`, 'defensive class: discharges kill everything inside the field, so damage barely matters']))),
+  'grenades|gravity|12': 'the pull packs the crowd into every blast (control); capped at BT_REALIZED_RANGE',
+  'mines|seeker|12': 'damage-insensitive: the mines crawl onto enemies, so more damage per blast changes little',
+  'mines|cluster|18': 'damage-insensitive in the bench',
+  'raillance|overload|6': 'damage-insensitive in the bench (one lance already kills)',
+  'nanites|fission|6': 'daughter swarms need kills to bud: damage-insensitive at LV 6',
   'acidspray|caustic|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
-  'shockfield|repulse|6': 'knockback (control); a discharge kills everything inside: damage-insensitive',
-  'shockfield|repulse|12': 'knockback (control); a discharge kills everything inside: damage-insensitive',
   'raillance|overload|12': 'damage-insensitive in the bench (one lance already kills)',
   'raillance|overload|18': 'damage-insensitive in the bench (one lance already kills)'
 });
