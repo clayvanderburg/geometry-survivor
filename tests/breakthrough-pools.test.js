@@ -59,7 +59,7 @@ test('LV 6 varies: every transform shows up at every milestone, its home milesto
       for (const t of transformPool(id)) assert.ok(seen[t.id] > 0, `${id} LV ${m}: ${t.id} never drawn`);
       for (const f of Object.keys(BT_FLATS)) assert.ok(seen[f] > 0, `${id} LV ${m}: ${f} never drawn`);
       const home = TRANSFORMS[id][m].id;
-      for (const t of transformPool(id)) if (t.id !== home) assert.ok(seen[home] > seen[t.id], `${id} LV ${m}: ${home} should beat ${t.id}`);
+      for (const t of transformPool(id)) if (t.home !== m) assert.ok(seen[home] > seen[t.id], `${id} LV ${m}: ${home} should beat ${t.id}`);
     }
   }
 });

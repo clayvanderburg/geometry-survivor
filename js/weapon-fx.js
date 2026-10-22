@@ -202,6 +202,16 @@ export class WeaponEffects {
         game.sound.playMissileImpact?.(0.6);
         break;
       }
+      case 'charge':
+        // Rolling Thunder: one charge of the string, each a little hotter and louder than the last.
+        fx.spawnFlash?.(e.x, e.y, r * 0.55, e.hue, 0.16);
+        fx.spawnShockwave(e.x, e.y, r, e.hue, 3, 0.28);
+        fx.spawnExplosionSparks(e.x, e.y, 8, e.hue, 2, 10, 1.8);
+        game.grid.applyImpulse(e.x, e.y, 14, r * 1.2, e.hue);
+        game.sound.playMissileImpact?.(0.42 + 0.08 * (e.step || 1));
+        break;
+      case 'silent':
+        break; // a timer only (Echo Salvo): its `after` does the work
       case 'nova':
         fx.spawnFlash?.(e.x, e.y, r * 0.55, e.hue, 0.18);
         fx.spawnShockwave(e.x, e.y, r, e.hue, 3, 0.3);
@@ -225,7 +235,7 @@ export class WeaponEffects {
     }
     // Damaging blasts ripple the grid through damageEnemiesInRadius; harmless ones still ripple it.
     if (e.damage > 0) game.damageEnemiesInRadius(e.x, e.y, r, e.damage, e.hue, e.source, e.knock, e.falloff, e.kind);
-    else game.grid.ripple?.(e.x, e.y, r, e.hue);
+    else if (e.style !== 'silent') game.grid.ripple?.(e.x, e.y, r, e.hue);
     e.after?.(game, e);
     if (e.cluster) {
       const c = e.cluster;

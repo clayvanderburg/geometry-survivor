@@ -519,7 +519,20 @@ export const BT_MIDDLE_TRANSFORM_CHANCE = 0.5;
 // EXTRA_TRANSFORMS[weapon] as { id, name, summary, home } and are read with b.tf.has(id). A transform that
 // builds on another one lists it in `requires` (it is drawn only once those are installed); `notBefore`
 // keeps one out of milestones under it (use the home milestone for "home tier or later").
-export const EXTRA_TRANSFORMS = {};
+export const EXTRA_TRANSFORMS = {
+  blaster: [
+    { id: 'slug', home: 6, name: 'Tracer Slugs', summary: 'Every fourth Autocannon shot is a heavy tracer slug: a big, hot bolt that hits far harder and punches through two more enemies.' },
+    { id: 'hotbarrel', home: 12, name: 'Hot Barrel', summary: 'Keep the Autocannon firing and its barrel heats up, firing faster and faster (up to +60%) as the bolts glow from cyan to white-hot orange.' }
+  ],
+  rockets: [
+    { id: 'shrapnel', home: 6, name: 'Shrapnel Shells', summary: 'Every Rocket Pod blast sprays a ring of jagged shrapnel that tears through the enemies around it.' },
+    { id: 'thunder', home: 18, name: 'Rolling Thunder', summary: 'Rocket Pod rockets drop a string of charges along their flight path that blow one after another behind them.' }
+  ],
+  missiles: [
+    { id: 'hunter', home: 6, name: 'Hunter-Killer', summary: 'Every Swarm Missile blast launches a hunter micro-missile at the nearest enemy beyond it.' },
+    { id: 'echo', home: 12, name: 'Echo Salvo', summary: 'A moment after each Swarm Missile salvo, a phantom echo salvo at half strength follows it onto the same targets.' }
+  ]
+};
 export function transformPool(id) {
   const out = BREAKTHROUGH_LEVELS.map((m, slot) => TRANSFORMS[id]?.[m] && { ...TRANSFORMS[id][m], home: m, slot }).filter(Boolean);
   for (const t of EXTRA_TRANSFORMS[id] || []) out.push({ ...t, slot: -1 });
