@@ -27,7 +27,9 @@ export const BT_BENCHES = Object.freeze({
   real: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']) }),
   dense: Object.freeze({ targets: 50, scenarios: Object.freeze(['pack', 'chase']) }),
   // `kite`: the reference swarm, chasing a ship that loops wide (1200 px) like a human kiting in long runs.
-  kite: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']), orbitRadius: 1200 }),
+  // It never auto-dashes: the bot dashes on almost every cooldown (16-24 a minute), and every dash vents a
+  // giant Corrosive Gas cloud, which read Gas 1.3-2x above real players; without it Gas matches them at LV 1-6.
+  kite: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']), orbitRadius: 1200, dash: false }),
   // `blend`: the geometric mean of `real` and `kite` (the Breakthrough calibration reference), so no option
   // is an outlier under either play style.
   blend: Object.freeze({ of: Object.freeze(['real', 'kite']) })
@@ -91,12 +93,12 @@ export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost'
     const [a, b] = await Promise.all(BT_BENCHES[kind].of.map((k) => benchOption(id, lv, option, { seeds, earlier, seed, bench: k })));
     return Math.sqrt(a * b);
   }
-  const { targets, scenarios, orbitRadius = h.BENCH.orbitRadius } = BT_BENCHES[kind];
+  const { targets, scenarios, orbitRadius = h.BENCH.orbitRadius, dash = true } = BT_BENCHES[kind];
   const bench = { ...h.BENCH, targets, orbitRadius, targetWave: BT_BENCH_WAVE[lv] };
   let sum = 0;
   for (const scenario of scenarios) {
     for (let seedIndex = 0; seedIndex < seeds; seedIndex++) {
-      const r = h.benchUpgrade({ seed, scenario, seedIndex, setup: setupFor(id, lv, bt), bench });
+      const r = h.benchUpgrade({ seed, scenario, seedIndex, setup: setupFor(id, lv, bt), bench, dash });
       for (const [src, v] of Object.entries(r.dps)) if (src !== 'thrusters' && (id === 'blaster' || !['blaster', 'helix'].includes(src))) sum += v;
     }
   }

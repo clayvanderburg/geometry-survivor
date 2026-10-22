@@ -734,7 +734,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
 export const BENCH = { targets: 50, innerRadius: 70, outerRadius: 420, seconds: 15, targetWave: 6, orbitRadius: 260, mix: ['swarmer', 'swarmer', 'pinwheel', 'weaver', 'splitter'] };
 
 // `setup(player)` runs after the install (e.g. a whole build, or dropping the Autocannon to bench a weapon alone).
-export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH, setup = null, asteroids = false }) {
+export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH, setup = null, asteroids = false, dash = true }) {
   const chase = scenario === 'chase';
   return withSeed(`${seed}:bench:${scenario}:${seedIndex}`, { tuning, weapons }, () => {
     const game = createHeadlessGame();
@@ -804,7 +804,7 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
       }
       game.geoms.length = 0;
       game.chests.length = 0;
-      if (p.dashCooldown <= 0) game.triggerDash(); // potential: dash nova on every cooldown
+      if (dash && p.dashCooldown <= 0) game.triggerDash(); // potential: dash nova on every cooldown (`dash: false`: never)
       if (!chase) { p.vx = 0; p.vy = 0; }
       game.update(DT);
       if (game.state !== 'PLAYING') game.state = 'PLAYING';
