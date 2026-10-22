@@ -173,10 +173,16 @@ test('Event Horizon: each breath marks a gravity wave with safe gaps; enraged, a
   step(m, player, Math.ceil(HORIZON.inhaleTime * 60) + 2);
   assert.equal(waves()[0].state, 'live', 'the wave rolls out as it exhales');
   assert.ok(m.enemyBullets.count >= HORIZON.ring - 1, 'orbs ride the wave');
-  for (const b of m.enemyBullets.active) {
-    const a = Math.atan2(b.vy, b.vx);
-    for (const g of waves()[0].gaps) assert.ok(Math.abs(Math.sin((a - g) / 2)) > Math.sin(HORIZON.waveGap / 4), 'no orb in a gap');
-  }
+  // The orbs fly out through the gaps (never along an arc), at least twice the old spacing apart (16 per ring).
+  const angles = m.enemyBullets.active.map((b) => Math.atan2(b.vy, b.vx));
+  const gapOf = (a) => waves()[0].gaps.some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < HORIZON.waveGap / 2);
+  assert.ok(angles.every(gapOf), 'every orb flies through a gap');
+  const sorted = [...angles].sort((p, q) => p - q);
+  const minGap = Math.min(...sorted.map((a, i) => (i ? a - sorted[i - 1] : a + Math.PI * 2 - sorted[sorted.length - 1])));
+  assert.ok(minGap >= 2 * (Math.PI * 2 / 3 - 0.62) / 5 - 1e-9, `orbs at least twice as far apart (${minGap.toFixed(2)} rad; was 5 per arc)`);
+  // The arcs are 30% of their old length (old: 3 arcs of 2π/3 − 0.62 rad) and 6 px thick (was 20).
+  assert.ok(Math.abs((Math.PI * 2 / 3 - HORIZON.waveGap) / (Math.PI * 2 / 3 - 0.62) - 0.3) < 0.02);
+  assert.equal(HORIZON.waveWidth, 6);
   m.bossTelegraphs.clear();
   h.hp = h.maxHp * 0.49;
   step(m, player, 2);
@@ -301,4 +307,34 @@ test('Event Horizon: its pull is a fight to escape, never a trap; touching the s
   for (let t = 0; t < 60 * 3; t++) { p.hp = p.maxHp; g.update(1 / 60); }
   // About one hit per spit window (plus the first), not one every 0.4 s of hit invulnerability (7+ in 3 s).
   assert.ok(hits <= Math.ceil(3 / HORIZON.spitTime) + 2, `a ship left on the core is hit ${hits} times in 3 s`);
+});
+
+test('Event Horizon never pulls or swallows other bosses or lieutenants, only regular hostiles', () => {
+  resetTuning();
+  const m = spawnBoss('event_horizon', 25);
+  const player = { x: 2900, y: 2000, radius: 15 };
+  step(m, player, 4);
+  const h = bossOf(m, 'event_horizon');
+  h.ramT = 99;
+  m.queueSpawn('swarmer', h.x + 150, h.y, 1, { instant: true });
+  m.queueSpawn('wing_commander', h.x - 150, h.y, 1, { instant: true, wave: 15 });
+  m.queueSpawn('bruiser', h.x, h.y + 150, 1, { instant: true, lieutenant: { name: 'TEST', epithet: 'T', mods: [] } });
+  step(m, player, 2);
+  const lt = m.enemies.find((e) => e.isLieutenant);
+  assert.ok(lt, 'a lieutenant is on the field');
+  const boss = m.enemies.find((e) => e.type === 'wing_commander');
+  const fodder = m.enemies.find((e) => e.type === 'swarmer');
+  if (lt) lt.gvx = lt.gvy = 0;
+  boss.gvx = boss.gvy = 0;
+  fodder.gvx = fodder.gvy = 0;
+  const env = { ...m.aiEnv, dt: 1 / 60, player, dirX: 1, dirY: 0, moveX: 1, moveY: 0, dist: 500 };
+  BOSS_DEFS.event_horizon.update(h, m, env);
+  assert.ok(Math.abs(fodder.gvx) + Math.abs(fodder.gvy) > 0, 'regular hostiles are dragged in');
+  assert.equal((boss.gvx || 0) + (boss.gvy || 0), 0, 'another boss is never pulled');
+  if (lt) assert.equal((lt.gvx || 0) + (lt.gvy || 0), 0, 'a lieutenant is never pulled');
+  // Parked on the core, neither is swallowed.
+  boss.x = h.x + 2; boss.y = h.y;
+  if (lt) { lt.x = h.x - 2; lt.y = h.y; }
+  BOSS_DEFS.event_horizon.update(h, m, env);
+  assert.ok(!boss.doomQueued && !(lt && lt.doomQueued));
 });
