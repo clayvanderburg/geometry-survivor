@@ -5127,7 +5127,7 @@ body.touch-mode .cs-skip-key { display: none; }
 .radio-box {
   --radio-w: min(600px, 37.5vw, calc(100vw - 28px)); /* clears the sector radar on the right */
   left: 50%; margin-left: calc(var(--radio-w) / -2); transform: none;
-  bottom: max(calc(max(14px, env(safe-area-inset-bottom)) + 74px), 16vh); /* above the shield bar, inward from the edge */
+  bottom: max(calc(max(14px, env(safe-area-inset-bottom)) + 54px), calc(16vh - 20px)); /* above the shield bar, inward from the edge */
   width: var(--radio-w); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
   box-shadow: 0 0 0 4px var(--speaker), 0 0 22px color-mix(in srgb, var(--speaker) 45%, transparent);
 }
@@ -5140,6 +5140,11 @@ body.touch-mode .cs-skip-key { display: none; }
 .radio-box .dialogue-text { font-size: 20px; }
 .radio-box .dialogue-body { padding-bottom: 4px; gap: 5px; }
 body.cutscene-on .radio-box { display: none; }
+/* In play (bottom middle, near the ship) the box itself is see-through: no panel, frame or glow, so it
+   never hides an incoming enemy. Only her words keep a dark backing so they stay readable. */
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) { background: transparent; border-color: transparent; outline: none; box-shadow: none; }
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) .dialogue-frame { background: rgba(0, 0, 0, 0.35); }
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) .dialogue-text { align-self: flex-start; padding: 4px 9px; border-radius: 6px; background: rgba(4, 6, 16, 0.78); }
 /* Over the level-up / Breakthrough cards: the free bottom-right corner, sliding in from the right. */
 body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; margin-left: 0; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
 body:has(#upgrade-modal:not(.hidden)) .radio-box.dialogue-pop { animation-name: radio-in-right; }
