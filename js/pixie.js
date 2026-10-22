@@ -99,7 +99,13 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'drones:overdrive': ['Overdrive Sync! They practiced in formation. All night.', 'eureka'],
   'drones:kamikaze': ['Kamikaze Wing! Don\'t worry, I build them in bulk.', 'oops'],
   'turret:gift': ['Parting Gift! Turrets that go out with a BANG.', 'smug'],
-  'turret:link': ['Overwatch Link! Turrets holding hands. Zappy hands!', 'eureka']
+  'turret:link': ['Overwatch Link! Turrets holding hands. Zappy hands!', 'eureka'],
+  'glaive:shatter': ['Shatter Edge! The frisbees explode now. You\'re welcome.', 'smug'],
+  'glaive:arcdisc': ['Arc Discs! Spinning AND sparking. Peak engineering.', 'eureka'],
+  'harpoon:whip': ['Whip Tether! I learned it from a space cowboy.', 'smug'],
+  'harpoon:tesla': ['Tesla Hook! The claw bites AND zaps!', 'eureka'],
+  'quake:crush': ['Crush Field! Gravity, but rude about it.', 'smug'],
+  'quake:lens': ['Gravity Lens! Everything wants to be near the boom.', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.

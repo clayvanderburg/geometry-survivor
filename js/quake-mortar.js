@@ -17,6 +17,7 @@
 import { WEAPON_SCALING as W, weaponDamage, quakeRadius } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { isDeployableTarget } from './deployables.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Crush Field, Gravity Lens
 
 const HUE = 32;            // graviton amber-gold; the wave front burns white-hot
 const LENS = 300;          // magenta ghost ring a few px out: the wave lensing the light behind it
@@ -96,6 +97,7 @@ export class QuakeMortar {
       s.x = s.sx + (s.lx - s.sx) * k;
       s.y = s.sy + (s.ly - s.sy) * k;
       s.z = shellHeight(s.h, k);
+      if (s.b && k < 1) BTX.quakeLens(game, s.b, s, dt);
       if (k < 1) continue;
       this.shells[i] = this.shells[this.shellCount - 1];
       this.shells[--this.shellCount] = s;
@@ -202,6 +204,7 @@ export class QuakeMortar {
       if (dist > range) { dx *= range / dist; dy *= range / dist; }
       this.launch(p.x + (dx / dist) * (p.radius || 15) * 0.5, p.y + (dy / dist) * (p.radius || 15) * 0.5, p.x + dx, p.y + dy,
         W.quakeFlight * (0.92 + 0.16 * (k / Math.max(1, n - 1))), damage, radius, rock, b.t4 ? W.skipBounces : 0, 1, 'quake', b.t8);
+      if (b.tf?.size && this.shellCount > 0) this.shells[this.shellCount - 1].b = b; // a main shell carries the pool transforms
     }
     for (let k = 0; k < this.picks.length; k++) this.picks[k] = null;
     this.volleys++;
@@ -229,10 +232,13 @@ export class QuakeMortar {
     s.stat = stat;
     s.fault = fault;
     s.spin = Math.random() * Math.PI * 2;
+    s.b = null;
+    s.lensT = 0;
   }
 
   land(game, s) {
     this.quake(game, s.lx, s.ly, s.radius, s.damage, s.rock, W.quakeKnock * s.scale, s.stat, false);
+    if (s.b) BTX.quakeCrush(game, s.b, s.lx, s.ly, s.radius, s.damage);
     if (s.fault) this.tearFaults(game, s);
     if (s.skips > 0) this.skip(game, s);
   }

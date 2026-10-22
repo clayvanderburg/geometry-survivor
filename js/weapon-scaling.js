@@ -759,11 +759,22 @@ export const WEAPON_SCALING = {
   recallHitShare: 0.5,
   recallSpeed: 1.25,            // x launch speed on the way home
   // Hits one disc lands, in units of one plain hit.
+  // Pool transforms (js/glaive.js via bt-extras.js): Shatter Edge (a disc that fades bursts into shatterShards
+  // shards at shatterShare of a hit, valued at shatterHitShare), Arc Discs (every ricochet arcs arcDiscShare of
+  // the hit back into the enemy it left, valued at arcDiscHitShare: that one may already be dead).
+  shatterShards: 5,
+  shatterShare: 0.35,
+  shatterHitShare: 0.6, // bt-bench: the shards burst where the disc's last ricochet left it, in the pack
+  arcDiscShare: 0.3,
+  arcDiscRange: 320,
+  arcDiscHitShare: 0.35, // bt-bench: the enemy left behind is often already dead
   glaiveDiscUnits: (b) => {
     const n = W.glaiveBounces(b);
     let units = 1;
     for (let k = 1; k <= n; k++) units += (b.t4 ? 2 * W.fissionShare : 1) * (b.t8 ? W.momentumGrowth ** k : 1);
     if (b.t12) units += W.recallHits * W.recallShare * W.recallHitShare * (b.t4 ? 2 : 1);
+    if (b.tf?.has('arcdisc')) units += n * W.arcDiscShare * W.arcDiscHitShare * (b.t4 ? 2 : 1);
+    if (b.tf?.has('shatter')) units += W.shatterShards * W.shatterShare * W.shatterHitShare * (b.t4 ? 2 : 1);
     return units;
   },
   glaiveUnits: (b) => W.glaiveCount(b) * W.glaiveDiscUnits(b) / W.glaiveCooldown(b),
@@ -859,8 +870,19 @@ export const WEAPON_SCALING = {
   chainRange: 220,
   chainTime: 0.04, // share of the cycle each leap takes
   chainHitShare: 0.75, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
+  // Pool transforms (js/claw-harpoon.js via bt-extras.js): Whip Tether (reeling in, the tether hits every enemy
+  // it sweeps across once for whipShare, valued at whipHitShare enemies), Tesla Hook (at the end of every throw
+  // the tip arcs teslaShare of a hit into up to teslaArcs enemies within teslaRange, valued at teslaHitShare).
+  whipShare: 0.35,
+  whipWidth: 12,
+  whipHitShare: 1,
+  teslaArcs: 3,
+  teslaShare: 0.35,
+  teslaRange: 170,
+  teslaHitShare: 0.5,
   harpoonUnits: (b) => 1 + W.harpoonCrushShare + (b.t4 ? W.slamShare * W.slamHitShare : 0)
-    + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0),
+    + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0)
+    + (b.tf?.has('whip') ? W.whipShare * W.whipHitShare : 0) + (b.tf?.has('tesla') ? W.teslaArcs * W.teslaShare * W.teslaHitShare : 0),
   // Damage of one throw hit on the first enemy on its line.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
@@ -911,8 +933,20 @@ export const WEAPON_SCALING = {
   epicenterRadiusMult: 2,
   epicenterKnockMult: 2.2,
   epicenterHitShare: 1.7, // a ship-sized ring lands on the whole crowd closing in: card bench (realized ~ the boost)
-  quakeUnits: (b) => 1 + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
-    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0),
+  // Pool transforms (js/quake-mortar.js via bt-extras.js): Crush Field (a main landing leaves a pool of
+  // crushRadiusFrac of the ring for crushLife s, ticking crushShare of the ring in all, valued at crushHitShare),
+  // Gravity Lens (a charge in flight drags enemies within lensRadiusMult rings of its landing toward it at
+  // lensPull px/s: control, its ring valued at lensHitShare of a plain one for the extra enemies it gathers).
+  crushShare: 0.4,
+  crushRadiusFrac: 0.6,
+  crushLife: 1.5,
+  crushTick: 0.25,
+  crushHitShare: 0.25, // bt-bench: the wave shoves the pack out of its own field
+  lensRadiusMult: 1.5,
+  lensPull: 90,
+  lensHitShare: 1.2,
+  quakeUnits: (b) => ((b.tf?.has('lens') ? W.lensHitShare : 1) + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
+    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0) + (b.tf?.has('crush') ? W.crushShare * W.crushHitShare : 0)),
   // Damage of one quake ring (main impact) to each enemy it passes.
   quakeDamageMult: (b) => lv1Trim('quake') * lv1('quake', 'quake', (b0) => DPS_TARGET(1) * W.quakeCooldown(b0) / (W.quakeShells(b0) * W.quakeUnits(b0))) * hitMult(b) * tfScale(b, W.quakeUnits),
 

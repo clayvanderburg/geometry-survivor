@@ -19,6 +19,7 @@ import { TUNING } from './config.js';
 import { WEAPON_SCALING as W, weaponDamage, areaMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { kickShipRecoil } from './ship-renderer.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Whip Tether, Tesla Hook
 
 export const HARPOON_HUE = 48;       // drill-jaw gold (the crab's drillJawColor)
 const CLAW_COLOR = '#00ffaa';        // the crab's drill colour while it bites (drillActiveColor)
@@ -174,6 +175,7 @@ export class ClawHarpoon {
   // End of the outward flight (full reach or a bite): spin, leap, or reel back.
   endOfThrow(b) {
     this.snap();
+    if (this.phase === 'out' && this.game) BTX.harpoonTesla(this.game, b, this.tipX, this.tipY, this.dmg);
     if (b.t8 && this.phase === 'out') {
       this.setPhase('spin');
       this.spinTick = 0;
@@ -445,6 +447,7 @@ export class ClawHarpoon {
     const s = clawSocket(p, this.socket);
     this.tipX = this.backX + (s.x - this.backX) * ease;
     this.tipY = this.backY + (s.y - this.backY) * ease;
+    BTX.harpoonWhip(game, b, this.throwId, s.x, s.y, this.tipX, this.tipY, this.dmg);
     if (this.phaseT >= (this.reelSoundAt || 0)) {
       this.reelSoundAt = this.phaseT + 0.06;
       if (k < 0.9) game.sound.playHarpoonReel?.();

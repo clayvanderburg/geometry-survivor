@@ -586,6 +586,18 @@ export const EXTRA_TRANSFORMS = {
   turret: [
     { id: 'gift', home: 6, name: 'Parting Gift', summary: 'Sentry Turrets self-destruct when their time runs out, in a big blast that wrecks everything around them.' },
     { id: 'link', home: 12, name: 'Overwatch Link', summary: 'Sentry Turrets near each other link up with a crackling beam that zaps every enemy crossing it.' }
+  ],
+  glaive: [
+    { id: 'shatter', home: 6, name: 'Shatter Edge', summary: 'A spent Glaive Disc shatters into a spray of razor shards that slice through the enemies around it.' },
+    { id: 'arcdisc', home: 12, name: 'Arc Discs', summary: 'Every Glaive Disc ricochet arcs lightning back into the enemy it just left.' }
+  ],
+  harpoon: [
+    { id: 'whip', home: 6, name: 'Whip Tether', summary: 'As the Claw Harpoon reels back in, its tether whips through every enemy it sweeps across.' },
+    { id: 'tesla', home: 12, name: 'Tesla Hook', summary: 'At the end of every throw the Claw Harpoon discharges, arcing lightning into up to 3 enemies near its tip.' }
+  ],
+  quake: [
+    { id: 'crush', home: 6, name: 'Crush Field', summary: 'Every Graviton Mortar burst leaves a crushing gravity field that keeps grinding whatever stands in it.' },
+    { id: 'lens', home: 12, name: 'Gravity Lens', summary: 'While a Graviton Mortar charge is in the air, it drags enemies toward where it will land, so its wave catches more of them.' }
   ]
 };
 export function transformPool(id) {
