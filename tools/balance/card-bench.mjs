@@ -4,6 +4,9 @@
 // averaged over the build). Benches as tools/balance/bt-bench.mjs: `real` (bot-like: a 260 px loop, dashing)
 // and `kite` (human-like: a 1200 px loop, no auto-dash), 25 chasing targets each; `blend` is their mean.
 //
+// Rule: one rank of a global card stays under one weapon card and under Overdrive. Replicator Array is the one
+// deliberate exception (a rare jackpot: +15-27% per rank, 2-4x a weapon card; tests/global-cards.test.js).
+//
 //   node tools/balance/card-bench.mjs --loadout 2|4|6|sprayers [--seeds 4] [--wave 10] [--json out.json]
 const h = await import('./harness.mjs');
 if (process.env.AREA_STEP) h.WEAPON_SCALING.areaStep = Number(process.env.AREA_STEP);
