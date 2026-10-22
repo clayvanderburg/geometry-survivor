@@ -149,7 +149,7 @@ test('gas cards preview their own stat; the pick and Breakthrough cards name the
   assert.ok(potency.rows.some((r) => r.id === 'gasAcid'), 'Status Potency previews the gas acid');
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.gas_damage, levelJump: 5 });
   const t = describeBreakthrough(p, 'gas', 6, 'transform');
-  assert.equal(t.id, 'bt:gas:6:transform');
+  assert.equal(t.id, 'bt:gas:6:seek');
   assert.equal(t.name, 'Seeking Miasma');
   assert.equal(t.category, 'GAS TRAIL');
   assert.match(t.headline, /\+22% DPS/);

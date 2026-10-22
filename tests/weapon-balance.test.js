@@ -30,9 +30,9 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -247,13 +247,16 @@ test('class-based balance: automatic single-target weapons realize ~85% of the A
 });
 
 // Past ~LV 9 the bench's wave-6 targets die to single hits, so late levels are measured against targets
-// that never die (pure per-target DPS). Glaive Discs grow on the Autocannon's own trimmed card steps
-// (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
-test('class-based balance: Glaive Discs stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
+// that never die (pure per-target DPS). Glaive Discs and Escort Drones grow on the Autocannon's own trimmed
+// card steps (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
+test('class-based balance: Glaive Discs and Escort Drones stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
   const tank = { enemyHpMult: 1e6 };
   for (const lv of [12, 18]) {
-    const share = benchDps('glaive', lv, tank) / benchDps('blaster', lv, tank);
-    assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `glaive LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    const ref = benchDps('blaster', lv, tank);
+    for (const id of ['glaive', 'drones']) {
+      const share = benchDps(id, lv, tank) / ref;
+      assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `${id} LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    }
   }
 });
 

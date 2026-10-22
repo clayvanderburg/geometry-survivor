@@ -10,13 +10,13 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  PIXIE_OFFER_LINES, PIXIE_WEAPON_LINES, PIXIE_PICK_LINES, PIXIE_TRANSFORM_LINES, PIXIE_BOOST_LINES, PIXIE_MAX_CHARS,
+  PIXIE_OFFER_LINES, PIXIE_WEAPON_LINES, PIXIE_PICK_LINES, PIXIE_TRANSFORM_LINES, PIXIE_BOOST_LINES, PIXIE_FLAT_LINES, PIXIE_MAX_CHARS,
   LineBag, PixieDirector, fillLine
 } = await import('../js/pixie.js');
 const pixieMod = await import('../js/pixie.js');
 const { RadioBox } = await import('../js/radio.js');
 const { drawPixie, PIXIE_MOODS } = await import('../js/portraits.js');
-const { TRANSFORMS } = await import('../js/weapon-levels.js');
+const { TRANSFORMS, transformPool } = await import('../js/weapon-levels.js');
 const { WEAPONS } = await import('../js/loadout.js');
 const { CAST } = await import('../js/story.js');
 const { Game } = await import('../js/main.js');
@@ -25,7 +25,7 @@ const root = new URL('../', import.meta.url);
 const root_ = root;
 const seeded = (seed = 7) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const weaponNames = WEAPONS.map((w) => w.name);
-const transformNames = Object.values(TRANSFORMS).flatMap((t) => Object.values(t).map((x) => x.name));
+const transformNames = Object.keys(TRANSFORMS).flatMap((w) => transformPool(w).map((x) => x.name));
 
 test('30+ Eureka lines, all short and PG-sized once filled in, each with a real mood', () => {
   assert.ok(PIXIE_OFFER_LINES.length >= 30, `${PIXIE_OFFER_LINES.length} offer lines`);
@@ -34,7 +34,8 @@ test('30+ Eureka lines, all short and PG-sized once filled in, each with a real 
     ...Object.values(PIXIE_WEAPON_LINES).flat(),
     ...Object.values(PIXIE_PICK_LINES),
     ...PIXIE_TRANSFORM_LINES.flatMap(([t, m]) => transformNames.map((n) => [fillLine(t, { name: n }), m])),
-    ...PIXIE_BOOST_LINES
+    ...PIXIE_BOOST_LINES,
+    ...Object.values(PIXIE_FLAT_LINES).flat()
   ];
   for (const [text, mood] of all) {
     assert.ok(text.length <= PIXIE_MAX_CHARS, `too long (${text.length}): ${text}`);
@@ -44,7 +45,7 @@ test('30+ Eureka lines, all short and PG-sized once filled in, each with a real 
   assert.equal(new Set(PIXIE_OFFER_LINES.map(([t]) => t)).size, PIXIE_OFFER_LINES.length, 'no duplicate lines');
   for (const key of Object.keys(PIXIE_PICK_LINES)) {
     const [w, id] = key.split(':');
-    assert.ok(Object.values(TRANSFORMS[w] || {}).some((t) => t.id === id), `${key} is a real Breakthrough`);
+    assert.ok(transformPool(w).some((t) => t.id === id), `${key} is a real Breakthrough`);
   }
   for (const w of Object.keys(PIXIE_WEAPON_LINES)) assert.ok(TRANSFORMS[w], `${w} is a weapon with Breakthroughs`);
   assert.ok(CAST.pixie && CAST.pixie.portrait === 'pixie');
@@ -119,7 +120,7 @@ test('Game: the Breakthrough pick and choice call Pixie; the radio is off unless
   assert.equal(g.say('pixie', 'hi'), true);
   const main = readFileSync(new URL('js/main.js', root), 'utf8');
   assert.match(main, /openNextBreakthrough\(\) \{[\s\S]*?this\.pixie\?\.offer\(id, name\)/);
-  assert.match(main, /applyBreakthrough\(p, upg\.weaponId, upg\.level, upg\.kind\);\s*this\.pixie\?\.picked\(upg\)/);
+  assert.match(main, /applyBreakthrough\(p, upg\.weaponId, upg\.level, upg\.option\);\s*this\.pixie\?\.picked\(upg\)/);
   assert.match(main, /\.showSplash\(\)\.enableStoryRadio\(\)/);
   const html = readFileSync(new URL('index.html', root), 'utf8');
   for (const id of ['radio-box', 'radio-portrait', 'radio-name', 'radio-text']) assert.match(html, new RegExp(`id="${id}"`));
