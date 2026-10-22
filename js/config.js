@@ -227,6 +227,7 @@ export const DEFAULT_TUNING = {
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.7,
   statusCardWeight: 0.7,    // each global STATUS card
+  replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
@@ -291,7 +292,8 @@ export const DEFAULT_TUNING = {
   goldRerollGrowth: 2,
   goldLockCost: 5,
   goldBanishCost: 30,
-  goldWeaponRerollCost: 40
+  goldWeaponRerollCost: 40,
+  goldSkipReward: 10
 };
 
 export const TUNING_SCHEMA = [
@@ -529,6 +531,7 @@ export const TUNING_SCHEMA = [
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'replicatorWeight', label: 'Replicator Array Weight', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
       { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]
@@ -586,7 +589,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
       { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
-      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
+      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
+      { key: 'goldSkipReward', label: 'Gold for Skipping a Level-up', type: 'range', min: 0, max: 100, step: 1, unit: '' }
     ]
   }
 ];

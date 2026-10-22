@@ -213,7 +213,7 @@ function overview() {
       ${tile('Survive 30 min <small>(target)</small>', (d) => pct(d.run.reach30min, 1))}
       ${tile('Wave median', (d) => d.run.wave.median ?? '—')}
       ${tile('Gold earned / spent', (d) => `${num(d.gold.earned)} <small>/ ${num(d.gold.spent)}</small>`)}
-      ${tile('Rerolls · locks · banishes / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)}</small>`)}
+      ${tile('Rerolls · locks · banishes · skips / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)} · ${fix(d.gold.skips ?? 0, 1)}</small>`)}
       ${tile('Armory: none · partial · maxed · not recorded <small>(runs)</small>', (d) => (d.armoryTiers ? d.armoryTiers.map((t) => t.runs).join(' · ') : '—'))}
     </div></section>`;
 }

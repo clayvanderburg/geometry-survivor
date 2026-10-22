@@ -1423,6 +1423,73 @@ html, body {
   display: none;
 }
 
+/* Evolution recipes on cards (js/evolution-recipes.js): "⚗ TOWARD …" with a chip per ingredient. */
+.upg-recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0 6px;
+}
+
+.upg-recipe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border-left: 2px solid #ff4fd8;
+  border-radius: 4px;
+  background: rgba(255, 79, 216, 0.07);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.upg-recipe-head {
+  flex-basis: 100%;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #ff8be6;
+}
+
+/* This card finishes the recipe: the evolution can turn up from the next level-up. */
+.upg-recipe.ready {
+  background: rgba(255, 79, 216, 0.16);
+  animation: recipe-ready 1.1s ease-in-out infinite alternate;
+}
+
+.upg-recipe.ready .upg-recipe-head { color: #fff; text-shadow: 0 0 8px #ff4fd8; }
+
+@keyframes recipe-ready {
+  from { box-shadow: 0 0 0 rgba(255, 79, 216, 0); }
+  to { box-shadow: 0 0 14px rgba(255, 79, 216, 0.45); }
+}
+
+.recipe-chip {
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 99px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recipe-chip.ok { color: #5dff9a; background: rgba(93, 255, 154, 0.08); }
+.recipe-chip.adds { color: #ff8be6; background: rgba(255, 79, 216, 0.18); box-shadow: 0 0 8px rgba(255, 79, 216, 0.5); }
+.recipe-chip.miss { color: var(--text-dim); border-style: dashed; }
+.recipe-chip.plain { color: #ffd6f5; }
+.recipe-plus { color: var(--text-dim); font-weight: 900; }
+
+.guide-recipe .recipe-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+#chest-rewards-grid.compact .upg-recipes { display: none; }
+
 #chest-rewards-grid.compact .upg-stats {
   margin-bottom: 8px;
 }
@@ -3625,6 +3692,30 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
   box-shadow: none;
 }
 
+.neon-btn.hand-skip-btn {
+  padding: 9px 18px;
+  font-size: 14px;
+  border-color: rgba(160, 190, 220, 0.7);
+  color: #dfe9f5;
+  background: rgba(120, 150, 190, 0.12);
+  box-shadow: 0 0 12px rgba(120, 170, 220, 0.2);
+}
+
+.neon-btn.hand-skip-btn.hidden { display: none; }
+
+/* Controller LB armed it: the next LB skips. */
+.neon-btn.hand-skip-btn.armed {
+  border-color: var(--gold);
+  color: #fff6cc;
+  text-shadow: 0 0 10px var(--gold);
+  animation: hand-skip-armed 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes hand-skip-armed {
+  from { box-shadow: 0 0 8px rgba(255, 204, 0, 0.3); transform: scale(1); }
+  to { box-shadow: 0 0 22px rgba(255, 204, 0, 0.75); transform: scale(1.04); }
+}
+
 .hand-key {
   margin-left: 6px;
   font-size: 11px;
@@ -4633,6 +4724,12 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward { margin
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward b { font-size: 18px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-label { font-size: 8.5px; letter-spacing: 1.5px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-text { font-size: 10px; }
+/* Recipes on compact cards: the leading one only, small (MORE shows them all). */
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipes { margin-top: 6px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe:not(:first-child) { display: none; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe { padding: 3px 5px; gap: 3px; font-size: 9px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe-head { font-size: 8px; letter-spacing: 1px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .recipe-chip { padding: 0 5px; }
 body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
 body.touch-mode .slot-tip-title { font-size: 20px; }
 body.touch-mode .slot-tip-line { font-size: 12.5px; margin-bottom: 10px; }
@@ -4869,16 +4966,17 @@ body.touch-mode .splash-tap { display: inline; }
 .start-pick-card { max-width: 1100px; width: min(96vw, 1100px); text-align: center; }
 .start-pick-title { margin: 4px 0 2px; font-size: 26px; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.6); }
 .start-pick-sub { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
+#start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } /* 8 starting weapons: two rows of 4 */
 #start-pick-options .upgrade-option.picked { transform: translateY(-5px); box-shadow: 0 8px 30px var(--rarity-soft), 0 0 0 2px #fff, 0 0 26px var(--rarity-soft); }
 .start-pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .start-pick-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
 body.touch-mode .start-pick-hint { display: none; }
 body.touch-mode .start-pick-title { font-size: 18px; }
 /* Six starting weapons: one row of compact cards on a landscape phone (3 per row when it's narrow). */
-body.touch-mode #start-pick-options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+body.touch-mode #start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 body.touch-mode #start-pick-options .upgrade-option { padding: 8px 7px 7px; }
 body.touch-mode #start-pick-options .upgrade-title { font-size: 14px; margin: 2px 0 4px; }
-@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Card scope (upgrade-cards.js cardScope): utility cards get a dashed inner edge, global cards a double
    one, each with a small pill on the bottom border. Neutral white so rarity colors stay readable; weapon
@@ -5023,23 +5121,27 @@ body.touch-mode .cs-skip-key { display: none; }
 .dialogue-box.dialogue-ready .dialogue-next { opacity: 1; animation: dialogue-next 0.6s steps(2) infinite; }
 @keyframes dialogue-next { 50% { transform: translateY(4px); } }
 
-/* Radio: the same box, small, bottom-left, click-through, above menus (the Breakthrough pick). */
+/* Radio: the same box, small, click-through, above menus (the Breakthrough pick). Centred and raised
+   off the bottom edge so it sits near the ship: you read it without looking away from the fight.
+   Centred with a negative margin (not a transform) so the slide animations keep transform. */
 .radio-box {
-  left: max(14px, env(safe-area-inset-left)); transform: none; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px); /* above the shield bar */
-  width: min(600px, calc(100% - 28px)); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
+  --radio-w: min(600px, 37.5vw, calc(100vw - 28px)); /* clears the sector radar on the right */
+  left: 50%; margin-left: calc(var(--radio-w) / -2); transform: none;
+  bottom: max(calc(max(14px, env(safe-area-inset-bottom)) + 74px), 16vh); /* above the shield bar, inward from the edge */
+  width: var(--radio-w); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
   box-shadow: 0 0 0 4px var(--speaker), 0 0 22px color-mix(in srgb, var(--speaker) 45%, transparent);
 }
 .radio-box.dialogue-pop { animation: radio-in 0.3s cubic-bezier(0.25, 1.6, 0.5, 1); }
 .radio-box.radio-out { animation: radio-out 0.25s ease-in forwards; }
-@keyframes radio-in { from { transform: translateX(-115%); } to { transform: none; } }
-@keyframes radio-out { to { transform: translateX(-115%); opacity: 0; } }
+@keyframes radio-in { from { transform: translateY(40px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes radio-out { to { transform: translateY(30px); opacity: 0; } }
 .radio-box .dialogue-portrait { width: 144px; height: 144px; } /* 2x the 72 px art: pixel-crisp */
 .radio-box .dialogue-name { font-size: 13px; }
 .radio-box .dialogue-text { font-size: 20px; }
 .radio-box .dialogue-body { padding-bottom: 4px; gap: 5px; }
 body.cutscene-on .radio-box { display: none; }
 /* Over the level-up / Breakthrough cards: the free bottom-right corner, sliding in from the right. */
-body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; margin-left: 0; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
 body:has(#upgrade-modal:not(.hidden)) .radio-box.dialogue-pop { animation-name: radio-in-right; }
 body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: radio-out-right; }
 @keyframes radio-in-right { from { transform: translateX(115%); } to { transform: none; } }
@@ -5048,7 +5150,7 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
    beside the cards, never over them. Portraits stay at whole multiples of the 72 px art. */
 #upgrade-choices .radio-dock { display: flex; align-items: center; justify-content: center; min-width: 0; pointer-events: none; }
 #upgrade-choices #radio-box.radio-docked {
-  position: relative; left: auto; right: auto; bottom: auto; transform: none; z-index: auto;
+  position: relative; left: auto; right: auto; bottom: auto; margin-left: 0; transform: none; z-index: auto;
   width: 100%; flex-direction: column; align-items: center; text-align: center; padding: 14px 12px; gap: 12px;
 }
 #upgrade-choices #radio-box.radio-docked .dialogue-portrait { width: 216px; height: 216px; }
@@ -5065,7 +5167,7 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
 }
 
 @media (max-width: 700px), (max-height: 520px) {
-  .radio-box { width: min(400px, calc(100% - 28px)); padding: 5px; gap: 9px; box-shadow: 0 0 0 3px var(--speaker); }
+  .radio-box { --radio-w: min(400px, calc(100vw - 28px)); padding: 5px; gap: 9px; box-shadow: 0 0 0 3px var(--speaker); }
   .radio-box .dialogue-frame { padding: 1px; border-width: 2px; }
   .radio-box .dialogue-portrait { width: 72px; height: 72px; }
   .radio-box .dialogue-name { font-size: 10px; padding: 1px 6px; }

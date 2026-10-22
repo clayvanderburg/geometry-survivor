@@ -14,10 +14,12 @@ import {
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
+import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
 import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
-  weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL
+  weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL,
+  REPLICATOR_ID, COUNT_STATS
 } from './weapon-levels.js';
 
 // What a card affects, shown as a subtle outline + label (css .scope-utility / .scope-global):
@@ -28,7 +30,7 @@ import {
 //   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives.
 export const CARD_SCOPES = ['weapon', 'utility', 'global'];
 const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'move_speed', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
-const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage']);
+const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage', REPLICATOR_ID]);
 export function cardScope(upg) {
   const stat = STAT_CARD_BY_ID[upg.id];
   if (stat) return POWER_STATS.has(stat.stat) ? 'weapon' : 'utility';
@@ -96,7 +98,8 @@ function elementRows(w) {
   return rows;
 }
 
-// headline: 'count' (+N UNIT), 'pct' (+N% UNIT, or N.N× UNIT from triple up), 'points' (+N% UNIT for ratio stats like luck),
+// headline: 'count' (+N UNIT), 'pct' (+N% UNIT, or N.N× UNIT from triple up), 'size' (like 'pct', for
+// distances and sizes: cards never show pixel counts, they break immersion), 'points' (+N% UNIT for ratio stats like luck),
 // or a function(before, after). newText: headline when the row comes online (before is null).
 export const STAT_ROWS = [
   // Build-wide modifiers first, so crit, tag and Reactor Overdrive cards lead with their own row
@@ -133,7 +136,7 @@ export const STAT_ROWS = [
   { id: 'rocketCount', label: 'Rockets / volley', get: (p) => wb(p, 'rockets', W.wingRocketCount), fmt: int, headline: 'count', unit: 'ROCKETS / VOLLEY', newText: (a) => `ROCKET PODS // ${a} / VOLLEY` },
   { id: 'rocketDamage', label: 'Rocket hit', get: (p) => wb(p, 'rockets', (b) => weaponDamage(p, 'rocket', b)), fmt: dec1, headline: 'pct', unit: 'ROCKET DAMAGE' },
   { id: 'rocketCooldown', label: 'Rocket volley interval', get: (p) => wb(p, 'rockets', W.wingRocketCooldown), fmt: secs, headline: 'pct', unit: 'ROCKET VOLLEY INTERVAL' },
-  { id: 'rocketBlast', label: 'Rocket blast radius', get: (p) => wb(p, 'rockets', (b) => wingRocketBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'ROCKET BLAST RADIUS' },
+  { id: 'rocketBlast', label: 'Rocket blast radius', get: (p) => wb(p, 'rockets', (b) => wingRocketBlastRadius(p, b)), fmt: int, headline: 'size', unit: 'ROCKET BLAST RADIUS' },
   { id: 'helixBolts', label: 'Spiral bolts per Autocannon shot', get: (p) => (p.weapons.pulsarHelix ? W.helixArms : null), fmt: int, headline: 'count', unit: 'SPIRAL BOLTS PER AUTOCANNON SHOT', newText: (a) => `+${a} SPIRAL BOLTS` },
   { id: 'helixDamage', label: 'Helix bolt damage', get: (p) => (p.weapons.pulsarHelix ? weaponDamage(p, 'helix') : null), fmt: dec1 },
 
@@ -141,7 +144,7 @@ export const STAT_ROWS = [
   { id: 'missileSalvo', label: 'Missiles / salvo', get: (p) => wb(p, 'missiles', W.missileSalvo), fmt: int, headline: 'count', unit: 'MISSILES / SALVO' },
   { id: 'missileCooldown', label: 'Salvo cooldown', get: (p) => wb(p, 'missiles', W.missileCooldown), fmt: secs, headline: 'pct', unit: 'MISSILE RELOAD' },
   { id: 'missileDamage', label: 'Missile damage', get: (p) => wb(p, 'missiles', (b) => weaponDamage(p, 'missile', b)), fmt: dec1, headline: 'pct', unit: 'MISSILE DAMAGE' },
-  { id: 'missileBlast', label: 'Missile blast radius', get: (p) => wb(p, 'missiles', (b) => missileBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'MISSILE BLAST RADIUS' },
+  { id: 'missileBlast', label: 'Missile blast radius', get: (p) => wb(p, 'missiles', (b) => missileBlastRadius(p, b)), fmt: int, headline: 'size', unit: 'MISSILE BLAST RADIUS' },
   { id: 'stormChain', label: 'Detonation lightning', get: (p) => (p.weapons.stormProtocol ? W.lightningJumps(levelBuild('lightning', W.stormChainLevel)) : null), fmt: (v) => `${v} jumps`, newText: () => 'MISSILES CHAIN LIGHTNING' },
   { id: 'stormDamage', label: 'Detonation arc damage', get: (p) => (p.weapons.stormProtocol ? weaponDamage(p, 'lightning', W.stormChainLevel) : null), fmt: dec1 },
 
@@ -149,21 +152,21 @@ export const STAT_ROWS = [
   { id: 'lightningJumps', label: 'Arc jumps', get: (p) => wb(p, 'lightning', W.lightningJumps), fmt: int, headline: 'count', unit: 'ARC JUMPS' },
   { id: 'lightningChains', label: 'Arc chains / discharge', get: (p) => wb(p, 'lightning', W.lightningChains), fmt: int },
   { id: 'lightningCooldown', label: 'Arc cooldown', get: (p) => wb(p, 'lightning', W.lightningCooldown), fmt: secs, headline: 'pct', unit: 'ARC COOLDOWN' },
-  { id: 'lightningReach', label: 'Arc jump reach', get: (p) => wb(p, 'lightning', W.lightningRange), fmt: int, headline: 'count', unit: 'ARC REACH' },
+  { id: 'lightningReach', label: 'Arc jump reach', get: (p) => wb(p, 'lightning', W.lightningRange), fmt: int, headline: 'size', unit: 'ARC REACH' },
   { id: 'lightningDamage', label: 'Arc damage / jump', get: (p) => wb(p, 'lightning', (b) => weaponDamage(p, 'lightning', b)), fmt: dec1, headline: 'pct', unit: 'ARC DAMAGE' },
 
   // Vortex Singularity
-  { id: 'singularityPull', label: 'Pull radius', get: (p) => wb(p, 'singularity', (b) => singularityPullRadius(p, b)), fmt: int, headline: 'count', unit: 'PULL RADIUS', newText: (a) => `SINGULARITIES // ${a} PULL RADIUS` },
+  { id: 'singularityPull', label: 'Pull radius', get: (p) => wb(p, 'singularity', (b) => singularityPullRadius(p, b)), fmt: int, headline: 'size', unit: 'PULL RADIUS', newText: () => 'SINGULARITIES ONLINE' },
   { id: 'singularityCount', label: 'Singularities / launch', get: (p) => wb(p, 'singularity', W.singularityCount), fmt: int },
   { id: 'singularityCooldown', label: 'Singularity cooldown', get: (p) => wb(p, 'singularity', W.singularityCooldown), fmt: secs, headline: 'pct', unit: 'VORTEX COOLDOWN' },
   { id: 'singularityLife', label: 'Singularity duration', get: (p) => wb(p, 'singularity', W.singularityLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s VORTEX DURATION` },
   { id: 'singularityCollapse', label: 'Collapse damage', get: (p) => wb(p, 'singularity', (b) => weaponDamage(p, 'collapse', b)), fmt: dec1, headline: 'pct', unit: 'IMPLOSION DAMAGE' },
-  { id: 'singularityCore', label: 'Core radius', get: (p) => wb(p, 'singularity', W.singularityCoreRadius), fmt: int, headline: 'count', unit: 'CORE RADIUS' },
+  { id: 'singularityCore', label: 'Core radius', get: (p) => wb(p, 'singularity', W.singularityCoreRadius), fmt: int, headline: 'size', unit: 'CORE RADIUS' },
   { id: 'singularityGrind', label: 'Core grind / tick', get: (p) => wb(p, 'singularity', (b) => weaponDamage(p, 'singularity', b)), fmt: dec1 },
 
   // Aegis Orbiting Blades
   { id: 'orbitalBlades', label: 'Orbit blades', get: (p) => wb(p, 'orbitals', W.orbitalBlades), fmt: int, headline: 'count', unit: 'ORBIT BLADES' },
-  { id: 'orbitalRadius', label: 'Orbit radius', get: (p) => wb(p, 'orbitals', W.orbitalRadius), fmt: int, headline: 'count', unit: 'ORBIT RADIUS' },
+  { id: 'orbitalRadius', label: 'Orbit radius', get: (p) => wb(p, 'orbitals', W.orbitalRadius), fmt: int, headline: 'size', unit: 'ORBIT RADIUS' },
   { id: 'orbitalSpin', label: 'Orbit spin', get: (p) => wb(p, 'orbitals', W.orbitalSpin), fmt: (v) => `${v.toFixed(2)} rad/s`, headline: 'pct', unit: 'ORBIT SPIN' },
   { id: 'orbitalBladeSize', label: 'Blade size', get: (p) => wb(p, 'orbitals', W.orbitalBladeRadius), fmt: int, headline: 'pct', unit: 'BLADE SIZE' },
   { id: 'orbitalDamage', label: 'Blade damage / tick', get: (p) => wb(p, 'orbitals', (b) => weaponDamage(p, 'orbital', b)), fmt: dec1, headline: 'pct', unit: 'BLADE DAMAGE' },
@@ -177,7 +180,7 @@ export const STAT_ROWS = [
   { id: 'mineMaxActive', label: 'Max active mines', get: (p) => wb(p, 'mines', W.mineMaxActive), fmt: int, headline: 'count', unit: 'MAX ACTIVE MINES', newText: (a) => `PROXIMITY MINES // ${a} ACTIVE` },
   { id: 'mineDamage', label: 'Mine blast damage', get: (p) => wb(p, 'mines', (b) => weaponDamage(p, 'mine', b)), fmt: dec1, headline: 'pct', unit: 'MINE DAMAGE' },
   { id: 'mineCooldown', label: 'Mine drop interval', get: (p) => wb(p, 'mines', W.mineCooldown), fmt: secs, headline: 'pct', unit: 'MINE DROP INTERVAL' },
-  { id: 'mineBlastRadius', label: 'Mine blast radius', get: (p) => wb(p, 'mines', (b) => mineBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'MINE BLAST RADIUS' },
+  { id: 'mineBlastRadius', label: 'Mine blast radius', get: (p) => wb(p, 'mines', (b) => mineBlastRadius(p, b)), fmt: int, headline: 'size', unit: 'MINE BLAST RADIUS' },
   { id: 'mineTrigger', label: 'Mine trigger radius', get: (p) => wb(p, 'mines', W.mineTriggerRadius), fmt: int },
   { id: 'mineLifetime', label: 'Mine fuse', get: (p) => wb(p, 'mines', W.mineLifetime), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s MINE FUSE` },
   { id: 'turretCharges', label: 'Turret charges', get: (p) => wb(p, 'turret', W.turretCharges), fmt: int, newText: (a) => `SENTRY TURRET // ${a} CHARGES` },
@@ -190,20 +193,20 @@ export const STAT_ROWS = [
   { id: 'siegeShell', label: 'Turret shell burst', get: (p) => (p.weapons.siegeBattery && ownsWeapon(p, 'turret') ? weaponDamage(p, 'siege') : null), fmt: dec1, newText: (a, row) => `TURRET SHELLS BURST // ${row.fmt(a)} DMG` },
   { id: 'droneCount', label: 'Escort drones', get: (p) => wb(p, 'drones', W.droneCount), fmt: int, headline: (b, a) => `+${a - b} ESCORT DRONE${a - b > 1 ? 'S' : ''}`, newText: (a) => `+${a} ESCORT DRONE${a > 1 ? 'S' : ''}` },
   { id: 'droneFireRate', label: 'Drone fire rate (each)', get: (p) => wb(p, 'drones', W.droneFireRate), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'DRONE FIRE RATE' },
-  { id: 'droneRange', label: 'Drone range', get: (p) => wb(p, 'drones', W.droneRange), fmt: int, headline: 'count', unit: 'DRONE RANGE' },
+  { id: 'droneRange', label: 'Drone range', get: (p) => wb(p, 'drones', W.droneRange), fmt: int, headline: 'size', unit: 'DRONE RANGE' },
   { id: 'droneDamage', label: 'Drone bolt damage', get: (p) => wb(p, 'drones', (b) => weaponDamage(p, 'drone', b)), fmt: dec1, headline: 'pct', unit: 'DRONE DAMAGE' },
 
   // Plasma Grenades (+ EMP Grenades)
   { id: 'grenadeCount', label: 'Grenades / throw', get: (p) => wb(p, 'grenades', W.grenadeCount), fmt: int, headline: 'count', unit: 'GRENADES / THROW', newText: (a) => `PLASMA GRENADES // ${a} / THROW` },
   { id: 'grenadeDamage', label: 'Grenade blast damage', get: (p) => wb(p, 'grenades', (b) => weaponDamage(p, 'grenade', b)), fmt: dec1, headline: 'pct', unit: 'GRENADE DAMAGE' },
   { id: 'grenadeCooldown', label: 'Throw interval', get: (p) => wb(p, 'grenades', W.grenadeCooldown), fmt: secs, headline: 'pct', unit: 'GRENADE THROW INTERVAL' },
-  { id: 'grenadeBlast', label: 'Grenade blast radius', get: (p) => wb(p, 'grenades', (b) => grenadeBlastRadius(p, b)), fmt: int, headline: 'count', unit: 'GRENADE BLAST RADIUS' },
-  { id: 'grenadeRange', label: 'Throw range', get: (p) => wb(p, 'grenades', W.grenadeRange), fmt: int, headline: 'count', unit: 'GRENADE THROW RANGE' },
+  { id: 'grenadeBlast', label: 'Grenade blast radius', get: (p) => wb(p, 'grenades', (b) => grenadeBlastRadius(p, b)), fmt: int, headline: 'size', unit: 'GRENADE BLAST RADIUS' },
+  { id: 'grenadeRange', label: 'Throw range', get: (p) => wb(p, 'grenades', W.grenadeRange), fmt: int, headline: 'size', unit: 'GRENADE THROW RANGE' },
   { id: 'grenadeElement', label: 'Grenade element', get: (p) => wb(p, 'grenades', () => grenadeElement(p).label), fmt: (v) => v },
   // Flamethrower (FIRE is built in: its burn rows come from elementRows('flamethrower') below)
   { id: 'flameDamage', label: 'Flame damage / scorch', get: (p) => wb(p, 'flamethrower', (b) => weaponDamage(p, 'flame', b)), fmt: dec1, headline: 'pct', unit: 'FLAME DAMAGE' },
   { id: 'flameTickRate', label: 'Scorches / s', get: (p) => wb(p, 'flamethrower', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'FLAME SCORCH RATE' },
-  { id: 'flameRange', label: 'Flame reach', get: (p) => wb(p, 'flamethrower', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'FLAME REACH', newText: (a) => `FLAMETHROWER // ${a} PX REACH` },
+  { id: 'flameRange', label: 'Flame reach', get: (p) => wb(p, 'flamethrower', (b) => flameRange(p, b)), fmt: int, headline: 'size', unit: 'FLAME REACH', newText: () => 'FLAMETHROWER ONLINE' },
   { id: 'flameCone', label: 'Cone width', get: (p) => wb(p, 'flamethrower', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
   { id: 'flameTurn', label: 'Spin speed', get: (p) => wb(p, 'flamethrower', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
   { id: 'flameNozzles', label: 'Nozzles', get: (p) => wb(p, 'flamethrower', W.flameNozzles), fmt: int, headline: 'count', unit: 'NOZZLE' },
@@ -213,7 +216,7 @@ export const STAT_ROWS = [
   // Cryo Sprayer (FROST is built in: its status rows come from elementRows('cryospray') below; the Flamethrower's formulas)
   { id: 'cryoDamage', label: 'Spray damage / hit', get: (p) => wb(p, 'cryospray', (b) => weaponDamage(p, 'cryo', b)), fmt: dec1, headline: 'pct', unit: 'SPRAY DAMAGE' },
   { id: 'cryoTickRate', label: 'Spray hits / s', get: (p) => wb(p, 'cryospray', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'SPRAY RATE' },
-  { id: 'cryoRange', label: 'Spray reach', get: (p) => wb(p, 'cryospray', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'SPRAY REACH', newText: (a) => `CRYO SPRAYER // ${a} PX REACH` },
+  { id: 'cryoRange', label: 'Spray reach', get: (p) => wb(p, 'cryospray', (b) => flameRange(p, b)), fmt: int, headline: 'size', unit: 'SPRAY REACH', newText: () => 'CRYO SPRAYER ONLINE' },
   { id: 'cryoCone', label: 'Cone width', get: (p) => wb(p, 'cryospray', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
   { id: 'cryoTurn', label: 'Spin speed', get: (p) => wb(p, 'cryospray', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
   { id: 'cryoNozzles', label: 'Nozzles', get: (p) => wb(p, 'cryospray', W.flameNozzles), fmt: int, headline: 'count', unit: 'NOZZLE' },
@@ -223,7 +226,7 @@ export const STAT_ROWS = [
   // Acid Sprayer (CORROSIVE is built in: its status rows come from elementRows('acidspray') below; the Flamethrower's formulas)
   { id: 'acidDamage', label: 'Spray damage / hit', get: (p) => wb(p, 'acidspray', (b) => weaponDamage(p, 'acid', b)), fmt: dec1, headline: 'pct', unit: 'SPRAY DAMAGE' },
   { id: 'acidTickRate', label: 'Spray hits / s', get: (p) => wb(p, 'acidspray', W.flameTickRate), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'SPRAY RATE' },
-  { id: 'acidRange', label: 'Spray reach', get: (p) => wb(p, 'acidspray', (b) => flameRange(p, b)), fmt: int, headline: 'count', unit: 'SPRAY REACH', newText: (a) => `ACID SPRAYER // ${a} PX REACH` },
+  { id: 'acidRange', label: 'Spray reach', get: (p) => wb(p, 'acidspray', (b) => flameRange(p, b)), fmt: int, headline: 'size', unit: 'SPRAY REACH', newText: () => 'ACID SPRAYER ONLINE' },
   { id: 'acidCone', label: 'Cone width', get: (p) => wb(p, 'acidspray', (b) => (W.flameConeHalf(b) * 360) / Math.PI), fmt: (v) => `${Math.round(v)}°`, headline: (b, a) => `+${Math.round(a - b)}° CONE WIDTH` },
   { id: 'acidTurn', label: 'Spin speed', get: (p) => wb(p, 'acidspray', (b) => (W.flameTurnRate(b) * 180) / Math.PI), fmt: (v) => `${Math.round(v)}°/s`, headline: (b, a) => `+${Math.round(a - b)}°/S SPIN SPEED` },
   { id: 'acidNozzles', label: 'Nozzles', get: (p) => wb(p, 'acidspray', W.flameNozzles), fmt: int, headline: 'count', unit: 'NOZZLE' },
@@ -233,17 +236,17 @@ export const STAT_ROWS = [
   { id: 'empArcs', label: 'EMP arcs / grenade blast', get: (p) => (p.weapons.empGrenades && ownsWeapon(p, 'grenades') ? W.empArcs : null), fmt: int, newText: (a) => `GRENADE BLASTS ARC // ${a} ZAPS` },
 
   // Corrosive Gas Trail (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
-  { id: 'gasRadius', label: 'Gas cloud radius', get: (p) => wb(p, 'gas', (b) => gasCloudRadius(p, b)), fmt: int, headline: 'count', unit: 'GAS CLOUD RADIUS' },
+  { id: 'gasRadius', label: 'Gas cloud radius', get: (p) => wb(p, 'gas', (b) => gasCloudRadius(p, b)), fmt: int, headline: 'size', unit: 'GAS CLOUD RADIUS' },
   { id: 'gasDamage', label: 'Gas damage / tick', get: (p) => wb(p, 'gas', (b) => weaponDamage(p, 'gas', b)), fmt: dec1, headline: 'pct', unit: 'GAS DAMAGE' },
   { id: 'gasTickRate', label: 'Gas ticks / s', get: (p) => wb(p, 'gas', (b) => 1 / W.gasTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'GAS TICK RATE' },
   { id: 'gasLife', label: 'Cloud linger', get: (p) => wb(p, 'gas', W.gasLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s CLOUD LINGER` },
   { id: 'gasCorrode', label: 'Gas max damage taken', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? corrodeCap(p, e.rank) : null; }), fmt: bonus, headline: (b, a) => `+${Math.round((a - b) * 100)}% MAX CORRODE` },
   { id: 'gasAcid', label: 'Gas acid (of hit damage)', get: (p) => wb(p, 'gas', () => { const e = weaponElement(p, 'gas'); return e ? statusDotShare(p, 'corrode', e.rank) : null; }), fmt: bonus },
-  { id: 'gasSeek', label: 'Clouds creep toward enemies', get: (p) => wb(p, 'gas', (b) => (b.t4 ? W.seekSpeed : null)), fmt: (v) => `${Math.round(v)} px/s`, newText: () => 'CLOUDS HUNT ENEMIES' },
+  { id: 'gasSeek', label: 'Clouds creep toward enemies', get: (p) => wb(p, 'gas', (b) => (b.t4 ? W.seekSpeed : null)), fmt: () => 'ON', newText: () => 'CLOUDS HUNT ENEMIES' },
   { id: 'gasPocket', label: 'Volatile pocket burst', get: (p) => wb(p, 'gas', (b) => (b.t8 ? weaponDamage(p, 'gas', b) * W.pocketShare * W.pocketEvery / W.gasTick(b) : null)), fmt: dec1, newText: (a, row) => `GAS POCKETS BURST // ${row.fmt(a)} DMG` },
   { id: 'gasShroud', label: 'Toxic shroud radius', get: (p) => wb(p, 'gas', (b) => (b.t12 ? gasCloudRadius(p, b) * W.shroudRadiusMult : null)), fmt: int, newText: (a) => `TOXIC SHROUD // ${a} RADIUS` },
   // Electric Shield Field (fixed SHOCK element: its stun rows read the field's own rank)
-  { id: 'fieldRadius', label: 'Field radius', get: (p) => wb(p, 'shockfield', (b) => fieldRadius(p, b)), fmt: int, headline: 'count', unit: 'FIELD RADIUS', newText: (a) => `SHOCK FIELD // ${a} RADIUS` },
+  { id: 'fieldRadius', label: 'Field radius', get: (p) => wb(p, 'shockfield', (b) => fieldRadius(p, b)), fmt: int, headline: 'size', unit: 'FIELD RADIUS', newText: () => 'SHOCK FIELD ONLINE' },
   { id: 'fieldDamage', label: 'Discharge damage', get: (p) => wb(p, 'shockfield', (b) => weaponDamage(p, 'shockfield', b)), fmt: dec1, headline: 'pct', unit: 'DISCHARGE DAMAGE' },
   { id: 'fieldCooldown', label: 'Field recharge', get: (p) => wb(p, 'shockfield', W.fieldCooldown), fmt: secs, headline: 'pct', unit: 'FIELD RECHARGE' },
   { id: 'fieldStun', label: 'Field stun', get: (p) => wb(p, 'shockfield', (b) => shockStun(p, W.fieldStunRank(b))), fmt: secs, headline: (b, a) => `+${(a - b).toFixed(2)}s STUN` },
@@ -255,9 +258,9 @@ export const STAT_ROWS = [
   { id: 'railDamage', label: 'Lance damage', get: (p) => wb(p, 'raillance', (b) => weaponDamage(p, 'rail', b)), fmt: dec1, headline: 'pct', unit: 'LANCE DAMAGE', newText: (a, row) => `RAIL LANCE // ${row.fmt(a)} DMG` },
   { id: 'railCycle', label: 'Charge time', get: (p) => wb(p, 'raillance', W.railCharge), fmt: secs, headline: 'pct', unit: 'CHARGE TIME' },
   { id: 'railLances', label: 'Lances / shot', get: (p) => wb(p, 'raillance', W.railLances), fmt: int, headline: 'count', unit: 'LANCE' },
-  { id: 'railWidth', label: 'Line width', get: (p) => wb(p, 'raillance', (b) => 2 * W.railWidth(b)), fmt: int, headline: (b, a) => `+${Math.round(a - b)} PX LINE WIDTH` },
+  { id: 'railWidth', label: 'Line width', get: (p) => wb(p, 'raillance', (b) => 2 * W.railWidth(b)), fmt: int, headline: 'size', unit: 'LINE WIDTH' },
   { id: 'railKeep', label: 'Damage kept / enemy pierced', get: (p) => wb(p, 'raillance', W.railKeep), fmt: pct, headline: (b, a) => `+${Math.round((a - b) * 100)}% KEPT PER PIERCE` },
-  { id: 'railMagnet', label: 'Magnetic pull reach', get: (p) => wb(p, 'raillance', (b) => (b.t4 ? W.magnetRange : null)), fmt: int, newText: (a) => `CHARGE DRAGS ENEMIES // ${a} PX` },
+  { id: 'railMagnet', label: 'Magnetic pull reach', get: (p) => wb(p, 'raillance', (b) => (b.t4 ? W.magnetRange : null)), fmt: int, newText: () => 'CHARGE DRAGS ENEMIES IN' },
   { id: 'railWake', label: 'Ion Wake damage / tick', get: (p) => wb(p, 'raillance', (b) => (b.t8 ? weaponDamage(p, 'rail', b) / W.railDamageMult(b) * W.railWakeDamageMult(b) : null)), fmt: dec1, newText: (a, row) => `ION WAKE // ${row.fmt(a)} DMG / TICK` },
   { id: 'railOverload', label: 'Overload Shot damage', get: (p) => wb(p, 'raillance', (b) => (b.t12 ? weaponDamage(p, 'rail', b) * W.overloadMult : null)), fmt: dec1, newText: (a, row) => `EVERY ${W.overloadEvery}RD SHOT // ${row.fmt(a)} DMG` },
   // Glaive Discs
@@ -265,12 +268,12 @@ export const STAT_ROWS = [
   { id: 'glaiveBounces', label: 'Ricochets per disc', get: (p) => wb(p, 'glaive', W.glaiveBounces), fmt: int, headline: (b, a) => `+${a - b} RICOCHET${a - b > 1 ? 'S' : ''}` },
   { id: 'glaiveDamage', label: 'Disc damage', get: (p) => wb(p, 'glaive', (b) => weaponDamage(p, 'glaive', b)), fmt: dec1, headline: 'pct', unit: 'DISC DAMAGE' },
   { id: 'glaiveCooldown', label: 'Throw interval', get: (p) => wb(p, 'glaive', W.glaiveCooldown), fmt: secs, headline: 'pct', unit: 'GLAIVE THROW INTERVAL' },
-  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', W.glaiveSpeed), fmt: (v) => `${Math.round(v)} px/s`, headline: 'pct', unit: 'DISC SPEED' },
+  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', W.glaiveSpeed), fmt: int, headline: 'pct', unit: 'DISC SPEED' },
   { id: 'glaiveFission', label: 'Twins per disc', get: (p) => wb(p, 'glaive', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'DISCS SPLIT ON THEIR FIRST HIT' },
   { id: 'glaiveMomentum', label: 'Ricochet damage growth', get: (p) => wb(p, 'glaive', (b) => (b.t8 ? W.momentumGrowth - 1 : null)), fmt: pct, newText: (a, row) => `EVERY RICOCHET +${row.fmt(a)} DAMAGE` },
   { id: 'glaiveRecall', label: 'Return-trip hits', get: (p) => wb(p, 'glaive', (b) => (b.t12 ? W.recallHits : null)), fmt: int, newText: (a) => `DISCS RETURN // ${a} HITS ON THE WAY` },
   // Nanite Swarm (always CORROSIVE: its corrode rank follows its level, weapon-levels.js fixedElementRank)
-  { id: 'naniteRadius', label: 'Swarm radius', get: (p) => wb(p, 'nanites', (b) => naniteRadius(p, b)), fmt: int, headline: 'count', unit: 'SWARM RADIUS', newText: (a) => `NANITE SWARM // ${a} RADIUS` },
+  { id: 'naniteRadius', label: 'Swarm radius', get: (p) => wb(p, 'nanites', (b) => naniteRadius(p, b)), fmt: int, headline: 'size', unit: 'SWARM RADIUS', newText: () => 'NANITE SWARM ONLINE' },
   { id: 'naniteDamage', label: 'Bite damage', get: (p) => wb(p, 'nanites', (b) => weaponDamage(p, 'nanite', b)), fmt: dec1, headline: 'pct', unit: 'BITE DAMAGE' },
   { id: 'naniteTickRate', label: 'Bites / s', get: (p) => wb(p, 'nanites', (b) => 1 / W.naniteTick(b)), fmt: (v) => `${v.toFixed(1)}/s`, headline: 'pct', unit: 'BITE RATE' },
   { id: 'naniteLife', label: 'Swarm lifetime', get: (p) => wb(p, 'nanites', W.naniteLife), fmt: sec1, headline: (b, a) => `+${(a - b).toFixed(1)}s SWARM LIFETIME` },
@@ -284,8 +287,8 @@ export const STAT_ROWS = [
   // Claw Harpoon (aimed; mining and the yank are utility)
   { id: 'harpoonDamage', label: 'Claw hit damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b)), fmt: dec1, headline: 'pct', unit: 'CLAW DAMAGE' },
   { id: 'harpoonRate', label: 'Throws / s', get: (p) => wb(p, 'harpoon', (b) => 1 / W.harpoonCooldown(b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'THROW RATE' },
-  { id: 'harpoonRange', label: 'Tether reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'count', unit: 'TETHER REACH', newText: (a) => `CLAW HARPOON // ${a} PX REACH` },
-  { id: 'harpoonHook', label: 'Yanks hulls up to', get: (p) => wb(p, 'harpoon', W.harpoonHookSize), fmt: (v) => `${Math.round(v)} px`, headline: (b, a) => `+${Math.round(a - b)} PX HOOK SIZE` },
+  { id: 'harpoonRange', label: 'Tether reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'size', unit: 'TETHER REACH', newText: () => 'CLAW HARPOON ONLINE' },
+  { id: 'harpoonHook', label: 'Yanks hulls up to', get: (p) => wb(p, 'harpoon', W.harpoonHookSize), fmt: int, headline: 'size', unit: 'HOOK SIZE' },
   { id: 'harpoonCrush', label: 'Crush damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b) * W.harpoonCrushShare), fmt: dec1 },
   { id: 'harpoonDrill', label: 'Rock drilled / throw', get: (p) => wb(p, 'harpoon', (b) => W.harpoonDrill(b) * (p.stats.miningSpeed || 75) / (TUNING.miningSpeed || 75)), fmt: int, headline: 'pct', unit: 'ROCK DRILLED' },
   { id: 'harpoonSlam', label: 'Seismic Slam damage', get: (p) => wb(p, 'harpoon', (b) => (b.t4 ? weaponDamage(p, 'harpoon', b) * W.slamShare : null)), fmt: dec1, newText: (a, row) => `SEISMIC SLAM // ${row.fmt(a)} DMG` },
@@ -316,8 +319,8 @@ export const STAT_ROWS = [
   { id: 'maxHp', label: 'Max shield', get: (p) => p.maxHp, fmt: int, headline: 'count', unit: 'MAX SHIELD' },
   { id: 'hp', label: 'Shield now', get: (p) => p.hp, fmt: int },
   { id: 'dashCooldown', label: 'Dash cooldown', get: (p) => W.dashCooldown(lv(p, 'dashNova'), TUNING.dashCooldownBase ?? 1.5), fmt: secs },
-  { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p)) * (p.dashDistanceMult ?? 1)), fmt: int, headline: 'count', unit: 'PX DASH' },
-  { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) * (p.dashDistanceMult ?? 1) : null), fmt: int, headline: 'count', unit: 'PX BLINK', newText: (a) => `DASH BLINKS // ${a} PX` },
+  { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p)) * (p.dashDistanceMult ?? 1)), fmt: int, headline: 'size', unit: 'DASH DISTANCE' },
+  { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) * (p.dashDistanceMult ?? 1) : null), fmt: int, headline: 'size', unit: 'BLINK DISTANCE', newText: () => 'DASH BLINKS' },
   { id: 'novaRadius', label: 'Dash nova radius', get: (p) => owned(p, 'dashNova', (l) => novaRadius(p, l)), fmt: int },
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
@@ -332,7 +335,7 @@ export const STAT_ROWS = [
   { id: 'quakeShells', label: 'Charges / volley', get: (p) => wb(p, 'quake', W.quakeShells), fmt: int, headline: 'count', unit: 'CHARGES / VOLLEY', newText: (a) => `GRAVITON MORTAR // ${a} / VOLLEY` },
   { id: 'quakeDamage', label: 'Gravity wave damage', get: (p) => wb(p, 'quake', (b) => weaponDamage(p, 'quake', b)), fmt: dec1, headline: 'pct', unit: 'GRAVITY WAVE DAMAGE' },
   { id: 'quakeCooldown', label: 'Volley interval', get: (p) => wb(p, 'quake', W.quakeCooldown), fmt: secs, headline: 'pct', unit: 'MORTAR VOLLEY INTERVAL' },
-  { id: 'quakeRadius', label: 'Gravity wave radius', get: (p) => wb(p, 'quake', (b) => quakeRadius(p, b)), fmt: int, headline: 'count', unit: 'WAVE RADIUS' },
+  { id: 'quakeRadius', label: 'Gravity wave radius', get: (p) => wb(p, 'quake', (b) => quakeRadius(p, b)), fmt: int, headline: 'size', unit: 'WAVE RADIUS' },
   { id: 'quakeRock', label: 'Rock damage / wave', get: (p) => wb(p, 'quake', (b) => (W.quakeRockDamage(b) > 0 ? W.quakeRockDamage(b) * (p.stats.miningSpeed || 75) / 75 : null)), fmt: int, headline: 'pct', unit: 'ROCK DAMAGE', newText: (a) => `WAVES TEAR ROCKS // ${a} DMG` },
   { id: 'quakeSkip', label: 'Rebounds / charge', get: (p) => wb(p, 'quake', (b) => (b.t4 ? W.skipBounces : null)), fmt: int, newText: (a) => `CHARGES REBOUND // ${a} MORE PULSES` },
   { id: 'quakeFault', label: 'Fractures / burst', get: (p) => wb(p, 'quake', (b) => (b.t8 ? W.faultCount : null)), fmt: int, newText: (a) => `BURSTS TEAR // ${a} FRACTURES` },
@@ -364,13 +367,14 @@ const trimDec = (v) => v.toFixed(1).replace(/\.0$/, '');
 function headlineText(row, before, after) {
   if (before === null) {
     if (row.newText) return row.newText(after, row);
+    if (row.headline === 'size') return `NEW // ${row.unit}`;
     if (row.headline === 'count') return `+${row.fmt(after)} ${row.unit}`;
     return `NEW // ${row.fmt(after)} ${row.unit || row.label.toUpperCase()}`;
   }
   if (typeof row.headline === 'function') return row.headline(before, after);
   const sign = after >= before ? '+' : '';
   // Compounding ranks (a +4 damage card is 1.5^4 = 5.06x) read as a multiplier once they triple the stat.
-  if (row.headline === 'pct') return after / before >= 3 ? `${trimDec(after / before)}× ${row.unit}` : `${sign}${Math.round((after / before - 1) * 100)}% ${row.unit}`;
+  if (row.headline === 'pct' || row.headline === 'size') return after / before >= 3 ? `${trimDec(after / before)}× ${row.unit}` : `${sign}${Math.round((after / before - 1) * 100)}% ${row.unit}`;
   if (row.headline === 'points') return `${sign}${Math.round((after - before) * 100)}% ${row.unit}`;
   if (row.headline === 'count') return `${sign}${Math.round(after - before)} ${row.unit}`;
   return `${row.label.toUpperCase()} ${row.fmt(before)} → ${row.fmt(after)}`;
@@ -391,6 +395,19 @@ const BUNDLE_HEADLINES = {
   ].filter(Boolean).join(' · '),
   thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
 };
+
+// REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
+// +1 TURRET"). Weapons at their count cap (or with no count stat) are left out.
+export function replicatorHeadline(before, after) {
+  const parts = [];
+  for (const id of ownedWeapons(after)) {
+    const cs = COUNT_STATS[id];
+    if (!cs) continue;
+    const n = ((weaponBuild(after, id).r[cs.stat] || 0) - (weaponBuild(before, id).r[cs.stat] || 0)) * cs.per;
+    if (n > 0) parts.push(`+${n} ${cs.unit}${n > 1 && !cs.unit.endsWith('S') ? 'S' : ''}`);
+  }
+  return parts.join(' · ');
+}
 
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
 // Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond maxRows.
@@ -421,7 +438,8 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const changed = diffRows(before, after);
 
   const lead = changed.find((r) => r.id === upg.headline) || changed[0];
-  const bundle = changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
+  const bundle = upg.id === REPLICATOR_ID ? replicatorHeadline(player, copy)
+    : changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
 
@@ -444,7 +462,9 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     bonus: bonusLevels(copy, sc ? sc.weapon : upg.id),
     headline,
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
-    hiddenRows: Math.max(0, changed.length - maxRows)
+    hiddenRows: Math.max(0, changed.length - maxRows),
+    // Evolution recipes: an evolution card shows its own; any other card the ones it moves forward.
+    recipes: upg.isSynergy ? [recipeView(upg.id, player)] : recipesAdvanced(player, copy)
   };
 }
 
@@ -515,7 +535,8 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
     headline: weapon.name.toUpperCase(),
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, changed.length - maxRows),
-    levelHtml: `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>`
+    levelHtml: `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>`,
+    recipes: recipesAdvanced(player, copy)
   };
 }
 
@@ -617,7 +638,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
         ${d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
         ${d.summary ? `<div class="upg-summary">${d.summary}</div>` : ''}
         ${rows || more ? `<div class="upg-stats">${rows}${more}
-        </div>` : ''}
+        </div>` : ''}${recipeStripHtml(d.recipes, { own: d.isSynergy })}
       </div>
       <div class="upg-level">${levelText(d, installed)}</div>
     `

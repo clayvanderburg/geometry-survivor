@@ -5,6 +5,7 @@
 // Hostile entry ids are enemy `type` strings (bosses included), plus 'lieutenant' (any elite). Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING, DEFAULT_TUNING } from './config.js';
+import { EVOLUTION_RECIPES } from './evolution-recipes.js';
 import { EnemyManager, contactDamageAt, waveScaleAt } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
@@ -541,22 +542,13 @@ export const MECHANIC_ENTRIES = [
 
 // --- Weapons: a thin adapter over UPGRADE_POOL / WEAPON_TAGS -------------------------------------
 // Categories are taken from the pool in order, so new cards and categories show up with no edits.
-// Recipes are optional hints for evolutions (unknown ids are simply skipped).
+// Evolutions carry their recipe id; field-guide-ui.js renders it from js/evolution-recipes.js.
 // The crab's starting weapons, straight from the loadout registry.
 export const STARTING_KIT = STARTING_WEAPONS.map((id) => ({
   key: id,
   name: WEAPON_BY_ID[id].name.toUpperCase(),
   text: WEAPON_BY_ID[id].summary
 }));
-
-const EVOLUTION_RECIPES = {
-  evo_tectonic: 'Rotary Claw Overclock LV 2',
-  evo_pulsar: 'Prism Split LV 2 or Hyper-Capacitor LV 2',
-  evo_tempest: 'Swarm Micro-Missiles + Tesla Arc Emitter',
-  evo_siege: 'Proximity Mines + Sentry Turret',
-  evo_emp: 'Plasma Grenades + Tesla Arc Emitter',
-  evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any weapon with an element'
-};
 
 const tagChips = (tags = []) => tags.filter(t => TAG_INFO[t]).map(t => ({ id: t, label: TAG_INFO[t].label, color: TAG_INFO[t].color }));
 
@@ -577,7 +569,7 @@ export function weaponGuide(levels = null, pool = UPGRADE_POOL) {
       maxLevel: u.maxLevel,
       evolution: !!u.isSynergy,
       weapon: !!WEAPON_BY_LEVEL_ID[u.id], // a slot weapon's own card (WEAPONS tab) vs an upgrade (UPGRADES tab)
-      recipe: EVOLUTION_RECIPES[u.id] || null,
+      recipe: EVOLUTION_RECIPES[u.id] ? u.id : null,
       tags: tagChips(u.tags),
       owned: levels ? (levels[u.id] || 0) : 0
     });
