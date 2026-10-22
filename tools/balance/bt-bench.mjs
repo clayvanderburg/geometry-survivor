@@ -6,10 +6,11 @@
 //
 // Targets: the bench's wave-6 mix, with hit points scaled to the wave a pilot is on when a weapon reaches
 // that level (BT_BENCH_WAVE), so late hits don't simply overkill wave-6 targets (which flattens every
-// damage gain and rewards only extra hits). BT_BENCHES: `real` (the reference) or `dense` (the old card bench).
+// damage gain and rewards only extra hits). BT_BENCHES: `blend` (the reference: `real` and `kite` together),
+// `real` (bot-like play), `kite` (human-like kiting) or `dense` (the old card bench).
 //
 //   node tools/balance/bt-bench.mjs [--weapons a,b] [--levels 6,12] [--seeds 6] [--workers 4] [--json out.json]
-//                                   [--seed S] [--bench real|dense]
+//                                   [--seed S] [--bench blend|real|kite|dense]
 //                                   [--values candidate.json]  (TF_REALIZED overrides, { weapon: { transform: [v6, v12, v18] } })
 //                                   [--class]  (class standing: each weapon's realized DPS / the Autocannon's)
 import { availableParallelism } from 'node:os';
@@ -26,7 +27,10 @@ export const BT_BENCHES = Object.freeze({
   real: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']) }),
   dense: Object.freeze({ targets: 50, scenarios: Object.freeze(['pack', 'chase']) }),
   // `kite`: the reference swarm, chasing a ship that loops wide (1200 px) like a human kiting in long runs.
-  kite: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']), orbitRadius: 1200 })
+  kite: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']), orbitRadius: 1200 }),
+  // `blend`: the geometric mean of `real` and `kite` (the Breakthrough calibration reference), so no option
+  // is an outlier under either play style.
+  blend: Object.freeze({ of: Object.freeze(['real', 'kite']) })
 });
 // Weapon-level rate stat (fire-rate POWER stat taken after Damage), when a weapon has one.
 const RATE_STATS = ['rate', 'reload', 'recharge', 'cooldown'];
@@ -78,11 +82,15 @@ function setupFor(id, lv, bt) {
 
 // Realized DPS of weapon `id` (every source but the Autocannon's when it isn't the one benched).
 // `option` null: no Breakthrough at `lv` itself (a level between milestones, or the class report).
-export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED, bench: kind = 'real' } = {}) {
+export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED, bench: kind = 'blend' } = {}) {
   await load();
   const bt = {};
   for (const m of wl.BREAKTHROUGH_LEVELS) if (m < lv) bt[m] = earlier;
   if (option) bt[lv] = option;
+  if (BT_BENCHES[kind].of) {
+    const [a, b] = await Promise.all(BT_BENCHES[kind].of.map((k) => benchOption(id, lv, option, { seeds, earlier, seed, bench: k })));
+    return Math.sqrt(a * b);
+  }
   const { targets, scenarios, orbitRadius = h.BENCH.orbitRadius } = BT_BENCHES[kind];
   const bench = { ...h.BENCH, targets, orbitRadius, targetWave: BT_BENCH_WAVE[lv] };
   let sum = 0;
@@ -114,7 +122,7 @@ export async function classCases({ weapons = null, levels = [1, 3, 6, 12, 18] } 
     .flatMap((id) => levels.map((lv) => ({ id, lv, option: wl.BREAKTHROUGH_LEVELS.includes(lv) ? 'boost' : null })));
 }
 
-export async function runAll({ cases, seeds, workers, values = null, seed = SEED, bench = 'real' }) {
+export async function runAll({ cases, seeds, workers, values = null, seed = SEED, bench = 'blend' }) {
   const results = new Array(cases.length);
   let next = 0, done = 0;
   await Promise.all(Array.from({ length: workers }, () => new Promise((resolve, reject) => {
@@ -157,7 +165,7 @@ if (!isMainThread) {
   const workers = Number(get('--workers', Math.max(1, Math.min(8, availableParallelism()))));
   const json = get('--json', null);
   const seed = get('--seed', SEED);
-  const bench = get('--bench', 'real');
+  const bench = get('--bench', 'blend');
   if (!BT_BENCHES[bench]) throw new Error(`--bench must be ${Object.keys(BT_BENCHES).join('|')}`);
   const valuesPath = get('--values', null);
   const values = valuesPath ? JSON.parse((await import('node:fs')).readFileSync(valuesPath, 'utf8')) : null;
