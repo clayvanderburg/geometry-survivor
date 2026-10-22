@@ -12,6 +12,21 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.45.0',
+    date: '2026-10-21',
+    title: 'Squadron & Replicator',
+    notes: [
+      { type: 'new', text: 'Escort Drones fly in formation: you start with a front pair, spaced wider, and Wingmen add a back row of 3. The lead has the heavy gun; drones hold ~85% of the Autocannon.' },
+      { type: 'new', text: 'New LV 6 drone Breakthrough, Escort Squadron: 3 more drones join at once, up to 8 (3 in front, 5 behind). New drones launch and snap into formation one by one.' },
+      { type: 'new', text: 'New global card, Replicator Array (always RARE or better, and rare in hands): each rank gives every equipped weapon one more of what it fires, up to its cap. Max 2 ranks.' },
+      { type: 'balance', text: 'Replicator Array never raises a weapon\'s level, so your Breakthroughs stay on schedule. It adds +2 Autocannon streams, +2 Tesla Arc jumps or +1 of everything else.' },
+      { type: 'balance', text: 'Rail Lance: Flux Lens widens the line more (+6 per card, was +4). Upgrade cards show size and reach boosts as percentages instead of pixels.' },
+      { type: 'new', text: 'Dialogue types at half speed and stays up twice as long, and Dr. Pixie talks from the bottom centre, close to your ship.' },
+      { type: 'new', text: 'The starting pick now offers 8 weapons: Escort Drones and Sentry Turret join it. REDUCE EFFECTS also dims the minor bosses\' glow flashes.' },
+      { type: 'balance', text: 'Event Horizon is fairer: you can always fly out of its pull, it spits you out on contact, its arcs are smaller, its orbs spaced out, and it no longer eats lieutenants.' }
+    ]
+  },
+  {
     version: '0.44.0',
     date: '2026-10-20',
     title: 'Big Guns, Bigger Bosses',
