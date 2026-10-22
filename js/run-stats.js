@@ -53,7 +53,7 @@ export const SUB_SOURCES = Object.freeze({
 export const OTHER_GROUPS = Object.freeze({
   shrapnel: 'shrapnel',   // Volatile Shatter (passive)
   nova: 'nova',           // Phase Nova dash burst
-  tectonic: 'tectonic',   // Tectonic Claw Bore drill blasts
+  tectonic: 'tectonic',   // Tectonic Drill Bore drill blasts
   supernova: 'supernova', // bomb
   blackhole: 'hazard',    // a dying Vortex's burst hitting other enemies
   ram: 'ram',             // enemies that popped on the shield

@@ -297,10 +297,10 @@ export const STAT_ROWS = [
   { id: 'harpoonBlast', label: 'Detonator blast damage', get: (p) => wb(p, 'harpoon', (b) => (b.tf?.has('detonate') ? weaponDamage(p, 'harpoon', b) * W.detShare : null)), fmt: dec1, newText: (a, row) => `DETONATOR BIT // ${row.fmt(a)} DMG` },
   { id: 'harpoonTunnel', label: 'Tunnel damage / bore', get: (p) => wb(p, 'harpoon', (b) => (b.tf?.has('tunnel') ? weaponDamage(p, 'harpoon', b) * W.tunnelShare : null)), fmt: dec1, newText: (a, row) => `TUNNEL BORE // ${row.fmt(a)} DMG` },
 
-  // Drill-claws + Tectonic Claw Bore
+  // Drills + Tectonic Drill Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
-  { id: 'miningRange', label: 'Claw reach', get: (p) => p.stats.miningRange, fmt: int },
-  { id: 'drillScale', label: 'Claw size', get: (p) => p.stats.drillScale, fmt: mult },
+  { id: 'miningRange', label: 'Drill reach', get: (p) => p.stats.miningRange, fmt: int },
+  { id: 'drillScale', label: 'Drill size', get: (p) => p.stats.drillScale, fmt: mult },
   { id: 'tectonicBlast', label: 'Drill blast damage', get: (p) => (p.weapons.tectonicBore ? weaponDamage(p, 'tectonic') : null), fmt: dec1, newText: (a, row) => `ASTEROIDS DETONATE // ${row.fmt(a)} DMG` },
   { id: 'tectonicRadius', label: 'Drill blast radius', get: (p) => (p.weapons.tectonicBore ? tectonicBlastRadius(p) : null), fmt: int },
 

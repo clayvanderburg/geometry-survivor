@@ -14,7 +14,7 @@ import { UPGRADE_POOL, UPGRADE_BY_ID, ownedElements } from './upgrades.js';
 import { WEAPON_BY_ID, ownsWeapon, weaponLevel } from './loadout.js';
 
 export const EVOLUTION_RECIPES = {
-  evo_tectonic: [{ card: 'mining_speed', level: 2, label: 'Rotary Claw' }],
+  evo_tectonic: [{ card: 'mining_speed', level: 2, label: 'Rotary Drill' }],
   evo_pulsar: [
     { weapon: 'blaster' },
     { anyOf: [{ card: 'multishot', level: 2 }, { card: 'firerate', level: 2 }] }

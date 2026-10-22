@@ -363,7 +363,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'controls', icon: '⌨', title: 'CONTROLS',
     body: () => [
-      'Keyboard: WASD move (and drill rock with the claws) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause (1-4 tabs) · N damage numbers · G field guide · H hide HUD · V fullscreen · T tuner.',
+      'Keyboard: WASD move (and drill rock) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause (1-4 tabs) · N damage numbers · G field guide · H hide HUD · V fullscreen · T tuner.',
       'Controller: left stick move · right stick aim and fire · A dash · B Supernova · X / Y auto-fire / auto-aim · Start pause. Menus: d-pad + A, B back; in the pause menu and this guide LB / RB switch tabs.',
       'Level-up cards: 1 / 2 / 3 or A picks · R or X rerolls (gold) · Shift+1 / 2 / 3 or Y locks a card (gold).'
     ]
@@ -388,7 +388,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
-      'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
+      'Your shield hugs the ship\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
       `Contact damage is ${Math.round((TUNING.contactDamage ?? 18) * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round((TUNING.bossContactDamage ?? 38) * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base, steepening again after wave ${TUNING.damageRampLateFrom ?? 30} (plasma orbs too). A hit gives 0.4 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
@@ -427,7 +427,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
-      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the crab's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
+      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the ship's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
       `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
       `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${[1, 2, 3, 4, 5].map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
       `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
@@ -508,7 +508,7 @@ export const MECHANIC_ENTRIES = [
     body: () => [
       `Only your front drills mine. Weapons and bombs never break rock (except the ${WEAPON_BY_ID.harpoon.name}, and a ${WEAPON_BY_ID.quake.name} with Tidal Shear or Spacetime Fractures), so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.`,
       `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it fires spinning drill bits that bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
-      'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
+      'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your drills, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
       ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
@@ -518,7 +518,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'gold', icon: '◆', title: 'GOLD, REROLL, LOCK & BANISH',
     body: () => [
-      `Gold veins drop ${goldPerVein()} ◆ gold as glowing gold coins (no XP). Your claws break them, and so do elites grinding through rock; either way the coins are yours to grab. Gold lasts for this run only and starts at 0: it is not Void Cores.`,
+      `Gold veins drop ${goldPerVein()} ◆ gold as glowing gold coins (no XP). Your drills break them, and so do elites grinding through rock; either way the coins are yours to grab. Gold lasts for this run only and starts at 0: it is not Void Cores.`,
       `REROLL on a level-up swaps every unlocked card for a fresh roll with the usual odds: ${rerollCost(0)} ◆, then ${rerollCost(1)} ◆, ${rerollCost(2)} ◆… within the same level-up, back to ${rerollCost(0)} ◆ on the next one. On a NEW WEAPON pick, REROLL swaps the 3 weapons for others: ${weaponRerollCost(0)} ◆, then ${weaponRerollCost(1)} ◆, ${weaponRerollCost(2)} ◆… Keys: R, or X on a controller.`,
       `LOCK a card for ${lockCost()} ◆ (one at a time): it stays put through rerolls, and if you pick a different card it comes back in your next level-up hand (in place of one random card) until you take it. Unlocking is free but refunds nothing. A lock is dropped if the card can no longer be offered by then (maxed, weapon discarded, no free slot for NEW WEAPON). Keys: Shift+1 / 2 / 3, or Y on the focused card.`,
       `BANISH a card for ${banishCost()} ◆: it never comes up again this run, and a fresh card takes its slot. It takes two presses so you can't do it by accident: click ✕ twice, press B then 1 / 2 / 3, or RB twice on the focused card. NEW WEAPON can't be banished.`

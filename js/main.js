@@ -1998,7 +1998,7 @@ export class Game {
   // Every broken rock comes through here: the ship's drill, or an elite grinding a path (rock.brokenBy
   // === 'elite'). Both get the same shatter effects, sound and ore drops (geoms, cores, gold-vein chest
   // roll) for the ship to collect. Only the ship's own drilling counts as rocks mined, heals from a
-  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Claw Bore blast.
+  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Drill Bore blast.
   onRockShattered(rock) {
     const byElite = rock.brokenBy === 'elite';
     if (!byElite) this.rocksMined++;
@@ -2076,7 +2076,7 @@ export class Game {
       });
     }
 
-    // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
+    // Tectonic Drill Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);

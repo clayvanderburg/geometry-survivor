@@ -27,7 +27,7 @@ export function tutorialSlides(tuning = TUNING) {
   return [
     {
       id: 'fly', title: 'FLY & FIGHT', media: 'fly.webp',
-      alt: 'The crab ship flying loops and shooting a swarm',
+      alt: 'The ship flying loops and shooting a swarm',
       lines: [
         {
           keyboard: '**WASD** flies · **mouse** aims · your guns fire on their own.',
@@ -53,7 +53,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'mine', title: 'MINE ASTEROIDS', media: 'mine.webp',
       alt: 'The ship drilling through asteroids with gold and green veins',
       lines: [
-        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
+        'Fly into rock to drill it: only your **drills** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
         '[[gold:◆ Gold veins]] pay gold to change your upgrade choices. [[green:Green veins]] restore your shield. [[purple:Purple cores]] give ❖ Void Cores.'
       ]
     },

@@ -302,15 +302,15 @@ export const DEFAULT_TUNING = {
 
 export const TUNING_SCHEMA = [
   {
-    group: '🦀 Crab Ship & Drill-Claws',
+    group: '⛏ Ship & Drills',
     items: [
-      { key: 'shipRadius', label: 'Crab Ship Hull Size', type: 'range', min: 8, max: 34, step: 1, unit: 'px' },
+      { key: 'shipRadius', label: 'Ship Hull Size', type: 'range', min: 8, max: 34, step: 1, unit: 'px' },
       { key: 'moveSpeed', label: 'Base Move Speed', type: 'range', min: 2.0, max: 14.0, step: 0.2, unit: '' },
-      { key: 'drillScale', label: 'Drill-Claw Size Scale', type: 'range', min: 0.5, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'drillScale', label: 'Drill Size Scale', type: 'range', min: 0.5, max: 3.0, step: 0.05, unit: 'x' },
       { key: 'miningSpeed', label: 'Base Drill Mining DPS', type: 'range', min: 25, max: 600, step: 5, unit: '/s' },
-      { key: 'miningRange', label: 'Drill-Claw Reach', type: 'range', min: 15, max: 140, step: 2, unit: 'px' },
-      { key: 'dualClawBonus', label: 'Twin-Claw Torque Mult', type: 'range', min: 1.0, max: 3.0, step: 0.05, unit: 'x' },
-      { key: 'carapaceColor', label: 'Crab Carapace Glow', type: 'color' },
+      { key: 'miningRange', label: 'Drill Reach', type: 'range', min: 15, max: 140, step: 2, unit: 'px' },
+      { key: 'dualClawBonus', label: 'Twin-Drill Torque Mult', type: 'range', min: 1.0, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'carapaceColor', label: 'Carapace Glow', type: 'color' },
       { key: 'innerArmorColor', label: 'Inner Shell Facet Color', type: 'color' },
       { key: 'drillIdleColor', label: 'Drill Bit Idle Color', type: 'color' },
       { key: 'drillActiveColor', label: 'Drill Bit Active Color', type: 'color' },

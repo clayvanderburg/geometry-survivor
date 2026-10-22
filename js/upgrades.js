@@ -167,8 +167,8 @@ export const MOVE_SPEED_STEP = 1.1;
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
-// Drill-claw numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
-export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
+// Drill numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
+export const MINING_SPEED_STEP = 1.06; // per Rotary Drill Overclock level
 export const TECTONIC_MINING_SPEED = 1.18;
 export const TECTONIC_MINING_RANGE = 1.15;
 export const TECTONIC_DRILL_SCALE = 1.15;
@@ -178,11 +178,11 @@ export const PULSAR_FIRE_RATE = 1.15;
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
-    name: 'Rotary Claw Overclock',
-    category: 'DRILL CLAWS',
+    name: 'Rotary Drill Overclock',
+    category: 'DRILLS',
     maxLevel: 10,
     headline: 'miningSpeed',
-    summary: 'Spins the twin drill-claws faster. Only mining speed.',
+    summary: 'Spins the twin drills faster. Only mining speed.',
     apply(player) {
       player.stats.miningSpeed *= MINING_SPEED_STEP;
     }
@@ -396,7 +396,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, claws and shards.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, drill bits and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }
@@ -456,8 +456,8 @@ export const UPGRADE_POOL = [
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
-    name: 'SYNERGY: Tectonic Claw Bore',
-    category: 'DRILL CLAWS',
+    name: 'SYNERGY: Tectonic Drill Bore',
+    category: 'DRILLS',
     tags: ['explosive', 'area'],
     isSynergy: true,
     maxLevel: 1,
@@ -465,7 +465,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.mining_speed >= 2);
     },
     headline: 'tectonicBlast',
-    summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
+    summary: 'EVOLUTION: Upgrades your drills (not a new weapon): supercharged drills, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
       player.stats.miningSpeed *= TECTONIC_MINING_SPEED;

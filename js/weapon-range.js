@@ -57,7 +57,7 @@ const MIXED_TYPES = RANGE_TARGETS.map((t) => t.id).filter((id) => id !== 'mixed'
 
 export const DUMMY_COUNTS = [1, 3, 6, 12, 24, 40, 60];
 
-// Non-weapon cards the panel can install, by group. Tectonic Claw Bore is left out: it needs asteroids,
+// Non-weapon cards the panel can install, by group. Tectonic Drill Bore is left out: it needs asteroids,
 // and the range has none.
 export const RANGE_MOD_GROUPS = [
   // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.

@@ -60,7 +60,7 @@ export const STAT_GROUPS = [
     ]
   },
   {
-    id: 'drill', label: 'DRILL CLAWS', rows: [
+    id: 'drill', label: 'DRILLS', rows: [
       { id: 'miningSpeed', label: 'Drill speed', kind: 'mult', fmt: 'rate0', get: (s) => s.stats.miningSpeed },
       { id: 'miningRange', label: 'Drill reach', kind: 'mult', fmt: 'num0', get: (s) => s.stats.miningRange },
       { id: 'drillScale', label: 'Drill size', kind: 'mult', fmt: 'x', get: (s) => s.stats.drillScale }
