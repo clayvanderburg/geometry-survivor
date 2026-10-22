@@ -13,8 +13,9 @@
 //
 // Target: each transform realizes BT_BENCH_BAND x Across the Board at each milestone (earlier milestones
 // Across the Board). Transforms that trade damage for control (BT_CONTROL) may sit lower. The sprayers
-// sit a little under Across the Board (BT_SPRAYER_BAND): their realized damage is capped by how many
-// targets the cone reaches, so Across the Board's free Turn / Range ranks outvalue any damage number.
+// sit a little under Across the Board (BT_SPRAYER_BAND): their realized damage rides on how fast the cone
+// sweeps the swarm, so Across the Board's free Spin Rotor rank outvalues any damage number; the LV 6 burst
+// and puddle transforms build in a Spin Rotor rank to match (W.flameTfTurnRanks).
 // BT_BENCH_EXEMPT lists the (weapon, transform, milestone) cases damage numbers can't bring into band.
 // The Electric Shield Field is defensive (CLASS_TARGET.defensive): it sits lower by design, and its
 // discharge kills everything inside, so its options barely move with damage; they stay at 1.
@@ -41,9 +42,9 @@ export const TF_REALIZED = {
   drones: { wingman: [1.12, 1.49, 1], homing: [0.89, 1, 1], pods: [1, 1, 0.82] },
   grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.63, 0.6], gravity: [1, 1.7, 1.45] },
   gas: { seek: [0.6, 0.6, 0.6], pockets: [0.6, 0.6, 0.6], shroud: [0.6, 0.6, 0.6] },
-  flamethrower: { fireballs: [0.6, 0.6, 0.6], napalm: [0.6, 0.6, 0.6], ring: [1.06, 1.7, 1.53] },
-  cryospray: { shatter: [0.6, 0.6, 0.6], slicks: [0.6, 0.6, 0.6], blizzard: [0.77, 1.4, 1.07] },
-  acidspray: { meltdown: [0.6, 0.6, 0.6], pools: [0.6, 0.6, 0.6], caustic: [1, 1.7, 1.05] },
+  flamethrower: { fireballs: [0.91, 1, 1], napalm: [0.6, 0.64, 0.6], ring: [1.14, 1.7, 1.53] },
+  cryospray: { shatter: [1, 0.91, 0.85], slicks: [0.6, 0.62, 0.6], blizzard: [0.77, 1.4, 1.07] },
+  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.05] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1] },
   raillance: { magnet: [1, 1, 1], wake: [1, 1, 1], overload: [0.6, 1, 1] },
   glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.92], recall: [1, 1, 1] },
@@ -54,7 +55,7 @@ export const TF_REALIZED = {
 
 // Cases outside their band that damage numbers can't fix (the bench barely moves when their damage does,
 // or the fix would cost more boss damage than BT_REALIZED_RANGE allows): flagged for a mechanics pass.
-const SPRAYER_REACH = 'sprayer reach: realized capped by the cone, not damage (sprayer pass)';
+const SPRAYER_REACH = 'puddles land where the cone already was: realized capped by reach, not damage (at the BT_REALIZED_RANGE floor)';
 export const BT_BENCH_EXEMPT = Object.freeze({
   'lightning|fork|12': 'chains one-shot the bench pack: hit count, not damage, sets realized',
   'lightning|orb|12': 'chains one-shot the bench pack: hit count, not damage, sets realized',
@@ -77,9 +78,7 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'gas|shroud|6': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|12': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|18': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
-  ...Object.fromEntries(['flamethrower|fireballs|6', 'flamethrower|fireballs|12', 'flamethrower|fireballs|18', 'flamethrower|napalm|6',
-    'flamethrower|napalm|12', 'flamethrower|napalm|18', 'cryospray|shatter|6', 'cryospray|shatter|12', 'cryospray|slicks|6', 'cryospray|slicks|12',
-    'cryospray|slicks|18', 'acidspray|meltdown|6', 'acidspray|meltdown|18', 'acidspray|pools|6', 'acidspray|pools|18'].map((k) => [k, SPRAYER_REACH])),
+  ...Object.fromEntries(['flamethrower|napalm|6', 'cryospray|slicks|18', 'acidspray|pools|6', 'acidspray|pools|18'].map((k) => [k, SPRAYER_REACH])),
   'flamethrower|ring|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
   'acidspray|caustic|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
   'shockfield|repulse|6': 'knockback (control); a discharge kills everything inside: damage-insensitive',
