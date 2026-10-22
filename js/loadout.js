@@ -74,7 +74,7 @@ export const WEAPONS = [
   {
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
-    summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+    summary: 'A nozzle spins round the ship spraying a short cone of fire. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close. Always FIRE.'
   },
   {
     id: 'cryospray', name: 'Cryo Sprayer', hudName: 'Cryo Sprayer', levelId: 'cryospray', levelKey: 'cryospray', category: 'PRIMARY', tagSources: ['cryo'],

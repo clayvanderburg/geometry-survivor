@@ -1,10 +1,10 @@
-// Weapon levels 1-12, single-stat cards and Breakthroughs.
+// Weapon levels 1-18, single-stat cards and Breakthroughs.
 //
 // Every slot weapon (Autocannon included) has a level from 1 to WEAPON_MAX_LEVEL. Equipping it is LV 1;
 // every stat card for that weapon raises ONLY its own stat, and the weapon level by 1 (a +N rarity jump
 // raises both by N, clamped so the weapon never passes LV 18). The level itself adds nothing: it counts
 // cards toward the LV 6 / 12 / 18 Breakthroughs. POWER cards (damage, fire rate / reload / cooldown,
-// count) each add damage output; UTILITY cards (size, radius, pull, reach, lifetime) add none, so a
+// count, singularity / nanite lifetime) each add damage output; UTILITY cards (size, radius, pull, reach, fuse) add none, so a
 // weapon built for damage matches every other weapon built for damage, and utility is a trade-off.
 //
 // At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: pick a transform (a new way the weapon works)
@@ -37,7 +37,7 @@ export const STAT_CARDS = {
     card('blaster', 'blaster_damage', 'damage', 'Autocannon Plasma Charge', 'damage', 'Autocannon: hotter bolts. Only damage per bolt.'),
     card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Autocannon: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
     card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Autocannon: fire faster. Only fire rate.', cap(8)),
-    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes a little less).', cap(6))
+    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes less than the one before).', cap(6))
   ],
   rockets: [
     card('rockets', 'rockets_damage', 'damage', 'Rocket Pod Warheads', 'rocketDamage', 'Rocket Pods: heavier warheads. Only damage per rocket.'),
@@ -58,7 +58,7 @@ export const STAT_CARDS = {
     card('lightning', 'lightning_reach', 'reach', 'Tesla Arc Reach', 'lightningReach', 'Tesla Arc: each jump reaches further. Only reach.')
   ],
   singularity: [
-    card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: a wider pull. Only pull radius (the pull still fades hard toward the rim).'),
+    card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: a wider pull, and a wider collapse with it (the pull still fades hard toward the rim). Only pull and collapse size.'),
     card('singularity', 'singularity_damage', 'damage', 'Vortex Implosion Damage', 'singularityCollapse', 'Vortex Singularity: harder core grind and collapse. Only damage.'),
     card('singularity', 'singularity_duration', 'duration', 'Vortex Lifetime', 'singularityLife', 'Vortex Singularity: each singularity lasts longer before it collapses. Only lifetime.'),
     card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often. Only cooldown.', cap(8)),
@@ -66,14 +66,14 @@ export const STAT_CARDS = {
   ],
   orbitals: [
     card('orbitals', 'orbitals_damage', 'damage', 'Orbit Blade Edge', 'orbitalDamage', 'Orbit Blades: sharper edges. Only blade damage.'),
-    card('orbitals', 'orbitals_count', 'count', 'Orbit Blade Count', 'orbitalBlades', 'Orbit Blades: one more blade on the ring.', cap(6)),
-    card('orbitals', 'orbitals_radius', 'radius', 'Orbit Blade Reach', 'orbitalRadius', 'Orbit Blades: the ring orbits further out. Only orbit distance.'),
+    card('orbitals', 'orbitals_count', 'count', 'Orbit Blade Count', 'orbitalBlades', 'Orbit Blades: one more blade on the ring (on both rings with Counter-Rotating Ring).', cap(6)),
+    card('orbitals', 'orbitals_radius', 'radius', 'Orbit Blade Reach', 'orbitalRadius', 'Orbit Blades: the ring orbits further out. Each blade hits a little harder to make up for the longer lap, so damage output stays the same.'),
     card('orbitals', 'orbitals_spin', 'spin', 'Orbit Blade Spin', 'orbitalSpin', 'Orbit Blades: the ring spins faster, so the blades sweep more enemies.'),
     card('orbitals', 'orbitals_size', 'size', 'Orbit Blade Size', 'orbitalBladeSize', 'Orbit Blades: bigger saw blades. Only blade size.', cap(8))
   ],
   mines: [
     card('mines', 'mines_damage', 'damage', 'Proximity Mine Charge', 'mineDamage', 'Proximity Mines: bigger charges. Only blast damage.'),
-    card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once.', cap(8)),
+    card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once (a whole triangle more with Minefield Triad).', cap(8)),
     card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often. Only drop rate.', cap(8)),
     card('mines', 'mines_radius', 'radius', 'Proximity Mine Blast Size', 'mineBlastRadius', 'Proximity Mines: wider blasts. Only blast size.'),
     card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
@@ -85,7 +85,7 @@ export const STAT_CARDS = {
     card('turret', 'turret_damage', 'damage', 'Sentry Turret Bigger Cogs', 'turretDamage', 'Sentry Turret: heavier bolts. Only bolt damage.'),
     card('turret', 'turret_rate', 'rate', 'Sentry Turret Tighten Springs', 'turretFireRate', 'Sentry Turret: shoots faster. Only fire rate.', cap(8)),
     card('turret', 'turret_redeploy', 'reload', 'Sentry Turret Loosen Bolts', 'turretReload', 'Sentry Turret: turret charges come back faster, so more turrets are out at once. Only reload speed.', cap(8)),
-    card('turret', 'turret_pierce', 'pierce', 'Sentry Turret Add Punch', 'turretPierce', 'Sentry Turret: each bolt punches through one more enemy (each one behind takes a little less). Only pierce.', cap(4))
+    card('turret', 'turret_pierce', 'pierce', 'Sentry Turret Add Punch', 'turretPierce', 'Sentry Turret: each bolt punches through one more enemy (each one behind takes less than the one before). Only pierce.', cap(4))
   ],
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
@@ -137,7 +137,7 @@ export const STAT_CARDS = {
     card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),
     card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
     card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
-    card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
+    card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: a stronger SHOCK rank: longer stuns, more long stuns and more shock per hit.', cap(4))
   ],
   raillance: [
     card('raillance', 'raillance_damage', 'damage', 'Rail Lance Slug Mass', 'railDamage', 'Rail Lance: a heavier slug. Only damage per lance.'),
@@ -327,7 +327,7 @@ export const TRANSFORMS = {
   },
   rockets: {
     6: tf('tandem', 'Tandem Warheads', 'Rocket Pod rockets blast twice: a second, delayed detonation rocks the same spot.'),
-    12: tf('napalm', 'Napalm Trail', 'Rocket Pod rockets streak fire and leave a burning napalm pool where they burst.'),
+    12: tf('napalm', 'Napalm Trail', 'Rocket Pod rockets leave a burning napalm pool where they burst.'),
     18: tf('mirv', 'MIRV Rockets', 'Each Rocket Pod rocket splits into three mini-rockets mid-flight, each homing on its own target ahead.')
   },
   missiles: {
@@ -336,7 +336,7 @@ export const TRANSFORMS = {
     18: tf('nuke', 'Tactical Nuke', 'Every fourth Swarm Missile salvo is one huge nuke with a giant blast.')
   },
   lightning: {
-    6: tf('fork', 'Forked Chains', 'Tesla Arc forks: two chains leap out at once, each a little weaker.'),
+    6: tf('fork', 'Forked Chains', 'Tesla Arc forks: two chains leap out at once, each about 60% as strong (more damage in all).'),
     12: tf('orb', 'Ball Lightning', 'Each Tesla Arc discharge also drops a crackling orb on the nearest enemy that zaps whatever is close.'),
     18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above on its last target and anything right beside it, stronger the more enemies the chain hit.')
   },
@@ -353,12 +353,12 @@ export const TRANSFORMS = {
   mines: {
     6: tf('cluster', 'Cluster Mines', 'Proximity Mines scatter three bomblets that pop just after the main blast.'),
     12: tf('seeker', 'Seeker Mines', 'Armed Proximity Mines crawl toward the nearest enemy.'),
-    18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, each a little weaker, tossed out toward the nearest enemy.')
+    18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, tossed out toward the nearest enemy: three times as many mines armed at once, each about 40% as strong.')
   },
   turret: {
     6: tf('capacity', 'Extra Capacity', 'Sentry Turret: carry one more turret charge, and every bolt hits harder.'),
     12: tf('mobile', 'Tank Tracks', 'Sentry Turrets roll after you instead of staying where they were planted, and their bolts hit harder.'),
-    18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
+    18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt about 40% lighter.')
   },
   drones: {
     6: tf('wingman', 'Escort Squadron', 'Escort Drones: 3 more drones join the formation (up to 8: 3 in front, 5 behind). Drones past 8 add their guns to the rest.'),
@@ -367,7 +367,7 @@ export const TRANSFORMS = {
   },
   grenades: {
     6: tf('cluster', 'Cluster Grenades', 'Plasma Grenades split as they land: bomblets hop onto nearby enemies past the blast and pop a moment later.'),
-    12: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that burns, freezes or corrodes (by its element) everything inside.'),
+    12: tf('cloud', 'Lingering Cloud', 'Plasma Grenade blasts leave a cloud that keeps hitting everything inside with the grenade\'s element (FIRE, FROST, CORROSIVE or SHOCK).'),
     18: tf('gravity', 'Gravity Grenade', 'Armed Plasma Grenades drag nearby enemies in, harder as the fuse burns down, then blast.')
   },
   gas: {
@@ -396,7 +396,7 @@ export const TRANSFORMS = {
     18: tf('overcharge', 'Thunderclap Overcharge', 'The Electric Shield Field banks charge with every discharge. When a big pack or a boss closes in, it releases it all in a wide thunderclap.')
   },
   raillance: {
-    6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, and every lance hits harder.'),
+    6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, so every lance skewers more of the pack.'),
     12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever stands on it or walks through.'),
     18: tf('overload', 'Overload Shot', 'Every third Rail Lance shot is an Overload: a beam three times as wide that hits twice as hard.')
   },
@@ -417,7 +417,7 @@ export const TRANSFORMS = {
   },
   quake: {
     6: tf('skip', 'Rebound Pulse', 'Graviton Mortar charges rebound after they burst: each one springs to the next pack twice, pulsing again in smaller gravity waves.'),
-    12: tf('fault', 'Spacetime Fractures', 'Every Graviton Mortar burst tears three seams in space-time that snap shut a moment later, hitting everything along them and shattering any rock they cross.'),
+    12: tf('fault', 'Spacetime Fractures', 'Every Graviton Mortar charge tears three seams in space-time where it bursts. They snap shut a moment later, hitting everything along them and cracking any rock they cross.'),
     18: tf('epicenter', 'Graviton Surge', 'Every third Graviton Mortar volley your own hull releases a huge gravity wave around the ship, hurling back everything close.')
   }
 };
@@ -471,7 +471,7 @@ export function countRoom(p, id) {
 }
 
 export const BOOST_NAME = 'Across the Board';
-export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
+export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} rank in every UTILITY stat (size, reach, range, pierce, status rank...). No new tricks, just more of the same.`;
 
 // In-world R&D lines for the Breakthrough header ({weapon} is the weapon's name).
 export const RD_LINES = [

@@ -151,6 +151,8 @@ export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
 export const TECTONIC_MINING_SPEED = 1.18;
 export const TECTONIC_MINING_RANGE = 1.15;
 export const TECTONIC_DRILL_SCALE = 1.15;
+// Pulsar Helix also speeds up the Autocannon (stats.fireRate, read by blasterFireRate).
+export const PULSAR_FIRE_RATE = 1.15;
 
 export const UPGRADE_POOL = [
   {
@@ -170,7 +172,7 @@ export const UPGRADE_POOL = [
     category: 'LUCK',
     maxLevel: 5,
     headline: 'luck',
-    summary: 'Raises the odds of lucky multi-level rolls, supply caches and cache jackpots.',
+    summary: 'Raises the odds of lucky multi-level rolls, evolution cards, supply caches and cache jackpots.',
     apply(player) {
       player.stats.luck += 0.25;
     }
@@ -354,7 +356,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'KINETIC weapons hit harder: blaster bolts, helix bolts, shrapnel and orbit blades.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, claws and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }
@@ -369,7 +371,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'explosive') || player.weapons.tectonicBore >= 1;
     },
-    summary: 'EXPLOSIVE weapons hit harder: rockets, missile, grenade and mine blasts, and tectonic drill detonations.',
+    summary: 'Every weapon with the EXPLOSIVE chip hits harder: rockets, missiles, grenades, mines, mortar waves, Siege Battery shells and drill blasts.',
     apply(player) {
       addTagDamage(player, 'explosive');
     }
@@ -384,7 +386,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'electric');
     },
-    summary: 'ELECTRIC weapons hit harder: Tesla arcs, Storm Protocol chains and Shock Field discharges.',
+    summary: 'Every weapon with the ELECTRIC chip hits harder: Tesla arcs (Storm Protocol and EMP arcs too) and Shock Field discharges.',
     apply(player) {
       addTagDamage(player, 'electric');
     }
@@ -400,7 +402,7 @@ export const UPGRADE_POOL = [
       const w = player.weapons;
       return hasTag(player, 'area') || w.dashNova >= 1 || w.tectonicBore >= 1;
     },
-    summary: 'AREA weapons reach further: rocket, missile, grenade and mine blasts, singularity pull and collapse, dash nova and drill blasts.',
+    summary: 'Every weapon with the AREA chip reaches further: wider blasts, clouds, swarms, waves, fields and pulls, and longer sprayer cones. The dash nova and drill blasts grow too.',
     apply(player) {
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }
@@ -439,10 +441,10 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
     headline: 'helixBolts',
-    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
+    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side. The Autocannon fires faster too.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
-      player.stats.fireRate *= 1.15;
+      player.stats.fireRate *= PULSAR_FIRE_RATE;
     }
   },
   {
