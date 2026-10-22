@@ -62,7 +62,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The level-up screen with a NEW WEAPON card and an upgrade card',
       lines: [
         `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade. Every ${floorStep} levels you **must** add a weapon.`,
-        'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards.'
+        'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards, or **SKIP** a hand for a little gold.'
       ]
     },
     {

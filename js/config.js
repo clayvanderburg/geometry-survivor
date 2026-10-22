@@ -292,7 +292,8 @@ export const DEFAULT_TUNING = {
   goldRerollGrowth: 2,
   goldLockCost: 5,
   goldBanishCost: 30,
-  goldWeaponRerollCost: 40
+  goldWeaponRerollCost: 40,
+  goldSkipReward: 10
 };
 
 export const TUNING_SCHEMA = [
@@ -588,7 +589,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
       { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
-      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
+      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
+      { key: 'goldSkipReward', label: 'Gold for Skipping a Level-up', type: 'range', min: 0, max: 100, step: 1, unit: '' }
     ]
   }
 ];

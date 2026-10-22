@@ -1,7 +1,8 @@
 // Gold: a per-run currency mined from gold veins (separate from Void Cores, which are meta) and spent on
 // the level-up hand. REROLL replaces the unlocked cards (TUNING.goldRerollCost, x goldRerollGrowth for
 // each further reroll of the same hand; the NEW WEAPON pick rerolls its weapons from goldWeaponRerollCost); LOCK (TUNING.goldLockCost) keeps one card in place through
-// rerolls and carries it into the next level-up hand if another card is picked.
+// rerolls and carries it into the next level-up hand if another card is picked. SKIP takes no card for
+// a little gold (skipReward); a lock carries over as if another card was picked.
 //
 // Pure helpers over a player and plain objects, so tests and the balance harness can use them without
 // a DOM. The hand itself is still rolled by upgrades.js rollLevelUpHand: rollHandAround only wraps it.
@@ -38,6 +39,10 @@ export function weaponRerollCost(rerolls = 0, tuning = TUNING) {
 export const lockCost = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldLockCost ?? 5));
 // BANISH: removes a card from this run's pool for good (a fresh card takes its slot).
 export const banishCost = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldBanishCost ?? 30));
+
+// SKIP: take no card from a level-up hand and bank this much gold instead (half a first reroll, so
+// skipping is a way out of a junk hand, never a gold farm).
+export const skipReward = (tuning = TUNING) => Math.max(0, Math.round(tuning.goldSkipReward ?? 10));
 
 // Spends from `wallet.gold` only when it covers the whole amount; gold never goes below 0.
 export function trySpend(wallet, amount) {
