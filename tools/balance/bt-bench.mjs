@@ -9,13 +9,22 @@
 // damage gain and rewards only extra hits).
 //
 //   node tools/balance/bt-bench.mjs [--weapons a,b] [--levels 6,12] [--seeds 3] [--workers 4] [--json out.json]
-//                                   [--seed S] [--values candidate.json]  (TF_REALIZED overrides, { weapon: { transform: [v6, v12, v18] } })
+//                                   [--seed S] [--values candidate.json]
+//                                   [--bench real|dense] [--class]  (class standing: each weapon / the Autocannon)  (TF_REALIZED overrides, { weapon: { transform: [v6, v12, v18] } })
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 
-// Wave a pilot is on when a weapon reaches LV 6 / 12 / 18 (main weapon, focused build; balance-sim runs).
-export const BT_BENCH_WAVE = { 6: 6, 12: 20, 18: 30 };
+// Wave a pilot is on when a weapon reaches LV 1 / 3 / 6 / 12 / 18 (main weapon, focused build; balance-sim runs).
+export const BT_BENCH_WAVE = { 1: 2, 3: 4, 6: 6, 12: 20, 18: 30 };
+// Bench populations. `real` is the balance reference: a chasing swarm as dense round the ship as in real
+// runs (a sprayer pilot has 11-16 enemies within 280 px, clumped to one side; this chase holds ~14, R 0.70).
+// `dense` is the original card bench (50 targets, still pack + chase): it puts 15-24 enemies within 280 px,
+// which overrates every area weapon (a cone's damage grows with the crowd, an aimed bolt's barely does).
+export const BT_BENCHES = Object.freeze({
+  real: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']) }),
+  dense: Object.freeze({ targets: 50, scenarios: Object.freeze(['pack', 'chase']) })
+});
 // Weapon-level rate stat (fire-rate POWER stat taken after Damage), when a weapon has one.
 const RATE_STATS = ['rate', 'reload', 'recharge', 'cooldown'];
 const SEED = 'btbench';
@@ -65,20 +74,22 @@ function setupFor(id, lv, bt) {
 }
 
 // Realized DPS of weapon `id` (every source but the Autocannon's when it isn't the one benched).
-export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED } = {}) {
+// `option` null: no Breakthrough at `lv` itself (a level between milestones, or the class report).
+export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED, bench: kind = 'dense' } = {}) {
   await load();
   const bt = {};
   for (const m of wl.BREAKTHROUGH_LEVELS) if (m < lv) bt[m] = earlier;
-  bt[lv] = option;
-  const bench = { ...h.BENCH, targetWave: BT_BENCH_WAVE[lv] };
+  if (option) bt[lv] = option;
+  const { targets, scenarios } = BT_BENCHES[kind];
+  const bench = { ...h.BENCH, targets, targetWave: BT_BENCH_WAVE[lv] };
   let sum = 0;
-  for (const scenario of ['pack', 'chase']) {
+  for (const scenario of scenarios) {
     for (let seedIndex = 0; seedIndex < seeds; seedIndex++) {
       const r = h.benchUpgrade({ seed, scenario, seedIndex, setup: setupFor(id, lv, bt), bench });
       for (const [src, v] of Object.entries(r.dps)) if (src !== 'thrusters' && (id === 'blaster' || !['blaster', 'helix'].includes(src))) sum += v;
     }
   }
-  return sum / (2 * seeds);
+  return sum / (scenarios.length * seeds);
 }
 
 // Every option of every weapon at every milestone: [{ id, lv, option, dps }].
@@ -93,11 +104,18 @@ export async function caseList({ weapons = null, levels = [6, 12, 18] } = {}) {
   return out;
 }
 
-export async function runAll({ cases, seeds, workers, values = null, seed = SEED }) {
+// Class standing: every weapon alone at `levels` (earlier milestones Across the Board, the milestone itself too).
+export async function classCases({ weapons = null, levels = [1, 3, 6, 12, 18] } = {}) {
+  await load();
+  return Object.keys(wl.STAT_CARDS).filter((id) => !weapons || weapons.includes(id))
+    .flatMap((id) => levels.map((lv) => ({ id, lv, option: wl.BREAKTHROUGH_LEVELS.includes(lv) ? 'boost' : null })));
+}
+
+export async function runAll({ cases, seeds, workers, values = null, seed = SEED, bench = 'dense' }) {
   const results = new Array(cases.length);
   let next = 0, done = 0;
   await Promise.all(Array.from({ length: workers }, () => new Promise((resolve, reject) => {
-    const w = new Worker(fileURLToPath(import.meta.url), { workerData: { seeds, values, seed } });
+    const w = new Worker(fileURLToPath(import.meta.url), { workerData: { seeds, values, seed, bench } });
     const feed = () => {
       if (next >= cases.length) { w.terminate(); resolve(); return; }
       const i = next++;
@@ -125,7 +143,7 @@ if (!isMainThread) {
   const ready = setRealized(workerData.values);
   parentPort.on('message', async ({ i, c }) => {
     await ready;
-    parentPort.postMessage({ i, dps: await benchOption(c.id, c.lv, c.option, { seeds: workerData.seeds, seed: workerData.seed }) });
+    parentPort.postMessage({ i, dps: await benchOption(c.id, c.lv, c.option, { seeds: workerData.seeds, seed: workerData.seed, bench: workerData.bench }) });
   });
 } else if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
@@ -136,13 +154,28 @@ if (!isMainThread) {
   const workers = Number(get('--workers', Math.max(1, Math.min(8, availableParallelism()))));
   const json = get('--json', null);
   const seed = get('--seed', SEED);
+  const bench = get('--bench', 'dense');
+  if (!BT_BENCHES[bench]) throw new Error(`--bench must be ${Object.keys(BT_BENCHES).join('|')}`);
   const valuesPath = get('--values', null);
   const values = valuesPath ? JSON.parse((await import('node:fs')).readFileSync(valuesPath, 'utf8')) : null;
-  const cases = await caseList({ weapons, levels });
   const t0 = Date.now();
-  const rows = relate(await runAll({ cases, seeds, workers, values, seed }));
-  process.stderr.write(`bt-bench: ${cases.length} cases in ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
-  if (json) (await import('node:fs')).writeFileSync(json, JSON.stringify(rows, null, 1));
-  console.log('| weapon | LV | option | DPS | vs Across the Board | vs Overtuned |\n|---|---:|---|---:|---:|---:|');
-  for (const r of rows) console.log(`| ${r.id} | ${r.lv} | ${r.option} | ${r.dps.toFixed(1)} | ${r.vsBoost.toFixed(2)} | ${r.vsOvertuned.toFixed(2)} |`);
+  if (args.includes('--class')) {
+    // Class standing: each weapon's realized DPS / the Autocannon's at the same level.
+    const cases = await classCases({ weapons: weapons && [...new Set(['blaster', ...weapons])], levels: get('--levels', '1,3,6,12,18').split(',').map(Number) });
+    const rows = await runAll({ cases, seeds, workers, values, seed, bench });
+    const ref = new Map(rows.filter((r) => r.id === 'blaster').map((r) => [r.lv, r.dps]));
+    for (const r of rows) r.vsAutocannon = r.dps / ref.get(r.lv);
+    process.stderr.write(`bt-bench: ${cases.length} class cases in ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
+    if (json) (await import('node:fs')).writeFileSync(json, JSON.stringify(rows, null, 1));
+    const lvs = [...new Set(rows.map((r) => r.lv))];
+    console.log(`| weapon | ${lvs.map((l) => `LV ${l}`).join(' | ')} |\n|---|${lvs.map(() => '---:').join('|')}|`);
+    for (const id of [...new Set(rows.map((r) => r.id))]) console.log(`| ${id} | ${lvs.map((l) => rows.find((r) => r.id === id && r.lv === l).vsAutocannon.toFixed(2)).join(' | ')} |`);
+  } else {
+    const cases = await caseList({ weapons, levels });
+    const rows = relate(await runAll({ cases, seeds, workers, values, seed, bench }));
+    process.stderr.write(`bt-bench: ${cases.length} cases in ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
+    if (json) (await import('node:fs')).writeFileSync(json, JSON.stringify(rows, null, 1));
+    console.log('| weapon | LV | option | DPS | vs Across the Board | vs Overtuned |\n|---|---:|---|---:|---:|---:|');
+    for (const r of rows) console.log(`| ${r.id} | ${r.lv} | ${r.option} | ${r.dps.toFixed(1)} | ${r.vsBoost.toFixed(2)} | ${r.vsOvertuned.toFixed(2)} |`);
+  }
 }
