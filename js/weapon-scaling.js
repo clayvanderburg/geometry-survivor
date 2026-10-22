@@ -463,7 +463,7 @@ export const WEAPON_SCALING = {
   overdriveTime: 1.5,
   overdriveMult: 3,
   overdriveHue: 46,
-  kamikazeEvery: 6, // bt-bench: the blast count, not its damage, sets what it realizes
+  kamikazeEvery: 5, // bt-bench: the blast count, not its damage, sets what it realizes
   kamikazeShare: 0.3,
   kamikazeHitShare: 1,
   kamikazeRange: 420,
