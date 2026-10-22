@@ -223,10 +223,15 @@ export const DEFAULT_TUNING = {
   // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
   slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
+  // Share of a level-up hand's weight held by weapon cards (stat + element), whatever the loadout
+  // (upgrades.js handWeights). Supply caches keep the raw weights.
+  handWeaponShare: 0.55,
+  globalCardWeight: 1,      // each GLOBAL card (Tempo, Cooldown, Persistence, Velocity, Area): like Overdrive or a crit card
   weaponLineWeight: 1.5,
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.7,
   statusCardWeight: 0.7,    // each global STATUS card
+  replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
@@ -526,9 +531,12 @@ export const TUNING_SCHEMA = [
       { key: 'weaponFloorStep', label: 'Weapon Floor: +1 Weapon Required Every N Levels', type: 'range', min: 1, max: 30, step: 1, unit: '' },
       { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'globalCardWeight', label: 'Global Card Weight (Tempo, Cooldown, Persistence, Velocity, Area)', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
+      { key: 'handWeaponShare', label: 'Weapon Cards Share of Level-Up Hands', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'prob' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'replicatorWeight', label: 'Replicator Array Weight', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
       { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]

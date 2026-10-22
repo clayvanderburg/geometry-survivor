@@ -350,7 +350,7 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * 1.3);
 
   const area = describeUpgrade(p, byId('tag_area'));
-  assert.equal(area.headline, '+15% AREA SIZE');
+  assert.equal(area.headline, '+15% AREA SIZE · 1 WEAPON', 'the global AREA card names how many weapons grow');
   assert.ok(area.rows.some((r) => r.id === 'missileBlast' && r.before === '75' && r.after === '86'));
   assert.ok(area.rows.some((r) => r.id === 'novaRadius'));
   applyUpgradeLevels(p, byId('tag_area'));

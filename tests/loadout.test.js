@@ -91,7 +91,8 @@ test('equipped weapon level-ups are weighted so a typical hand is mostly about y
   assert.equal(upgradeKind(UPGRADE_BY_ID.blaster_fire), 'element');
   assert.equal(upgradeKind(UPGRADE_BY_ID.status_potency), 'status');
   assert.equal(upgradeKind(UPGRADE_BY_ID.overdrive), 'general');
-  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'tag');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'general', 'Field Amplifier is the global AREA card (v0.46)');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_kinetic), 'tag');
   assert.equal(upgradeKind(UPGRADE_BY_ID.evo_pulsar), 'evolution');
 });
 
@@ -459,7 +460,9 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
   // It shows up in ordinary hands, and rolls its rarity jumps like other lines.
   let offered = 0;
   withRandom(() => { for (let i = 0; i < 300; i++) if (rollLevelUpHand(p, 3).some((c) => c.id === 'shrapnel')) offered++; }, lcg(21));
-  assert.ok(offered > 20, `Shatter in ${offered} of 300 hands`);
+  // ~5% of 1-weapon hands: weapon cards hold handWeaponShare of a hand (upgrades.js handWeights), up from ~37%
+  // of a 1-weapon hand on raw weights, so each general card turns up a little less at run start.
+  assert.ok(offered > 10, `Shatter in ${offered} of 300 hands`);
   const others = UPGRADE_POOL.filter((u) => u.id !== 'shrapnel');
   const rare = withRandom(() => rollUpgrades({ ...p, upgradeLevels: Object.fromEntries(others.map((u) => [u.id, u.maxLevel])), banished: Object.fromEntries(others.map((u) => [u.id, true])) }, 1), () => 0.02);
   assert.equal(rare[0].id, 'shrapnel');

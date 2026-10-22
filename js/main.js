@@ -41,7 +41,8 @@ import {
   MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE, MOVE_SPEED_STEP } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement,
+  dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
@@ -175,6 +176,9 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
 const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges pulse red
+// Supernova bomb pickups (v0.46: the spare bomb left the Geom Attractor card): a rare drop, scaled by Luck.
+// Lieutenants drop one most often; void wells and hulks now and then. Bosses still add one straight away.
+export const BOMB_DROP = Object.freeze({ lieutenant: 0.35, blackhole: 0.04, hulk: 0.02, max: 9 });
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
@@ -2083,7 +2087,7 @@ export class Game {
     // with the invulnerability to match.
     const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
     p.dashTimer = W.dashDuration * reach;
-    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
+    p.dashCooldown = dashCooldownFor(p, TUNING.dashCooldownBase ?? 1.5);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, W.dashInvuln + W.dashDuration * (reach - 1));
 
@@ -2447,6 +2451,13 @@ export class Game {
         hue: e.isBoss || e.isLieutenant ? 48 : 145,
         magnetized: fromBomb
       });
+    }
+
+    // A Supernova bomb pickup (BOMB_DROP), never while the bomb bay is full.
+    const bombChance = (e.isLieutenant ? BOMB_DROP.lieutenant : e.type === 'blackhole' ? BOMB_DROP.blackhole : e.type === 'hulk' ? BOMB_DROP.hulk : 0) * luck;
+    if (!bossPay && bombChance > 0 && this.player.bombs < BOMB_DROP.max && Math.random() < bombChance) {
+      const ba = Math.random() * Math.PI * 2;
+      this.geoms.push({ isBomb: true, x: e.x, y: e.y, vx: Math.cos(ba) * 3, vy: Math.sin(ba) * 3, xp: 0, rotation: 0, hue: 48, magnetized: fromBomb });
     }
 
     const maxWaveCores = Math.ceil((TUNING.maxWaveCores ?? 3) * this.player.stats.coreDropMult);
@@ -3432,6 +3443,8 @@ export class Game {
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster bolts, same reach
+    const speed = p.stats.bulletSpeed * vel;
     for (const stream of prismStreams(blasterStreams(p, b))) {
       const a = p.angle + stream.angle;
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
@@ -3440,13 +3453,13 @@ export class Game {
       this.bullets.push({
         x: noseX,
         y: noseY,
-        vx: Math.cos(a) * p.stats.bulletSpeed,
-        vy: Math.sin(a) * p.stats.bulletSpeed,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
         damage,
         pierce,
         hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
         radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
-        life: 1.25,
+        life: 1.25 / vel,
         width: AUTOCANNON_DRAW_WIDTH,
         ...flak,
         ricochet: b.t8 ? 1 : 0,
@@ -3461,14 +3474,14 @@ export class Game {
         this.bullets.push({
           x: p.x,
           y: p.y,
-          vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
-          vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
+          vx: Math.cos(ha) * (speed * 0.85),
+          vy: Math.sin(ha) * (speed * 0.85),
           damage: weaponDamage(p, 'helix', b),
           pierce,
           hue: 305, // evolution magenta: reads apart from cyan Autocannon shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
-          life: 1.3
+          life: 1.3 / vel
         });
       }
     }
@@ -3485,6 +3498,7 @@ export class Game {
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const heading = p.hullAngle ?? p.drillAngle ?? p.angle; // hull heading: where the wing pods are
     const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
@@ -3513,13 +3527,13 @@ export class Game {
       this.bullets.push({
         x: wx,
         y: wy,
-        vx: fx * W.wingRocketSpeed,
-        vy: fy * W.wingRocketSpeed,
+        vx: fx * W.wingRocketSpeed * vel,
+        vy: fy * W.wingRocketSpeed * vel,
         damage,
         pierce: 1,
         hue: 354,
         radius: 4.5,
-        life: W.wingRocketLife,
+        life: W.wingRocketLife / vel,
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
@@ -3539,6 +3553,7 @@ export class Game {
   fireSwarmMissiles(b = weaponBuild(this.player, 'missiles')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'missiles', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const salvo = W.missileSalvo(b);
     const damage = weaponDamage(p, 'missile', b);
     const blastRadius = missileBlastRadius(p, b);
@@ -3581,12 +3596,12 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: W.missileSpeed * (nuke ? 0.8 : 1),
+        speed: W.missileSpeed * vel * (nuke ? 0.8 : 1),
         damage: each,
         blastRadius: radius,
         hue: nuke ? 30 : hue,
         trail: [],
-        life: nuke ? W.missileLife * 1.25 : W.missileLife,
+        life: (nuke ? W.missileLife * 1.25 : W.missileLife) / vel,
         source: 'missile',
         nuke,
         cluster
@@ -5125,7 +5140,7 @@ export class Game {
   // the 3x3 cells around it.
   mergeLooseGeoms() {
     const loose = [];
-    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.magnetized) loose.push(g);
+    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.isBomb && !g.magnetized) loose.push(g);
     let excess = loose.length - MAX_LOOSE_GEOMS;
     if (excess <= 0) return;
     const r = GEOM_MERGE_RADIUS, cells = new Map();
@@ -5659,12 +5674,12 @@ export class Game {
     this.mergeLooseGeoms();
     for (let i = this.geoms.length - 1; i >= 0; i--) {
       const g = this.geoms[i];
-      g.rotation += g.isCore ? 0.12 : g.isGold ? 0.05 : 0.08;
+      g.rotation += g.isCore ? 0.12 : g.isGold || g.isBomb ? 0.05 : 0.08;
 
       const dx = p.x - g.x;
       const dy = p.y - g.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const attractR = g.isCore || g.isGold ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
+      const attractR = g.isCore || g.isGold || g.isBomb ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
 
       if (dist < attractR || g.magnetized) {
         g.magnetized = true;
@@ -5699,6 +5714,16 @@ export class Game {
           burst(this, 'gold', g.x, g.y);
           this.addGold(g.gold || 1);
           this.score += Math.round(10 * this.multiplier);
+          this.geoms.splice(i, 1);
+          continue;
+        }
+        if (g.isBomb) {
+          // A spare Supernova: a bright gold bloom, a chime on top of the core pickup, and the HUD count ticks up.
+          this.sound.playGeomPickup(true);
+          this.sound.playGoldPickup?.();
+          burst(this, 'core', g.x, g.y, { hue: 45, scale: 1.3 });
+          p.bombs = Math.min(BOMB_DROP.max, p.bombs + 1);
+          this.particles.spawnFloatText(p.x, p.y - 22, '+1 ✸ SUPERNOVA', '#ffcc00', 15);
           this.geoms.splice(i, 1);
           continue;
         }
@@ -6171,7 +6196,7 @@ export class Game {
     };
   }
 
-  // Keyboard: [1-6] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  // Keyboard: [1-8] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
   handleStartPickKey(e, onControl) {
     const code = e.code;
     if (e.repeat) return;
@@ -6831,6 +6856,27 @@ export class Game {
         ctx.rotate(Math.PI / 4);
         ctx.strokeStyle = `hsla(290, 100%, 75%, ${alpha})`;
         ctx.strokeRect(-pulseR * 0.55, -pulseR * 0.55, pulseR * 1.1, pulseR * 1.1);
+      } else if (g.isBomb) {
+        // Supernova bomb: an eight-point gold star with a pulsing halo (reads apart from coins and cores).
+        const r = 11 + Math.sin(performance.now() * 0.009 + i) * 1.4;
+        ctx.strokeStyle = `hsla(45, 100%, 62%, ${alpha * 0.5})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `hsla(48, 100%, 60%, ${alpha})`;
+        ctx.shadowColor = '#ffcc00';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        for (let s = 0; s < 16; s++) {
+          const a = (s * Math.PI) / 8;
+          const rr = s % 2 ? r * 0.42 : r;
+          if (s === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else if (g.isGold) {
         // Gold coin: a solid, glowing hexagon with a dark diamond stamped in (XP geoms are hollow outlines).
         const r = 8 + Math.sin(performance.now() * 0.008 + i) * 0.8;
