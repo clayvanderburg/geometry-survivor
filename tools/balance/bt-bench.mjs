@@ -24,7 +24,9 @@ export const BT_BENCH_WAVE = { 1: 2, 3: 4, 6: 6, 12: 20, 18: 30 };
 // which overrates every area weapon (a cone's damage grows with the crowd, an aimed bolt's barely does).
 export const BT_BENCHES = Object.freeze({
   real: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']) }),
-  dense: Object.freeze({ targets: 50, scenarios: Object.freeze(['pack', 'chase']) })
+  dense: Object.freeze({ targets: 50, scenarios: Object.freeze(['pack', 'chase']) }),
+  // `kite`: the reference swarm, chasing a ship that loops wide (1200 px) like a human kiting in long runs.
+  kite: Object.freeze({ targets: 25, scenarios: Object.freeze(['chase']), orbitRadius: 1200 })
 });
 // Weapon-level rate stat (fire-rate POWER stat taken after Damage), when a weapon has one.
 const RATE_STATS = ['rate', 'reload', 'recharge', 'cooldown'];
@@ -81,8 +83,8 @@ export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost'
   const bt = {};
   for (const m of wl.BREAKTHROUGH_LEVELS) if (m < lv) bt[m] = earlier;
   if (option) bt[lv] = option;
-  const { targets, scenarios } = BT_BENCHES[kind];
-  const bench = { ...h.BENCH, targets, targetWave: BT_BENCH_WAVE[lv] };
+  const { targets, scenarios, orbitRadius = h.BENCH.orbitRadius } = BT_BENCHES[kind];
+  const bench = { ...h.BENCH, targets, orbitRadius, targetWave: BT_BENCH_WAVE[lv] };
   let sum = 0;
   for (const scenario of scenarios) {
     for (let seedIndex = 0; seedIndex < seeds; seedIndex++) {
