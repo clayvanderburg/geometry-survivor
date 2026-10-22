@@ -172,7 +172,7 @@ export const STAT_CARDS = {
     card('harpoon', 'harpoon_damage', 'damage', 'Drill Driver Tungsten Bit', 'harpoonDamage', 'Drill Driver: a harder drill bit. Only damage per hit.'),
     card('harpoon', 'harpoon_rate', 'rate', 'Drill Driver Spin-Up Motor', 'harpoonRate', 'Drill Driver: the next bit spins up faster, so you fire more of them. Only fire rate.', cap(8)),
     card('harpoon', 'harpoon_range', 'range', 'Drill Driver Long Barrel', 'harpoonRange', 'Drill Driver: bits fly further before they are spent. Only reach.', cap(8)),
-    card('harpoon', 'harpoon_pierce', 'pierce', 'Drill Driver Hardened Threads', 'harpoonPierce', 'Drill Driver: bits lose less bite boring through each enemy. Only damage past the first enemy.', sharedCap(6)),
+    card('harpoon', 'harpoon_pierce', 'pierce', 'Drill Driver Hardened Threads', 'harpoonPierce', 'Drill Driver: bits lose less bite boring through each enemy. Only damage past the first enemy.', sharedCap(5)),
     card('harpoon', 'harpoon_drill', 'drill', 'Drill Driver Rock Bore', 'harpoonDrill', 'Drill Driver: each bit bores through more rock before it bites to a stop. Only mining.', cap(8))
   ],
   quake: [

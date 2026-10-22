@@ -1,6 +1,6 @@
 // Drill Driver (weapon id `harpoon`, kept for stats history): a PRIMARY slot weapon. While firing, the ship
 // spins up a drill bit at its nose and fires it along the turret aim. The bit bores through every enemy on
-// its line once (each one behind takes W.harpoonPierceKeep of the last unless it died, like Autocannon bolts)
+// its line once (each one behind takes W.harpoonPierceKeep of the last, kill or not)
 // and through rock: it breaks rock worth W.harpoonDrill rock HP per bit (x the ship's drill speed) and bites
 // to a stop in the first rock it can't finish. Bedrock always stops it, and so does an armored serpent plate.
 // Rock a bit breaks is your mining: it counts as rocks mined and drops its ore like a drill bite. A spent bit
@@ -211,7 +211,7 @@ export class DrillDriver {
       }
       game.hitEnemy(e, bit.dmg * bit.pierceMult, 'harpoon', kick.x, kick.y, 1, 'harpoon');
       const survived = !e.dead && e.hp > 0;
-      if (survived) bit.pierceMult *= bit.keep; // a kill costs the bit no momentum
+      bit.pierceMult *= bit.keep; // every enemy bored costs the bit some bite, kill or not
       bit.flash = 0.12;
       // Screw-through: sparks spray off both sides of the hull and chips fly out the back.
       game.particles.spawnDirectionalSparks?.(e.x, e.y, ang, 0.9, 4, DRILL_HUE, 6);
