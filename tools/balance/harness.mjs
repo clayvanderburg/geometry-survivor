@@ -804,7 +804,7 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
       }
       game.geoms.length = 0;
       game.chests.length = 0;
-      if (dash && p.dashCooldown <= 0) game.triggerDash(); // potential: dash nova on every cooldown
+      if (dash && p.dashCooldown <= 0) game.triggerDash(); // potential: dash nova on every cooldown (`dash: false`: never)
       if (!chase) { p.vx = 0; p.vy = 0; }
       game.update(DT);
       if (game.state !== 'PLAYING') game.state = 'PLAYING';
