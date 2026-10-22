@@ -668,22 +668,23 @@ export function sprayTurn(sp, game, p, b, dt, range) {
     }
     if (sp.seekA != null) {
       const diff = ((sp.seekA - sp.swivel) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
-      const step = W.seekTurn * dt;
+      const step = W.flameTurnRate(b) * (W.seekTurnMult[b.id] ?? 0.7) * dt;
       turn = Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
     }
   }
   if (has(b, 'whirl')) {
-    const was = sp.whirlT || 0;
-    sp.whirlT = (was + dt) % W.whirlEvery;
-    if (sp.whirlT < W.whirlTime) {
-      if (was >= W.whirlTime || sp.whirlT < was) {
-        // The whirl kicks off: a hot ring round the hull and a whoosh.
-        game.particles.spawnShockwave(p.x, p.y, range * 0.8, sp.kind.hue, 4, W.whirlTime);
-        game.particles.spawnShockwave(p.x, p.y, range * 0.45, sp.kind.ringHue2, 2.5, W.whirlTime * 0.8);
-        game.sound.playFlameBurst?.(sp.kind.sound);
-      }
-      turn += (Math.PI * 2 / W.whirlTime) * dt;
+    // The whirl window is the first whirlTime s of each whirlEvery s cycle; a tick earns the part of it that
+    // overlaps the window, so a whirl is exactly one extra turn at any frame rate.
+    const t0 = sp.whirlT || 0, t1 = t0 + dt;
+    const overlap = Math.max(0, Math.min(t1, W.whirlTime) - t0) + Math.max(0, Math.min(t1, W.whirlEvery + W.whirlTime) - Math.max(t0, W.whirlEvery));
+    if (t0 < W.whirlTime ? t0 === 0 : t1 >= W.whirlEvery) {
+      // The whirl kicks off: a hot ring round the hull and a whoosh.
+      game.particles.spawnShockwave(p.x, p.y, range * 0.8, sp.kind.hue, 4, W.whirlTime);
+      game.particles.spawnShockwave(p.x, p.y, range * 0.45, sp.kind.ringHue2, 2.5, W.whirlTime * 0.8);
+      game.sound.playFlameBurst?.(sp.kind.sound);
     }
+    sp.whirlT = t1 % W.whirlEvery;
+    turn += (Math.PI * 2 / W.whirlTime) * overlap;
   }
   return turn;
 }

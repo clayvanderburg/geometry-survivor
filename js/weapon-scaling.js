@@ -277,7 +277,7 @@ export const WEAPON_SCALING = {
   latticeWidth: 10,
   latticeHitShare: 0.5,
   conductTime: 1.2,
-  conductArcs: 2,
+  conductArcs: 1, // bt-bench (blend): two arcs per charged kill read 1.82x at LV 12
   conductShare: 0.5,
   conductRange: 200,
   conductHitShare: 0.5,
@@ -668,15 +668,18 @@ export const WEAPON_SCALING = {
   // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
   flameTfTurnRanks: 1,
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 ? W.flameTfTurnRanks : 0),
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
   // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
-  // whirlEvery s the nozzle adds one full turn over whirlTime s), Seeker (the nozzle swings toward the densest
-  // pack within its range at seekTurn rad/s instead of spinning; it spins on when nobody is in reach).
-  whirlEvery: 3,
-  whirlTime: 0.45,
-  seekTurn: 3.2,
+  // whirlEvery s the nozzle adds one full turn over whirlTime s, plus flameTfTurnRanks Spin Rotor rank), Seeker (the
+  // nozzle swings toward the densest pack within its range at seekTurnMult x its spin speed instead of spinning;
+  // it spins on when nobody is in reach).
+  whirlEvery: 2.5,
+  whirlTime: 0.6,
+  // The nozzle swings at this share of its own spin speed (bt-bench, blend: 3.2 rad/s parked the cone on the pack,
+  // Cryo/Acid 1.45-1.52x). The Flamethrower spins flameTurnTrim faster, so its share is lower.
+  seekTurnMult: Object.freeze({ flamethrower: 0.6, cryospray: 0.7, acidspray: 0.7 }),
   seekEvery: 0.25,
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
