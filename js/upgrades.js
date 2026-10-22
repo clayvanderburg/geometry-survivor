@@ -7,7 +7,7 @@ import {
 } from './loadout.js';
 import {
   STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
-  levelCardWeapon, weaponElement, elementsOf, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks
+  levelCardWeapon, weaponElement, elementsOf, boostRanks, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks
 } from './weapon-levels.js';
 import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
 
@@ -627,6 +627,8 @@ export function levelRoom(player, u) {
   let own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
   // A count card shares its cap with the REPLICATOR ARRAY ranks its weapon already gets.
   const sc = STAT_CARD_BY_ID[u.id];
+  // A capped UTILITY stat shares its cap with the ACROSS THE BOARD ranks the weapon already gets.
+  if (sc?.boostCapped) own -= boostRanks(player, sc.weapon);
   if (sc && COUNT_STATS[sc.weapon]?.card === u.id) own -= replicatorBonus(sc.weapon, player.upgradeLevels[u.id], replicatorRanks(player));
   const weapon = levelCardWeapon(u.id);
   if (!weapon && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
