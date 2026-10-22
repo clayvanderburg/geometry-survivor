@@ -384,18 +384,18 @@ export const TRANSFORMS = {
     18: tf('shroud', 'Toxic Shroud', 'Corrosive Gas Trail wraps your hull in a lasting cloud that follows you everywhere and eats anything that gets close.')
   },
   flamethrower: {
-    6: tf('fireballs', 'Fireballs', 'Every second each Flamethrower nozzle lobs a fireball that bursts at the tip of its flames, scorching and igniting everything around it.'),
-    12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through.'),
+    6: tf('fireballs', 'Fireballs', 'Every second each Flamethrower nozzle lobs a fireball that bursts at the tip of its flames, scorching and igniting everything around it, and the nozzle spins faster.'),
+    12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through, and the nozzle spins faster.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
   },
   cryospray: {
-    6: tf('shatter', 'Shatter', 'When the Cryo Sprayer hits a FROZEN enemy it shatters in a burst of ice shards that hits and chills everything around it.'),
-    12: tf('slicks', 'Frost Slicks', 'Cryo Sprayer coolant splashes down at the tip of the spray as freezing slicks that keep chilling whatever crosses them.'),
+    6: tf('shatter', 'Shatter', 'When the Cryo Sprayer hits a FROZEN enemy it shatters in a burst of ice shards that hits and chills everything around it, and the nozzle spins faster.'),
+    12: tf('slicks', 'Frost Slicks', 'Cryo Sprayer coolant splashes down at the tip of the spray as freezing slicks that keep chilling whatever crosses them, and the nozzle spins faster.'),
     18: tf('blizzard', 'Blizzard Ring', 'Every few seconds the Cryo Sprayer vents a ring of frost that rolls out all around you, chilling and shoving back everything it passes.')
   },
   acidspray: {
-    6: tf('meltdown', 'Meltdown', 'Corroded enemies the Acid Sprayer kills melt down in an acid splash that hits and corrodes everything around them.'),
-    12: tf('pools', 'Acid Pools', 'Acid Sprayer acid splashes down at the tip of the spray as caustic pools that keep eating whatever crosses them.'),
+    6: tf('meltdown', 'Meltdown', 'Corroded enemies the Acid Sprayer kills melt down in an acid splash that hits and corrodes everything around them, and the nozzle spins faster.'),
+    12: tf('pools', 'Acid Pools', 'Acid Sprayer acid splashes down at the tip of the spray as caustic pools that keep eating whatever crosses them, and the nozzle spins faster.'),
     18: tf('caustic', 'Caustic Ring', 'Every few seconds the Acid Sprayer vents a ring of acid that rolls out all around you, corroding and shoving back everything it passes.')
   },
   shockfield: {
