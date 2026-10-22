@@ -57,7 +57,8 @@ import {
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, skipReward, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { readyEvolutions, evolutionName } from './evolution-recipes.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -992,6 +993,10 @@ export class Game {
     });
     document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
+    // Like the cards, a tap that lands as the hand appears (still firing / steering) doesn't skip it.
+    document.getElementById('btn-skip-hand')?.addEventListener('click', () => {
+      if (performance.now() - (this.choicesShownAt || 0) >= CHOICE_CLICK_GUARD_MS) this.skipHand();
+    });
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
     }
@@ -4188,6 +4193,7 @@ export class Game {
     this.lockNote = '';
     this.banishMode = false;
     this.banishArmed = -1;
+    this.skipArmed = false;
     // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
     this.handDrought = this.player.newWeaponDrought || 0;
     const carried = this.carriedLock;
@@ -4267,7 +4273,8 @@ export class Game {
   }
 
   // Level-up modal keys: [1]-[4] pick, Shift+[1]-[4] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels).
+  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels),
+  // [K] skips the hand for gold.
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
     if (this.slotTipOpen) {
@@ -4295,16 +4302,23 @@ export class Game {
       return true;
     }
     if (code === 'KeyR') return this.rerollHand();
+    if (code === 'KeyK') return this.skipHand();
     return false;
   }
 
   // Level-up modal controller extras (A still picks the focused card): X rerolls, Y locks or unlocks
-  // the focused card. Neither button does anything else in this modal.
+  // the focused card, RB twice banishes it, LB twice skips the hand (LB is also dash, so one press only
+  // arms it; any other button disarms).
   handleUpgradePad(gp) {
     if (this.state !== 'UPGRADE' || !gp) return false;
     if (this.slotTipOpen) {
       if ([PAD.A, PAD.B, PAD.X, PAD.Y, PAD.START].some((b) => gp.pressed(b))) this.closeSlotTip();
       return true; // nothing under the tip can be picked while it is open
+    }
+    if (gp.pressed(PAD.LB)) return this.skipHand(false);
+    if (this.skipArmed && [PAD.A, PAD.B, PAD.X, PAD.Y, PAD.RB].some((b) => gp.pressed(b))) {
+      this.skipArmed = false;
+      this.renderHandControls();
     }
     if (gp.pressed(PAD.X)) return this.rerollHand();
     if (gp.pressed(PAD.Y)) {
@@ -4350,6 +4364,50 @@ export class Game {
 
   canEditHand() {
     return this.state === 'UPGRADE' && this.handPhase === 'hand' && this.currentChoices.length > 0;
+  }
+
+  // SKIP: take no card and bank skipReward() gold (js/gold.js). A locked card carries into the next hand,
+  // as if another card had been picked. `confirmed` false (controller LB) only arms it the first time.
+  skipHand(confirmed = true) {
+    if (!this.canEditHand() || this.slotTipOpen) return false;
+    if (!confirmed && !this.skipArmed) {
+      this.skipArmed = true;
+      this.renderHandControls();
+      this.sound?.playUiSelect?.();
+      return true;
+    }
+    this.skipArmed = false;
+    if (this.handLock) this.carriedLock = { card: this.handLock.card, slot: this.handLock.slot };
+    this.handLock = null;
+    this.runStats?.skip?.();
+    const p = this.player;
+    const reward = skipReward();
+    this.gold += reward;
+    this.goldEarned += reward;
+    this.flashGold('gain');
+    // The hand is flicked away and the gold rings in: a warm ring, a spray of coin glints, a coin chord.
+    this.particles.spawnFloatText(p.x, p.y - 24, reward ? `SKIPPED // +${reward} ${GOLD_ICON} GOLD` : 'SKIPPED', '#ffcc00', 15);
+    burst(this, 'pick', p.x, p.y, { hue: 48, scale: 0.9 });
+    for (let i = 0; i < Math.min(6, Math.max(2, Math.round(reward / 2))); i++) {
+      const a = (i / 6) * Math.PI * 2;
+      burst(this, 'gold', p.x + Math.cos(a) * 26, p.y + Math.sin(a) * 26, { scale: 0.8 });
+    }
+    playPreset(this.sound, 'skipCash');
+    this.sound?.playGoldPickup?.();
+    this.closeUpgradeModal();
+    return true;
+  }
+
+  // EVOLUTION READY: an evolution whose recipe the last pick completed can now turn up in level-ups.
+  announceEvolutions(readyBefore) {
+    const p = this.player;
+    const fresh = readyEvolutions(p).filter((id) => !readyBefore.includes(id));
+    fresh.forEach((id, i) => {
+      this.particles.spawnFloatText(p.x, p.y - 46 - i * 18, `⚗ EVOLUTION READY: ${evolutionName(id).toUpperCase()}`, RARITY.evolution.color, 15);
+    });
+    if (!fresh.length) return;
+    burst(this, 'pick', p.x, p.y, { hue: hueOf(RARITY.evolution.color, 315), scale: 1.2 });
+    playPreset(this.sound, 'shimmer', { pitch: semis(3) });
   }
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
@@ -4463,6 +4521,17 @@ export class Game {
       reroll.title = inPick && !open ? 'No other weapons left to offer'
         : affordable ? `Reroll the ${inPick ? 'weapons on offer' : 'unlocked cards'} for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
     }
+    // SKIP (level-up hands only): no card, a little gold. Controller LB arms it, a second LB skips.
+    const skip = doc?.getElementById('btn-skip-hand');
+    if (skip) {
+      const sr = skipReward();
+      skip.classList?.[inHand ? 'remove' : 'add']('hidden');
+      skip.classList?.[this.skipArmed ? 'add' : 'remove']('armed');
+      skip.innerHTML = this.skipArmed
+        ? `⏭ CONFIRM SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">LB</span>`
+        : `⏭ SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">[K] / LB×2</span>`;
+      skip.title = `Take no card this level-up and bank ${sr} gold${this.handLock ? ' (your locked card comes back next level-up)' : ''}`;
+    }
     const note = doc?.getElementById('hand-lock-note');
     if (note && inPick) {
       note.textContent = this.canRerollWeaponPick() ? `↻ ${cost} ${GOLD_ICON} swaps these for different weapons` : 'Every weapon left is on offer';
@@ -4534,6 +4603,7 @@ export class Game {
     this.closeCardDetail();
     container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
     const shownAt = performance.now();
+    this.choicesShownAt = shownAt;
     this.choiceCardEls = [];
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
@@ -4718,6 +4788,7 @@ export class Game {
     const p = this.player;
     this.sound?.playUiConfirm?.();
     this.runStats?.picked(upg);
+    const readyBefore = readyEvolutions(p);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
     if (this.handPhase === 'hand' && this.handLock) {
@@ -4740,6 +4811,7 @@ export class Game {
     }
     if (upg.isWeaponPick) {
       acquireWeapon(p, upg.weaponId);
+      this.announceEvolutions(readyBefore);
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
@@ -4750,6 +4822,7 @@ export class Game {
     }
 
     const jump = this.applyUpgrade(upg);
+    this.announceEvolutions(readyBefore);
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
     const color = RARITY[rarityFor(upg, jump)].color;
     this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
@@ -5853,6 +5926,7 @@ export class Game {
     this.fieldGuide ||= new FieldGuideUI({
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
+      getPlayer: () => (this.state === 'PAUSED' ? this.player : null),
       onClose: () => this.onGuideClosed()
     });
     // Opening with unread entries jumps straight to the first one.

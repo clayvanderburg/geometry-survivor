@@ -14,6 +14,7 @@ import {
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
+import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
 import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
@@ -461,7 +462,9 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     bonus: bonusLevels(copy, sc ? sc.weapon : upg.id),
     headline,
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
-    hiddenRows: Math.max(0, changed.length - maxRows)
+    hiddenRows: Math.max(0, changed.length - maxRows),
+    // Evolution recipes: an evolution card shows its own; any other card the ones it moves forward.
+    recipes: upg.isSynergy ? [recipeView(upg.id, player)] : recipesAdvanced(player, copy)
   };
 }
 
@@ -532,7 +535,8 @@ export function describeWeaponPick(player, weaponId, maxRows = MAX_ROWS) {
     headline: weapon.name.toUpperCase(),
     rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, changed.length - maxRows),
-    levelHtml: `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>`
+    levelHtml: `EQUIP // LV 1<span class="upg-max"> / ${maxLevel}</span>`,
+    recipes: recipesAdvanced(player, copy)
   };
 }
 
@@ -634,7 +638,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
         ${d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
         ${d.summary ? `<div class="upg-summary">${d.summary}</div>` : ''}
         ${rows || more ? `<div class="upg-stats">${rows}${more}
-        </div>` : ''}
+        </div>` : ''}${recipeStripHtml(d.recipes, { own: d.isSynergy })}
       </div>
       <div class="upg-level">${levelText(d, installed)}</div>
     `
