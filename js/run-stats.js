@@ -58,6 +58,10 @@ export const OTHER_GROUPS = Object.freeze({
   other: 'other'
 });
 
+// Groups that are not a loadout weapon's damage: weapon shares are computed without them (a Supernova wipes a
+// screen at once and would dilute every weapon's share; js/stats-aggregate.js lists them separately).
+export const NON_WEAPON_GROUPS = Object.freeze(new Set(Object.values(OTHER_GROUPS)));
+
 // stat id -> group id. `weapons` is loadout.js WEAPONS (id + tagSources).
 export function buildSourceGroups(weapons = []) {
   const map = { ...OTHER_GROUPS, ...SUB_SOURCES };
@@ -97,6 +101,10 @@ export class RunStats {
     this.weaponPicks = new Map(); // weapon id -> same row, for the NEW WEAPON pick
     this.totalDmg = 0;
     this.totalKills = 0;
+    this.weaponDmg = 0;   // totals without NON_WEAPON_GROUPS (Supernova, ram, ...)
+    this.weaponKills = 0;
+    this.bombs = 0;       // Supernova bombs used, and the enemies they killed
+    this.bombKills = 0;
     this.baseDamage = 1;
     this.levelTimes = [];
     this.lastLevel = 1;
@@ -126,6 +134,7 @@ export class RunStats {
     const rec = this.groups.get(id) || this.group(id);
     rec.dmg += amount;
     this.totalDmg += amount;
+    if (!NON_WEAPON_GROUPS.has(id)) this.weaponDmg += amount;
     const cur = rec.cur;
     if (cur) {
       cur.dmg += amount;
@@ -157,6 +166,7 @@ export class RunStats {
     rec.kills++;
     if (rec.cur) rec.cur.kills++;
     this.totalKills++;
+    if (!NON_WEAPON_GROUPS.has(id)) this.weaponKills++;
     const row = this.enemyRow(enemyKind(e));
     row[1]++;
     if (Number.isFinite(e?.spawnedAt) && t >= e.spawnedAt) {
@@ -230,6 +240,12 @@ export class RunStats {
     if (row) row[slot]++;
   }
 
+  // A Supernova bomb went off and killed `kills` enemies.
+  bomb(kills = 0) {
+    this.bombs++;
+    this.bombKills += Math.max(0, kills | 0);
+  }
+
   reroll() { this.rerolls++; }
   banish() { this.banishes = (this.banishes || 0) + 1; }
   lock() { this.locks++; }
@@ -268,11 +284,13 @@ export class RunStats {
     if (lv > 0) {
       let bucket = rec.levels.get(lv);
       if (!bucket) {
-        bucket = { secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0 };
+        bucket = { secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, wAllDmg: 0, wAllKills: 0 };
         rec.levels.set(lv, bucket);
       }
       bucket.dmg0 = this.totalDmg;
       bucket.kills0 = this.totalKills;
+      bucket.wdmg0 = this.weaponDmg;
+      bucket.wkills0 = this.weaponKills;
       rec.cur = bucket;
     } else rec.cur = null;
   }
@@ -285,8 +303,12 @@ export class RunStats {
     rec.owned += dt;
     cur.allDmg += this.totalDmg - cur.dmg0;
     cur.allKills += this.totalKills - cur.kills0;
+    cur.wAllDmg += this.weaponDmg - cur.wdmg0;
+    cur.wAllKills += this.weaponKills - cur.wkills0;
     cur.dmg0 = this.totalDmg;
     cur.kills0 = this.totalKills;
+    cur.wdmg0 = this.weaponDmg;
+    cur.wkills0 = this.weaponKills;
     rec.since = t;
   }
 
@@ -308,8 +330,9 @@ export class RunStats {
         for (const [lv, b] of [...rec.levels].sort((a, b) => a[0] - b[0])) {
           if (!(b.secs > 0)) continue;
           const target = this.dpsTarget && out.curve ? r2(this.dpsTarget(lv)) : 0;
-          // [seconds, damage, damage / base damage, all damage, kills, all kills, DPS_TARGET(lv)]
-          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target];
+          // [seconds, damage, damage / base damage, all damage, kills, all kills, DPS_TARGET(lv),
+          //  all weapon damage, all weapon kills] (the last two leave out NON_WEAPON_GROUPS; older runs lack them)
+          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target, r0(b.wAllDmg), b.wAllKills];
         }
       }
       weapons[rec.id] = out;
@@ -334,7 +357,8 @@ export class RunStats {
       // [spawned, killed, spawn->death seconds summed, deaths timed, damage to player, hits on player]
       enemies: Object.fromEntries([...this.enemies].map(([k, v]) => [k, [v[0], v[1], r1(v[2]), v[3], r0(v[4]), v[5]]])),
       cards: pairs(this.cards),
-      weaponPicks: pairs(this.weaponPicks)
+      weaponPicks: pairs(this.weaponPicks),
+      bombs: [this.bombs, this.bombKills] // [Supernova bombs used, enemies they killed]
     };
     if (armory) {
       this.finished.armory = Object.fromEntries(Object.entries(armory.ranks || {}).filter(([, r]) => r > 0));
