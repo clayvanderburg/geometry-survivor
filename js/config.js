@@ -223,6 +223,9 @@ export const DEFAULT_TUNING = {
   // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
   slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
+  // Share of a level-up hand's weight held by weapon cards (stat + element), whatever the loadout
+  // (upgrades.js handWeights). Supply caches keep the raw weights.
+  handWeaponShare: 0.55,
   weaponLineWeight: 1.5,
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.7,
@@ -527,6 +530,7 @@ export const TUNING_SCHEMA = [
       { key: 'weaponFloorStep', label: 'Weapon Floor: +1 Weapon Required Every N Levels', type: 'range', min: 1, max: 30, step: 1, unit: '' },
       { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'handWeaponShare', label: 'Weapon Cards Share of Level-Up Hands', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'prob' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
