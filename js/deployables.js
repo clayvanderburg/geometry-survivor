@@ -8,6 +8,7 @@
 import { TUNING } from './config.js';
 import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE, DRONE_MAX, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild, levelBuild } from './weapon-levels.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Overdrive Sync, Kamikaze Wing, Parting Gift, Overwatch Link
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
 
@@ -83,8 +84,13 @@ export class Deployables {
     this.turretCount = 0;
     this.droneCount = 0;
     for (const t of this.turrets) t.target = null;
-    for (const d of this.drones) { d.target = null; d.trailCount = 0; }
+    for (const d of this.drones) { d.target = null; d.trailCount = 0; d.dive = null; }
     this.mineTimer = 0.5;
+    // Pool Breakthrough clocks (bt-extras.js): Overdrive Sync, Kamikaze Wing, Overwatch Link.
+    this.odClock = 0;
+    this.overdrive = false;
+    this.kamiT = 0;
+    this.linkT = 0;
     // Sentry Turret charges (DRG: Survivor's LMG Gun Platform): held charges (null until the turret is
     // first equipped, then a full bank), the reload toward the next one, the gap between drops and how
     // long the ship has stood still.
@@ -264,11 +270,13 @@ export class Deployables {
     const lv = level || levelBuild('turret', 1); // turrets already planted keep firing after a discard
     const range = W.turretRange(lv);
     const rate = W.turretFireRate(lv);
+    if (this.turretCount > 1) BTX.turretLinks(this, dt, game, this.turrets, this.turretCount, lv, weaponDamage(p, 'turret', lv));
     for (let i = this.turretCount - 1; i >= 0; i--) {
       const t = this.turrets[i];
       t.life -= dt;
       if (t.flash > 0) t.flash = Math.max(0, t.flash - dt * 9);
       if (t.life <= 0) {
+        BTX.turretGift(game, t, lv, weaponDamage(p, 'turret', lv));
         t.target = null;
         this.turrets[i] = this.turrets[this.turretCount - 1];
         this.turrets[--this.turretCount] = t;
@@ -410,6 +418,7 @@ export class Deployables {
       d.fireAcc = this.droneCount / (want + 1); // staggered so a formation doesn't fire in one clap
       d.target = null;
       d.retarget = 0;
+      d.dive = null;
       d.flash = 0;
       d.trailCount = 0;
       d.podT = W.podEvery * (0.5 + this.droneCount / (want + 1));
@@ -420,7 +429,7 @@ export class Deployables {
       d.docked = false;
       d.pop = 0;
     }
-    while (this.droneCount > want) this.drones[--this.droneCount].target = null;
+    while (this.droneCount > want) { const d = this.drones[--this.droneCount]; d.target = null; d.dive = null; }
     const n = this.droneCount;
     if (n === 0) return;
 
@@ -431,9 +440,12 @@ export class Deployables {
     const back = n - front;
     const shipSpeed = Math.hypot(p.vx || 0, p.vy || 0);
     const range = W.droneRange(level);
-    const rate = W.droneFireRate(level);
+    const rate = W.droneFireRate(level) * BTX.droneOverdrive(this, dt, level, game, this.drones, n);
     const leadDamage = weaponDamage(p, 'drone', level);
     const wingDamage = leadDamage * W.droneWingDamageMult(level) / W.droneDamageMult(level);
+    // Kamikaze Wing: a blast worth kamikazeShare of the formation's (base-rate) output over one interval.
+    const kamikazeBlast = W.kamikazeShare * W.droneFireRate(level) * (leadDamage + wingDamage * (n - 1)) * W.kamikazeEvery;
+    BTX.droneKamikazeTick(this, dt, level, game, this.drones, n);
     for (let i = 0; i < n; i++) {
       const d = this.drones[i];
       const damage = i === 0 ? leadDamage : wingDamage; // the flight lead carries the heavy gun
@@ -441,6 +453,7 @@ export class Deployables {
       const r = spacing + Math.sin(this.time * 3 + i * 2.1) * 3; // a gentle bob, out of phase per drone
       const tx = p.x + (fx * cos - fy * sin) * r;
       const ty = p.y + (fx * sin + fy * cos) * r;
+      if (BTX.droneDive(game, d, dt, kamikazeBlast)) continue;
       if (d.launch > 0) {
         // Still in the hangar: ride the hull until its turn, then kick out toward the slot.
         d.launch -= dt;
@@ -501,7 +514,7 @@ export class Deployables {
       }
       while (d.fireAcc >= 1) {
         d.fireAcc -= 1;
-        const bolt = this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed * projectileSpeedMult(p), damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
+        const bolt = this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed * projectileSpeedMult(p), damage, this.overdrive ? W.overdriveHue : DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
         // Homing Bolts: curve onto the drone's target.
         if (level.t8) { bolt.homing = W.homingTurn; bolt.target = tgt; bolt.life += 0.2; }
         d.flash = 1;

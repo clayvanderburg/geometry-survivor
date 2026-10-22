@@ -58,7 +58,12 @@ const TWEAKS = {
   nanites: { zoom: 1.4, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'pack', count: 16 } },
   // A piercing line reads best against a LINE of targets: the ship sits left of frame and every charge
   // skewers the whole row to the edge.
-  raillance: { zoom: 1.5, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'line', count: 8 } }
+  raillance: { zoom: 1.5, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'line', count: 8 } },
+  // A clip's own tweak (by clip name) wins over its weapon's. Parting Gift: turrets live 10 s, so the loop
+  // starts just before the first ones expire and blow.
+  'turret-gift': { warmup: 570, frames: 48 },
+  // Static Charge arcs to enemies beside the line: a denser pack gives them somewhere to jump.
+  'raillance-static': { dummies: { count: 28 } }
 };
 
 (async () => {
@@ -129,7 +134,7 @@ async function listWeapons(browser) {
 }
 
 async function capture(browser, clip, tmp) {
-  const tweak = TWEAKS[clip.weapon] || {};
+  const tweak = TWEAKS[clip.name] || TWEAKS[clip.weapon] || {};
   const range = {
     weapons: [{ id: clip.weapon, level: clip.level, custom: false, bt: clip.bt }],
     mods: {},

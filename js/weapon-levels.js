@@ -574,6 +574,18 @@ export const EXTRA_TRANSFORMS = {
   missiles: [
     { id: 'hunter', home: 6, name: 'Hunter-Killer', summary: 'Every Swarm Missile blast launches a hunter micro-missile at the nearest enemy beyond it.' },
     { id: 'echo', home: 12, name: 'Echo Salvo', summary: 'A moment after each Swarm Missile salvo, a phantom echo salvo at half strength follows it onto the same targets.' }
+  ],
+  raillance: [
+    { id: 'static', home: 6, name: 'Static Charge', summary: 'Every enemy the Rail Lance pierces arcs a bolt of static into the nearest enemy off the line.' },
+    { id: 'reflect', home: 18, name: 'Reflector Rail', summary: 'The Rail Lance bounces off the edge of the screen and sweeps back across it at 60% strength.' }
+  ],
+  drones: [
+    { id: 'overdrive', home: 6, name: 'Overdrive Sync', summary: 'Every few seconds the Escort Drones sync up and fire at triple speed for a burst, their bolts turning gold.' },
+    { id: 'kamikaze', home: 12, name: 'Kamikaze Wing', summary: 'Every few seconds an Escort Drone dives into the thickest pack and detonates; a fresh drone launches from the hull to take its place.' }
+  ],
+  turret: [
+    { id: 'gift', home: 6, name: 'Parting Gift', summary: 'Sentry Turrets self-destruct when their time runs out, in a big blast that wrecks everything around them.' },
+    { id: 'link', home: 12, name: 'Overwatch Link', summary: 'Sentry Turrets near each other link up with a crackling beam that zaps every enemy crossing it.' }
   ]
 };
 export function transformPool(id) {

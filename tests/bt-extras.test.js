@@ -153,3 +153,94 @@ test('Echo Salvo: a half-strength repeat follows each salvo, never echoes itself
   assert.equal(g.weaponFx.events.filter((e) => e.style === 'silent').length, 1, 'the echo schedules no echo');
   assert.equal(g.missileSalvos, 1, 'echoes don\'t count toward the Tactical Nuke');
 });
+
+test('Static Charge: each enemy a lance pierces arcs staticShare of its hit into the nearest enemy off the line', () => {
+  // Two on the aim line (straight right), one just off it beside the first.
+  const { g, p } = fight('raillance', { 6: 'static' }, [[200, 0], [300, 0], [200, 90]]);
+  const [a, b, off] = g.enemyManager.enemies;
+  p.angle = 0;
+  const hits = new Map();
+  const hit = g.hitEnemy.bind(g);
+  g.hitEnemy = (e, d, ...r) => { hits.set(e, [...(hits.get(e) || []), d]); return hit(e, d, ...r); };
+  g.railLance.fire(g, p, weaponBuild(p, 'raillance'));
+  assert.equal(hits.get(a).length, 1);
+  assert.ok(hits.get(off), 'the enemy beside the line takes an arc');
+  const first = hits.get(a)[0];
+  assert.ok(hits.get(off).some((d) => Math.abs(d - first * W.staticShare) < 1e-6), 'an arc carries staticShare of the hit');
+  assert.ok(b);
+});
+
+test('Reflector Rail: the lance bounces off the screen edge and sweeps back at reflectShare', () => {
+  const { g, p } = fight('raillance', { 18: 'reflect' }, [[200, 0]]);
+  g.camX = p.x - g.width / 2;
+  g.camY = p.y - g.height / 2;
+  p.angle = -Math.PI / 4; // up and to the right: it meets the top edge first
+  const before = g.railLance.beamCount;
+  g.railLance.fire(g, p, weaponBuild(p, 'raillance'));
+  const beams = g.railLance.beams.slice(0, Math.max(0, g.railLance.beamCount - before) || 2);
+  const back = beams.find((ln) => ln.dy > 0);
+  assert.ok(back, 'a reflected beam heads back down');
+  assert.ok(Math.abs(back.y1 - g.camY) < 4, 'it starts on the top edge');
+  assert.ok(back.dx > 0, 'and keeps travelling right');
+});
+
+test('Overdrive Sync: the formation fires overdriveMult x as fast for overdriveTime of every overdriveEvery s', () => {
+  const { g, p } = fight('drones', { 6: 'overdrive' });
+  const dep = g.deployables;
+  const lv = weaponBuild(p, 'drones');
+  let on = 0;
+  const steps = Math.round(W.overdriveEvery * 60) * 2;
+  for (let i = 0; i < steps; i++) if (BTX.droneOverdrive(dep, 1 / 60, lv, g, dep.drones, 0) === W.overdriveMult) on++;
+  assert.ok(Math.abs(on / steps - W.overdriveTime / W.overdriveEvery) < 0.02);
+  const { g: g2, p: p2 } = fight('drones', { 6: 'boost' });
+  assert.equal(BTX.droneOverdrive(g2.deployables, 1, weaponBuild(p2, 'drones'), g2, [], 0), 1);
+});
+
+test('Kamikaze Wing: a drone dives on the densest pack, blows, and relaunches from the hull', () => {
+  // A tight pack of 5 to one side, a lone enemy the other.
+  const pack = [[220, 0], [235, 12], [230, -14], [245, 4], [215, 10]];
+  const { g, p } = fight('drones', { 12: 'kamikaze' }, [...pack, [-200, 0]]);
+  const lone = g.enemyManager.enemies[5];
+  for (let i = 0; i < 60; i++) g.update(1 / 60); // the drones launch and dock
+  const dep = g.deployables;
+  dep.kamiT = W.kamikazeEvery;
+  BTX.droneKamikazeTick(dep, 0, weaponBuild(p, 'drones'), g, dep.drones, dep.droneCount);
+  const diver = dep.drones.slice(0, dep.droneCount).find((d) => d.dive);
+  assert.ok(diver, 'one drone dives');
+  assert.notEqual(diver.dive.target, lone, 'on the pack, not the lone enemy');
+  const hp = g.enemyManager.enemies.slice(0, 5).map((e) => e.hp);
+  for (let i = 0; i < 60 && diver.dive; i++) BTX.droneDive(g, diver, 1 / 60, 1000);
+  assert.equal(diver.dive, null);
+  assert.ok(diver.launch > 0, 'back in the hangar, relaunching');
+  assert.ok(g.enemyManager.enemies.slice(0, 5).filter((e, k) => e.hp < hp[k]).length >= 3, 'the blast hits the pack');
+});
+
+test('Parting Gift: an expiring turret blows for giftBolts of its bolts', () => {
+  const { g, p } = fight('turret', { 6: 'gift' }, [[40, 0], [0, 50]]);
+  const lv = weaponBuild(p, 'turret');
+  const dmg = [];
+  g.damageEnemiesInRadius = (x, y, r, d) => dmg.push(d);
+  BTX.turretGift(g, { x: p.x, y: p.y }, lv, 10);
+  assert.deepEqual(dmg, [10 * W.giftBolts]);
+  BTX.turretGift(g, { x: p.x, y: p.y }, weaponBuild(Object.assign({}, p, { breakthroughs: {} }), 'turret'), 10);
+  assert.equal(dmg.length, 1, 'no blast without the transform');
+});
+
+test('Overwatch Link: two turrets in range zap an enemy standing between them, once per linkTick', () => {
+  const { g, p } = fight('turret', { 12: 'link' }, [[100, 0], [100, 200]]);
+  const [mid, away] = g.enemyManager.enemies;
+  const lv = weaponBuild(p, 'turret');
+  const turrets = [{ x: p.x, y: p.y }, { x: p.x + 200, y: p.y }];
+  const hits = [];
+  g.hitEnemy = (e, d) => hits.push([e, d]);
+  const state = {};
+  BTX.turretLinks(state, 1 / 60, g, turrets, 2, lv, 10);
+  assert.deepEqual(hits, [[mid, 10 * W.linkShare]]);
+  BTX.turretLinks(state, 1 / 60, g, turrets, 2, lv, 10);
+  assert.equal(hits.length, 1, 'next zap only after linkTick');
+  turrets[1].x = p.x + W.linkRange + 50;
+  state.linkT = 0;
+  BTX.turretLinks(state, 1 / 60, g, turrets, 2, lv, 10);
+  assert.equal(hits.length, 1, 'out of range: no link');
+  assert.ok(away);
+});

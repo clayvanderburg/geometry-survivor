@@ -93,7 +93,13 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'rockets:shrapnel': ['Shrapnel Shells! Pointy bits, everywhere, on purpose!', 'eureka'],
   'rockets:thunder': ['Rolling Thunder! Ba-boom-boom-BOOM. That\'s the science.', 'smug'],
   'missiles:hunter': ['Hunter-Killer! The missiles have missiles now!', 'eureka'],
-  'missiles:echo': ['Echo Salvo! I fired it once and the universe said it back.', 'eureka']
+  'missiles:echo': ['Echo Salvo! I fired it once and the universe said it back.', 'eureka'],
+  'raillance:static': ['Static Charge! Don\'t pet the enemies. Or do!', 'smug'],
+  'raillance:reflect': ['Reflector Rail! The screen edge is a mirror now. Oops.', 'oops'],
+  'drones:overdrive': ['Overdrive Sync! They practiced in formation. All night.', 'eureka'],
+  'drones:kamikaze': ['Kamikaze Wing! Don\'t worry, I build them in bulk.', 'oops'],
+  'turret:gift': ['Parting Gift! Turrets that go out with a BANG.', 'smug'],
+  'turret:link': ['Overwatch Link! Turrets holding hands. Zappy hands!', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.
