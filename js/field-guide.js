@@ -9,6 +9,7 @@ import { EVOLUTION_RECIPES } from './evolution-recipes.js';
 import { EnemyManager, contactDamageAt, waveScaleAt } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
+import { BOSS_ESCAPE } from './boss-escape.js';
 import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
 import { RAM } from './boss-ram.js';
@@ -371,7 +372,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'mode_hardcore', icon: '☠', title: 'HARDCORE MODE',
     body: () => [
-      `Pick it next to LAUNCH ([2], or LB / RB on a controller). The shield is your only life: it never regenerates, no card raises or restores it (Shield Capacitor is never offered), relic caches and shield crystals repair nothing, and the Void Armory's Aegis Shield Matrix is switched off, so every run starts at the base ${BASE_SHIELD}. Every other armory upgrade still applies.`,
+      `Pick it next to LAUNCH ([2], or LB / RB on a controller). The shield is your only life: it never regenerates, no card raises or restores it (Shield Capacitor is never offered), Alien Tech Caches and shield crystals repair nothing, and the Void Armory's Aegis Shield Matrix is switched off, so every run starts at the base ${BASE_SHIELD}. Every other armory upgrade still applies.`,
       'When the shield hits 0 the run is over, as always. HARDCORE runs race on their own global board (ALL-TIME and per version) and in MY RUNS.'
     ]
   },
@@ -396,7 +397,7 @@ export const MECHANIC_ENTRIES = [
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
-      `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
+      `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Every boss ESCAPES ${Math.round(BOSS_ESCAPE.time / 60)} minutes after it arrives (its bar counts down the last ${BOSS_ESCAPE.warnAt} s) and takes its Alien Tech Cache with it, except the final boss. Bosses can overlap: a slow kill meets the next one. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
       `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
       `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}${lateHpText()}.`
     ]
@@ -411,7 +412,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'status', icon: '☢', title: 'ELEMENTS: BURN · FREEZE · CORRODE · SHOCK',
     body: () => [
-      `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by a supply cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
+      `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by an Alien Tech Cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
       `${WEAPON_BY_ID.gas.name} is born CORROSIVE (no element cards): every gas tick corrodes, its corrode rank grows by 1 at LV 6, 12 and 18, and it counts as a CORROSIVE weapon for STATUS cards and the Corrosive Amplifier.`,
       `${WEAPON_BY_ID.flamethrower.name} is born FIRE (no element cards): every scorch sets its targets burning, Sticky Gel cards raise its burn rank (up to ${ELEMENT_MAX_RANKS}), and it counts as a FIRE weapon for STATUS cards and the Fire Amplifier. It never aims: the nozzle spins round the ship (faster with Spin Rotor cards, Fireballs and Napalm Puddles) and sprays the whole time. Asteroids block its flames: a rock shadows the slice of the cone behind it.`,
       `${WEAPON_BY_ID.cryospray.name} and ${WEAPON_BY_ID.acidspray.name} are the Flamethrower's twins: the same spinning cone (rocks block it), born FROST and CORROSIVE. Deep Freeze and Etching Agent cards raise their element rank. All three sprayers take Extra Nozzle cards (up to 4 streams). At LV 6 the Flamethrower lobs Fireballs, the Cryo Sprayer Shatters frozen enemies and the Acid Sprayer makes corroded kills Melt Down; LV 12 / 18 drop puddles / slicks / pools and roll out a ring.`,
@@ -512,7 +513,7 @@ export const MECHANIC_ENTRIES = [
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
       ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
-      `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
+      `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Alien Tech Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
     ]
   },
   {
@@ -525,9 +526,9 @@ export const MECHANIC_ENTRIES = [
     ]
   },
   {
-    id: 'caches', icon: '▣', title: 'RELIC CACHES & JACKPOTS',
+    id: 'caches', icon: '▣', title: 'ALIEN TECH CACHES & JACKPOTS',
     body: () => [
-      'Bosses always drop a Super Relic Cache. Lieutenants, vortexes, splitters and weavers have small luck-scaled chances; gold veins can hide one.',
+      'Bosses always drop a Super Alien Tech Cache (unless they escape: kill them within 3 minutes). Lieutenants, vortexes, splitters and weavers have small luck-scaled chances; gold veins can hide one.',
       `Opening one installs free upgrades: 1× normally, or a rare 2× (${pct(TUNING.chestDoubleChance ?? 0.075)}), 3× (${+((TUNING.chestTripleChance ?? 0.018) * 100).toFixed(1)}%) or 5× Penta-Core (${+((TUNING.chestPentaChance ?? 0.003) * 100).toFixed(1)}%) jackpot, all × luck (super caches roll better).`
     ]
   },

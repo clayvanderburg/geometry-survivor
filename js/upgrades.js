@@ -193,7 +193,7 @@ export const UPGRADE_POOL = [
     category: 'LUCK',
     maxLevel: 5,
     headline: 'luck',
-    summary: 'Raises the odds of lucky multi-level rolls, evolution cards, supply caches and cache jackpots.',
+    summary: 'Raises the odds of lucky multi-level rolls, evolution cards, Alien Tech Caches and their jackpots.',
     apply(player) {
       player.stats.luck += 0.25;
     }

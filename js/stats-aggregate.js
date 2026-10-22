@@ -245,6 +245,16 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
   const bombRuns = list.filter((r) => Array.isArray(r.bombs));
   const bombsUsed = bombRuns.map((r) => r.bombs[0] || 0);
   const bombKills = sum(bombRuns.map((r) => r.bombs[1] || 0));
+  // --- Boss escapes: how often each boss got away, against hulls of that kind spawned (split pieces count) ---
+  const bossEscapes = {};
+  for (const r of list) {
+    for (const [kind, n] of Object.entries(r.bossEscapes || {})) {
+      const row = bossEscapes[kind] || (bossEscapes[kind] = { escaped: 0, spawned: 0 });
+      row.escaped += n;
+    }
+  }
+  for (const kind of Object.keys(bossEscapes)) bossEscapes[kind].spawned = sum(list.map((r) => (Array.isArray(r.enemies?.[kind]) ? r.enemies[kind][0] : 0)));
+
   const bombs = {
     runs: bombRuns.length,
     perRun: { median: median(bombsUsed), mean: bombRuns.length ? round(sum(bombsUsed) / bombRuns.length, 2) : null },
@@ -276,6 +286,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
     gold: { earned: mean((r) => r.gold?.earned || 0), spent: mean((r) => r.gold?.spent || 0), rerolls: mean((r) => r.gold?.rerolls || 0), locks: mean((r) => r.gold?.locks || 0), banishes: mean((r) => r.gold?.banishes || 0), skips: mean((r) => r.gold?.skips || 0) },
     weapons,
     bombs,
+    bossEscapes,
     sources,
     enemies,
     deaths,

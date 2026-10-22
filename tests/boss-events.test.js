@@ -216,7 +216,7 @@ test('boss defeat triggers a fixed-tick hit-stop then half-speed slow-mo and a r
 
   assert.equal(calls.defeats, 1);
   assert.equal(g.bossCard.kind, 'defeat');
-  assert.equal(g.bossCard.detail, '+1,500 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES · +1 BOMB');
+  assert.equal(g.bossCard.detail, '+1,500 PTS · SUPER ALIEN TECH CACHE · 3 ❖ VOID CORES · +1 BOMB');
   assert.equal(g.player.bombs, 3, 'existing boss rewards are unchanged');
   assert.equal(g.chests.length, 1);
   assert.equal(g.hitStopTicks, 6);
@@ -252,7 +252,7 @@ test('a full bomb stock is not advertised as a bomb reward', () => {
   g.enemyManager.enemies.push(boss);
   g.multiplier = 2;
   g.killEnemy(boss);
-  assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER RELIC CACHE · 3 ❖ VOID CORES');
+  assert.equal(g.bossCard.detail, '+3,000 PTS · SUPER ALIEN TECH CACHE · 3 ❖ VOID CORES');
 });
 
 test('boss epithets climb with each five-wave encounter', () => {

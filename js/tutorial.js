@@ -70,7 +70,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'A boss warping in next to the ship',
       lines: [
         `From wave ${ltWave}, a named **LIEUTENANT** elite hunts you.`,
-        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Wave **50**: beat its boss, clear the field, win.',
+        'Every **5th wave** a **BOSS** arrives. Kill it within **3 minutes** for an **Alien Tech Cache**. Wave **50**: beat its boss, clear the field, win.',
         'A **red lane** or a **marked zone** means a boss attack is coming: **get out of it**.'
       ]
     },

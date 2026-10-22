@@ -243,6 +243,12 @@ export class RunStats {
   }
 
   // A Supernova bomb went off and killed `kills` enemies.
+  // A boss that ran out its clock and escaped (js/boss-escape.js), by kind.
+  bossEscaped(kind) {
+    this.bossEscapes = this.bossEscapes || {};
+    this.bossEscapes[kind] = (this.bossEscapes[kind] || 0) + 1;
+  }
+
   bomb(kills = 0) {
     this.bombs++;
     this.bombKills += Math.max(0, kills | 0);
@@ -363,6 +369,7 @@ export class RunStats {
       weaponPicks: pairs(this.weaponPicks),
       bombs: [this.bombs, this.bombKills] // [Supernova bombs used, enemies they killed]
     };
+    if (this.bossEscapes) this.finished.bossEscapes = { ...this.bossEscapes }; // { boss kind: escapes }
     if (armory) {
       this.finished.armory = Object.fromEntries(Object.entries(armory.ranks || {}).filter(([, r]) => r > 0));
       this.finished.armorySpent = Math.max(0, Math.round(armory.spent || 0));

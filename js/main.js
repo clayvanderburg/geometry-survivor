@@ -12,6 +12,7 @@ import { updateBossWarps, drawBossWarps } from './boss-warp.js';
 import { playBossCues } from './boss-sfx-major.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
+import { tickBossEscapes, escapeLeft, BOSS_ESCAPE } from './boss-escape.js';
 import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
@@ -1903,7 +1904,7 @@ export class Game {
       guaranteedSuper
     });
     this.particles.spawnShockwave(x, y, 140, 48, 4, 0.45);
-    this.particles.spawnFloatText(x, y - 18, '★ RELIC CACHE DROPPED! ★', '#ffcc00', 15);
+    this.particles.spawnFloatText(x, y - 18, '★ ALIEN TECH CACHE DROPPED! ★', '#ffcc00', 15);
   }
 
   openRelicChest(chest) {
@@ -1917,8 +1918,8 @@ export class Game {
 
     // Roll Chest Jackpot Tier based on Luck — multi-upgrade jackpots are genuinely rare!
     let rewardCount = 1;
-    let tierTitle = 'RELIC SUPPLY CACHE (1X)';
-    let tierSub = '★ TACTICAL CACHE UNLOCKED ★';
+    let tierTitle = 'ALIEN TECH CACHE (1X)';
+    let tierSub = '★ ALIEN TECH UNLOCKED ★';
     let bonusCores = 1;
 
     const pentaChance = Math.min(0.45, (TUNING.chestPentaChance ?? 0.003) * luck * superMult);
@@ -1933,11 +1934,11 @@ export class Game {
     } else if (roll < tripleChance) {
       rewardCount = 3;
       tierTitle = '★ TRIPLE POWERUP JACKPOT! (3X) ★';
-      tierSub = '★★ SUPER RELIC CACHE UNLOCKED ★★';
+      tierSub = '★★ SUPER ALIEN TECH CACHE UNLOCKED ★★';
       bonusCores = 2;
     } else if (roll < doubleChance) {
       rewardCount = 2;
-      tierTitle = '★ DOUBLE SUPPLY CACHE! (2X) ★';
+      tierTitle = '★ DOUBLE ALIEN TECH CACHE! (2X) ★';
       tierSub = '★ LUCKY CACHE UNLOCKED ★';
       bonusCores = 1;
     }
@@ -2820,7 +2821,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 140, 600, 48);
     this.grid.ripple?.(e.x, e.y, 680, 48, 1.3);
     this.sound.playBossDefeat();
-    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER ALIEN TECH CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
     if (isCampaignWin(this, e)) finalBossDown(this); // the final boss: clear the sector, then VICTORY (js/final-stand.js)
@@ -2877,7 +2878,8 @@ export class Game {
         epithet: e.epithet || '',
         hp: Math.max(0, Math.ceil(e.hp)),
         maxHp: Math.round(e.maxHp),
-        pct: Math.max(0, Math.min(1, e.hp / e.maxHp))
+        pct: Math.max(0, Math.min(1, e.hp / e.maxHp)),
+        escape: escapeLeft(this, e) // s until it escapes (null: never)
       })),
       overflow: bosses.length - shown.length,
       warning: soonest
@@ -2905,7 +2907,11 @@ export class Game {
       setHidden(document.getElementById(`boss-bar-${i}`), !row);
       if (!row) continue;
       document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
-      document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
+      // The last BOSS_ESCAPE.warnAt s before it escapes, the title gives way to a red countdown.
+      const escaping = row.escape !== null && row.escape !== undefined && row.escape <= BOSS_ESCAPE.warnAt;
+      const epithetEl = document.getElementById(`boss-bar-epithet-${i}`);
+      epithetEl.textContent = escaping ? `ESCAPING IN ${Math.ceil(row.escape)}s` : row.epithet;
+      epithetEl.classList?.toggle?.('boss-bar-escaping', escaping);
       document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
     }
     const moreEl = document.getElementById('boss-bar-more');
@@ -5694,6 +5700,7 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
+    tickBossEscapes(this, dt); // every boss escapes after 3 minutes, bar the final one (js/boss-escape.js)
     playBossCues(this); // the major bosses' queued sound cues (with their shake and hit-stop)
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.

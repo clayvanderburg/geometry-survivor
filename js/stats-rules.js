@@ -17,6 +17,7 @@
 //   armory      { upgrade id: rank } Void Armory ranks held during the run (ranks above 0 only)
 //   armorySpent cores spent on those ranks (js/progression.js armorySpent)
 //   bombs       [Supernova bombs used, enemies they killed] (older runs lack it)
+//   bossEscapes { boss kind: times it escaped (js/boss-escape.js) } (only when one did; older runs lack it)
 // Runs from older clients carry no armory fields: their Armory tier is 'unknown'.
 import { KNOWN_VERSIONS } from './changelog.js';
 import { normalizeMode } from './modes.js';
@@ -127,6 +128,14 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
   }
   for (const [id, v] of entries(body.sources, L.MAX_SOURCES)) run.sources[id] = dec(v, L.MAX_DAMAGE, 0);
   if (Array.isArray(body.bombs)) run.bombs = [int(body.bombs[0], 1e5), int(body.bombs[1], L.MAX_COUNT)];
+  if (body.bossEscapes && typeof body.bossEscapes === 'object') {
+    const esc = {};
+    for (const [id, v] of entries(body.bossEscapes, L.MAX_KINDS)) {
+      const n = int(v, 100);
+      if (n > 0) esc[id] = n;
+    }
+    if (Object.keys(esc).length) run.bossEscapes = esc;
+  }
   for (const [id, v] of entries(body.enemies, L.MAX_KINDS)) {
     if (!Array.isArray(v)) continue;
     const killed = int(v[1], L.MAX_COUNT);
