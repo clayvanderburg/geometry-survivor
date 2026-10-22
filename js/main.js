@@ -43,7 +43,7 @@ import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
   wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
 } from './weapon-scaling.js';
-import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
+import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, rdLine, RD_LINES, drawBreakthroughOptions, btOption } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
 import { WEAPONS, STARTING_WEAPONS, START_WEAPON_CHOICES, readStartWeapon, writeStartWeapon, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
@@ -455,7 +455,7 @@ export class Game {
       xp: 0,
       xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
-      // Breakthroughs chosen per weapon at LV 6 / 12 / 18: { singularity: { 6: 'transform', 12: 'boost' } }.
+      // Breakthroughs chosen per weapon at LV 6 / 12 / 18, as option ids: { singularity: { 6: 'twin', 12: 'boost' } }.
       breakthroughs: {},
       breakthroughsOffered: {}, // milestones already shown, so none is ever offered twice
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
@@ -4670,16 +4670,18 @@ export class Game {
       this.handLock = null;
       this.breakthrough = { weaponId: id, level };
       markBreakthroughOffered(p, id, level);
-      this.currentChoices = ['transform', 'boost'].map((kind) => describeBreakthrough(p, id, level, kind));
+      // 3 options from the weapon's pool (docs/BREAKTHROUGH_POOLS.md).
+      this.currentChoices = drawBreakthroughOptions(id, level, p.breakthroughs?.[id]).map((opt) => describeBreakthrough(p, id, level, opt));
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
       const name = WEAPON_BY_ID[id].name;
       // The slot 6 weapon gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
       const early = weaponLevel(p, id) < level;
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
-        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
+        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
-      if (this.radioOn) this.radio.dock(document.getElementById('upgrade-choices')); // big, in the free column
+      // Big, in a 4th column beside the 3 pool cards.
+      if (this.radioOn && this.radio.dock(document.getElementById('upgrade-choices'))) document.getElementById('upgrade-choices').classList?.add('cards-4');
       this.pixie?.offer(id, name); // Dr. Pixie's EUREKA on the radio (never blocks the pick)
       const modal = document.getElementById('upgrade-modal');
       modal.classList.remove('hidden');
@@ -4730,7 +4732,7 @@ export class Game {
       return;
     }
     if (upg.isBreakthrough) {
-      applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      applyBreakthrough(p, upg.weaponId, upg.level, upg.option);
       this.pixie?.picked(upg);
       this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
@@ -4784,9 +4786,9 @@ export class Game {
       const level = weaponLevel(p, id);
       const lineList = weaponUpgradeLines(p, id);
       const lvText = `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${WEAPON_MAX_LEVEL}</span>`;
-      // Its Breakthroughs (transform names, or Across the Board), then its stat cards and evolutions.
+      // Its Breakthroughs (transform or flat names), then its stat cards and evolutions.
       const bt = Object.entries(p.breakthroughs?.[id] || {})
-        .map(([m, kind]) => `<span class="loadout-line bt">⚛ ${kind === 'transform' ? TRANSFORMS[id][m].name : BOOST_NAME}</span>`).join('');
+        .map(([m, v]) => `<span class="loadout-line bt">⚛ ${btOption(id, +m, v)?.name ?? ''}</span>`).join('');
       const lines = bt + lineList
         // Element cards drop their "Autocannon: " prefix here: the slot already names the weapon.
         .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '').replace(/^[^:]+: /, '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
@@ -6171,7 +6173,7 @@ export class Game {
     };
   }
 
-  // Keyboard: [1-6] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  // Keyboard: [1-8] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
   handleStartPickKey(e, onControl) {
     const code = e.code;
     if (e.repeat) return;

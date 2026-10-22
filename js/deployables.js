@@ -6,14 +6,14 @@
 // damage goes through Game.hitEnemy: turret/drone bolts ride the shared bullet sweep (asteroid
 // cover blocks them), mine bursts use Game.damageEnemiesInRadius.
 import { TUNING } from './config.js';
-import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE, DRONE_MAX } from './weapon-scaling.js';
 import { weaponBuild, levelBuild } from './weapon-levels.js';
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
 
 const MINE_POOL = 36;   // >= W.mineMaxActive at max level (capacity 11, x3 with Minefield Triad)
 const TURRET_POOL = TURRET_MAX_ACTIVE; // >= W.turretMaxActive at max level
-const DRONE_POOL = 4;   // W.droneCount: up to 3, plus 1 with the Extra Wingman Breakthrough
+const DRONE_POOL = DRONE_MAX; // W.droneCount: up to 3 in front and 5 behind
 const TRAIL_LEN = 9;    // drone thruster trail samples (one per tick)
 const RETARGET_TIME = 0.2;       // seconds between nearest-target searches per turret/drone
 const LOS_CANDIDATES = 3;        // nearest targets tried before giving up on a blocked line of sight
@@ -35,9 +35,25 @@ const SIDESTEPS = [38, -38, 76, -76, 114, -114].map((v) => v * TURRET_SCALE); //
 const DRONE_BOLT_RADIUS = 2.6;
 const MINE_KNOCK = 1.6;
 const BOLT_KNOCK = 0.9;
-// Formation slots (radians from the hull heading, radius scale): one drone trails directly behind,
-// two fly a V off the rear quarters, the third closes the V behind them.
-const DRONE_SLOTS = [[2.35, 1], [-2.35, 1], [Math.PI, 1.3], [Math.PI, 2.1]];
+// Formation (ship frame, x forward / y starboard, in units of droneFormationRadius): a FRONT ROW of up to 3
+// round the nose and a BACK ROW of up to 5 in a shallow chevron behind the hull. Each row spreads
+// symmetrically to fit however many fly in it; how many go in front is droneFrontFor (weapon-scaling.js):
+// up to 5 as a front pair + back row of 3, then Escort Squadron's 3 take the front centre and the back
+// row's outer sides (8: 3 in front, 5 behind).
+const DRONE_FRONT_ROWS = [[], [[1.45, 0]], [[0.55, -1.05], [0.55, 1.05]], [[0.55, -1.05], [1.45, 0], [0.55, 1.05]]]; // the centre slot clears the nose
+const DRONE_BACK_ROWS = [
+  [],
+  [[-1.35, 0]],
+  [[-1.15, -0.8], [-1.15, 0.8]],
+  [[-1.15, -1.15], [-1.4, 0], [-1.15, 1.15]],
+  [[-0.95, -1.75], [-1.3, -0.6], [-1.3, 0.6], [-0.95, 1.75]],
+  [[-0.85, -2.1], [-1.15, -1.15], [-1.4, 0], [-1.15, 1.15], [-0.85, 2.1]]
+];
+function droneSlot(i, front, back) {
+  return i < front ? DRONE_FRONT_ROWS[front][i] : DRONE_BACK_ROWS[back][i - front];
+}
+const DRONE_LAUNCH_GAP = 0.07; // s between drones launching together (a squadron peels off one by one)
+const DRONE_DOCK_DIST = 7;     // px from its slot where a launching drone docks (snap ring + chirp)
 
 const wrapAngle = (a) => {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -55,7 +71,7 @@ export class Deployables {
     this.mines = Array.from({ length: MINE_POOL }, () => ({ x: 0, y: 0, age: 0, life: 0, trigger: 0, blast: 0, damage: 0, spin: 0, cluster: false, seeker: false }));
     this.turrets = Array.from({ length: TURRET_POOL }, () => ({ x: 0, y: 0, life: 0, maxLife: 0, aim: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, packing: false }));
     this.drones = Array.from({ length: DRONE_POOL }, () => ({
-      x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0,
+      x: 0, y: 0, vx: 0, vy: 0, angle: 0, fireAcc: 0, target: null, retarget: 0, flash: 0, podT: 0, launch: 0, flight: 0, docked: true, pop: 0,
       trailX: new Float32Array(TRAIL_LEN), trailY: new Float32Array(TRAIL_LEN), trailHead: 0, trailCount: 0
     }));
     this.clear();
@@ -384,6 +400,7 @@ export class Deployables {
   updateDrones(dt, game, level) {
     const p = game.player;
     const want = level ? Math.min(DRONE_POOL, W.droneCount(level)) : 0;
+    let launching = 0;
     while (this.droneCount < want) {
       const d = this.drones[this.droneCount++];
       d.x = p.x;
@@ -396,29 +413,62 @@ export class Deployables {
       d.flash = 0;
       d.trailCount = 0;
       d.podT = W.podEvery * (0.5 + this.droneCount / (want + 1));
-      game.particles.spawnShockwave(p.x, p.y, 28, DEPLOYABLE_HUES.drone, 2, 0.2);
+      // Launch: drones joining together (a squadron) peel off the hull one by one and fly out to their
+      // slots, then dock with a snap ring and a chirp that climbs along the row.
+      d.launch = launching++ * DRONE_LAUNCH_GAP;
+      d.flight = 0;
+      d.docked = false;
+      d.pop = 0;
     }
     while (this.droneCount > want) this.drones[--this.droneCount].target = null;
     const n = this.droneCount;
     if (n === 0) return;
 
     const heading = p.hullAngle ?? p.drillAngle ?? p.angle;
+    const cos = Math.cos(heading), sin = Math.sin(heading);
     const spacing = TUNING.droneFormationRadius ?? 54;
+    const front = Math.min(n, W.droneFront(level));
+    const back = n - front;
+    const shipSpeed = Math.hypot(p.vx || 0, p.vy || 0);
     const range = W.droneRange(level);
     const rate = W.droneFireRate(level);
-    const damage = weaponDamage(p, 'drone', level);
+    const leadDamage = weaponDamage(p, 'drone', level);
+    const wingDamage = leadDamage * W.droneWingDamageMult(level) / W.droneDamageMult(level);
     for (let i = 0; i < n; i++) {
       const d = this.drones[i];
-      const [slotAngle, slotScale] = n === 1 ? DRONE_SLOTS[2] : DRONE_SLOTS[i];
-      const r = spacing * (n === 1 ? 1 : slotScale) + Math.sin(this.time * 3 + i * 2.1) * 3;
-      const tx = p.x + Math.cos(heading + slotAngle) * r;
-      const ty = p.y + Math.sin(heading + slotAngle) * r;
+      const damage = i === 0 ? leadDamage : wingDamage; // the flight lead carries the heavy gun
+      const [fx, fy] = droneSlot(i, front, back);
+      const r = spacing + Math.sin(this.time * 3 + i * 2.1) * 3; // a gentle bob, out of phase per drone
+      const tx = p.x + (fx * cos - fy * sin) * r;
+      const ty = p.y + (fx * sin + fy * cos) * r;
+      if (d.launch > 0) {
+        // Still in the hangar: ride the hull until its turn, then kick out toward the slot.
+        d.launch -= dt;
+        d.x = p.x;
+        d.y = p.y;
+        if (d.launch > 0) continue;
+        d.vx = (tx - p.x) * 0.22;
+        d.vy = (ty - p.y) * 0.22;
+        game.particles.spawnShockwave(p.x, p.y, 28, DEPLOYABLE_HUES.drone, 2, 0.2);
+      }
       // Damped spring: keeps station at full thrust (a few ship-speeds of lag) and swings on turns.
       d.vx = (d.vx + (tx - d.x) * 0.09) * 0.74;
       d.vy = (d.vy + (ty - d.y) * 0.09) * 0.74;
       d.x += d.vx;
       d.y += d.vy;
       if (Math.abs(tx - d.x) + Math.abs(ty - d.y) > 600) { d.x = tx; d.y = ty; d.vx = d.vy = 0; d.trailCount = 0; }
+      if (!d.docked) {
+        d.flight += dt;
+        // Docked once on station (the spring trails a few ship-speeds behind at full thrust) or after 0.5 s.
+        if (Math.hypot(tx - d.x, ty - d.y) < DRONE_DOCK_DIST + shipSpeed * 4 || d.flight > 0.5) {
+          d.docked = true;
+          d.pop = 1;
+          game.particles.spawnShockwave(d.x, d.y, 20, DEPLOYABLE_HUES.drone, 2.5, 0.22);
+          game.particles.spawnFlash?.(d.x, d.y, 16, DEPLOYABLE_HUES.drone, 0.12);
+          game.sound.playDroneDock?.(i);
+        }
+      }
+      if (d.pop > 0) d.pop = Math.max(0, d.pop - dt * 3.5);
 
       d.trailX[d.trailHead] = d.x;
       d.trailY[d.trailHead] = d.y;
@@ -701,7 +751,7 @@ export class Deployables {
     const hd = DEPLOYABLE_HUES.drone;
     for (let i = 0; i < this.droneCount; i++) {
       const d = this.drones[i];
-      if (!this.inView(game, d.x, d.y, 60)) continue;
+      if (d.launch > 0 || !this.inView(game, d.x, d.y, 60)) continue;
       // Thruster trail: oldest sample faint and thin, newest bright and thick.
       const n = d.trailCount;
       for (let s = 1; s < n; s++) {
@@ -717,6 +767,16 @@ export class Deployables {
       }
       ctx.save();
       ctx.translate(d.x, d.y);
+      if (d.pop > 0) {
+        // Dock snap: a ring that tightens onto the drone while its hull pops up and settles.
+        ctx.strokeStyle = `hsla(${hd}, 100%, 75%, ${d.pop * 0.9})`;
+        ctx.lineWidth = 1.5 + d.pop * 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 9 + d.pop * 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const s = (i === 0 ? 1.25 : 1) * (1 + 0.45 * d.pop * d.pop); // the flight lead (heavy gun) flies a bigger hull
+      if (s !== 1) ctx.scale(s, s);
       ctx.rotate(d.angle);
       ctx.strokeStyle = `hsla(${hd}, 100%, 62%, 0.95)`;
       ctx.lineWidth = 2;

@@ -70,8 +70,9 @@ test('a supply-cache level is the starting level of the next level-up card and t
   const g = game();
   // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Autocannon
   // cards are banished: maxing them would fill the weapon's LV 12 cap).
-  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
-  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID)].filter((id) => id !== 'multishot').map((id) => [id, true]));
+  // Replicator Array is banished too (maxed, it would add its streams to the Autocannon).
+  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && u.id !== 'replicator_array' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
+  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID), 'replicator_array'].filter((id) => id !== 'multishot').map((id) => [id, true]));
 
   // Draws: 1x cache tier, Prism Split's shuffle score, then a lucky +2 level roll.
   withRandom([0.99, 0.5, 0.05], () => g.openRelicChest({ guaranteedSuper: false }));

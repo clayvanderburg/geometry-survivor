@@ -7,9 +7,10 @@
 // count) each add damage output; UTILITY cards (size, radius, pull, reach, lifetime) add none, so a
 // weapon built for damage matches every other weapon built for damage, and utility is a trade-off.
 //
-// At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: pick a transform (a new way the weapon works)
-// or ACROSS THE BOARD (a flat damage boost and +1 rank in every UTILITY stat of that weapon). Both are worth
-// about the same potential DPS (BT_TRANSFORM_DPS vs BT_BOOST_DPS, pinned by tests).
+// At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: pick 1 of 3 options drawn from its pool
+// (docs/BREAKTHROUGH_POOLS.md, Deep Rock Galactic: Survivor's overclocks): transforms (a new way the weapon
+// works) and FLATS (ACROSS THE BOARD: a flat damage boost and +1 rank in every UTILITY stat; OVERTUNED CORE:
+// damage only). Every option is worth about the same potential DPS (BT_FLATS / BT_TRANSFORM_DPS, pinned by tests).
 //
 // No DOM and no game imports, so tests, the card previews and the balance harness can all use it.
 
@@ -21,6 +22,9 @@ export const BT_BOOST_DPS = 1.18;
 // ACROSS THE BOARD: free ranks added to every UTILITY stat of the weapon (not counted toward its level).
 // POWER stats get none: +1 Prism Split, fire rate and damage at once would multiply far past a transform.
 export const BT_BOOST_RANKS = 1;
+// OVERTUNED CORE: damage only, a little under a transform (DRG: Survivor's clean overclocks), so the
+// transforms stay the exciting pick.
+export const BT_OVERTUNED_DPS = 1.2;
 
 // Single-stat cards per weapon. `stat` is the rank key read by weapon-scaling.js; `headline` the
 // STAT_ROWS id shown enlarged on the card; maxLevel is the most ranks one card can take (the weapon
@@ -90,7 +94,7 @@ export const STAT_CARDS = {
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (the front pair, then the back row).', { maxLevel: 4 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
@@ -361,7 +365,7 @@ export const TRANSFORMS = {
     18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
   },
   drones: {
-    6: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
+    6: tf('wingman', 'Escort Squadron', 'Escort Drones: 3 more drones join the formation (up to 8: 3 in front, 5 behind). Drones past 8 add their guns to the rest.'),
     12: tf('homing', 'Homing Bolts', 'Escort Drone bolts curve onto their targets.'),
     18: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
   },
@@ -428,6 +432,48 @@ export const TRANSFORMS = {
 // charges back means more turrets out.
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
+// REPLICATOR ARRAY (global card, v0.45): each rank adds +1 rank to the "how many" stat of every equipped
+// weapon that has one (COUNT_STATS), as a bonus outside the weapon level like ACROSS THE BOARD's ranks, so
+// Breakthrough timing never moves. The card ranks + Replicator ranks of a count stat never pass that stat
+// card's own cap (a weapon already at its cap gets nothing), and the count card's own room shrinks to match.
+// `stat` is the build rank key; `card` the weapon's count card (null: the Sentry Turret has no count card,
+// so its bonus is a turret charge, kept in r.charges); `cap` its rank cap; `per` the amount one rank adds
+// and `unit` the word on the card headline. Weapons missing here (Vortex Singularity, Gas Trail, Shock
+// Field, Nanite Swarm, Claw Harpoon) have no count stat and get nothing.
+export const REPLICATOR_ID = 'replicator_array';
+export const REPLICATOR_MAX_RANKS = 2;
+const countStat = (stat, card, cap, per, unit) => ({ stat, card, cap, per, unit });
+export const COUNT_STATS = Object.freeze({
+  blaster: countStat('prism', 'multishot', 5, 2, 'STREAMS'),
+  rockets: countStat('count', 'rockets_count', 6, 1, 'ROCKET'),
+  missiles: countStat('salvo', 'missiles_salvo', 8, 1, 'MISSILE'),
+  lightning: countStat('chain', 'lightning_chain', 6, 2, 'ARC JUMPS'),
+  orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
+  mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
+  turret: countStat('charges', null, 2, 1, 'TURRET'),
+  drones: countStat('wingmen', 'drones_wingmen', 4, 1, 'DRONE'),
+  grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
+  flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
+  cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
+  acidspray: countStat('nozzles', 'acidspray_nozzles', 3, 1, 'NOZZLE'),
+  raillance: countStat('count', 'raillance_count', 3, 1, 'LANCE'),
+  glaive: countStat('count', 'glaive_count', 4, 1, 'DISC'),
+  quake: countStat('count', 'quake_count', 4, 1, 'CHARGE')
+});
+export const replicatorRanks = (p) => p?.upgradeLevels?.[REPLICATOR_ID] || 0;
+// Replicator ranks a weapon actually gets (0..ranks): what fits under its count cap after its own card ranks.
+export function replicatorBonus(id, cardRanks, ranks) {
+  const cs = COUNT_STATS[id];
+  return cs && ranks > 0 ? Math.max(0, Math.min(ranks, cs.cap - (cardRanks || 0))) : 0;
+}
+// Count ranks a weapon can still take from one more Replicator rank (its card ranks + bonus under the cap).
+export function countRoom(p, id) {
+  const cs = COUNT_STATS[id];
+  if (!cs) return 0;
+  const own = cs.card ? p?.upgradeLevels?.[cs.card] || 0 : 0;
+  return Math.max(0, cs.cap - own - replicatorBonus(id, own, replicatorRanks(p)));
+}
+
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
 
@@ -436,10 +482,10 @@ export const RD_LINES = [
   'Bridge, this is R&D: we cracked something in the {weapon} telemetry. Pick which prototype goes into production.',
   'Your science and engineering team made an exciting discovery in the {weapon}. Sign off on one build.',
   'Science bay here. The {weapon} just did something it should not be able to do. We want to do it again.',
-  'Engineering: two {weapon} blueprints, one fabricator slot. Your call, pilot.',
+  'Engineering: three {weapon} blueprints, one fabricator slot. Your call, pilot.',
   'R&D to pilot: the {weapon} field data is in and it is beautiful. Which version do we print?',
   'Somebody in the lab overclocked the {weapon} and nothing exploded. Pick the keeper.',
-  'Prototype bay: two new {weapon} configurations are ready. One ships today.',
+  'Prototype bay: three new {weapon} configurations are ready. One ships today.',
   'Chief engineer here. We rewired the {weapon} core and found headroom. Spend it.'
 ];
 
@@ -451,8 +497,93 @@ export function milestonesCrossed(from, to) {
   return BREAKTHROUGH_LEVELS.filter((m) => from < m && to >= m);
 }
 
-// Chosen Breakthroughs of a weapon: { 6: 'transform' | 'boost', 12: ..., 18: ... }.
+// Chosen Breakthroughs of a weapon: { 6: option, 12: ..., 18: ... }. An option is a transform id
+// ('flak'), a flat id ('boost' | 'overtuned'), or the legacy 'transform' (the milestone's home transform).
 export const weaponBreakthroughs = (p, id) => p.breakthroughs?.[id] || {};
+
+// --- Breakthrough pools (docs/BREAKTHROUGH_POOLS.md) -----------------------------------------------------
+// Flats: shared by every weapon, no new mechanic. `dps` is the potential-DPS multiplier of one pick.
+export const BT_FLATS = Object.freeze({
+  boost: Object.freeze({ id: 'boost', name: 'Across the Board', dps: BT_BOOST_DPS }),
+  overtuned: Object.freeze({ id: 'overtuned', name: 'Overtuned Core', dps: BT_OVERTUNED_DPS })
+});
+export const overtunedSummary = (weaponName) => `${weaponName}: +${Math.round((BT_OVERTUNED_DPS - 1) * 100)}% damage on every hit. No new tricks, no extras: just a hotter core.`;
+// Draw weights of a transform: at its home milestone, and at any other one.
+export const BT_HOME_WEIGHT = 3;
+export const BT_AWAY_WEIGHT = 1;
+// Chance the middle card is a transform (it is a flat otherwise).
+export const BT_MIDDLE_TRANSFORM_CHANCE = 0.5;
+
+// Every transform a weapon can draw: { id, name, summary, home, slot } (slot 0 / 1 / 2 sets the build's
+// t4 / t8 / t12 flag, so the weapon code reads it wherever it was taken). Transforms added later go in
+// EXTRA_TRANSFORMS[weapon] as { id, name, summary, home } and are read with b.tf.has(id). A transform that
+// builds on another one lists it in `requires` (it is drawn only once those are installed); `notBefore`
+// keeps one out of milestones under it (use the home milestone for "home tier or later").
+export const EXTRA_TRANSFORMS = {};
+export function transformPool(id) {
+  const out = BREAKTHROUGH_LEVELS.map((m, slot) => TRANSFORMS[id]?.[m] && { ...TRANSFORMS[id][m], home: m, slot }).filter(Boolean);
+  for (const t of EXTRA_TRANSFORMS[id] || []) out.push({ ...t, slot: -1 });
+  return out;
+}
+// Can transform `t` be drawn at milestone `m` with `taken` (a Set of installed transform ids)?
+export const transformEligible = (t, m, taken) =>
+  !taken.has(t.id) && (t.requires || []).every((r) => taken.has(r)) && m >= (t.notBefore || 0);
+export const transformById = (id, tfId) => transformPool(id).find((t) => t.id === tfId) || null;
+
+// The option id behind a stored choice ('transform' means the milestone's home transform).
+export const btOptionId = (id, m, v) => (v === 'transform' ? TRANSFORMS[id]?.[m]?.id ?? null : v ?? null);
+// What a stored choice is: { kind: 'transform', transform } or { kind: flat id, flat }, or null.
+export function btOption(id, m, v) {
+  const opt = btOptionId(id, m, v);
+  if (!opt) return null;
+  if (BT_FLATS[opt]) return { id: opt, kind: opt, flat: BT_FLATS[opt], name: BT_FLATS[opt].name };
+  const t = transformById(id, opt);
+  return t ? { id: opt, kind: 'transform', transform: t, name: t.name } : null;
+}
+// Transform ids a weapon already has installed.
+export function takenTransforms(id, bt = {}) {
+  const out = new Set();
+  for (const m of BREAKTHROUGH_LEVELS) {
+    const o = btOption(id, m, bt[m]);
+    if (o?.kind === 'transform') out.add(o.id);
+  }
+  return out;
+}
+
+// Weighted pick without replacement from `items` ({ w } each); null when empty.
+function weightedTake(items, rng) {
+  const total = items.reduce((s, it) => s + it.w, 0);
+  if (!items.length || total <= 0) return null;
+  let roll = rng() * total;
+  const i = items.findIndex((it) => (roll -= it.w) < 0);
+  return items.splice(i < 0 ? items.length - 1 : i, 1)[0];
+}
+
+// The 3 options of a weapon's Breakthrough at milestone `m`, given what it already has (`bt`): option ids,
+// shuffled. Card 1 is a transform, card 2 a transform or a flat, card 3 a flat; at least one of each, never
+// a duplicate, a transform already installed never comes back, and none comes before what it `requires`.
+// A short pool fills with flats.
+export const BT_HAND_SIZE = 3;
+export function drawBreakthroughOptions(id, m, bt = {}, rng = Math.random) {
+  const taken = takenTransforms(id, bt);
+  const tfs = transformPool(id).filter((t) => transformEligible(t, m, taken)).map((t) => ({ id: t.id, w: t.home === m ? BT_HOME_WEIGHT : BT_AWAY_WEIGHT }));
+  const flats = Object.keys(BT_FLATS).map((f) => ({ id: f, w: 1 }));
+  const hand = [];
+  const first = weightedTake(tfs, rng);
+  if (first) hand.push(first.id);
+  const middle = (rng() < BT_MIDDLE_TRANSFORM_CHANCE && weightedTake(tfs, rng)) || weightedTake(flats, rng);
+  if (middle) hand.push(middle.id);
+  while (hand.length < BT_HAND_SIZE) {
+    const next = weightedTake(flats, rng) || weightedTake(tfs, rng);
+    if (!next) break;
+    hand.push(next.id);
+  }
+  for (let i = hand.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [hand[i], hand[j]] = [hand[j], hand[i]];
+  }
+  return hand;
+}
 
 // Ranks a player holds in each stat of a weapon (card levels from upgradeLevels).
 export function statRanks(p, id) {
@@ -463,24 +594,36 @@ export function statRanks(p, id) {
 
 // Everything the weapon formulas need: level (with any evolution bonus level), effective ranks
 // (card ranks + ACROSS THE BOARD ranks), which transforms are installed and how many boosts.
-export function makeBuild(id, lv, ranks = {}, bt = {}) {
+// `replicator`: REPLICATOR ARRAY ranks, added to the weapon's COUNT_STATS stat up to its cap.
+// `tf` is the set of installed transform ids; `ot` counts OVERTUNED CORE picks.
+export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0) {
   let atb = 0;
-  const t = {};
+  let ot = 0;
+  const tf = new Set();
+  const t = [false, false, false];
   for (const m of BREAKTHROUGH_LEVELS) {
-    if (bt[m] === 'boost') atb++;
-    else if (bt[m] === 'transform') t[m] = true;
+    const o = btOption(id, m, bt[m]);
+    if (!o) continue;
+    if (o.kind === 'boost') atb++;
+    else if (o.kind === 'overtuned') ot++;
+    else if (o.kind === 'transform') {
+      tf.add(o.id);
+      if (o.transform.slot >= 0) t[o.transform.slot] = true;
+    }
   }
   const r = {};
   for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
-  // t4 / t8 / t12 name the first, second and third Breakthrough (now at LV 6 / 12 / 18).
-  const [m1, m2, m3] = BREAKTHROUGH_LEVELS;
-  return { id, lv, r, atb, t4: !!t[m1], t8: !!t[m2], t12: !!t[m3], transforms: (t[m1] ? 1 : 0) + (t[m2] ? 1 : 0) + (t[m3] ? 1 : 0) };
+  const cs = COUNT_STATS[id];
+  if (cs && replicator > 0) r[cs.stat] = (r[cs.stat] || 0) + replicatorBonus(id, ranks[cs.stat], replicator);
+  // t4 / t8 / t12: the weapon's first, second and third transform (home LV 6 / 12 / 18) is installed,
+  // at whichever milestone it was taken.
+  return { id, lv, r, atb, ot, tf, t4: t[0], t8: t[1], t12: t[2], transforms: tf.size };
 }
 
 // Build of an owned weapon. `levelKey` is the player.weapons key holding its level (loadout.js).
 export function weaponBuild(p, id, lv = null) {
   const level = lv ?? (id === 'blaster' ? Math.max(1, p.weapons?.blaster || 0) : (p.weapons?.[id] || 0));
-  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id));
+  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id), replicatorRanks(p));
 }
 
 // A weapon at a level with no stat ranks and no Breakthroughs (Storm Protocol's fixed chain level).

@@ -95,9 +95,10 @@ test('slot 6: that weapon starts with its LV 6 Breakthrough, once per run, in pl
   assert.equal(weaponLevel(p, id), 1);
   assert.equal(g.handPhase, 'breakthrough', 'the Breakthrough opens right away');
   assert.deepEqual(g.breakthrough, { weaponId: id, level: 6 });
+  const pick = g.currentChoices[0].option;
   g.selectUpgrade(0);
   assert.equal(g.state, 'PLAYING');
-  assert.equal(p.breakthroughs[id][6], 'transform');
+  assert.equal(p.breakthroughs[id][6], pick);
   // It counts as the LV 6 Breakthrough: reaching LV 6 offers nothing more, LV 12 still does.
   const card = UPGRADE_BY_ID[`${id}_damage`] || Object.values(UPGRADE_BY_ID).find((u) => u.id.startsWith(id));
   applyUpgradeLevels(p, { ...card, levelJump: 5 });
