@@ -16,6 +16,7 @@ import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius } from './weapon-
 import { weaponBuild, weaponElement } from './weapon-levels.js';
 import { wellPullScale } from './gravity.js';
 import { isDeployableTarget } from './deployables.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Sticky Plasma, Plasma Geyser
 
 // Element look per grenade element, with the blast / cloud hue. Plasma is the plain one.
 export const GRENADE_ELEMENTS = {
@@ -104,6 +105,7 @@ export class Grenades {
         continue;
       }
       g.armedT += dt;
+      if (g.stuck) BTX.grenadeRide(g);
       if (g.armedT >= g.fuse) {
         // Swap-remove keeps live grenades packed; `g` keeps its data until the slot is reused.
         this.items[i] = this.items[this.count - 1];
@@ -228,6 +230,9 @@ export class Grenades {
       g.cluster = b.t4;
       g.cloud = b.t8;
       g.gravity = b.t12;
+      g.sticky = !!b.tf?.has('sticky');
+      g.geyser = !!b.tf?.has('geyser');
+      g.stuck = null;
       g.emp = emp;
       g.pullRadius = radius * W.gravityPullRadiusMult;
       g.spin = Math.random() * Math.PI * 2;
@@ -251,6 +256,7 @@ export class Grenades {
     fx.spawnShockwave(g.x, g.y, 20, g.hue, 1.6, 0.18);
     fx.spawnExplosionSparks(g.x, g.y, 3, g.hue, 1, 4, 1.4);
     if (g.cluster) this.cluster(game, g);
+    BTX.grenadeStick(game, g);
     if (g.gravity) {
       fx.spawnShockwave(g.x, g.y, g.pullRadius, g.hue, 2.5, g.fuse, true);
       if (this.throwSound !== this.throws) {
@@ -306,6 +312,7 @@ export class Grenades {
         damage: g.damage * W.cloudShare / ticks, hue: g.hue, source: 'grenade', look: g.element });
     }
     if (g.emp) this.emp(game, g);
+    BTX.grenadeBlast(game, g);
   }
 
   // Cluster Grenades: the grenade splits as it lands and the bomblets hop onto enemies just outside its

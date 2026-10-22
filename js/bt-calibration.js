@@ -23,7 +23,7 @@ export const BT_REALIZED_RANGE = Object.freeze([0.6, 1.7]);
 export const BT_SPRAYERS = Object.freeze(['flamethrower', 'cryospray', 'acidspray']);
 export const BT_CONTROL = Object.freeze({
   shockfield: ['lash', 'repulse'], raillance: ['magnet'], grenades: ['gravity'], flamethrower: ['ring'],
-  cryospray: ['shatter', 'slicks', 'blizzard'], acidspray: ['caustic'], quake: ['epicenter', 'lens']
+  cryospray: ['shatter', 'slicks', 'blizzard'], acidspray: ['caustic'], quake: ['epicenter', 'lens'], mines: ['shock'], orbitals: ['vortex']
 });
 
 export const TF_REALIZED = {
@@ -32,11 +32,11 @@ export const TF_REALIZED = {
   missiles: { cluster: [1, 1.12, 1], rain: [1, 1, 1], nuke: [1, 0.73, 1], hunter: [0.72, 1, 0.79], echo: [0.92, 1, 0.62] },
   lightning: { fork: [1.7, 1, 1.57], orb: [1.23, 1, 1], strike: [1.7, 1, 1.24] },
   singularity: { twin: [1.7, 1, 1], aftershock: [0.85, 1, 1], cascade: [0.73, 1, 0.83] },
-  orbitals: { counter: [0.94, 1, 1], fling: [0.69, 1, 0.74], nova: [0.6, 1, 1] },
-  mines: { cluster: [1, 0.95, 1], seeker: [1, 1, 1], triad: [1.15, 1, 1] },
+  orbitals: { counter: [0.94, 1, 1], fling: [0.69, 1, 0.74], nova: [0.6, 1, 1], frenzy: [0.92, 0.88, 0.9], vortex: [1.15, 1, 1] },
+  mines: { cluster: [1, 0.95, 1], seeker: [1, 1, 1], triad: [1.15, 1, 1], shock: [0.85, 0.8, 0.72], napalm: [1, 1, 1] },
   turret: { capacity: [1, 1, 1], mobile: [0.72, 0.8, 0.75], overload: [0.66, 1, 1], gift: [0.65, 0.64, 0.8], link: [0.7, 0.64, 0.8] },
   drones: { wingman: [1.24, 1.49, 1.16], homing: [1, 1, 1], pods: [1, 1, 1], overdrive: [1, 0.88, 0.92], kamikaze: [1.3, 0.88, 0.88] },
-  grenades: { cluster: [1.1, 1.42, 1], cloud: [0.69, 0.63, 0.69], gravity: [1, 1.7, 1.45] },
+  grenades: { cluster: [1.1, 1.42, 1], cloud: [0.69, 0.63, 0.69], gravity: [1, 1.7, 1.45], sticky: [0.66, 0.85, 0.7], geyser: [0.95, 0.85, 0.78] },
   gas: { seek: [0.6, 1, 1], pockets: [0.6, 0.6, 0.6], shroud: [0.6, 0.6, 0.6] },
   flamethrower: { fireballs: [0.6, 0.6, 0.6], napalm: [0.6, 0.6, 0.6], ring: [1, 1.7, 1] },
   cryospray: { shatter: [0.6, 0.6, 0.6], slicks: [0.6, 0.6, 0.6], blizzard: [0.73, 1.4, 0.91] },

@@ -302,3 +302,50 @@ test('Crush Field and Gravity Lens: a main shell leaves a crushing pool; in flig
   for (let i = 0; i < 30; i++) BTX.quakeLens(g, b, s, 1 / 60);
   assert.ok(e.x > x0 + 30, 'dragged toward the landing point');
 });
+
+test('Sticky Plasma: a grenade landing by an enemy rides it and hits it stickyShare more; Plasma Geyser erupts geyserBursts times', () => {
+  const { g } = fight('grenades', { 6: 'sticky', 18: 'geyser' }, [[100, 0]]);
+  const e = g.enemyManager.enemies[0];
+  const gr = { x: e.x + 20, y: e.y, sticky: true, geyser: true, damage: 10, radius: 90, hue: 300 };
+  BTX.grenadeStick(g, gr);
+  assert.equal(gr.stuck, e);
+  e.x += 50;
+  BTX.grenadeRide(gr);
+  assert.ok(Math.abs(gr.x - (e.x + gr.stickDx)) < 1e-9, 'rides along');
+  const hits = [];
+  g.hitEnemy = (x, d) => hits.push([x, d]);
+  g.weaponFx.events = [];
+  BTX.grenadeBlast(g, gr);
+  assert.deepEqual(hits, [[e, 10 * W.stickyShare]]);
+  const vents = g.weaponFx.events.filter((ev) => ev.style === 'charge');
+  assert.equal(vents.length, W.geyserBursts);
+  assert.ok(vents.every((v, k) => v.delay === W.geyserGap * (k + 1) && Math.abs(v.damage - 10 * W.geyserShare) < 1e-9));
+});
+
+test('Shock Mines stun what the blast hits; Napalm Mines leave a pool worth napalmMineShare', async () => {
+  const { isStunned } = await import('../js/status-effects.js');
+  const { g } = fight('mines', { 6: 'shock', 12: 'napalm' }, [[60, 0], [600, 0]]);
+  const [near, far] = g.enemyManager.enemies;
+  g.weaponFx.pools = [];
+  BTX.mineBlast(g, { x: near.x - 30, y: near.y, blast: 120, damage: 10, shock: true, napalm: true });
+  assert.ok(isStunned(near), 'stunned');
+  assert.ok(!isStunned(far), 'out of the blast: not stunned');
+  const pool = g.weaponFx.pools[0];
+  assert.ok(Math.abs(pool.damage * (W.napalmMineLife / W.napalmMineTick) - 10 * W.napalmMineShare) < 1e-9);
+});
+
+test('Blade Frenzy builds with hits up to +frenzyMax and cools; Vortex Ring drags enemies onto the ring', () => {
+  const { g, p } = fight('orbitals', { 6: 'frenzy', 12: 'vortex' }, [[220, 0], [600, 0]]);
+  const b = weaponBuild(p, 'orbitals');
+  const s = {};
+  for (let i = 0; i < 100; i++) BTX.frenzyHit(s, b);
+  assert.ok(Math.abs(BTX.frenzyMult(s, 0, b) - (1 + W.frenzyMax)) < 1e-9, 'capped at full heat');
+  BTX.frenzyMult(s, 10, b);
+  assert.equal(BTX.frenzyMult(s, 0, b), 1, 'cooled off');
+  const [inBand, outside] = g.enemyManager.enemies;
+  const d0 = Math.hypot(inBand.x - p.x, inBand.y - p.y);
+  for (let i = 0; i < 30; i++) BTX.orbitalVortex(g, 1 / 60, b, p.x, p.y, 160);
+  const d1 = Math.hypot(inBand.x - p.x, inBand.y - p.y);
+  assert.ok(d1 < d0 && d1 >= 158, 'dragged onto the ring, not past it');
+  assert.equal(Math.hypot(outside.x - p.x, outside.y - p.y), 600, 'outside the band: untouched');
+});

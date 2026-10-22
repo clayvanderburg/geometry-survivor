@@ -325,7 +325,20 @@ export const WEAPON_SCALING = {
   novaShare: 0.22,
   novaRadius: 70,
   orbitalPassesContactTicksPerSec: (b) => W.orbitalBlades(b) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(b)) * 60 * (b.t4 ? 1 + 1 / W.counterRadiusMult : 1),
-  orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)),
+  // Pool transforms (main.js updateOrbitals via bt-extras.js): Blade Frenzy (every blade hit adds frenzyGain
+  // heat, which bleeds off at frenzyDecay /s; blades hit 1 + frenzyMax x heat as hard, valued at frenzyValue of
+  // full heat), Vortex Ring (enemies within vortexBand of the ring are dragged onto it at vortexPull px/s:
+  // control, valued at vortexHitShare for the extra contact).
+  frenzyGain: 0.03,
+  frenzyDecay: 0.6,
+  frenzyMax: 0.6,
+  frenzyValue: 0.3, // bt-bench: blades rarely hold full heat between packs
+  frenzySize: 0.35, // blades grow up to this much at full heat (utility: more of the pack in reach)
+  vortexBand: 90,
+  vortexPull: 70,
+  vortexHitShare: 1.55, // bt-bench: the vortex keeps a whole pack grinding on the ring
+  orbitalExtraUnits: (b) => (b.tf?.has('frenzy') ? 1 + W.frenzyMax * W.frenzyValue : 1) * (b.tf?.has('vortex') ? W.vortexHitShare : 1),
+  orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)) * W.orbitalExtraUnits(b),
   // A wider ring passes an enemy less often, so its blades hit harder per pass to match: Reach adds no DPS.
   orbitalDamageMult: (b) => lv1('orbitals', 'orbitals', (b0) => DPS_TARGET(1) / W.orbitalUnits(b0)) * hitMult(b) * tfScale(b, W.orbitalUnits)
     * W.orbitalRadius(b) / W.orbitalRadius(levelBuild('orbitals', 1)),
@@ -380,7 +393,20 @@ export const WEAPON_SCALING = {
   triadSpacing: 36,
   triadRange: 400, // a triad is tossed toward the nearest enemy this close to the ship (else dropped in the wake)...
   triadToss: 150, // ...landing at most this far out: a crowd that holds back still ends up within a Seeker Mine's reach
-  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)),
+  // Pool transforms (js/deployables.js via bt-extras.js): Shock Mines (blasts SHOCK at rank shockMineRank:
+  // control, valued at shockMineHitShare for the stunned pack the next mine catches), Napalm Mines (a pool of
+  // napalmMineRadiusFrac of the blast for napalmMineLife s, napalmMineShare of the blast in all, valued at
+  // napalmMineHitShare).
+  shockMineRank: 2,
+  shockMineRadius: 1.25, // the blast crackles this much wider (utility)
+  shockMineHitShare: 1, // bt-bench: the stun mostly holds enemies a mine has already blown
+  napalmMineShare: 0.4,
+  napalmMineLife: 2,
+  napalmMineTick: 0.25,
+  napalmMineRadiusFrac: 0.7,
+  napalmMineHitShare: 0.5,
+  mineExtraUnits: (b) => (b.tf?.has('shock') ? W.shockMineHitShare : 1) * (1 + (b.tf?.has('napalm') ? W.napalmMineShare * W.napalmMineHitShare : 0)),
+  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) * W.mineExtraUnits(b),
   mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
 
   // --- Sentry Turret (stats: damage, rate, reload, pierce) ---------------------------------------
@@ -506,7 +532,20 @@ export const WEAPON_SCALING = {
   gravityRamp: 2, // the pull builds up as the fuse burns down (none on landing, x3 at the blast; grenades.js gravityRamp)
   grenadeClusterHitShare: 0.2, // bomblets land past the blast and catch fewer enemies: valued at this share
   gravityHitShare: 1.3, // the pull packs about a third more enemies into every blast: valued at this share
-  grenadeUnits: (b) => (1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0)) * (b.t12 ? W.gravityHitShare : 1),
+  // Pool transforms (js/grenades.js via bt-extras.js): Sticky Plasma (a grenade landing within stickyReach of an
+  // enemy rides it and hits it for stickyShare more on the blast, valued at stickyHitShare: not every grenade
+  // lands beside one), Plasma Geyser (every blast erupts geyserBursts more times, geyserGap s apart, each
+  // geyserShare of the blast in geyserRadiusFrac of it, valued at geyserHitShare).
+  stickyReach: 46,
+  stickyShare: 0.6,
+  stickyHitShare: 0.3, // bt-bench: few grenades land within reach of an enemy
+  geyserBursts: 2,
+  geyserGap: 0.35,
+  geyserShare: 0.35,
+  geyserRadiusFrac: 0.9, // bt-bench: wide vents catch the pack the blast scattered (damage alone barely moved it)
+  geyserHitShare: 0.35, // bt-bench: the blast already thinned the pack the vent erupts on
+  grenadeExtraUnits: (b) => (b.tf?.has('sticky') ? W.stickyShare * W.stickyHitShare : 0) + (b.tf?.has('geyser') ? W.geyserBursts * W.geyserShare * W.geyserHitShare : 0),
+  grenadeUnits: (b) => (1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0) + W.grenadeExtraUnits(b)) * (b.t12 ? W.gravityHitShare : 1),
   grenadeDamageMult: (b) => lv1('grenades', 'grenades', (b0) => DPS_TARGET(1) * W.grenadeCooldown(b0) / (W.grenadeCount(b0) * W.grenadeUnits(b0))) * hitMult(b) * tfScale(b, W.grenadeUnits),
   // SYNERGY: EMP Grenades (Plasma Grenades + Tesla Arc): each blast arcs into empArcs enemies within
   // empRange x the blast radius for empShare of the blast damage each. Off the DPS curve, like Storm Protocol.
@@ -1107,10 +1146,10 @@ export const POTENTIAL_DPS = {
     const minis = b.t12 ? W.cascadeMinis * (W.cascadeDamageMult(b) * W.cascadeLife * 60 + W.cascadeCollapseDamageMult(b)) * W.cascadeHitShare : 0;
     return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
   },
-  orbitals: (b) => W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
+  orbitals: (b) => (W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
-    + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
-  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
+    + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0)) * W.orbitalExtraUnits(b),
+  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) * W.mineExtraUnits(b) / W.mineCooldown(b),
   turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b) * W.turretExtraUnits(b),
   drones: (b) => (W.droneDamageMult(b) + (W.droneCount(b) - 1) * W.droneWingDamageMult(b)) / W.droneDamageMult(b)
     * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)) * W.droneExtraUnits(b),
@@ -1118,7 +1157,7 @@ export const POTENTIAL_DPS = {
     const blast = W.grenadeDamageMult(b);
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
-    return W.grenadeCount(b) * (blast + bomblets + cloud) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
+    return W.grenadeCount(b) * (blast + bomblets + cloud + W.grenadeExtraUnits(b) * blast) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
   },
   gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
     + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0),

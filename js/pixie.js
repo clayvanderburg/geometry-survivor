@@ -105,7 +105,13 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'harpoon:whip': ['Whip Tether! I learned it from a space cowboy.', 'smug'],
   'harpoon:tesla': ['Tesla Hook! The claw bites AND zaps!', 'eureka'],
   'quake:crush': ['Crush Field! Gravity, but rude about it.', 'smug'],
-  'quake:lens': ['Gravity Lens! Everything wants to be near the boom.', 'eureka']
+  'quake:lens': ['Gravity Lens! Everything wants to be near the boom.', 'eureka'],
+  'grenades:sticky': ['Sticky Plasma! Do NOT shake hands with it.', 'oops'],
+  'grenades:geyser': ['Plasma Geyser! Boom, boom, and one more boom.', 'smug'],
+  'mines:shock': ['Shock Mines! Stunned AND exploded. Efficient!', 'smug'],
+  'mines:napalm': ['Napalm Mines! The floor is lava. On purpose.', 'eureka'],
+  'orbitals:frenzy': ['Blade Frenzy! They get sharper the more they cut!', 'eureka'],
+  'orbitals:vortex': ['Vortex Ring! Come closer. Closer. Into the blades.', 'smug']
 });
 
 // After the pick: any other transform, and Across the Board.

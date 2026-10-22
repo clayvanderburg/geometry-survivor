@@ -191,10 +191,13 @@ export class Deployables {
     }
     m.cluster = level.t4;
     m.seeker = level.t8;
+    m.shock = !!level.tf?.has('shock');
+    m.napalm = !!level.tf?.has('napalm');
     m.age = 0;
     m.life = W.mineLifetime(level);
     m.trigger = W.mineTriggerRadius(level);
     m.blast = mineBlastRadius(p, level);
+    if (m.shock) m.blast *= W.shockMineRadius; // Shock Mines crackle wider
     m.damage = weaponDamage(p, 'mine', level);
     m.spin = this.time * 1.7;
   }
@@ -209,6 +212,7 @@ export class Deployables {
     game.damageEnemiesInRadius(m.x, m.y, m.blast, m.damage, hue, 'mine', MINE_KNOCK);
     // Cluster Mines: bomblets pop just after the main blast.
     if (m.cluster) game.weaponFx?.scatter(m.x, m.y, W.mineClusterBomblets, m.blast * 0.7, m.blast * 0.4, m.damage * W.mineClusterShare, W.mineClusterDelay, hue, 'mine');
+    BTX.mineBlast(game, m);
   }
 
   // Nearest valid enemy within `range` of (x, y), or null.
