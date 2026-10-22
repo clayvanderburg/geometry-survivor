@@ -13,6 +13,7 @@ import { applyBossHazards } from './boss-hazards.js';
 import { playBossCue } from './boss-sfx-major.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
+import { tickBossQueue } from './boss-queue.js';
 import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
@@ -2534,7 +2535,9 @@ export class Game {
     }
   }
 
-  processPendingBossSpawns() {
+  processPendingBossSpawns(dt = 0) {
+    // A boss waits while one from an earlier boss wave is still up (js/boss-queue.js): no two bosses' kits at once.
+    if (!tickBossQueue(this, dt)) return;
     while (this.pendingBossSpawns.length > 0) {
       const scheduled = this.pendingBossSpawns[0];
       const bp = this.eliteSpawnPoint(40, TUNING.bossWarningTime ?? 3, { rock: !((TUNING.bossPortalBlast ?? 280) > 0) });
@@ -5282,7 +5285,7 @@ export class Game {
     // Scheduled encounters retain their wave scaling and get the first free slots.
     if (!range) {
       this.enemyManager.wave = this.wave;
-      this.processPendingBossSpawns();
+      this.processPendingBossSpawns(dt);
       tickFinalStand(this, dt);
       this.updateLieutenantSchedule();
       this.spawnCooldown -= dt;
