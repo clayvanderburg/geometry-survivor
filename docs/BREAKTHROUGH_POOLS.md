@@ -47,7 +47,16 @@ under a transform, so the transforms stay the exciting pick (Director, Oct 22):
 | Overtuned Core | ×1.20 (`BT_OVERTUNED_DPS`) | nothing |
 | Across the Board | ×1.18 (`BT_BOOST_DPS`) | +1 every UTILITY rank |
 
-`tests/breakthroughs.test.js` pins every option's `dpsGain` to its row. New transforms keep the class rule
+`tests/breakthroughs.test.js` pins every option's `dpsGain` to its row.
+
+**Realized calibration (card bench).** The model holds every transform at ×1.22, but what one *realizes* depends on
+how its attacks land, so before calibration the options ranged from 0.4× to 1.95× Across the Board. `js/bt-calibration.js`
+`TF_REALIZED` scales each transform's damage per milestone so it realizes **1.05–1.30× Across the Board** (control
+transforms 0.95–1.30×, sprayers 0.85–1.0×), measured with `node tools/balance/bt-bench.mjs` (pack + chase, targets at
+the wave a weapon reaches that level: 6 / 20 / 30). Potential DPS counts the value back in, so the ×1.22 rows above
+still hold. Values stay within 0.6–1.7 (a transform's boss damage never moves more than that); cases damage can't
+fix are listed in `BT_BENCH_EXEMPT` with a reason. **A new transform needs a `TF_REALIZED` entry**
+(`tests/bt-calibration.test.js`): bench it and tune its hit share or value into the band. New transforms keep the class rule
 (`WEAPON_CLASS` / `CLASS_TARGET`): bench numbers go in each content PR.
 
 ## Data and saves

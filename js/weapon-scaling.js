@@ -573,7 +573,7 @@ export const WEAPON_SCALING = {
   flamePuddleHitShare: 1.5,
   flameRingEvery: 2.5,
   flameRingRadiusMult: 1.3,
-  flameRingShare: 0.015,
+  flameRingShare: 0.03,
   flameRingHitShare: 2,
   flameRingKnock: 2.4,
   flameUnits: (b) => W.flameNozzleMult(b) * (W.flameHitShare + (b.t4 ? W.flameBurstShare * W.flameBurstHitShare : 0))
