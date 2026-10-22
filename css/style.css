@@ -424,6 +424,7 @@ html, body {
 /* The last 30 s before a boss escapes (js/boss-escape.js): its title becomes a pulsing red countdown. */
 .boss-bar-epithet.boss-bar-escaping {
   color: #ff3355;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
   animation: boss-escaping 0.8s ease-in-out infinite;

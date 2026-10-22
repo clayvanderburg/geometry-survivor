@@ -65,7 +65,7 @@ function warn(game, e) {
   const name = encounterName(e);
   game.showBanner?.(`⚠ ${name} IS GETTING AWAY! // KILL IT FOR THE ALIEN TECH CACHE // ${BOSS_ESCAPE.warnAt}s`);
   game.sound?.playBossCue?.('wing_siren');
-  const who = name.charAt(0) + name.slice(1).toLowerCase();
+  const who = name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()); // BROOD QUEEN -> Brood Queen
   game.say?.('pixie', `${who} is getting away!`, {
     mood: 'oops', cut: true,
     then: [{ who: 'pixie', text: 'Kill it for that Alien Tech Cache!', mood: 'eureka' }]

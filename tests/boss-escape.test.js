@@ -51,7 +51,7 @@ test('the clock: a warning at 2:30 (Dr. Pixie + a banner), the escape at 3:00 sh
   assert.equal(radio.length, 0, 'no warning before 2:30');
   tickBossEscapes(g, 1);
   assert.equal(radio.length, 1, 'the warning at 2:30');
-  assert.match(radio[0].text, /Brood queen is getting away!/);
+  assert.match(radio[0].text, /^Brood Queen is getting away!$/);
   assert.match(radio[0].then[0].text, /Alien Tech Cache/);
   assert.ok(banners.some((b) => /BROOD QUEEN IS GETTING AWAY! \/\/ KILL IT FOR THE ALIEN TECH CACHE/.test(b)));
   assert.ok(Math.abs(escapeLeft(g, q) - BOSS_ESCAPE.warnAt) < 1e-6);
