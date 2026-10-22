@@ -15,9 +15,9 @@ import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
-import { clipHTML, breakthroughClip } from './weapon-media.js';
+import { clipHTML, transformClip } from './weapon-media.js';
 import {
-  WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
+  WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, BT_OVERTUNED_DPS, boostSummary, overtunedSummary, btOption,
   weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL,
   REPLICATOR_ID, COUNT_STATS, globalMult
 } from './weapon-levels.js';
@@ -575,30 +575,39 @@ export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
   return v;
 }
 
-// One of the two Breakthrough choices at a weapon milestone: kind 'transform' (TRANSFORMS[id][level])
-// or 'boost' (ACROSS THE BOARD). Rows are the exact before -> after stats with the choice installed on
-// a copy of the player, led by the weapon's potential DPS.
-export function describeBreakthrough(player, weaponId, level, kind, maxRows = MAX_ROWS) {
+// One Breakthrough option at a weapon milestone (weapon-levels.js drawBreakthroughOptions): a transform id,
+// 'transform' (the milestone's home transform), or a flat ('boost' ACROSS THE BOARD, 'overtuned' OVERTUNED
+// CORE). `kind` is 'transform' or the flat id; `option` the id stored on the pick. Rows are the exact
+// before -> after stats with the choice installed on a copy of the player, led by the weapon's potential DPS.
+const FLAT_TEXT = {
+  boost: { summary: boostSummary, headline: () => `+${Math.round((BT_BOOST_DPS - 1) * 100)}% DAMAGE + UTILITY` },
+  overtuned: { summary: overtunedSummary, headline: () => `+${Math.round((BT_OVERTUNED_DPS - 1) * 100)}% DAMAGE` }
+};
+export function describeBreakthrough(player, weaponId, level, option, maxRows = MAX_ROWS) {
   const weapon = WEAPON_BY_ID[weaponId];
+  const opt = btOption(weaponId, level, option);
   const before = readRows(player);
   const copy = deepCopy(player);
-  applyBreakthrough(copy, weaponId, level, kind);
+  applyBreakthrough(copy, weaponId, level, option);
   const changed = diffRows(before, readRows(copy));
   const dpsBefore = weaponPotentialDps(player, weaponId);
   const dpsAfter = weaponPotentialDps(copy, weaponId);
   const gain = dpsBefore ? dpsAfter / dpsBefore - 1 : 0;
   const rows = [{ id: 'potentialDps', label: `${weapon.hudName} potential DPS`, before: dec1(dpsBefore || 0), after: dec1(dpsAfter || 0) }, ...changed];
-  const transform = kind === 'transform' ? TRANSFORMS[weaponId][level] : null;
-  const rarity = kind === 'transform' ? 'transform' : 'boost';
+  const transform = opt?.kind === 'transform' ? opt.transform : null;
+  const flat = FLAT_TEXT[opt?.kind] || FLAT_TEXT.boost;
+  const rarity = transform ? 'transform' : 'boost';
   return {
-    id: `bt:${weaponId}:${level}:${kind}`,
+    id: `bt:${weaponId}:${level}:${opt?.id}`,
     weaponId,
     level,
-    kind,
-    name: transform ? transform.name : BOOST_NAME,
+    kind: opt?.kind,
+    option: opt?.id,
+    transform,
+    name: opt?.name || BOOST_NAME,
     category: WEAPON_BADGE[weaponId],
     tags: weaponTags(weaponId).filter((t) => TAG_INFO[t]),
-    summary: transform ? transform.summary : boostSummary(weapon.name),
+    summary: transform ? transform.summary : flat.summary(weapon.name),
     isSynergy: false,
     isBreakthrough: true,
     rarity,
@@ -607,7 +616,7 @@ export function describeBreakthrough(player, weaponId, level, kind, maxRows = MA
     jump: 1,
     headline: transform
       ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
-      : `+${Math.round((BT_BOOST_DPS - 1) * 100)}% DAMAGE + UTILITY // +${Math.round(gain * 100)}% DPS`,
+      : `${flat.headline()} // +${Math.round(gain * 100)}% DPS`,
     rows: rows.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
     hiddenRows: Math.max(0, rows.length - maxRows),
     levelHtml: `⚛ BREAKTHROUGH // ${weapon.name.toUpperCase()} LV ${level}`,
@@ -649,7 +658,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
     : '';
   const more = d.hiddenRows ? `<div class="upg-stat upg-stat-more">+${d.hiddenRows} more stat${d.hiddenRows > 1 ? 's' : ''} improved</div>` : '';
   // A Breakthrough's TRANSFORM card shows it in action (the generic boost has nothing new to show).
-  const clip = d.isBreakthrough && d.kind === 'transform' ? clipHTML(breakthroughClip(d.weaponId, d.level), `${d.name} in action`) : '';
+  const clip = d.isBreakthrough && d.transform ? clipHTML(transformClip(d.weaponId, d.transform), `${d.name} in action`) : '';
   return {
     className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}${SCOPE_LABEL[d.scope] ? ` scope-${d.scope}` : ''}`,
     html: `

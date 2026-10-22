@@ -222,7 +222,7 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS; the cards des
   }
   const { p } = fieldGame({ cards: [['shockfield_damage', 5]] });
   const card = describeBreakthrough(p, 'shockfield', 6, 'transform');
-  assert.equal(card.id, 'bt:shockfield:6:transform');
+  assert.equal(card.id, 'bt:shockfield:6:lash');
   assert.equal(card.name, 'Arc Lash');
   assert.equal(card.category, 'SHOCK FIELD');
   assert.match(card.headline, /\+22% DPS/);

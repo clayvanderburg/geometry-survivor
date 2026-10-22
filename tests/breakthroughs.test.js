@@ -36,11 +36,14 @@ test('a +5 card that leaps past LV 6 and LV 12 queues both Breakthroughs, lowest
   g.closeUpgradeModal();
   assert.equal(g.handPhase, 'breakthrough');
   assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 6 });
-  g.selectUpgrade(1); // ACROSS THE BOARD
+  assert.equal(g.currentChoices.length, 3, 'three options from the pool');
+  g.selectUpgrade(g.currentChoices.findIndex((c) => c.option === 'boost' || c.option === 'overtuned'));
+  const first = p.breakthroughs.blaster[6];
   assert.equal(g.handPhase, 'breakthrough', 'the LV 12 Breakthrough follows at once');
   assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 12 });
-  g.selectUpgrade(0);
-  assert.deepEqual(p.breakthroughs.blaster, { 6: 'boost', 12: 'transform' });
+  const tfCard = g.currentChoices.find((c) => c.kind === 'transform');
+  g.selectUpgrade(g.currentChoices.indexOf(tfCard));
+  assert.deepEqual(p.breakthroughs.blaster, { 6: first, 12: tfCard.option });
   assert.equal(g.state, 'PLAYING');
   assert.deepEqual(pendingBreakthroughs(p, 'blaster'), []);
 });
