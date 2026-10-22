@@ -41,15 +41,17 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7, Sentry
-// Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 3.6, Sentry
+// Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). Escort Drones
+// also take the Autocannon's 0.8 card steps (v0.45; 2.7 on full steps before), so they track it to LV 18
+// (73-85% of it at LV 1-18 in the card bench, where full steps had them at 122-134% by LV 12-18). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
 // pierce, so less of the curve is lost to overkill. Glaive Discs also take the Autocannon's 0.8 card steps, so
 // they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
@@ -100,6 +102,12 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
+// Escort Drones flying at once (deployables.js pool size): a front pair and a back row of 3.
+export const DRONE_MAX = 8;
+// Drones in the FRONT row for a formation of n (the rest fly in the BACK row). One balanced fill order for
+// every drone, from Wingmen cards and the LV 6 Escort Squadron alike: 1 front centre, then the front pair,
+// the back row up to 3, the front centre (6), then the back row's outer sides (7, 8): 3 in front, 5 behind.
+export const droneFrontFor = (n) => (n <= 2 ? n : n <= 5 ? 2 : 3);
 export const TURRET_MAX_ACTIVE = 12; // 10 s lifetime / 1.43 s fastest reload (7 out) + a full bank of 3, with room
 
 export const WEAPON_SCALING = {
@@ -333,7 +341,7 @@ export const WEAPON_SCALING = {
   // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
-  turretCharges: (b) => 2 + (b.t4 ? 1 : 0),
+  turretCharges: (b) => 2 + (b.r?.charges || 0) + (b.t4 ? 1 : 0), // r.charges: REPLICATOR ARRAY ranks (no card)
   turretReload: (b) => 6 / rateMult(b.r.reload),
   turretDuration: () => 10,
   turretStillTime: 0.5,
@@ -357,19 +365,34 @@ export const WEAPON_SCALING = {
   turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, W.turretShotUnits),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
-  droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
-  droneFireRate: (b) => 7.6 * rateMult(b.r.rate),
+  // Formation: up to 3 in front of the nose and 5 behind the hull, DRONE_MAX in all, filled in one balanced
+  // order (droneFrontFor): Wingmen ranks give up to 5 (front pair + back row of 3), Escort Squadron (LV 6)
+  // adds 3 more (front centre + the back row's sides). Drones past DRONE_MAX are never wasted: droneSquad
+  // counts them and their guns ride on the others.
+  droneSquad: (b) => 1 + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
+  droneCount: (b) => Math.min(DRONE_MAX, W.droneSquad(b)),
+  droneFront: (b) => droneFrontFor(W.droneCount(b)),
+  squadronRow: 3,
+  // The first drone is the flight LEAD; every drone after it is a lighter WINGMAN whose bolts hit for
+  // droneWingHitShare of the lead's. A formation picks a target per drone, so it wastes far less on overkill
+  // than one heavy gun: at full value, Wingmen ranks ran ~130% of the Autocannon's Prism Split rank for rank
+  // in the card bench (~90% at 0.6). Adding a wingman changes no other drone, so each card still changes
+  // only its own stat. Surplus drones past DRONE_MAX add their guns to the wingmen in the formation.
+  droneWingHitShare: 0.6,
+  droneValue: (b) => 1 + W.droneWingHitShare * (W.droneSquad(b) - 1),
+  droneWingDamageMult: (b) => (W.droneCount(b) > 1 ? W.droneDamageMult(b) * W.droneWingHitShare * (W.droneSquad(b) - 1) / (W.droneCount(b) - 1) : 0),
+  droneFireRate: (b) => 7.6 * (1 + rateStep('drones') * (b.r.rate || 0)), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
   droneRange: (b) => 784 + 35 * b.r.range, // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
   droneBoltSpeed: 15,
-  // Transforms: Extra Wingman (+1 drone past the cap), Homing Bolts, Micro-Missile Pods (each drone
+  // Transforms: Escort Squadron (the back row of 3), Homing Bolts, Micro-Missile Pods (each drone
   // launches a homing micro-missile every podEvery s worth 22% of its bolt damage).
   homingTurn: 0.16,
   podEvery: 2.5,
   podShare: 0.22,
   podBlast: 60,
-  droneUnits: (b) => W.droneCount(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
+  droneUnits: (b) => W.droneValue(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
   droneDamageMult: (b) => lv1Trim('drones') * lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
-  podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
+  podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b), // the lead's; a wingman's pods scale with its bolts
 
   // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------
   // Autonomous: every throw interval the ship lobs `count` grenades at the nearest enemies in throw
@@ -559,7 +582,7 @@ export const WEAPON_SCALING = {
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
   railSpread: 0.12,                               // rad between Split Rails lances
-  railWidth: (b) => 6 * (1 + 0.3 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull)
+  railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
   railKnock: 1.6,
   // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it
@@ -968,7 +991,8 @@ export const POTENTIAL_DPS = {
     + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
   mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
   turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b),
-  drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
+  drones: (b) => (W.droneDamageMult(b) + (W.droneCount(b) - 1) * W.droneWingDamageMult(b)) / W.droneDamageMult(b)
+    * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies

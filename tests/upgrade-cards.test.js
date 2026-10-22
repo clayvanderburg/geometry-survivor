@@ -70,8 +70,9 @@ test('a supply-cache level is the starting level of the next level-up card and t
   const g = game();
   // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Autocannon
   // cards are banished: maxing them would fill the weapon's LV 12 cap).
-  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
-  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID)].filter((id) => id !== 'multishot').map((id) => [id, true]));
+  // Replicator Array is banished too (maxed, it would add its streams to the Autocannon).
+  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && u.id !== 'replicator_array' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
+  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID), 'replicator_array'].filter((id) => id !== 'multishot').map((id) => [id, true]));
 
   // Draws: 1x cache tier, Prism Split's shuffle score, then a lucky +2 level roll.
   withRandom([0.99, 0.5, 0.05], () => g.openRelicChest({ guaranteedSuper: false }));
@@ -192,7 +193,9 @@ test('rarity is the rolled level jump: +1 common up to +5 legendary; evolutions 
     const card = renderUpgradeCard(describeUpgrade(p, { ...byId('luck_boost'), levelJump: jump }), '[1]');
     assert.match(card.className, new RegExp(`\\brarity-${expected[jump - 1]}\\b`), `+${jump}`);
     assert.equal(card.html.includes('upg-jump-ribbon'), jump > 1);
-    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} LEVELS`));
+    // Luck is not a weapon: its jump is in RANKS (weapon cards say LEVELS, see the chest card above).
+    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} RANKS`));
+    assert.match(card.html, /→ RANK \d+/);
   }
   const evo = UPGRADE_POOL.find((u) => u.isSynergy);
   assert.match(renderUpgradeCard(describeUpgrade(p, { ...evo, levelJump: 1 }), '[1]').className, /\brarity-evolution\b/);
