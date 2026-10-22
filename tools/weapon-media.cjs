@@ -64,7 +64,7 @@ const TWEAKS = {
 (async () => {
   const { chromium } = require(playwrightPath || 'playwright');
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  const weaponIds = await listWeapons(browser);
+  const { weaponIds, extras } = await listWeapons(browser);
   const clips = [];
   for (const id of weaponIds) {
     clips.push({ name: id, weapon: id, level: WEAPON_CLIP_LEVEL, bt: {} });
@@ -72,6 +72,12 @@ const TWEAKS = {
       const bt = {};
       for (const m of BREAKTHROUGH_LEVELS) if (m <= lv) bt[m] = m === lv ? 'transform' : 'boost';
       clips.push({ name: `${id}-${lv}`, weapon: id, level: lv, bt });
+    }
+    // Pool transforms added later (EXTRA_TRANSFORMS): at their home milestone, earlier ones the boost.
+    for (const t of extras[id] || []) {
+      const bt = {};
+      for (const m of BREAKTHROUGH_LEVELS) if (m <= t.home) bt[m] = m === t.home ? t.id : 'boost';
+      clips.push({ name: `${id}-${t.id}`, weapon: id, level: t.home, bt });
     }
   }
   const todo = clips.filter((c) => !only || only.has(c.name) || only.has(c.weapon));
@@ -113,7 +119,10 @@ async function listWeapons(browser) {
   try {
     const page = await context.newPage();
     await page.goto('http://127.0.0.1:8096/index.html');
-    return await page.evaluate(async () => (await import('/js/loadout.js')).WEAPONS.map((w) => w.id));
+    return await page.evaluate(async () => ({
+      weaponIds: (await import('/js/loadout.js')).WEAPONS.map((w) => w.id),
+      extras: JSON.parse(JSON.stringify((await import('/js/weapon-levels.js')).EXTRA_TRANSFORMS))
+    }));
   } finally {
     await context.close();
   }

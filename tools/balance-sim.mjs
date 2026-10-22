@@ -245,11 +245,12 @@ export function formatReport({ opts, strategies, runs, bench, classes, wallSecon
       // Per weapon and milestone, pooled: how much longer runs lasted after taking each kind.
       const keys = [...new Set(bts.map(b => `${b.weapon}|${b.level}`))].sort();
       out.push('\n## Breakthroughs by weapon (pooled; time survived after the pick, median, by kind)');
-      out.push(table(['weapon', 'LV', 'taken', 'transform', 'boost', 'after transform', 'after boost'], keys.map(k => {
+      out.push(table(['weapon', 'LV', 'taken', 'transform', 'boost', 'overtuned', 'after transform', 'after boost', 'after overtuned'], keys.map(k => {
         const [weapon, level] = k.split('|');
         const list = bts.filter(b => b.weapon === weapon && String(b.level) === level);
         const after = kind => { const l = list.filter(b => b.kind === kind).map(b => b.run.time - b.time); return l.length ? mmss(median(l)) : '—'; };
-        return [weapon, level, list.length, list.filter(b => b.kind === 'transform').length, list.filter(b => b.kind === 'boost').length, after('transform'), after('boost')];
+        const n = kind => list.filter(b => b.kind === kind).length;
+        return [weapon, level, list.length, n('transform'), n('boost'), n('overtuned'), after('transform'), after('boost'), after('overtuned')];
       })));
     }
 

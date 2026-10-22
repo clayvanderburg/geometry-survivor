@@ -6,8 +6,8 @@ import {
   WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
 } from './loadout.js';
 import {
-  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
-  levelCardWeapon, weaponElement, elementsOf
+  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, BT_FLATS, transformById, takenTransforms, transformEligible, btOptionId, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
+  levelCardWeapon, weaponElement, elementsOf, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks
 } from './weapon-levels.js';
 import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
 
@@ -24,14 +24,15 @@ export const RARITY = {
   weapon: { label: 'NEW WEAPON', color: '#ff8a3d' },
   // Breakthrough choices at weapon LV 6 / 12 / 18 (not level rolls either).
   transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
-  boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }
+  boost: { label: '⚛ FLAT BOOST', color: '#ffb347' } // the flats: Across the Board, Overtuned Core
 };
 
 const RARITY_BY_JUMP = ['common', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 
+// `rarityFloor` (a jump size) keeps a card at least that tier: Replicator Array always shows RARE.
 export function rarityFor(upg, jump = 1) {
   if (upg.isSynergy) return 'evolution';
-  return RARITY_BY_JUMP[Math.max(1, Math.min(5, jump))];
+  return RARITY_BY_JUMP[Math.max(1, upg.rarityFloor || 1, Math.min(5, jump))];
 }
 
 // Each slot weapon contributes its equip line (LV 1, installed by acquireWeapon; never offered in a
@@ -185,6 +186,23 @@ export const UPGRADE_POOL = [
     apply(player) {
       player.stats.damage *= 1.12;
     }
+  },
+  {
+    // Global: +1 rank to the count stat of every equipped weapon that has one (weapon-levels.js COUNT_STATS),
+    // outside the weapon level. Always at least RARE (rarityFloor), never rolls a multi-rank jump, rare in
+    // hands (TUNING.replicatorWeight) and offered only while some equipped weapon can still take a count rank.
+    id: REPLICATOR_ID,
+    name: 'Replicator Array',
+    category: 'POWER',
+    maxLevel: REPLICATOR_MAX_RANKS,
+    rarityFloor: 3,
+    noJump: true,
+    overcharge: false,
+    headline: 'bulletCount', // the card headline lists every weapon's gain (upgrade-cards.js replicatorHeadline)
+    get weight() { return TUNING.replicatorWeight ?? 0.25; },
+    summary: 'Prints a copy of every weapon\'s launcher: one more of whatever each one fires (streams, rockets, drones, turrets, nozzles...). Never raises a weapon\'s level.',
+    req: (player) => ownedWeapons(player).some((id) => countRoom(player, id) > 0),
+    apply() {} // its rank in upgradeLevels is read by every weaponBuild
   },
   ...weaponGroup('rockets'),
   ...weaponGroup('missiles'),
@@ -604,7 +622,10 @@ export function canOvercharge(u) {
 // Levels a card can still add: its own cap, and for a level card (stat or element) also the room left
 // under the weapon's LV 18 cap (so a +5 roll on a LV 16 weapon installs +2). An OVERCHARGE card has no cap.
 export function levelRoom(player, u) {
-  const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
+  let own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
+  // A count card shares its cap with the REPLICATOR ARRAY ranks its weapon already gets.
+  const sc = STAT_CARD_BY_ID[u.id];
+  if (sc && COUNT_STATS[sc.weapon]?.card === u.id) own -= replicatorBonus(sc.weapon, player.upgradeLevels[u.id], replicatorRanks(player));
   const weapon = levelCardWeapon(u.id);
   if (!weapon && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
   if (!weapon) return Math.max(0, own);
@@ -696,7 +717,7 @@ export function rollUpgrades(player, count = 3, { cache = false } = {}) {
     const remaining = levelRoom(player, u);
     let levelJump = 1;
 
-    if (!u.isSynergy && remaining > 1) {
+    if (!u.isSynergy && !u.noJump && remaining > 1) {
       const roll = Math.random();
       const c = levelJumpChances(luck);
       // Largest jump whose threshold the roll beats and that still fits under the level cap.
@@ -947,14 +968,18 @@ export function markBreakthroughOffered(player, id, level) {
   (all[id] || (all[id] = {}))[level] = true;
 }
 
-// Record a Breakthrough choice ('transform' or 'boost') for a weapon at a milestone. Weapon formulas
-// read it straight from player.breakthroughs, so nothing else needs rebuilding.
-export function applyBreakthrough(player, id, level, kind) {
-  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level) || !['transform', 'boost'].includes(kind)) return false;
+// Record a Breakthrough choice for a weapon at a milestone: a flat ('boost' | 'overtuned'), a transform id
+// from its pool, or 'transform' (that milestone's home transform). Stored as given; a transform already
+// installed can't be taken twice, nor one before what it `requires`. Weapon formulas read it straight from player.breakthroughs,
+// so nothing else needs rebuilding.
+export function applyBreakthrough(player, id, level, option) {
+  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level)) return false;
+  const opt = btOptionId(id, level, option);
   const all = player.breakthroughs || (player.breakthroughs = {});
   const mine = all[id] || (all[id] = {});
-  if (mine[level]) return false;
-  mine[level] = kind;
+  if (mine[level] || !opt) return false;
+  if (!BT_FLATS[opt] && (!transformById(id, opt) || !transformEligible(transformById(id, opt), level, takenTransforms(id, mine)))) return false;
+  mine[level] = option;
   return true;
 }
 
