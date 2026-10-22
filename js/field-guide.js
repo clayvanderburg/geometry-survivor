@@ -20,7 +20,7 @@ import { BOSS_SCHEDULE, BOSS_EVERY, MAJOR_BOSS_EVERY, CAMPAIGN_WAVES, unlockWave
 import { LT_MODIFIERS } from './lieutenants.js';
 import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
-import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS } from './weapon-levels.js';
+import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS, BT_BOOST_DPS, BT_BOOST_RANKS, WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
@@ -438,10 +438,10 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'weaponlevels', icon: '⚛', title: 'WEAPON LEVELS & BREAKTHROUGHS',
     body: () => [
-      'Every weapon, Autocannon included, goes from LV 1 to LV 18. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
+      `Every weapon, Autocannon included, goes from LV 1 to LV ${WEAPON_MAX_LEVEL}. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that (Orbit Blade Reach also raises blade damage to match the longer lap; Vortex Pull also widens the collapse). Each card also adds a level.`,
       'Damage, fire rate and count cards add damage output. Size, radius, reach and pull cards add none: they make the weapon easier to land, so a weapon built purely for damage hits as hard as any other weapon built the same way.',
-      'At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+18% damage, and +1 to every size, reach and range stat of that weapon). A card that jumps past a milestone still triggers it.',
-      'EVOLUTIONS are semi-rare one-shot synergy cards that need two weapons (or a weapon and a passive). Every evolution names the weapons it upgrades.'
+      `At LV ${BREAKTHROUGH_LEVELS.join(', ').replace(/, (\d+)$/, ' and $1')} the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+${Math.round((BT_BOOST_DPS - 1) * 100)}% damage, and +${BT_BOOST_RANKS} rank in every UTILITY stat of that weapon: size, reach, range, pierce...). A card that jumps past a milestone still triggers it.`,
+      'EVOLUTIONS are semi-rare one-shot synergy cards. Most need two weapons; the rest need one card at LV 2 (Supercritical also needs a weapon with an element). Luck makes them turn up more often. Every evolution names what it upgrades, and the Field Guide lists its recipe.'
     ]
   },
   {
@@ -478,7 +478,7 @@ export const MECHANIC_ENTRIES = [
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
-      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures shatter any rock they cross (broken rocks count as mined; bedrock never cracks).`,
+      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures crack any rock they cross (broken rocks count as mined; bedrock never cracks).`,
       'Field Amplifier makes every AREA weapon reach further.'
     ]
   },
@@ -498,15 +498,15 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, glaive discs orange, nanite swarm pale lime, claw harpoon yellow, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, cryo sprayer ice blue, acid sprayer acid green, shock field pale cyan, rail lance lilac, glaive discs orange, nanite swarm pale lime, claw harpoon yellow, graviton mortar coral, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
   {
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
-      'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
-      `The ${WEAPON_BY_ID.harpoon.name} is the one weapon that mines: it throws one of your drill-claws, which drills through the rock on its line (Rock Drill cards bore deeper, drill-speed upgrades help too) and bites to a stop in rock it can't finish. Rock it breaks counts as yours, ore and all.`,
+      `Only your front drill-claws mine. Weapons and bombs never break rock (except the ${WEAPON_BY_ID.harpoon.name}, and a ${WEAPON_BY_ID.quake.name} with Tidal Shear or Spacetime Fractures), so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.`,
+      `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it throws one of your drill-claws, which drills through the rock on its line (Rock Drill cards bore deeper, drill-speed upgrades help too) and bites to a stop in rock it can't finish. Rock it breaks counts as yours, ore and all.`,
       'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),

@@ -1,5 +1,5 @@
-// Flamethrower: a PRIMARY slot weapon. While firing (like the Autocannon: auto-fire, the mouse, the right
-// stick or touch aim), a nozzle on the turret sprays a short cone of fire along the aim. Every scorch
+// Flamethrower: a PRIMARY slot weapon. A nozzle spins slowly round the ship (it never aims and sprays the
+// whole time it is equipped) and sprays a short cone of fire. Every scorch
 // (W.flameTickRate per second) hits everything inside the cone, near hits full and the tip at
 // 1 - W.flameEdgeFalloff, with source 'flame': status-effects.js sets it on FIRE at the weapon's built-in
 // rank (weapon-levels.js FIXED_ELEMENTS / fixedElementRank), so the STATUS cards and Fire Amplifier work
