@@ -67,7 +67,7 @@ test('Across the Board text quotes its real damage boost and free ranks (card an
 
 test('every tag card names the chip it boosts, so it covers every weapon showing that chip', () => {
   const tagCards = UPGRADE_POOL.filter((u) => u.category === 'SPECIALIST');
-  assert.equal(tagCards.length, 4);
+  assert.equal(tagCards.length, 3); // KINETIC, EXPLOSIVE, ELECTRIC; Field Amplifier (AREA) is a global card since #211
   for (const u of tagCards) {
     const [tag] = u.tags;
     assert.ok(u.summary.includes(`${TAG_INFO[tag].label} chip`), `${u.id}: "${u.summary}"`);
