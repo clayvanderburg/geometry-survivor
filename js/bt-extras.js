@@ -5,6 +5,7 @@
 // Autocannon: Tracer Slugs, Hot Barrel. Rocket Pods: Shrapnel Shells, Rolling Thunder.
 // Swarm Missiles: Hunter-Killer, Echo Salvo. Builds carry them in b.tf (makeBuild).
 import { WEAPON_SCALING as W } from './weapon-scaling.js';
+import { applyShock } from './status-effects.js';
 
 const has = (b, id) => !!b?.tf?.has(id);
 
@@ -419,5 +420,109 @@ export function quakeLens(game, b, s, dt) {
   if (s.lensT <= 0) {
     s.lensT = 0.32;
     game.particles.spawnShockwave(s.lx, s.ly, r * 0.8, 300, 0.8, 0.3, true);
+  }
+}
+
+// --- Plasma Grenades (js/grenades.js) -----------------------------------------------------------------
+
+// Sticky Plasma: a landing grenade grabs the nearest enemy within stickyReach and rides it.
+export function grenadeStick(game, g) {
+  if (!g.sticky) return;
+  let best = null, bestSq = W.stickyReach * W.stickyReach;
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.invulnerable) continue;
+    const dSq = (e.x - g.x) ** 2 + (e.y - g.y) ** 2;
+    if (dSq < bestSq) { bestSq = dSq; best = e; }
+  }
+  g.stuck = best;
+  if (!best) return;
+  g.stickDx = (g.x - best.x) * 0.5;
+  g.stickDy = (g.y - best.y) * 0.5;
+  game.particles.spawnFlash?.(g.x, g.y, 14, g.hue, 0.1);
+  game.particles.spawnShockwave(g.x, g.y, 18, g.hue, 2, 0.14);
+}
+
+// Keeps a stuck grenade on its host while the fuse burns.
+export function grenadeRide(g) {
+  const e = g.stuck;
+  if (!e) return;
+  if (e.dead) { g.stuck = null; return; }
+  g.x = e.x + g.stickDx;
+  g.y = e.y + g.stickDy;
+}
+
+// On the blast: the stuck host takes stickyShare more; Plasma Geyser's vent erupts geyserBursts times.
+export function grenadeBlast(game, g) {
+  const e = g.stuck;
+  if (e && !e.dead) {
+    game.hitEnemy(e, g.damage * W.stickyShare, 'grenade', 0, 0, 1, 'grenade');
+    game.particles.spawnFlash?.(e.x, e.y, (e.radius || 10) * 1.8, g.hue + 20, 0.14);
+  }
+  g.stuck = null;
+  if (!g.geyser) return;
+  for (let k = 1; k <= W.geyserBursts; k++) {
+    game.weaponFx.schedule({ x: g.x, y: g.y, delay: W.geyserGap * k, radius: g.radius * W.geyserRadiusFrac, damage: g.damage * W.geyserShare,
+      hue: g.hue, source: 'grenade', style: 'charge', step: k + 1, knock: 0.8 });
+  }
+}
+
+// --- Proximity Mines (js/deployables.js) -----------------------------------------------------------------
+
+// Shock Mines: the blast SHOCKs every enemy in it. Napalm Mines: it leaves a burning pool.
+export function mineBlast(game, m) {
+  if (m.shock) {
+    const p = game.player;
+    for (const e of game.enemyManager.enemies) {
+      if (e.dead) continue;
+      const r = m.blast + (e.radius || 10);
+      if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 > r * r) continue;
+      if (applyShock(e, W.shockMineRank, p)) game.particles.spawnLightning?.(m.x, m.y, e.x, e.y, 62, 0.9, 0.14);
+    }
+    game.particles.spawnShockwave(m.x, m.y, m.blast * 0.9, 62, 2.5, 0.28);
+    game.sound.playArcZap?.(4);
+  }
+  if (m.napalm) {
+    const ticks = W.napalmMineLife / W.napalmMineTick;
+    game.weaponFx.addPool({ x: m.x, y: m.y, radius: m.blast * W.napalmMineRadiusFrac, life: W.napalmMineLife, tick: W.napalmMineTick,
+      damage: m.damage * W.napalmMineShare / ticks, hue: 18, source: 'mine' });
+    game.particles.spawnExplosionSparks(m.x, m.y, 14, 20, 1.5, 8, 2.4);
+  }
+}
+
+// --- Orbit Blades (main.js updateOrbitals) --------------------------------------------------------------
+
+// Blade Frenzy: the heat (0..1) bleeds off every tick; returns the blades' damage multiplier.
+export function frenzyMult(state, dt, b) {
+  if (!has(b, 'frenzy')) { state.bladeFrenzy = 0; return 1; }
+  state.bladeFrenzy = Math.max(0, (state.bladeFrenzy || 0) - W.frenzyDecay * dt);
+  return 1 + W.frenzyMax * state.bladeFrenzy;
+}
+export function frenzyHit(state, b) {
+  if (has(b, 'frenzy')) state.bladeFrenzy = Math.min(1, (state.bladeFrenzy || 0) + W.frenzyGain);
+}
+// Blade size multiplier: the blades swell as the frenzy builds.
+export const frenzySize = (state, b) => (has(b, 'frenzy') ? 1 + W.frenzySize * (state.bladeFrenzy || 0) : 1);
+// The blades' spark hue: Orbit green heating toward white-hot gold as the frenzy builds.
+export const frenzyHue = (state, b) => (has(b, 'frenzy') ? 150 - 100 * (state.bladeFrenzy || 0) : 150);
+
+// Vortex Ring: enemies within vortexBand of the ring are dragged onto it (bosses hold their ground).
+export function orbitalVortex(game, dt, b, cx, cy, radius) {
+  if (!has(b, 'vortex')) return;
+  const pull = W.vortexPull * dt;
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.isBoss) continue;
+    const dx = e.x - cx, dy = e.y - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    const off = d - radius;
+    if (Math.abs(off) > W.vortexBand || Math.abs(off) < 2) continue;
+    const k = Math.min(Math.abs(off), pull * (e.isLieutenant ? 0.4 : 1)) * Math.sign(off);
+    // Onto the ring, with a little swirl along it so the pull reads as a vortex.
+    e.x -= (dx / d) * k - (dy / d) * k * 0.4;
+    e.y -= (dy / d) * k + (dx / d) * k * 0.4;
+  }
+  game.vortexFxT = (game.vortexFxT || 0) - dt;
+  if (game.vortexFxT <= 0) {
+    game.vortexFxT = 0.4;
+    game.particles.spawnShockwave(cx, cy, radius + W.vortexBand * 0.6, 150, 1, 0.35, true);
   }
 }

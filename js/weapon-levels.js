@@ -598,6 +598,18 @@ export const EXTRA_TRANSFORMS = {
   quake: [
     { id: 'crush', home: 6, name: 'Crush Field', summary: 'Every Graviton Mortar burst leaves a crushing gravity field that keeps grinding whatever stands in it.' },
     { id: 'lens', home: 12, name: 'Gravity Lens', summary: 'While a Graviton Mortar charge is in the air, it drags enemies toward where it will land, so its wave catches more of them.' }
+  ],
+  grenades: [
+    { id: 'sticky', home: 6, name: 'Sticky Plasma', summary: 'A Plasma Grenade that lands near an enemy sticks to it, rides along, and hits it extra hard when it blows.' },
+    { id: 'geyser', home: 18, name: 'Plasma Geyser', summary: 'Every Plasma Grenade blast leaves a plasma vent that erupts twice more, a beat apart.' }
+  ],
+  mines: [
+    { id: 'shock', home: 6, name: 'Shock Mines', summary: 'Proximity Mine blasts crackle 25% wider and SHOCK everything they hit, stunning the pack in place for the next mine.' },
+    { id: 'napalm', home: 12, name: 'Napalm Mines', summary: 'Proximity Mines leave a pool of burning napalm where they blow.' }
+  ],
+  orbitals: [
+    { id: 'frenzy', home: 6, name: 'Blade Frenzy', summary: 'Every cut feeds the Orbit Blades: they grow up to half again and hit up to 60% harder while they keep cutting, cooling off when nothing is near.' },
+    { id: 'vortex', home: 12, name: 'Vortex Ring', summary: 'The Orbit Blades whip up a vortex that drags nearby enemies onto the ring and into the blades.' }
   ]
 };
 export function transformPool(id) {

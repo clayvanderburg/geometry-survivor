@@ -4083,10 +4083,12 @@ export class Game {
     const p = this.player;
     this.orbitalAngle += dt * W.orbitalSpin(b);
     const count = W.orbitalBlades(b);
-    const bladeR = W.orbitalBladeRadius(b);
-    const damage = weaponDamage(p, 'orbital', b);
+    const damage = weaponDamage(p, 'orbital', b) * BTX.frenzyMult(this, dt, b);
+    const bladeR = W.orbitalBladeRadius(b) * BTX.frenzySize(this, b);
+    const sparkHue = BTX.frenzyHue(this, b);
     const enemies = this.enemyManager.enemies;
     const rings = this.orbitalRings(b);
+    BTX.orbitalVortex(this, dt, b, p.x, p.y, rings[0].radius);
     for (const ring of rings) {
       for (let o = 0; o < count; o++) {
         const oa = ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / count;
@@ -4101,10 +4103,11 @@ export class Game {
           const reach = e.radius + bladeR;
           if (dx * dx + dy * dy < reach * reach) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
-            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
+            this.particles.spawnExplosionSparks(ox, oy, 3, sparkHue, 2, 7, 1.6);
+            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, sparkHue, 0.1);
             this.sound.playBladeHit?.();
             this.hitEnemy(e, damage, 'orbital', 0, 0, 0.6);
+            BTX.frenzyHit(this, b);
           }
         }
       }
@@ -6616,7 +6619,7 @@ export class Game {
     const b = weaponBuild(p, 'orbitals');
     if (this.bladeNovaHide > 0) return; // Nova Ring: the blades just burst and are reforming
     const orbCount = W.orbitalBlades(b);
-    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1));
+    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1)) * BTX.frenzySize(this, b);
     const vfx = TUNING.vfxIntensity ?? 1;
     for (const ring of this.orbitalRings(b)) {
       const orbRadius = ring.radius;
