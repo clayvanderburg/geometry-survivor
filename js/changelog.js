@@ -20,10 +20,10 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
       { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires spinning drill bits that pierce enemies and bore through rock as your mining. Nothing is pulled in any more.' },
       { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
-      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only (Growth Lattice gives XP), Phase Nova Thrusters is just the shockwave, and spare bombs drop from lieutenants.' },
+      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only, Phase Nova Thrusters just the shockwave, and bombs drop from lieutenants. Hands never offer dead ranks.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
       { type: 'balance', text: 'Tesla Arc discharges twice as often, each a little lighter. The Flamethrower spins about 50% faster, and sprayer Breakthroughs speed the nozzle up too.' },
-      { type: 'balance', text: 'Weapon cards fill more of each level-up hand, and capped cards stop offering ranks that do nothing (Grapple Hooks max 3). Non-weapon cards now jump in RANKS.' }
+      { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' }
     ]
   },
   {
