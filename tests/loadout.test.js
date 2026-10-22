@@ -91,7 +91,8 @@ test('equipped weapon level-ups are weighted so a typical hand is mostly about y
   assert.equal(upgradeKind(UPGRADE_BY_ID.blaster_fire), 'element');
   assert.equal(upgradeKind(UPGRADE_BY_ID.status_potency), 'status');
   assert.equal(upgradeKind(UPGRADE_BY_ID.overdrive), 'general');
-  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'tag');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'general', 'Field Amplifier is the global AREA card (v0.46)');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_kinetic), 'tag');
   assert.equal(upgradeKind(UPGRADE_BY_ID.evo_pulsar), 'evolution');
 });
 

@@ -6,7 +6,7 @@
 // damage goes through Game.hitEnemy: turret/drone bolts ride the shared bullet sweep (asteroid
 // cover blocks them), mine bursts use Game.damageEnemiesInRadius.
 import { TUNING } from './config.js';
-import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE, DRONE_MAX } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, mineBlastRadius, siegeShellRadius, TURRET_MAX_ACTIVE, DRONE_MAX, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild, levelBuild } from './weapon-levels.js';
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
@@ -380,7 +380,7 @@ export class Deployables {
     const damage = weaponDamage(p, 'turret', level);
     // LMG Overload: a little spray.
     const aim = level.t12 ? t.aim + (Math.random() - 0.5) * 2 * W.overloadSpread : t.aim;
-    const b = this.fireBolt(game, t.x, t.y, aim, TURRET_MUZZLE, W.turretBoltSpeed, damage,
+    const b = this.fireBolt(game, t.x, t.y, aim, TURRET_MUZZLE, W.turretBoltSpeed * projectileSpeedMult(p), damage,
       DEPLOYABLE_HUES.turret, TURRET_BOLT_RADIUS, 'turret', W.turretRange(level));
     b.pierce = W.turretPierce(level);
     b.sweepX = t.x; // the barrel is long; sweep from the turret centre so enemies sitting on it are hit
@@ -490,7 +490,7 @@ export class Deployables {
         d.podT -= dt;
         if (d.podT <= 0) {
           d.podT += W.podEvery;
-          const pod = this.fireBolt(game, d.x, d.y, face + (Math.random() - 0.5) * 1.2, 6, W.droneBoltSpeed * 0.55, damage * W.podDamageMult(level) / W.droneDamageMult(level) / 2,
+          const pod = this.fireBolt(game, d.x, d.y, face + (Math.random() - 0.5) * 1.2, 6, W.droneBoltSpeed * projectileSpeedMult(p) * 0.55, damage * W.podDamageMult(level) / W.droneDamageMult(level) / 2,
             40, 3.6, 'drone', range * 1.6);
           pod.homing = 0.12;
           pod.target = tgt;
@@ -501,7 +501,7 @@ export class Deployables {
       }
       while (d.fireAcc >= 1) {
         d.fireAcc -= 1;
-        const bolt = this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed, damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
+        const bolt = this.fireBolt(game, d.x, d.y, face, 9, W.droneBoltSpeed * projectileSpeedMult(p), damage, DEPLOYABLE_HUES.drone, DRONE_BOLT_RADIUS, 'drone', range);
         // Homing Bolts: curve onto the drone's target.
         if (level.t8) { bolt.homing = W.homingTurn; bolt.target = tgt; bolt.life += 0.2; }
         d.flash = 1;

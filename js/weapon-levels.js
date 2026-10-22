@@ -470,6 +470,37 @@ export function countRoom(p, id) {
   return Math.max(0, cs.cap - own - replicatorBonus(id, own, replicatorRanks(p)));
 }
 
+// GLOBAL CARDS (Vampire Survivors-style passives, v0.46): each rank reaches every equipped weapon that
+// has the stat, as a multiplier outside the weapon level (like REPLICATOR ARRAY, Breakthrough timing never
+// moves). Each step is about half a weapon card's (a Rate card is +40% of the base attack rate per rank), so
+// a global is worth a pick but a weapon's own card still does more for that weapon. `stats` are the
+// STAT_CARDS rank keys a card reaches (Tempo: attack / fire / tick rates; Cooldown: reloads, recharges and
+// cooldowns, plus the Phase Dash); Persistence reaches PERSIST_WEAPONS' lifetimes and Velocity
+// VELOCITY_WEAPONS' projectile speed. Tempo, Cooldown and Persistence add DPS (POWER); Velocity only
+// changes how fast shots land (UTILITY). The step for each is GLOBAL_STEP (tests/global-cards.test.js prices them).
+export const GLOBAL_MAX_RANKS = 5;
+export const GLOBAL_CARDS = Object.freeze({
+  tempo: Object.freeze({ id: 'tempo_core', step: 0.08, stats: ['rate'] }), // reaches the most weapons, so the smallest step
+  cooldown: Object.freeze({ id: 'cooldown_matrix', step: 0.1, stats: ['reload', 'recharge', 'cooldown'] }),
+  persistence: Object.freeze({ id: 'persistence_field', step: 0.15 }),
+  velocity: Object.freeze({ id: 'velocity_coils', step: 0.15 })
+});
+// Lingering effects Persistence lengthens: singularities, nanite swarms, gas clouds, turrets, armed mines.
+export const PERSIST_WEAPONS = Object.freeze(['singularity', 'nanites', 'gas', 'turret', 'mines']);
+// Weapons whose shots fly (bolts, rockets, missiles, discs, grenades, canisters): Velocity speeds them up.
+export const VELOCITY_WEAPONS = Object.freeze(['blaster', 'rockets', 'missiles', 'turret', 'drones', 'glaive', 'grenades', 'nanites']);
+// Weapons whose base attack grows with Field Amplifier (the global AREA card; transforms' blasts grow too).
+export const AREA_WEAPONS = Object.freeze(['rockets', 'missiles', 'singularity', 'mines', 'grenades', 'gas', 'flamethrower', 'cryospray', 'acidspray', 'shockfield', 'nanites', 'quake']);
+export const globalRanks = (p, kind) => p?.upgradeLevels?.[GLOBAL_CARDS[kind].id] || 0;
+export const globalMult = (p, kind) => 1 + GLOBAL_CARDS[kind].step * globalRanks(p, kind);
+// Weapons a global card reaches (equipped or not): the ones with one of its stats or on its list.
+export function globalReaches(kind, id) {
+  if (kind === 'persistence') return PERSIST_WEAPONS.includes(id);
+  if (kind === 'velocity') return VELOCITY_WEAPONS.includes(id);
+  if (kind === 'area') return AREA_WEAPONS.includes(id);
+  return (STAT_CARDS[id] || []).some((c) => GLOBAL_CARDS[kind].stats.includes(c.stat));
+}
+
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
 
@@ -506,7 +537,8 @@ export function statRanks(p, id) {
 // Everything the weapon formulas need: level (with any evolution bonus level), effective ranks
 // (card ranks + ACROSS THE BOARD ranks), which transforms are installed and how many boosts.
 // `replicator`: REPLICATOR ARRAY ranks, added to the weapon's COUNT_STATS stat up to its cap.
-export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0) {
+// `g`: the GLOBAL CARDS multipliers ({ tempo, cooldown, persistence }; each 1 when left out).
+export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0, g = null) {
   let atb = 0;
   const t = {};
   for (const m of BREAKTHROUGH_LEVELS) {
@@ -519,13 +551,16 @@ export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0) {
   if (cs && replicator > 0) r[cs.stat] = (r[cs.stat] || 0) + replicatorBonus(id, ranks[cs.stat], replicator);
   // t4 / t8 / t12 name the first, second and third Breakthrough (now at LV 6 / 12 / 18).
   const [m1, m2, m3] = BREAKTHROUGH_LEVELS;
-  return { id, lv, r, atb, t4: !!t[m1], t8: !!t[m2], t12: !!t[m3], transforms: (t[m1] ? 1 : 0) + (t[m2] ? 1 : 0) + (t[m3] ? 1 : 0) };
+  return { id, lv, r, atb, t4: !!t[m1], t8: !!t[m2], t12: !!t[m3], transforms: (t[m1] ? 1 : 0) + (t[m2] ? 1 : 0) + (t[m3] ? 1 : 0), g: g || NO_GLOBALS };
 }
+
+const NO_GLOBALS = Object.freeze({ tempo: 1, cooldown: 1, persistence: 1 });
+const buildGlobals = (p) => (p?.upgradeLevels ? { tempo: globalMult(p, 'tempo'), cooldown: globalMult(p, 'cooldown'), persistence: globalMult(p, 'persistence') } : null);
 
 // Build of an owned weapon. `levelKey` is the player.weapons key holding its level (loadout.js).
 export function weaponBuild(p, id, lv = null) {
   const level = lv ?? (id === 'blaster' ? Math.max(1, p.weapons?.blaster || 0) : (p.weapons?.[id] || 0));
-  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id), replicatorRanks(p));
+  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id), replicatorRanks(p), buildGlobals(p));
 }
 
 // A weapon at a level with no stat ranks and no Breakthroughs (Storm Protocol's fixed chain level).

@@ -8,7 +8,7 @@
 // PERMANENT = RUN START vs BASE (Void Armory) and THIS RUN = TOTAL vs RUN START (cards picked this run).
 import { TUNING } from './config.js';
 import { runStartPlayer, runUpgradeLines } from './upgrades.js';
-import { WEAPON_SCALING as W, blasterFireRate, baseDamage } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, blasterFireRate, baseDamage, dashCooldownFor } from './weapon-scaling.js';
 import { weaponBuild, weaponElement, ELEMENT_INFO } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
 import { weaponPotentialDps, bonusLevels, bonusText, maxText } from './upgrade-cards.js';
@@ -53,7 +53,7 @@ export const STAT_GROUPS = [
       { id: 'moveSpeed', label: 'Move speed', kind: 'mult', fmt: 'num1', get: (s) => s.stats.moveSpeed },
       {
         id: 'dash', label: 'Dash cooldown', kind: 'add', fmt: 'sec', lower: true,
-        get: (s, t) => W.dashCooldown(s.weapons?.dashNova || 0, t.dashCooldownBase ?? 1.5) * (s.dashCooldownMult ?? 1)
+        get: (s, t) => dashCooldownFor(s, t.dashCooldownBase ?? 1.5)
       },
       // Phase Dash reach (Dash Extender cards x Afterburner Jets), as a multiple of the bare dash.
       { id: 'dashDistance', label: 'Dash distance', kind: 'mult', fmt: 'pct', get: (s) => W.dashDistanceMult(s.upgradeLevels?.dash_range || 0) * (s.dashDistanceMult ?? 1) }
