@@ -229,3 +229,15 @@ test('Supernova bombs are a rare drop: lieutenants, void wells and hulks drop a 
   assert.equal(game.player.bombs, 3, 'collected: +1 bomb');
   assert.equal(game.geoms.length, 0);
 });
+
+// Replicator Array is a deliberate jackpot (Clay: "really powerful" and rare), the one intentional exception
+// to the global card rule (one rank under one weapon card and under Overdrive). On the card bench
+// (tools/balance/card-bench.mjs, blend, 16 seeds) one rank adds +27% / +16-19% / +15-18% / +23-25% to a 2 / 4 / 6 /
+// sprayer-and-cloud build, 2-4x one weapon card (+15 / +5-8 / +4-5 / +6%) and Overdrive. It stays rare instead:
+// 2 ranks, hand weight 0.25 (about 2% of hands), at least RARE. Don't "fix" its power without asking Clay.
+test('Replicator Array: the deliberate jackpot exception, kept rare (2 ranks, weight 0.25)', async () => {
+  const { REPLICATOR_ID, REPLICATOR_MAX_RANKS } = await import('../js/weapon-levels.js');
+  assert.equal(REPLICATOR_MAX_RANKS, 2);
+  assert.equal(TUNING.replicatorWeight, 0.25);
+  assert.equal(byId(REPLICATOR_ID).maxLevel, REPLICATOR_MAX_RANKS);
+});

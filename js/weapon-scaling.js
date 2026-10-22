@@ -824,7 +824,12 @@ export const WEAPON_SCALING = {
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
   tagDamageStep: { kinetic: 0.2, explosive: 0.3, electric: 0.3 },
-  areaStep: 0.15,
+  // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
+  // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
+  // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
+  // global card rule (one rank under one weapon card and under Overdrive). At +10% it sits under both with 2, 4
+  // and 6 weapons, and about level with them on an all-area build (sprayers and clouds), where area is reach.
+  areaStep: 0.1,
 
   // Elements (weapon-levels.js ELEMENT_CARDS): `lv` below is the rank of a weapon's element card (1-5).
   // STACKS (Deep Rock Galactic: Survivor style): every hit of an element weapon adds stacks of its status,
