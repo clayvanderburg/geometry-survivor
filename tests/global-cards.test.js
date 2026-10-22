@@ -64,13 +64,14 @@ test('global cards: five ranks, GLOBAL scope, POWER or UTILITY, a step about hal
     assert.ok(c.summary.length <= 110, `${kind} summary stays short`);
     if (kind !== 'persistence' && kind !== 'velocity') assert.ok(def.step <= RATE_STEP / 2 + 1e-9, `${kind}: at most half a Rate card's +${RATE_STEP * 100}%`);
     assert.equal(U.upgradeKind(c), 'general');
-    assert.ok(U.cardWeight(c) <= 0.25, `${kind}: rare in hands (the four weigh one general card)`);
+    // As often as Reactor Overdrive: the weapon-share guard (upgrades.js handWeights) protects weapon progression.
+    assert.equal(U.cardWeight(c), U.cardWeight(byId('overdrive')) * (TUNING.globalCardWeight ?? 1), `${kind}: weighted like Overdrive`);
   }
   const area = byId('tag_area');
   assert.equal(area.globalCard, 'area');
   assert.equal(cardScope(area), 'global', 'Field Amplifier is the global AREA card');
   assert.equal(area.category, 'UTILITY');
-  assert.equal(U.cardWeight(area), TUNING.tagCardWeight ?? 0.7, 'and keeps its old hand weight');
+  assert.equal(U.cardWeight(area), TUNING.globalCardWeight ?? 1, 'weighted like the other global cards');
 });
 
 test('Tempo reaches every Rate card and Cooldown every reload / recharge / cooldown: together they reach every weapon but the passive-free ones', () => {

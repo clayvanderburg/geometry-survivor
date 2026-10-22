@@ -138,7 +138,10 @@ export const globalReach = (player, kind) => ownedWeapons(player).filter((id) =>
 function globalCards() {
   const reaches = (kind) => (player) => globalReach(player, kind).length > 0;
   const card = (kind, name, category, summary, extra = {}) => ({
-    id: GLOBAL_CARDS[kind].id, name, category, maxLevel: GLOBAL_MAX_RANKS, globalCard: kind, headline: `global_${kind}`, weight: 0.25,
+    id: GLOBAL_CARDS[kind].id, name, category, maxLevel: GLOBAL_MAX_RANKS, globalCard: kind, headline: `global_${kind}`,
+    // As often as Reactor Overdrive or a crit card: the weapon-share guard (handWeights) keeps weapon cards at
+    // TUNING.handWeaponShare of a hand, so these no longer have to stay light to protect weapon progression.
+    get weight() { return TUNING.globalCardWeight ?? 1; },
     req: reaches(kind), summary, apply() {}, ...extra
   });
   return [
@@ -430,12 +433,12 @@ export const UPGRADE_POOL = [
   },
   {
     // The global AREA card (v0.46: it was an AREA specialist): every blast, cloud, cone, field and pull on
-    // every weapon grows, so it sits with the GLOBAL CARDS. Keeps its id and the specialist hand weight.
+    // every weapon grows, so it sits with the GLOBAL CARDS. Keeps its id; weighted like the other global cards.
     id: 'tag_area',
     name: 'Field Amplifier',
     category: 'UTILITY',
     globalCard: 'area',
-    weight: 0.7,
+    get weight() { return TUNING.globalCardWeight ?? 1; },
     tags: ['area'],
     maxLevel: 5,
     headline: 'areaSize',
@@ -640,6 +643,26 @@ export function cardWeight(u, luck = 1, player = null) {
   }
 }
 
+// HAND COMPOSITION: every equipped weapon brings its own 4-7 cards, so on raw weights the weapon cards' share
+// of a level-up hand followed the loadout (37% of offers with 1 weapon, 68% with 6: tools/hand-composition.mjs)
+// and global cards faded out just when builds should broaden. Level-up hands rescale the weapon cards (stat and
+// element cards) as one group so they hold TUNING.handWeaponShare of the total weight whatever you carry;
+// inside each group the usual weights still decide. Supply caches keep the raw weights.
+export const isWeaponCard = (u) => {
+  const kind = upgradeKind(u);
+  return kind === 'weapon' || kind === 'element';
+};
+export function handWeights(player, pool, luck = player.stats.luck || 1.0, { cache = false } = {}) {
+  const weights = pool.map((u) => cardWeight(u, luck, player));
+  const share = TUNING.handWeaponShare ?? 0.55;
+  if (cache || !(share > 0 && share < 1)) return weights;
+  let weapon = 0, other = 0;
+  pool.forEach((u, i) => { if (isWeaponCard(u)) weapon += weights[i]; else other += weights[i]; });
+  if (!(weapon > 0) || !(other > 0)) return weights; // only one group left: nothing to balance
+  const scale = (share / (1 - share)) * (other / weapon);
+  return pool.map((u, i) => (isWeaponCard(u) ? weights[i] * scale : weights[i]));
+}
+
 // Cumulative roll thresholds (roll < pentaChance → +5, < quadChance → +4, ...), all scaled by Luck.
 export function levelJumpChances(luck) {
   const pentaChance = Math.min(0.1, (TUNING.pentaLevelChance ?? 0.0025) * luck);
@@ -723,7 +746,9 @@ export function eligibleUpgrades(player, { cache = false } = {}) {
 // excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 4 slots, O(n^slots).
 export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   const luck = player.stats.luck || 1.0;
-  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck, player) }));
+  const cards = eligibleUpgrades(player).filter((u) => u.id !== excludeId);
+  const weights = handWeights(player, cards, luck);
+  const pool = cards.map((u, i) => ({ id: u.id, w: weights[i] }));
   const odds = new Map(pool.map((c) => [c.id, 0]));
   const k = Math.min(Math.max(0, Math.floor(slots)), 4, pool.length);
   const total = pool.reduce((a, c) => a + c.w, 0);
@@ -752,8 +777,10 @@ export function rollUpgrades(player, count = 3, { cache = false } = {}) {
   const luck = player.stats.luck || 1.0;
 
   // Weighted sample without replacement: one draw per candidate, key = r^(1/weight), highest keys win.
-  const shuffled = eligibleUpgrades(player, { cache })
-    .map((upgrade) => ({ upgrade, score: Math.pow(Math.random(), 1 / cardWeight(upgrade, luck, player)) }))
+  const pool = eligibleUpgrades(player, { cache });
+  const weights = handWeights(player, pool, luck, { cache });
+  const shuffled = pool
+    .map((upgrade, i) => ({ upgrade, score: Math.pow(Math.random(), 1 / weights[i]) }))
     .sort((a, b) => b.score - a.score)
     .map(({ upgrade }) => upgrade);
 
