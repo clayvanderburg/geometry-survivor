@@ -133,17 +133,19 @@ export const WEAPON_SCALING = {
   arcRoundShare: 0.3,
   arcRoundRange: 150,
   // Pool transforms (EXTRA_TRANSFORMS): Tracer Slugs (every slugEvery-th shot is a slug worth slugMult bolts,
-  // slugPierce more pierce: utility), Hot Barrel (sustained fire heats the barrel to +hotRateMax fire rate over
-  // hotHeatUp s, cooling over hotCool s; valued at hotValue of full heat, since bursts and retargets cool it).
+  // slugPierce more pierce: utility; valued at slugValue, since a slug overkills small targets), Hot Barrel
+  // (sustained fire heats the barrel to +hotRateMax fire rate over hotHeatUp s, cooling over hotCool s; valued
+  // at hotValue of full heat, since the extra bolts overkill too). Both values from the card bench.
   slugEvery: 4,
   slugMult: 2.5,
   slugPierce: 2,
   slugRadiusMult: 1.8,
+  slugValue: 0.6,
   hotRateMax: 0.6,
   hotHeatUp: 2.5,
   hotCool: 1.2,
-  hotValue: 0.6,
-  slugUnits: (b) => (b.tf?.has('slug') ? (W.slugEvery - 1 + W.slugMult) / W.slugEvery : 1),
+  hotValue: 0.45,
+  slugUnits: (b) => (b.tf?.has('slug') ? (W.slugEvery - 1 + W.slugMult * W.slugValue) / W.slugEvery : 1),
   hotUnits: (b) => (b.tf?.has('hotbarrel') ? 1 + W.hotRateMax * W.hotValue : 1),
   blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)) * W.slugUnits(b) * W.hotUnits(b),
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
@@ -173,7 +175,7 @@ export const WEAPON_SCALING = {
   // Pool transforms: Shrapnel Shells (every blast throws shellShards shards at shellShare of the hit,
   // valued at shellHitShare: they fan out, so few land), Rolling Thunder (a rocket drops a charge every
   // thunderEvery s of flight, up to thunderMax, each thunderShare of the hit in thunderRadiusFrac of the
-  // blast; valued at thunderHitShare since the early ones land behind the pack).
+  // blast; valued at thunderHitShare, from the card bench: most land behind the pack).
   shellShards: 6,
   shellShare: 0.25,
   shellHitShare: 0.35,
@@ -184,7 +186,7 @@ export const WEAPON_SCALING = {
   thunderShare: 0.25,
   thunderDelay: 0.14,
   thunderRadiusFrac: 0.6,
-  thunderHitShare: 0.5,
+  thunderHitShare: 0.2,
   rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)
     + (b.tf?.has('shrapnel') ? W.shellShards * W.shellShare * W.shellHitShare : 0)
     + (b.tf?.has('thunder') ? W.thunderMax * W.thunderShare * W.thunderHitShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
