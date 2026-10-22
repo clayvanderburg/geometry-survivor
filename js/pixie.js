@@ -6,7 +6,7 @@
 // Lines are short (≤ 60 characters), PG, nerdy mad science with an 80s streak. Each pool is a per-run
 // shuffle bag, so no line repeats until the pool runs dry, and never twice in a row. A line is
 // [text, mood]; {weapon} and {name} fill in the weapon and the Breakthrough's name.
-import { TRANSFORMS, BOOST_NAME } from './weapon-levels.js';
+import { BT_FLATS, btOption } from './weapon-levels.js';
 import { isReduceEffects } from './juice.js';
 
 export const PIXIE_MAX_CHARS = 60;
@@ -80,13 +80,20 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'singularity:twin': ['TWO black holes? I\'ll update the insurance.', 'oops'],
   'blaster:ricochet': ['Ricochet Rounds! Geometry is on OUR side now!', 'smug'],
   'rockets:mirv': ['MIRV Rockets! Rockets that make rockets!', 'eureka'],
-  'drones:wingman': ['Another wingman! I\'ll knit it a tiny scarf.', 'eureka'],
+  'drones:wingman': ['A whole squadron! I\'ll knit them tiny scarves.', 'eureka'],
   'lightning:strike': ['Thunderstrike! I cleared the forecast myself.', 'smug'],
   'orbitals:fling': ['Blade Fling! Keep your fingers inside the ship.', 'oops'],
   'flamethrower:ring': ['Inferno Ring! Fire, but in a circle. Elegant.', 'smug'],
   'cryospray:blizzard': ['Blizzard Ring! Bring a sweater, Jack.', 'eureka'],
   'grenades:gravity': ['Gravity Grenades! Newton is spinning. Literally.', 'smug'],
-  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka']
+  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka'],
+  // Pool transforms (EXTRA_TRANSFORMS): every one has its own line (tests/breakthrough-pools.test.js).
+  'blaster:slug': ['Tracer Slugs! Every fourth shot is a BIG one. I counted.', 'smug'],
+  'blaster:hotbarrel': ['Hot Barrel! Don\'t touch it. Seriously, don\'t.', 'oops'],
+  'rockets:shrapnel': ['Shrapnel Shells! Pointy bits, everywhere, on purpose!', 'eureka'],
+  'rockets:thunder': ['Rolling Thunder! Ba-boom-boom-BOOM. That\'s the science.', 'smug'],
+  'missiles:hunter': ['Hunter-Killer! The missiles have missiles now!', 'eureka'],
+  'missiles:echo': ['Echo Salvo! I fired it once and the universe said it back.', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.
@@ -105,6 +112,15 @@ export const PIXIE_BOOST_LINES = Object.freeze([
   ['A bit of everything! Like a lab buffet.', 'eureka'],
   ['Turned every dial up one notch. You\'re welcome!', 'smug']
 ]);
+
+// Flats with their own reactions (Across the Board uses PIXIE_BOOST_LINES).
+export const PIXIE_FLAT_LINES = Object.freeze({
+  overtuned: Object.freeze([
+    ['Overtuned Core! I removed the safety limiter. And the label.', 'oops'],
+    ['Hotter core, bigger hits. Simple science!', 'smug'],
+    ['It\'s glowing a color I haven\'t named yet. Overtuned!', 'eureka']
+  ])
+});
 
 export const fillLine = (text, vars = {}) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
@@ -193,15 +209,18 @@ export class PixieDirector {
     return { who: 'pixie', text: fillLine(line[0], { weapon: weaponName }), mood: line[1] };
   }
 
-  // The player chose `pick` ({ weaponId, level, kind: 'transform' | 'boost' }).
+  // The player chose `pick` ({ weaponId, level, option }: a transform id or a flat id; `kind` alone, as
+  // older callers pass it, means the milestone's home transform or Across the Board). Lines key on the
+  // option, so a transform's line plays at whichever milestone it was taken.
   pickLine(pick) {
-    if (pick.kind === 'boost') {
-      const line = this.boostBag.next();
-      return { who: 'pixie', text: fillLine(line[0], { name: BOOST_NAME }), mood: line[1] };
+    const opt = btOption(pick.weaponId, pick.level, pick.option ?? pick.kind);
+    if (opt && opt.kind !== 'transform') {
+      const own = PIXIE_FLAT_LINES[opt.id];
+      const line = own ? own[Math.floor(this.rng() * own.length)] : this.boostBag.next();
+      return { who: 'pixie', text: fillLine(line[0], { name: BT_FLATS[opt.id].name }), mood: line[1] };
     }
-    const tf = TRANSFORMS[pick.weaponId]?.[pick.level];
-    const line = (tf && PIXIE_PICK_LINES[`${pick.weaponId}:${tf.id}`]) || this.transformBag.next();
-    return { who: 'pixie', text: fillLine(line[0], { name: tf?.name || 'It' }), mood: line[1] };
+    const line = (opt && PIXIE_PICK_LINES[`${pick.weaponId}:${opt.id}`]) || this.transformBag.next();
+    return { who: 'pixie', text: fillLine(line[0], { name: opt?.name || 'It' }), mood: line[1] };
   }
 
   offer(weaponId, weaponName) {

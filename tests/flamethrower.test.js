@@ -153,7 +153,7 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
   assert.equal(describeWeaponPick(p, 'flamethrower').headline, 'FLAMETHROWER');
   acquireWeapon(p, 'flamethrower');
   const reach = describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_range, levelJump: 1 });
-  assert.equal(reach.headline, '+40 FLAME REACH');
+  assert.match(reach.headline, /^\+\d+% FLAME REACH$/); // a relative gain, never a pixel count
   assert.deepEqual(reach.rows.map((r) => r.id), ['flameRange']);
   assert.match(describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_cone, levelJump: 2 }).headline, /CONE WIDTH/);
   const gel = describeUpgrade(p, { ...UPGRADE_BY_ID.flamethrower_burn, levelJump: 1 });

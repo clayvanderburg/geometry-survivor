@@ -28,9 +28,9 @@ test('Blink Drive is a 3-rank UTILITY card that never overcharges, and its card 
   assert.equal(canOvercharge(u), false);
   const { p } = freshGame();
   const card = describeUpgrade(p, { ...u, levelJump: 1 });
-  assert.equal(card.headline, `DASH BLINKS // ${W.blinkDistance(1)} PX`);
+  assert.equal(card.headline, 'DASH BLINKS');
   install(p);
-  assert.equal(describeUpgrade(p, { ...u, levelJump: 1 }).headline, `+${W.blinkDistance(2) - W.blinkDistance(1)} PX BLINK`);
+  assert.equal(describeUpgrade(p, { ...u, levelJump: 1 }).headline, `+${Math.round((W.blinkDistance(2) / W.blinkDistance(1) - 1) * 100)}% BLINK DISTANCE`);
 });
 
 test('without the card the dash is the old speed burst; with it the ship teleports the blink distance along its motion', () => {
@@ -113,11 +113,22 @@ test('Phase Dash Extender: 5 ranks, +20% dash distance each (blinks too), invuln
   const { p } = freshGame();
   const card = describeUpgrade(p, { ...u, levelJump: 1 });
   const before = W.dashDistance(p.stats.moveSpeed, 0), after = W.dashDistance(p.stats.moveSpeed, 1);
-  assert.equal(card.headline, `+${Math.round(after - before)} PX DASH`);
+  assert.equal(card.headline, `+${Math.round((after / before - 1) * 100)}% DASH DISTANCE`);
   const q = freshGame();
   install(q.p);
   applyUpgradeLevels(q.p, { ...u, levelJump: 2 });
   q.p.vx = 3;
   q.g.triggerDash();
   assert.ok(Math.abs(q.p.x - (2000 + W.blinkDistance(1) * W.dashDistanceMult(2))) < 1e-6, 'a longer blink');
+});
+
+test('upgrade cards never show pixel counts: size and reach read as relative gains', async () => {
+  const { STAT_ROWS } = await import('../js/upgrade-cards.js');
+  const { p } = freshGame();
+  for (const row of STAT_ROWS) {
+    for (const text of [row.unit, row.label, row.fmt?.(120)]) assert.ok(!/\bpx\b/i.test(String(text ?? '')), `${row.id}: "${text}"`);
+    if (row.newText) assert.ok(!/\bpx\b/i.test(row.newText(120, row)), `${row.id} newText`);
+  }
+  assert.equal(STAT_ROWS.find((r) => r.id === 'railWidth').headline, 'size');
+  void p;
 });
