@@ -59,7 +59,7 @@ const CORE_INFO = {
   raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
   glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
   nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
-  harpoon: { headline: 'harpoonRange', summary: 'Fires one of your drill-claws on a tether where you aim: it pierces every enemy on its line, drills through rock (mining it as it goes) and yanks small enemies back into your other claw, which crushes them.' },
+  harpoon: { headline: 'harpoonRange', summary: 'Fires spinning drill bits where you aim: each one bores through every enemy on its line and drills through rock, mining it as it goes.' },
   quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over and shoving it back. Tidal Shear cards and Spacetime Fractures let it break rocks too.' }
 };
 
@@ -167,8 +167,8 @@ export const MOVE_SPEED_STEP = 1.1;
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
-// Drill-claw numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
-export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
+// Drill numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
+export const MINING_SPEED_STEP = 1.06; // per Rotary Drill Overclock level
 export const TECTONIC_MINING_SPEED = 1.18;
 export const TECTONIC_MINING_RANGE = 1.15;
 export const TECTONIC_DRILL_SCALE = 1.15;
@@ -178,11 +178,11 @@ export const PULSAR_FIRE_RATE = 1.15;
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
-    name: 'Rotary Claw Overclock',
-    category: 'DRILL CLAWS',
+    name: 'Rotary Drill Overclock',
+    category: 'DRILLS',
     maxLevel: 10,
     headline: 'miningSpeed',
-    summary: 'Spins the twin drill-claws faster. Only mining speed.',
+    summary: 'Spins the twin drills faster. Only mining speed.',
     apply(player) {
       player.stats.miningSpeed *= MINING_SPEED_STEP;
     }
@@ -396,7 +396,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, claws and shards.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, drill bits and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }
@@ -456,8 +456,8 @@ export const UPGRADE_POOL = [
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
-    name: 'SYNERGY: Tectonic Claw Bore',
-    category: 'DRILL CLAWS',
+    name: 'SYNERGY: Tectonic Drill Bore',
+    category: 'DRILLS',
     tags: ['explosive', 'area'],
     isSynergy: true,
     maxLevel: 1,
@@ -465,7 +465,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.mining_speed >= 2);
     },
     headline: 'tectonicBlast',
-    summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
+    summary: 'EVOLUTION: Upgrades your drills (not a new weapon): supercharged drills, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
       player.stats.miningSpeed *= TECTONIC_MINING_SPEED;

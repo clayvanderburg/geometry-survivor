@@ -69,7 +69,7 @@ export const PIXIE_WEAPON_LINES = Object.freeze({
   raillance: [['The Rail Lance goes through ROCK now. Oops?', 'oops']],
   glaive: [['Frisbees of DOOM. Patent pending!', 'smug']],
   nanites: [['The nanites ate my lunch. Promising!', 'eureka']],
-  harpoon: [['Your claw has a leash now. Good claw!', 'eureka']],
+  harpoon: [['You shoot DRILLS now. Rocks fear you.', 'eureka']],
   quake: [['Graviton Mortar! Space-time just hiccuped.', 'smug']]
 });
 
@@ -87,6 +87,9 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'cryospray:blizzard': ['Blizzard Ring! Bring a sweater, Jack.', 'eureka'],
   'grenades:gravity': ['Gravity Grenades! Newton is spinning. Literally.', 'smug'],
   'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka'],
+  'harpoon:twin': ['Twin Drills! Two bits, one trigger!', 'eureka'],
+  'harpoon:spin': ['Drill Spin! The bit just LOVES its job.', 'smug'],
+  'harpoon:chain': ['Ricochet Bits! They bounce now. Not my fault.', 'oops'],
   // Pool transforms (EXTRA_TRANSFORMS): every one has its own line (tests/breakthrough-pools.test.js).
   'blaster:slug': ['Tracer Slugs! Every fourth shot is a BIG one. I counted.', 'smug'],
   'blaster:hotbarrel': ['Hot Barrel! Don\'t touch it. Seriously, don\'t.', 'oops'],
@@ -102,8 +105,8 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'turret:link': ['Overwatch Link! Turrets holding hands. Zappy hands!', 'eureka'],
   'glaive:shatter': ['Shatter Edge! The frisbees explode now. You\'re welcome.', 'smug'],
   'glaive:arcdisc': ['Arc Discs! Spinning AND sparking. Peak engineering.', 'eureka'],
-  'harpoon:whip': ['Whip Tether! I learned it from a space cowboy.', 'smug'],
-  'harpoon:tesla': ['Tesla Hook! The claw bites AND zaps!', 'eureka'],
+  'harpoon:detonate': ['Detonator Bit! Screws in, says goodbye. Loudly.', 'smug'],
+  'harpoon:tunnel': ['Tunnel Bore! Mind the gap. It bites.', 'eureka'],
   'quake:crush': ['Crush Field! Gravity, but rude about it.', 'smug'],
   'quake:lens': ['Gravity Lens! Everything wants to be near the boom.', 'eureka'],
   'grenades:sticky': ['Sticky Plasma! Do NOT shake hands with it.', 'oops'],

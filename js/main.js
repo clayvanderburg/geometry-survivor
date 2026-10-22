@@ -28,7 +28,7 @@ import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
 import { GlaiveDiscs } from './glaive.js';
-import { ClawHarpoon } from './claw-harpoon.js';
+import { DrillDriver } from './drill-driver.js';
 import * as BTX from './bt-extras.js'; // pool Breakthroughs (Tracer Slugs, Hot Barrel, Shrapnel Shells, ...)
 import { QuakeMortar } from './quake-mortar.js';
 import { RiftManager } from './rifts.js';
@@ -526,7 +526,7 @@ export class Game {
     (this.railLance ||= new RailLance()).clear();
     (this.glaive ||= new GlaiveDiscs()).clear();
     (this.nanites ||= new NaniteSwarm()).clear();
-    (this.clawHarpoon ||= new ClawHarpoon()).clear();
+    (this.drillDriver ||= new DrillDriver()).clear();
     (this.quakeMortar ||= new QuakeMortar()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
@@ -1998,7 +1998,7 @@ export class Game {
   // Every broken rock comes through here: the ship's drill, or an elite grinding a path (rock.brokenBy
   // === 'elite'). Both get the same shatter effects, sound and ore drops (geoms, cores, gold-vein chest
   // roll) for the ship to collect. Only the ship's own drilling counts as rocks mined, heals from a
-  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Claw Bore blast.
+  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Drill Bore blast.
   onRockShattered(rock) {
     const byElite = rock.brokenBy === 'elite';
     if (!byElite) this.rocksMined++;
@@ -2076,7 +2076,7 @@ export class Game {
       });
     }
 
-    // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
+    // Tectonic Drill Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
@@ -5558,7 +5558,7 @@ export class Game {
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
     this.railLance?.update(dt, this, shouldFire); // Rail Lance: charge, then a piercing line (js/rail-lance.js)
-    this.clawHarpoon?.update(dt, this, shouldFire); // js/claw-harpoon.js
+    this.drillDriver?.update(dt, this, shouldFire); // js/drill-driver.js
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -5750,8 +5750,7 @@ export class Game {
       }
       // Contact uses the same hull-hugging outline the shield draws.
       // A Blinker that just landed (arriveT) can't hit: only its lunge can (js/archetypes.js BLINKER).
-      // Nor can a Claw Harpoon catch while it's held or just flung (noContactUntil, js/claw-harpoon.js).
-      if (!(e.arriveT > 0) && !(e.noContactUntil > this.elapsedTime) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
+      if (!(e.arriveT > 0) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
@@ -7081,7 +7080,7 @@ export class Game {
     this.acidSprayer?.draw(ctx, this);
     this.railLance?.draw(ctx, this);
     this.glaive?.draw(ctx, this);
-    if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
+    if (this.state !== 'GAMEOVER') this.drillDriver?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
     this.quakeMortar?.drawAir(ctx, this);

@@ -43,7 +43,7 @@ const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that fo
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
   shockfield: { drift: true, dash: 60, dummies: CHASERS },
-  harpoon: { dummies: { ...CHASERS, count: 20 }, frames: 48 }, // chasers to skewer, yank and crush
+  harpoon: { dummies: { ...CHASERS, count: 20 }, frames: 48 }, // chasers for the bits to bore through
   // Mines drop behind the ship: it circles outside a ring of still targets under a fixed camera, laying a
   // ring of armed mines in shot; a second in, the targets are released and charge through them.
   mines: { orbit: 170, fixedCam: true, zoom: 1.4, warmup: 360, frames: 60, release: 15, dummies: { count: 10 } },

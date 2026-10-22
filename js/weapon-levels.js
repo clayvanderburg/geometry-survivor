@@ -169,11 +169,11 @@ export const STAT_CARDS = {
     card('nanites', 'nanites_launch', 'cooldown', 'Nanite Swarm Fabricator', 'naniteCooldown', 'Nanite Swarm: a fresh swarm launches sooner. Only launch rate.', cap(6))
   ],
   harpoon: [
-    card('harpoon', 'harpoon_damage', 'damage', 'Claw Harpoon Tungsten Bit', 'harpoonDamage', 'Claw Harpoon: a harder drill bit. Only damage per hit.'),
-    card('harpoon', 'harpoon_rate', 'rate', 'Claw Harpoon Winch Motor', 'harpoonRate', 'Claw Harpoon: a faster winch throws and reels in the claw more often. Only throw rate.', cap(8)),
-    card('harpoon', 'harpoon_range', 'range', 'Claw Harpoon Tether Length', 'harpoonRange', 'Claw Harpoon: a longer tether, so the claw flies further. Only reach.', cap(8)),
-    card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', sharedCap(3)),
-    card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
+    card('harpoon', 'harpoon_damage', 'damage', 'Drill Driver Tungsten Bit', 'harpoonDamage', 'Drill Driver: a harder drill bit. Only damage per hit.'),
+    card('harpoon', 'harpoon_rate', 'rate', 'Drill Driver Spin-Up Motor', 'harpoonRate', 'Drill Driver: the next bit spins up faster, so you fire more of them. Only fire rate.', cap(8)),
+    card('harpoon', 'harpoon_range', 'range', 'Drill Driver Long Barrel', 'harpoonRange', 'Drill Driver: bits fly further before they are spent. Only reach.', cap(8)),
+    card('harpoon', 'harpoon_pierce', 'pierce', 'Drill Driver Hardened Threads', 'harpoonPierce', 'Drill Driver: bits lose less bite boring through each enemy. Only damage past the first enemy.', sharedCap(6)),
+    card('harpoon', 'harpoon_drill', 'drill', 'Drill Driver Rock Bore', 'harpoonDrill', 'Drill Driver: each bit bores through more rock before it bites to a stop. Only mining.', cap(8))
   ],
   quake: [
     card('quake', 'quake_damage', 'damage', 'Graviton Mortar Dense Core', 'quakeDamage', 'Graviton Mortar: denser charges. Only gravity wave damage.'),
@@ -189,7 +189,8 @@ export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
 // (runs are not saved mid-run, and a weapon's ranks are looked up only for its current cards).
 export const RETIRED_STAT_CARDS = Object.freeze({
   turret_count: 'Sentry Turret Count (retired)',
-  turret_lifetime: 'Sentry Turret Lifetime (retired)'
+  turret_lifetime: 'Sentry Turret Lifetime (retired)',
+  harpoon_grapple: 'Grapple Hooks (retired)'
 });
 export const STAT_CARD_BY_ID = Object.fromEntries(STAT_CARD_LIST.map((c) => [c.id, c]));
 
@@ -321,7 +322,7 @@ export const WEAPON_BADGE = {
   raillance: 'RAIL LANCE',
   glaive: 'GLAIVE DISCS',
   nanites: 'NANITE SWARM',
-  harpoon: 'CLAW HARPOON',
+  harpoon: 'DRILL DRIVER',
   quake: 'GRAVITON MORTAR'
 };
 
@@ -419,9 +420,9 @@ export const TRANSFORMS = {
     18: tf('plague', 'Nanite Plague', 'Enemies a Nanite Swarm bites carry the plague: when one dies to anything, a small swarm bursts from the wreck and keeps eating.')
   },
   harpoon: {
-    6: tf('slam', 'Seismic Slam', 'Every time the Claw Harpoon reels in, your claws snap shut in a seismic slam that hits everything round your nose.'),
-    12: tf('spin', 'Drill Spin', 'At the end of every throw the Claw Harpoon spins in place, grinding every enemy and rock round its tip before it reels back.'),
-    18: tf('chain', 'Chain Harpoon', 'At the end of every throw the Claw Harpoon leaps on to up to 3 more enemies near its tip, skewering each one before it reels back.')
+    6: tf('twin', 'Twin Drills', 'The Drill Driver fires two bits at once, fanned slightly apart, so it bores twice the line.'),
+    12: tf('spin', 'Drill Spin', 'Where a Drill Driver bit stops, it spins in place, grinding every enemy and rock round its tip before it crumbles.'),
+    18: tf('chain', 'Ricochet Bits', 'A spent Drill Driver bit caroms on to up to 3 more enemies near its tip, boring into each one.')
   },
   quake: {
     6: tf('skip', 'Rebound Pulse', 'Graviton Mortar charges rebound after they burst: each one springs to the next pack twice, pulsing again in smaller gravity waves.'),
@@ -443,7 +444,7 @@ export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'coo
 // `stat` is the build rank key; `card` the weapon's count card (null: the Sentry Turret has no count card,
 // so its bonus is a turret charge, kept in r.charges); `cap` its rank cap; `per` the amount one rank adds
 // and `unit` the word on the card headline. Weapons missing here (Vortex Singularity, Gas Trail, Shock
-// Field, Nanite Swarm, Claw Harpoon) have no count stat and get nothing.
+// Field, Nanite Swarm, Drill Driver) have no count stat and get nothing.
 export const REPLICATOR_ID = 'replicator_array';
 export const REPLICATOR_MAX_RANKS = 2;
 const countStat = (stat, card, cap, per, unit) => ({ stat, card, cap, per, unit });
@@ -592,8 +593,8 @@ export const EXTRA_TRANSFORMS = {
     { id: 'arcdisc', home: 12, name: 'Arc Discs', summary: 'Every Glaive Disc ricochet arcs lightning back into the enemy it just left.' }
   ],
   harpoon: [
-    { id: 'whip', home: 6, name: 'Whip Tether', summary: 'As the Claw Harpoon reels back in, its tether whips through every enemy it sweeps across.' },
-    { id: 'tesla', home: 12, name: 'Tesla Hook', summary: 'At the end of every throw the Claw Harpoon discharges, arcing lightning into up to 3 enemies near its tip.' }
+    { id: 'detonate', home: 6, name: 'Detonator Bit', summary: 'A Drill Driver bit screws into the first enemy that survives it, stays there, and blows a moment later, wrecking everything around it.' },
+    { id: 'tunnel', home: 12, name: 'Tunnel Bore', summary: 'Every Drill Driver bit leaves a churning bore behind it that keeps cutting any enemy crossing it for a second.' }
   ],
   quake: [
     { id: 'crush', home: 6, name: 'Crush Field', summary: 'Every Graviton Mortar burst leaves a crushing gravity field that keeps grinding whatever stands in it.' },

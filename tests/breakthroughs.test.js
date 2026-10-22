@@ -73,7 +73,7 @@ test('every transform names its weapon in the summary', () => {
     cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer',
     shockfield: 'Electric Shield Field', raillance: 'Rail Lance',
     glaive: 'Glaive Disc',
-    nanites: 'Nanite Swarm', harpoon: 'Claw Harpoon',
+    nanites: 'Nanite Swarm', harpoon: 'Drill Driver',
     quake: 'Graviton Mortar' };
   for (const id of Object.keys(TRANSFORMS)) assert.ok(NAMES[id], `${id} needs a name to check`);
   for (const [id, byLevel] of Object.entries(TRANSFORMS)) {

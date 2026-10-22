@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// No card rank does nothing. A UTILITY stat whose formula tops out (hook size, pierce keep, element rank)
+// No card rank does nothing. A UTILITY stat whose formula tops out (pierce keep, element rank)
 // has its card capped where it tops out, and ACROSS THE BOARD's free ranks count toward that cap
 // (weapon-levels.js sharedCap, upgrades.js levelRoom).
 const h = await import('../tools/balance/harness.mjs');
@@ -16,22 +16,15 @@ const card = (id) => STAT_CARD_LIST.find((c) => c.id === id);
 
 test('the capped utility cards are exactly the ones whose formula tops out', () => {
   assert.deepEqual(capped.map((c) => c.id).sort(), [
-    'acidspray_etch', 'cryospray_chill', 'flamethrower_burn', 'harpoon_grapple', 'raillance_pierce', 'shockfield_stun'
+    'acidspray_etch', 'cryospray_chill', 'flamethrower_burn', 'harpoon_pierce', 'raillance_pierce', 'shockfield_stun'
   ]);
 });
 
-test('Grapple Hooks tops out at the biggest hookable hull, and every rank below that grows the hook', () => {
-  // Bosses, lieutenants and armored plates are never hooked (claw-harpoon.js hookable); every other hull is.
-  const radii = [
-    ...Object.keys(HOSTILE_INFO).map((type) => hostileKindStats(type, 1)?.radius || 0),
-    MITOSIS.cap,
-    ...Object.keys(ARCHETYPE_INFO).map((type) => ARCHETYPE_INFO[type].radius || 0)
-  ];
-  const biggest = Math.max(...radii);
-  const max = card('harpoon_grapple').maxLevel;
-  const size = (r) => W.harpoonHookSize(makeBuild('harpoon', 18, { grapple: r }));
-  assert.ok(size(max) >= biggest, `rank ${max} hooks a ${biggest} px hull`);
-  assert.ok(size(max - 1) < biggest, `rank ${max - 1} still misses the biggest hull, so rank ${max} is not dead`);
+test('Hardened Threads tops out at 100% pierce keep exactly at its cap', () => {
+  const max = card('harpoon_pierce').maxLevel;
+  const keep = (r) => W.harpoonPierceKeep(makeBuild('harpoon', 18, { pierce: r }));
+  assert.equal(keep(max), 1);
+  assert.ok(keep(max - 1) < 1);
 });
 
 test('Penetrator Core tops out at 100% pierce keep exactly at its cap', () => {
@@ -56,16 +49,16 @@ test('Across the Board ranks shrink a capped card\'s room; uncapped cards keep t
   g.resetRun();
   const p = g.player;
   acquireWeapon(p, 'harpoon');
-  const grapple = UPGRADE_BY_ID.harpoon_grapple;
+  const grapple = UPGRADE_BY_ID.harpoon_pierce;
   const drill = UPGRADE_BY_ID.harpoon_drill;
   const before = { grapple: levelRoom(p, grapple), drill: levelRoom(p, drill) };
-  assert.equal(before.grapple, card('harpoon_grapple').maxLevel);
+  assert.equal(before.grapple, card('harpoon_pierce').maxLevel);
   applyBreakthrough(p, 'harpoon', BREAKTHROUGH_LEVELS[0], 'boost');
   assert.equal(levelRoom(p, grapple), before.grapple - 1, 'one Across the Board takes one rank of room');
   assert.equal(levelRoom(p, drill), before.drill, 'an uncapped utility card keeps its room');
   applyBreakthrough(p, 'harpoon', BREAKTHROUGH_LEVELS[1], 'boost');
   applyBreakthrough(p, 'harpoon', BREAKTHROUGH_LEVELS[2], 'boost');
-  assert.equal(levelRoom(p, grapple), 0, 'three Across the Boards fill Grapple Hooks: it is never offered');
+  assert.equal(levelRoom(p, grapple), before.grapple - 3, 'three Across the Boards take three ranks of Hardened Threads');
 });
 
 test('every capped card is still reachable: a weapon can hit LV 18 without it', () => {

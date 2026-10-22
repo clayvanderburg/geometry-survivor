@@ -285,21 +285,22 @@ export const STAT_ROWS = [
   { id: 'naniteGoo', label: 'Swarm life / kill', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooLifePerKill : null)), fmt: secs, newText: (a, row) => `GRAY GOO // +${row.fmt(a)} PER KILL` },
   { id: 'naniteGooGrow', label: 'Swarm max growth', get: (p) => wb(p, 'nanites', (b) => (b.t8 ? W.gooGrowMax : W.naniteGrowMax)), fmt: mult },
   { id: 'nanitePlague', label: 'Plague swarm radius', get: (p) => wb(p, 'nanites', (b) => (b.t12 ? naniteRadius(p, b) * W.plagueRadiusMult : null)), fmt: int, newText: () => 'BITTEN ENEMIES CARRY THE PLAGUE' },
-  // Claw Harpoon (aimed; mining and the yank are utility)
-  { id: 'harpoonDamage', label: 'Claw hit damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b)), fmt: dec1, headline: 'pct', unit: 'CLAW DAMAGE' },
-  { id: 'harpoonRate', label: 'Throws / s', get: (p) => wb(p, 'harpoon', (b) => 1 / W.harpoonCooldown(b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'THROW RATE' },
-  { id: 'harpoonRange', label: 'Tether reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'size', unit: 'TETHER REACH', newText: () => 'CLAW HARPOON ONLINE' },
-  { id: 'harpoonHook', label: 'Yanks hulls up to', get: (p) => wb(p, 'harpoon', W.harpoonHookSize), fmt: int, headline: 'size', unit: 'HOOK SIZE' },
-  { id: 'harpoonCrush', label: 'Crush damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b) * W.harpoonCrushShare), fmt: dec1 },
-  { id: 'harpoonDrill', label: 'Rock drilled / throw', get: (p) => wb(p, 'harpoon', (b) => W.harpoonDrill(b) * (p.stats.miningSpeed || 75) / (TUNING.miningSpeed || 75)), fmt: int, headline: 'pct', unit: 'ROCK DRILLED' },
-  { id: 'harpoonSlam', label: 'Seismic Slam damage', get: (p) => wb(p, 'harpoon', (b) => (b.t4 ? weaponDamage(p, 'harpoon', b) * W.slamShare : null)), fmt: dec1, newText: (a, row) => `SEISMIC SLAM // ${row.fmt(a)} DMG` },
-  { id: 'harpoonSpin', label: 'Drill Spin damage / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t8 ? weaponDamage(p, 'harpoon', b) * W.spinShare : null)), fmt: dec1, newText: (a, row) => `DRILL SPIN // ${row.fmt(a)} DMG` },
-  { id: 'harpoonChain', label: 'Chain leaps / throw', get: (p) => wb(p, 'harpoon', (b) => (b.t12 ? W.chainLeaps : null)), fmt: int, newText: (a) => `CHAIN HARPOON // ${a} LEAPS` },
+  // Drill Driver (aimed; mining and pierce are utility)
+  { id: 'harpoonDamage', label: 'Bit hit damage', get: (p) => wb(p, 'harpoon', (b) => weaponDamage(p, 'harpoon', b)), fmt: dec1, headline: 'pct', unit: 'BIT DAMAGE' },
+  { id: 'harpoonRate', label: 'Bits / s', get: (p) => wb(p, 'harpoon', (b) => 1 / W.harpoonCooldown(b)), fmt: (v) => `${v.toFixed(2)}/s`, headline: 'pct', unit: 'FIRE RATE' },
+  { id: 'harpoonRange', label: 'Bit reach', get: (p) => wb(p, 'harpoon', W.harpoonRange), fmt: int, headline: 'size', unit: 'REACH', newText: () => 'DRILL DRIVER ONLINE' },
+  { id: 'harpoonPierce', label: 'Kept past each enemy', get: (p) => wb(p, 'harpoon', (b) => W.harpoonPierceKeep(b) * 100), fmt: (v) => `${Math.round(v)}%`, headline: 'size', unit: 'PIERCE' },
+  { id: 'harpoonDrill', label: 'Rock drilled / bit', get: (p) => wb(p, 'harpoon', (b) => W.harpoonDrill(b) * (p.stats.miningSpeed || 75) / (TUNING.miningSpeed || 75)), fmt: int, headline: 'pct', unit: 'ROCK DRILLED' },
+  { id: 'harpoonTwin', label: 'Bits / launch', get: (p) => wb(p, 'harpoon', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'TWIN DRILLS // 2 BITS' },
+  { id: 'harpoonSpin', label: 'Drill Spin damage / bit', get: (p) => wb(p, 'harpoon', (b) => (b.t8 ? weaponDamage(p, 'harpoon', b) * W.spinShare : null)), fmt: dec1, newText: (a, row) => `DRILL SPIN // ${row.fmt(a)} DMG` },
+  { id: 'harpoonChain', label: 'Ricochets / bit', get: (p) => wb(p, 'harpoon', (b) => (b.t12 ? W.chainLeaps : null)), fmt: int, newText: (a) => `RICOCHET BITS // ${a} CAROMS` },
+  { id: 'harpoonBlast', label: 'Detonator blast damage', get: (p) => wb(p, 'harpoon', (b) => (b.tf?.has('detonate') ? weaponDamage(p, 'harpoon', b) * W.detShare : null)), fmt: dec1, newText: (a, row) => `DETONATOR BIT // ${row.fmt(a)} DMG` },
+  { id: 'harpoonTunnel', label: 'Tunnel damage / bore', get: (p) => wb(p, 'harpoon', (b) => (b.tf?.has('tunnel') ? weaponDamage(p, 'harpoon', b) * W.tunnelShare : null)), fmt: dec1, newText: (a, row) => `TUNNEL BORE // ${row.fmt(a)} DMG` },
 
-  // Drill-claws + Tectonic Claw Bore
+  // Drills + Tectonic Drill Bore
   { id: 'miningSpeed', label: 'Mining speed', get: (p) => p.stats.miningSpeed, fmt: int, headline: 'pct', unit: 'MINING SPEED' },
-  { id: 'miningRange', label: 'Claw reach', get: (p) => p.stats.miningRange, fmt: int },
-  { id: 'drillScale', label: 'Claw size', get: (p) => p.stats.drillScale, fmt: mult },
+  { id: 'miningRange', label: 'Drill reach', get: (p) => p.stats.miningRange, fmt: int },
+  { id: 'drillScale', label: 'Drill size', get: (p) => p.stats.drillScale, fmt: mult },
   { id: 'tectonicBlast', label: 'Drill blast damage', get: (p) => (p.weapons.tectonicBore ? weaponDamage(p, 'tectonic') : null), fmt: dec1, newText: (a, row) => `ASTEROIDS DETONATE // ${row.fmt(a)} DMG` },
   { id: 'tectonicRadius', label: 'Drill blast radius', get: (p) => (p.weapons.tectonicBore ? tectonicBlastRadius(p) : null), fmt: int },
 

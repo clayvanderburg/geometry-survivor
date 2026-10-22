@@ -38,10 +38,12 @@ export const SUB_SOURCES = Object.freeze({
   glaive_recall: 'glaive',   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
   nanite_fission: 'nanites', // Nanite Swarm: Fission Bloom daughter swarms
   nanite_plague: 'nanites',   // Nanite Swarm: Nanite Plague swarms
-  harpooncrush: 'harpoon',  // Claw Harpoon: a reeled-in catch crushed in the other claw
-  harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
-  harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
-  harpoonchain: 'harpoon',   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
+  harpooncrush: 'harpoon',  // retired (v0.45 Claw Harpoon crush); old run stats still name it
+  harpoonslam: 'harpoon',   // retired (v0.45 Claw Harpoon Seismic Slam); old run stats still name it
+  harpoonspin: 'harpoon',   // Drill Driver: Drill Spin
+  harpoonchain: 'harpoon',  // Drill Driver: Ricochet Bits caroms
+  harpoonblast: 'harpoon',  // Drill Driver: Detonator Bit blasts
+  harpoontunnel: 'harpoon', // Drill Driver: Tunnel Bore ticks
   quake_skip: 'quake',       // Graviton Mortar: Rebound Pulse waves
   quake_fault: 'quake',      // Graviton Mortar: Spacetime Fractures snapping shut
   quake_epicenter: 'quake'   // Graviton Mortar: Graviton Surge waves
@@ -51,7 +53,7 @@ export const SUB_SOURCES = Object.freeze({
 export const OTHER_GROUPS = Object.freeze({
   shrapnel: 'shrapnel',   // Volatile Shatter (passive)
   nova: 'nova',           // Phase Nova dash burst
-  tectonic: 'tectonic',   // Tectonic Claw Bore drill blasts
+  tectonic: 'tectonic',   // Tectonic Drill Bore drill blasts
   supernova: 'supernova', // bomb
   blackhole: 'hazard',    // a dying Vortex's burst hitting other enemies
   ram: 'ram',             // enemies that popped on the shield
