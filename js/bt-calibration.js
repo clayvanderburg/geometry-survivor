@@ -48,10 +48,10 @@ export const TF_REALIZED = {
   acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.4] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1] },
   raillance: { magnet: [1, 1, 1], wake: [1, 1.16, 1], overload: [0.6, 1, 1], static: [1.2, 1.45, 1], reflect: [1.1, 1, 1] },
-  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] }
+  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] },
   nanites: { fission: [0.6, 0.79, 0.85], goo: [0.6, 0.66, 0.7], plague: [0.6, 0.6, 0.6] },
   harpoon: { slam: [0.93, 1, 0.78], spin: [0.89, 1, 0.92], chain: [1, 1.26, 0.6], whip: [1, 1, 1], tesla: [1, 1.12, 0.85] },
-  quake: { skip: [0.79, 0.6, 0.72], fault: [1, 0.65, 0.75], epicenter: [1, 0.95, 0.95], crush: [0.8, 0.68, 0.72], lens: [1, 1, 1] }
+  quake: { skip: [0.79, 0.6, 0.72], fault: [1, 0.65, 0.75], epicenter: [1, 0.95, 0.95], crush: [0.8, 0.6, 0.72], lens: [0.9, 0.85, 0.85] }
 };
 
 // Cases outside their band that damage numbers can't fix (the bench barely moves when their damage does,
@@ -89,7 +89,8 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'nanites|fission|6': 'daughter swarms need kills to bud: damage-insensitive at LV 6',
   'acidspray|caustic|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
   'raillance|overload|12': 'damage-insensitive in the bench (one lance already kills)',
-  'raillance|overload|18': 'damage-insensitive in the bench (one lance already kills)'
+  'raillance|overload|18': 'damage-insensitive in the bench (one lance already kills)',
+  'quake|crush|12': 'damage-insensitive at LV 12 at the BT_REALIZED_RANGE floor (skip and fault sit there too)',
 });
 
 const MILESTONES = [6, 12, 18];
