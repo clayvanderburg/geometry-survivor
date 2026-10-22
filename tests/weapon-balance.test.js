@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 // (size, radius, reach, pull...) add none. The TARGET (Clay, v0.43.1) is class-based: realized damage per
 // target vs the Autocannon at equal level, by WEAPON_CLASS / CLASS_TARGET, measured in the card bench.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, RATE_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, discardWeapon } = await import('../js/upgrades.js');
 const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
@@ -34,6 +34,8 @@ test('balance trims are deliberate and few: Autocannon and Claw Harpoon card ste
   assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 });
   assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
+  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage)');
+  assert.ok(near(rateStep('lightning'), RATE_STEP * 0.6));
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
   assert.equal(damageGrowth('rockets'), DAMAGE_GROWTH);

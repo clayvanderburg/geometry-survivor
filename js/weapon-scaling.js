@@ -54,6 +54,11 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
 export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
+// RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
+// its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
+// Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
+// build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
+export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
 // Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
@@ -83,7 +88,7 @@ export const CLASS_TARGET = Object.freeze({
 });
 const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
-export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
+export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1) * (RATE_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
 export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
@@ -236,7 +241,12 @@ export const WEAPON_SCALING = {
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
   lightningJumps: (b) => 5 + 2 * b.r.chain,
-  lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
+  // A discharge every 0.775 s (1.55 s before v0.46): twice as often, each jump half as hard. The chains were
+  // bound by targets (a jump already killed most of what it landed on), so faster, lighter discharges waste
+  // less on overkill and crackle more like lightning (card bench: 0.43-0.54x the Autocannon at LV 6-12 under
+  // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
+  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)),
+  stormArcScale: 2,
   lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
   lightningChains: (b) => (b.t4 ? 2 : 1),
   // Potential counts the first jump of a chain as a full hit and every later jump at lightningJumpShare:
