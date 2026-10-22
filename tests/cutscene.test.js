@@ -41,7 +41,7 @@ test('typewriter: characters appear over typeDuration, punctuation adds a beat, 
   assert.equal(blipAt('▼◆', 0), true, 'alien glyphs blip too');
   assert.equal(mouthFrame(1.23, false), 0, 'the mouth closes once the line is typed');
   assert.ok([0, 1, 2].includes(mouthFrame(0.2, true)));
-  assert.ok(readHold('x'.repeat(500)) <= 2.6, 'a read hold stays short');
+  assert.ok(readHold('x'.repeat(500)) <= 5.2, 'a read hold stays bounded');
 });
 
 test('timeline: steps block in order, background steps run alongside, lines auto-advance or advance on input', () => {
@@ -85,12 +85,12 @@ test('timeline: steps block in order, background steps run alongside, lines auto
   assert.deepEqual(ends, ['skip']);
 });
 
-test('the opening scene: a valid script, about 30–45 s, the full cast, a warp-in, the miner gets the last word', () => {
+test('the opening scene: a valid script, about 60–90 s left alone (tap to go faster), the full cast, a warp-in, the miner gets the last word', () => {
   registerStoryCast();
   const actions = new CutsceneStage({ sound: null }).actions();
   assert.deepEqual(validateScript(OPENING_SCENE, { actions }), []);
   const t = estimateDuration(OPENING_SCENE);
-  assert.ok(t >= 30 && t <= 45, `opening runs ${t.toFixed(1)} s`);
+  assert.ok(t >= 60 && t <= 90, `opening runs ${t.toFixed(1)} s`); // half-speed text since v0.45.0
   const lines = OPENING_SCENE.steps.filter((s) => s.do === 'say');
   assert.deepEqual([...new Set(lines.map((s) => s.who))].sort(), ['dispatch', 'miner', 'vex']);
   for (const s of lines) assert.ok(CAST[s.who], s.who);
