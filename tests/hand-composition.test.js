@@ -63,3 +63,14 @@ test('real hands: weapon cards are 50-70% of offers and most 4-card hands hold a
     if (r.handSize >= 4) assert.ok(r.handsWithOther > 0.8, `${n} weapons: ${(r.handsWithOther * 100).toFixed(0)}% of hands hold a non-weapon card`);
   }
 });
+
+test('the global cards turn up about as often as Reactor Overdrive; Replicator Array stays rare', () => {
+  const r = handComposition(6, { players: 60, hands: 25, seed: 'parity' });
+  const od = r.perCard.overdrive;
+  assert.ok(od > 0.04, `Overdrive in ${(od * 100).toFixed(1)}% of hands`);
+  for (const id of ['tempo_core', 'cooldown_matrix', 'velocity_coils', 'tag_area']) {
+    const ratio = (r.perCard[id] || 0) / od;
+    assert.ok(ratio > 0.6 && ratio < 1.6, `${id}: ${ratio.toFixed(2)}x Overdrive's offer rate`);
+  }
+  assert.ok((r.perCard.replicator_array || 0) < od / 2, 'Replicator Array stays rare');
+});

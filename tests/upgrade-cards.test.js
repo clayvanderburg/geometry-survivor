@@ -329,18 +329,25 @@ test('cards that do several separate things name all of them in the headline, no
   assert.equal(headline('status_application'), 'ALL 4 STATUS REACTIONS STRONGER');
   assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
   assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
-  assert.equal(headline('magnet'), '+44% PICKUP · +15% XP · +1 BOMB');
-  assert.equal(headline('thrusters'), 'FASTER DASH + SHOCKWAVE');
+  assert.equal(headline('magnet'), '+44% PICKUP RADIUS', 'one card, one effect (v0.46): XP is Growth Lattice, bombs drop');
+  assert.equal(headline('xp_growth'), '+15% XP GAIN');
+  assert.equal(headline('thrusters'), 'DASH SHOCKWAVE');
   applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
-  assert.equal(headline('thrusters'), 'FASTER DASH, BIGGER SHOCKWAVE');
+  assert.equal(headline('thrusters'), 'BIGGER DASH SHOCKWAVE');
   assert.equal(headline('move_speed'), '+10% MOVE SPEED', 'move speed is its own card');
   assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
 });
 
-test('Geom Attractor Field maxes at 2x XP and half its old pickup radius (6.1x base)', () => {
+test('Geom Attractor Field maxes at half its old pickup radius (6.1x base); Growth Lattice at 2x XP', () => {
   const p = makePlayer();
+  const bombs = p.bombs;
   const card = UPGRADE_POOL.find((u) => u.id === 'magnet');
   for (let i = 0; i < card.maxLevel; i++) applyUpgradeLevels(p, card);
-  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
   assert.ok(Math.abs(p.stats.magnetRadius / TUNING.magnetRadius - Math.pow(1.65, 5) / 2) < 1e-9, 'LV 5 = half the old 12.2x radius');
+  assert.equal(p.stats.xpMultiplier, TUNING.xpMultiplier, 'only pickup radius');
+  assert.equal(p.bombs, bombs, 'no bombs: they are a rare drop now');
+  const growth = UPGRADE_POOL.find((u) => u.id === 'xp_growth');
+  for (let i = 0; i < growth.maxLevel; i++) applyUpgradeLevels(p, growth);
+  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
+  assert.equal(card.weight + growth.weight, 1, 'the two cards split the old card\'s hand weight');
 });
