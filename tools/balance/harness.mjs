@@ -734,7 +734,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
 export const BENCH = { targets: 50, innerRadius: 70, outerRadius: 420, seconds: 15, targetWave: 6, orbitRadius: 260, mix: ['swarmer', 'swarmer', 'pinwheel', 'weaver', 'splitter'] };
 
 // `setup(player)` runs after the install (e.g. a whole build, or dropping the Autocannon to bench a weapon alone).
-export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH, setup = null }) {
+export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scenario = 'pack', seedIndex = 0, tuning = {}, weapons = {}, bench = BENCH, setup = null, asteroids = false }) {
   const chase = scenario === 'chase';
   return withSeed(`${seed}:bench:${scenario}:${seedIndex}`, { tuning, weapons }, () => {
     const game = createHeadlessGame();
@@ -742,8 +742,10 @@ export function benchUpgrade({ upgradeId = null, level = 0, seed = 'bench', scen
     installInstrumentation(game, metrics);
     game.pollGamepad = () => null;
     game.resetRun();
-    game.asteroidManager.asteroids = [];
-    game.asteroidManager.rebuildSpatialHash();
+    if (!asteroids) { // `asteroids`: keep the run's starting sector (rocks are cover: they block bolts and flames)
+      game.asteroidManager.asteroids = [];
+      game.asteroidManager.rebuildSpatialHash();
+    }
     game.state = 'PLAYING';
     game.spawnWavePack = () => {};
     game.waveTimer = -1e9; // hold the wave (no boss schedule, no spawn ramp)
