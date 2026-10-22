@@ -2,15 +2,16 @@
 // Across the Board, Overtuned Core) at weapon LV 6 / 12 / 18, relative to Across the Board at the same level.
 // The weapon is benched alone (the Autocannon is dropped unless it is the one benched) with a damage-first
 // build (Damage ranks, then the weapon's fire-rate stat past 10 ranks), and every milestone below the one
-// under test is Across the Board. Each case is the mean of the pack and chase scenarios over `seeds` seeds.
+// under test is Across the Board. Each case is the mean of the bench's scenarios over `seeds` seeds.
 //
 // Targets: the bench's wave-6 mix, with hit points scaled to the wave a pilot is on when a weapon reaches
 // that level (BT_BENCH_WAVE), so late hits don't simply overkill wave-6 targets (which flattens every
-// damage gain and rewards only extra hits).
+// damage gain and rewards only extra hits). BT_BENCHES: `real` (the reference) or `dense` (the old card bench).
 //
-//   node tools/balance/bt-bench.mjs [--weapons a,b] [--levels 6,12] [--seeds 3] [--workers 4] [--json out.json]
-//                                   [--seed S] [--values candidate.json]
-//                                   [--bench real|dense] [--class]  (class standing: each weapon / the Autocannon)  (TF_REALIZED overrides, { weapon: { transform: [v6, v12, v18] } })
+//   node tools/balance/bt-bench.mjs [--weapons a,b] [--levels 6,12] [--seeds 6] [--workers 4] [--json out.json]
+//                                   [--seed S] [--bench real|dense]
+//                                   [--values candidate.json]  (TF_REALIZED overrides, { weapon: { transform: [v6, v12, v18] } })
+//                                   [--class]  (class standing: each weapon's realized DPS / the Autocannon's)
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
@@ -75,7 +76,7 @@ function setupFor(id, lv, bt) {
 
 // Realized DPS of weapon `id` (every source but the Autocannon's when it isn't the one benched).
 // `option` null: no Breakthrough at `lv` itself (a level between milestones, or the class report).
-export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED, bench: kind = 'dense' } = {}) {
+export async function benchOption(id, lv, option, { seeds = 3, earlier = 'boost', seed = SEED, bench: kind = 'real' } = {}) {
   await load();
   const bt = {};
   for (const m of wl.BREAKTHROUGH_LEVELS) if (m < lv) bt[m] = earlier;
@@ -111,7 +112,7 @@ export async function classCases({ weapons = null, levels = [1, 3, 6, 12, 18] } 
     .flatMap((id) => levels.map((lv) => ({ id, lv, option: wl.BREAKTHROUGH_LEVELS.includes(lv) ? 'boost' : null })));
 }
 
-export async function runAll({ cases, seeds, workers, values = null, seed = SEED, bench = 'dense' }) {
+export async function runAll({ cases, seeds, workers, values = null, seed = SEED, bench = 'real' }) {
   const results = new Array(cases.length);
   let next = 0, done = 0;
   await Promise.all(Array.from({ length: workers }, () => new Promise((resolve, reject) => {
@@ -150,11 +151,11 @@ if (!isMainThread) {
   const get = (f, d) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : d; };
   const weapons = get('--weapons', null)?.split(',');
   const levels = get('--levels', '6,12,18').split(',').map(Number);
-  const seeds = Number(get('--seeds', 3));
+  const seeds = Number(get('--seeds', 6));
   const workers = Number(get('--workers', Math.max(1, Math.min(8, availableParallelism()))));
   const json = get('--json', null);
   const seed = get('--seed', SEED);
-  const bench = get('--bench', 'dense');
+  const bench = get('--bench', 'real');
   if (!BT_BENCHES[bench]) throw new Error(`--bench must be ${Object.keys(BT_BENCHES).join('|')}`);
   const valuesPath = get('--values', null);
   const values = valuesPath ? JSON.parse((await import('node:fs')).readFileSync(valuesPath, 'utf8')) : null;
