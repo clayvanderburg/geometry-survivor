@@ -33,7 +33,7 @@ const TABLE = {
   lightning: ['chain', 'lightning_chain', 6, '+2 ARC JUMPS'],
   orbitals: ['count', 'orbitals_count', 6, '+1 BLADE'],
   mines: ['capacity', 'mines_capacity', 8, '+1 MINE'],
-  turret: ['charges', null, 2, '+1 TURRET'],
+  turret: ['charges', null, 2, '+1 TURRET CHARGE'],
   drones: ['wingmen', 'drones_wingmen', 4, '+1 DRONE'],
   grenades: ['count', 'grenades_count', 5, '+1 GRENADE'],
   flamethrower: ['nozzles', 'flamethrower_nozzles', 3, '+1 NOZZLE'],
@@ -123,7 +123,7 @@ test('Replicator Array: never raises a weapon level, so Breakthrough timing stay
 test('Replicator Array: card preview lists each weapon\'s gain, rows read the new counts, GLOBAL scope', () => {
   const p = player(['blaster', 'drones', 'turret', 'flamethrower', 'glaive', 'gas']);
   const d = describeUpgrade(p, CARD);
-  assert.equal(d.headline, '+2 STREAMS · +1 DRONE · +1 TURRET · +1 NOZZLE · +1 DISC');
+  assert.equal(d.headline, '+2 STREAMS · +1 DRONE · +1 TURRET CHARGE · +1 NOZZLE · +1 DISC');
   assert.deepEqual(d.rows.map((r) => r.id), ['bulletCount', 'prismLayout', 'turretCharges', 'droneCount', 'flameNozzles', 'glaiveCount']);
   assert.deepEqual(d.rows.find((r) => r.id === 'turretCharges'), { id: 'turretCharges', label: 'Turret charges', before: '2', after: '3' });
   assert.equal(cardScope(CARD), 'global');

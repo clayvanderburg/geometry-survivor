@@ -59,7 +59,7 @@ export const WEAPONS = [
   {
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
     color: '#b6ff4a',
-    summary: 'Gunship drones fly in formation behind the hull and fire at nearby targets.'
+    summary: 'Gunship drones fly in formation, a pair off your nose and a row behind the hull, and fire at nearby targets.'
   },
   {
     id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
