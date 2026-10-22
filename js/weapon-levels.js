@@ -610,6 +610,22 @@ export const EXTRA_TRANSFORMS = {
   orbitals: [
     { id: 'frenzy', home: 6, name: 'Blade Frenzy', summary: 'Every cut feeds the Orbit Blades: they grow up to half again and hit up to 60% harder while they keep cutting, cooling off when nothing is near.' },
     { id: 'vortex', home: 12, name: 'Vortex Ring', summary: 'The Orbit Blades whip up a vortex that drags nearby enemies onto the ring and into the blades.' }
+  ],
+  singularity: [
+    { id: 'accretion', home: 6, name: 'Accretion Disk', summary: 'A live Vortex Singularity flings bolts of hot debris at the enemies around its pull.' },
+    { id: 'whitehole', home: 18, name: 'White Hole', summary: 'A collapsing Vortex Singularity bounces back as a white hole, blasting everything around it outward.' }
+  ],
+  nanites: [
+    { id: 'needles', home: 6, name: 'Nano Needles', summary: 'Every Nanite Swarm fires nanite needles at the enemies just outside it.' },
+    { id: 'ravenous', home: 12, name: 'Ravenous Swarm', summary: 'Nanite Swarms get hungrier as they live: their bite grows up to twice as strong and they swell to 60% bigger as they feed.' }
+  ],
+  shockfield: [
+    { id: 'pulse', home: 6, name: 'Pulse Wave', summary: 'Every Electric Shield Field discharge sends a shock wave rolling out past the field, hitting what it reaches.' },
+    { id: 'capacitor', home: 12, name: 'Capacitor Bank', summary: 'The Electric Shield Field banks a spare charge: every discharge is followed by a second, half-strength one a beat later that reaches a little further.' }
+  ],
+  gas: [
+    { id: 'tendrils', home: 6, name: 'Toxic Tendrils', summary: 'Corrosive Gas Trail clouds lash toxic tendrils at the enemies near them.' },
+    { id: 'spores', home: 12, name: 'Spore Burst', summary: 'Corrosive Gas Trail clouds pop in a corrosive burst as they fade.' }
   ]
 };
 export function transformPool(id) {

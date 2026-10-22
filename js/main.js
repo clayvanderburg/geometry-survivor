@@ -3805,6 +3805,9 @@ export class Game {
         // Aftershock Collapse: a tighter second implosion; Hawking Cascade: mini-singularities on collapse.
         aftershock: b.t8 ? weaponDamage(p, 'collapse', b) * W.aftershockDamageMult(b) / W.singularityCollapseDamageMult(b) : 0,
         cascade: b.t12 ? b : null,
+        // Accretion Disk (per debris bolt) and White Hole (the bounce-back blast), as shares of a cast.
+        accretion: b.tf?.has('accretion') ? weaponDamage(p, 'collapse', b) * W.accretionShare * W.singularityCastDamage(b) / W.singularityCollapseDamageMult(b) * W.accretionEvery / life : 0,
+        whiteHole: b.tf?.has('whitehole') ? weaponDamage(p, 'collapse', b) * W.whiteShare * W.singularityCastDamage(b) / W.singularityCollapseDamageMult(b) : 0,
         life,
         maxLife: life,
         spin: 0,
@@ -4038,6 +4041,7 @@ export class Game {
       sg.vx *= 0.985;
       sg.vy *= 0.985;
       sg.life -= dt;
+      BTX.singularityAccretion(this, sg, dt);
 
       const imploding = sg.life <= SINGULARITY_IMPLODE_TIME;
       if (imploding && !sg.implodeCued) {
@@ -4168,6 +4172,7 @@ export class Game {
         source: 'singularity', style: 'implode', knock: KNOCKBACK.area, falloff: TUNING.singularityCollapseEdgeFalloff ?? 0.75, kind: 'collapse' });
     }
     if (sg.cascade) this.spawnCascade(sg);
+    BTX.whiteHole(this, sg, r);
   }
 
   triggerLevelUp() {

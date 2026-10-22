@@ -210,6 +210,16 @@ export class WeaponEffects {
         game.grid.applyImpulse(e.x, e.y, 14, r * 1.2, e.hue);
         game.sound.playMissileImpact?.(0.42 + 0.08 * (e.step || 1));
         break;
+      case 'whitehole':
+        // White Hole: the collapse bounces back, a white-hot core blowing out into a wide cyan ring.
+        fx.spawnFlash?.(e.x, e.y, r * 0.5, 200, 0.26);
+        fx.spawnShockwave(e.x, e.y, r, 195, 6, 0.45);
+        fx.spawnShockwave(e.x, e.y, r * 0.6, 0, 3, 0.3);
+        fx.spawnExplosionSparks(e.x, e.y, 30, 200, 4, 16, 2.4);
+        game.grid.applyImpulse(e.x, e.y, 90, r * 1.3, 200);
+        game.shake = Math.max(game.shake || 0, 6);
+        game.sound.playExplosion?.(0.8);
+        break;
       case 'silent':
         break; // a timer only (Echo Salvo): its `after` does the work
       case 'nova':

@@ -300,6 +300,20 @@ export const WEAPON_SCALING = {
   cascadeLife: 1.1,
   cascadeRadiusFrac: 0.45,
   cascadePullScale: 0.6,
+  // Pool transforms (main.js via bt-extras.js): Accretion Disk (every accretionEvery s a live core flings a debris
+  // bolt at a random enemy in its pull; all its bolts are accretionShare of a cast, valued at accretionHitShare),
+  // White Hole (the collapse bounces back as an outward blast of whiteRadiusMult x the collapse radius for
+  // whiteShare of a cast, valued at whiteHitShare: it lands on what the collapse just gathered).
+  accretionEvery: 0.18, // bt-bench: more, smaller bolts spread over the pull (damage barely moved it)
+  accretionShare: 0.3,
+  accretionHitShare: 0.8,
+  accretionSpeed: 10,
+  accretionReach: 1.7, // bolts go for enemies out to this x the pull radius first (the core grinds the ones inside)
+  whiteShare: 0.3,
+  whiteDelay: 0.22,
+  whiteRadiusMult: 1.6,
+  whiteHitShare: 0.6, // bt-bench: the collapse already killed much of what it gathered
+  singularityExtraUnits: (b) => 1 + (b.tf?.has('accretion') ? W.accretionShare * W.accretionHitShare : 0) + (b.tf?.has('whitehole') ? W.whiteShare * W.whiteHitShare : 0),
   singularityUnits: (b) => (b.t4 ? 1 + W.twinUnitShare : 1) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0)),
   // Damage of one core per cast (grind over its LV 1 lifetime + collapse), in base damage: the LV 1 value
   // times the build's hit multiplier. Grind is per tick, so a Lifetime card grinds longer at the same rate.
@@ -307,7 +321,7 @@ export const WEAPON_SCALING = {
   // the aftershock or the minis), so each one adds exactly BT_TRANSFORM_DPS at any Lifetime.
   singularityTfUnits: (b) => {
     const core = (1 - SINGULARITY_COLLAPSE_SHARE) * W.singularityLife(b) / lv1('singularityLife', 'singularity', W.singularityLife) + SINGULARITY_COLLAPSE_SHARE;
-    return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0));
+    return W.singularityExtraUnits(b) * (b.t4 ? 1 + W.twinUnitShare : 1) * (core + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0));
   },
   singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityTfUnits),
   singularityDamageMult: (b) => W.singularityCastDamage(b) * (1 - SINGULARITY_COLLAPSE_SHARE) / (lv1('singularityLife', 'singularity', W.singularityLife) * 60),
@@ -606,7 +620,19 @@ export const WEAPON_SCALING = {
   shroudRadiusMult: 2,
   shroudShare: 0.5,
   shroudHitShare: 1.4, // the shroud holds whatever is closing in on the hull: valued at this share
-  gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0),
+  // Pool transforms (js/gas-trail.js via bt-extras.js): Toxic Tendrils (every gas tick up to tendrilMax clouds each
+  // lash the nearest enemy outside them within tendrilRange for tendrilShare of a tick, valued at tendrilHitShare),
+  // Spore Burst (a fading cloud pops for sporeMult ticks in sporeRadiusMult of it; valued as sporeUnits ticks'
+  // worth per tick: clouds fade about as often as they vent).
+  tendrilMax: 3, // bt-bench (blend, #220 no-dash kite): 5 realized 1.40-1.48x Across the Board
+  tendrilShare: 1,
+  tendrilRange: 280,
+  tendrilHitShare: 0.15, // bt-bench: few enemies stand near the trail (gas reach, #214)
+  sporeMult: 4,
+  sporeRadiusMult: 2.5,
+  sporeUnits: 0.2, // bt-bench: few pops land on the pack (gas reach, #214)
+  gasExtraUnits: (b) => (b.tf?.has('tendrils') ? W.tendrilMax * W.tendrilShare * W.tendrilHitShare : 0) + (b.tf?.has('spores') ? W.sporeUnits : 0),
+  gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0) + W.gasExtraUnits(b),
   gasDamageMult: (b) => lv1('gas', 'gas', (b0) => DPS_TARGET(1) * W.gasTick(b0) / W.gasUnits(b0)) * hitMult(b) * tfScale(b, W.gasUnits),
   pocketDamageMult: (b) => W.pocketShare * W.gasDamageMult(b) * W.pocketEvery / W.gasTick(b),
   shroudDamageMult: (b) => W.shroudShare * W.gasDamageMult(b),
@@ -707,8 +733,21 @@ export const WEAPON_SCALING = {
   overchargeRadiusMult: 1.6,
   overchargePack: 8,
   overchargeHitShare: 1.25, // it only fires on a pack of 8+ in a wider ring: valued a little above a discharge
+  // Pool transforms (js/shock-field.js via bt-extras.js): Pulse Wave (pulseDelay s after a discharge a wave hits
+  // every enemy between the field's edge and pulseReach px past it for pulseShare, valued at pulseHitShare: reach the
+  // field lacks), Capacitor Bank (capDelay s after a discharge a second one fires at capShare on what is inside capRadiusMult x the field,
+  // valued at capHitShare: the first one emptied most of the ring).
+  pulseShare: 0.5,
+  pulseDelay: 0.14,
+  pulseReach: 70, // px the wave rolls past the field's edge (a fixed band: a radius multiple outgrew the pack at LV 18)
+  pulseHitShare: 2.4, // bt-bench: the shell past the field holds most of the pack the field never reaches
+  capShare: 0.5,
+  capRadiusMult: 1.1, // the banked charge arcs a little wider than the field (reach: the field is damage-insensitive, #214)
+  capDelay: 0.3,
+  capHitShare: 0.35, // bt-bench: the first discharge emptied most of the ring
+  fieldExtraUnits: (b) => (b.tf?.has('pulse') ? W.pulseShare * W.pulseHitShare : 0) + (b.tf?.has('capacitor') ? W.capShare * W.capHitShare : 0),
   fieldUnits: (b) => W.fieldHitShare + (b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare : 0)
-    + (b.t12 ? W.fieldHitShare * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0),
+    + (b.t12 ? W.fieldHitShare * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0) + W.fieldExtraUnits(b),
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
@@ -866,7 +905,20 @@ export const WEAPON_SCALING = {
   plagueEvery: 0.2,
   plagueMax: 5,
   plagueHitShare: 0.8,
-  naniteUnits: (b) => W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0),
+  // Pool transforms (js/nanites.js via bt-extras.js): Nano Needles (every needleEvery s each swarm fires a needle
+  // worth needleMult bites at the nearest enemy outside it within needleRange, valued at needleHitShare), Ravenous
+  // Swarm (a swarm's bite grows from 1x to 1 + ravenousMax over its life and it swells up to ravenousGrow, valued
+  // at ravenousValue of the average).
+  needleEvery: 0.35,
+  needleMult: 1.5,
+  needleRange: 240,
+  needleHitShare: 0.25, // bt-bench: needles finish off what the swarm already chewed
+  ravenousMax: 1,
+  ravenousGrow: 0.6,
+  ravenousValue: 0.3, // bt-bench: swarms rarely live out their full life on a pack
+  naniteExtraUnits: (b) => (b.tf?.has('needles') ? W.needleMult * W.needleHitShare * W.naniteTick(b) / W.needleEvery : 0),
+  naniteRavenous: (b) => (b.tf?.has('ravenous') ? 1 + W.ravenousMax * 0.5 * W.ravenousValue : 1),
+  naniteUnits: (b) => (W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0) + W.naniteExtraUnits(b)) * W.naniteRavenous(b),
   // Damage of one bite to each enemy inside a swarm (daughters and plague swarms bite the same).
   naniteDamageMult: (b) => lv1('nanites', 'nanites', (b0) => DPS_TARGET(1) * W.naniteTick(b0) / (W.naniteUnits(b0) * W.naniteUptime(b0))) * hitMult(b) * tfScale(b, W.naniteUnits),
 
@@ -1171,7 +1223,7 @@ export const POTENTIAL_DPS = {
     const core = W.singularityDamageMult(b) * W.singularityLife(b) * 60 + W.singularityCollapseDamageMult(b);
     const after = b.t8 ? W.aftershockDamageMult(b) : 0;
     const minis = b.t12 ? W.cascadeMinis * (W.cascadeDamageMult(b) * W.cascadeLife * 60 + W.cascadeCollapseDamageMult(b)) * W.cascadeHitShare : 0;
-    return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
+    return W.singularityExtraUnits(b) * (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
   },
   orbitals: (b) => (W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
@@ -1186,7 +1238,7 @@ export const POTENTIAL_DPS = {
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
     return W.grenadeCount(b) * (blast + bomblets + cloud + W.grenadeExtraUnits(b) * blast) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
   },
-  gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
+  gas: (b) => (W.gasDamageMult(b) * (W.gasHitShare + W.gasExtraUnits(b)) + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
     + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0),
   flamethrower: (b) => {
     const stream = W.flameStreamDps(b) * W.flameHitShare * W.flameNozzleMult(b); // every nozzle
@@ -1204,7 +1256,7 @@ export const POTENTIAL_DPS = {
     const discharge = W.fieldHitShare * d;
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
-    return (discharge + lash + clap) / W.fieldCooldown(b);
+    return (discharge + lash + clap + W.fieldExtraUnits(b) * d) / W.fieldCooldown(b);
   },
   raillance: (b) => W.railLances(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
   glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b),

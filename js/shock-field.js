@@ -17,6 +17,7 @@
 // weapon-scaling.js so card previews stay exact. Damage goes through Game.hitEnemy (source 'shockfield').
 import { WEAPON_SCALING as W, weaponDamage, fieldRadius } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Pulse Wave, Capacitor Bank
 
 export const FIELD_HUE = 188;     // electric cyan
 const MAX_BOLTS = 6;              // discharge bolts drawn per discharge (all enemies are still hit)
@@ -178,6 +179,7 @@ export class ShockField {
     // Repulsor Surge: a discharge that lands shaves the Phase Dash cooldown (never the shield).
     if (b.t8 && n > 0 && p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - W.dashRefund);
     if (b.t12) this.store = Math.min(W.overchargeStore, this.store + 1);
+    BTX.fieldAfter(game, this, b, r, dmg);
     this.timer = this.duration = W.fieldCooldown(b);
     this.discharges++;
     this.flash = 0.28;
