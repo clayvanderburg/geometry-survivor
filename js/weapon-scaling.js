@@ -614,7 +614,7 @@ export const WEAPON_SCALING = {
   tendrilRange: 280,
   tendrilHitShare: 0.15, // bt-bench: few enemies stand near the trail (gas reach, #214)
   sporeMult: 4,
-  sporeRadiusMult: 2.1,
+  sporeRadiusMult: 2.5,
   sporeUnits: 0.2, // bt-bench: few pops land on the pack (gas reach, #214)
   gasExtraUnits: (b) => (b.tf?.has('tendrils') ? W.tendrilMax * W.tendrilShare * W.tendrilHitShare : 0) + (b.tf?.has('spores') ? W.sporeUnits : 0),
   gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0) + W.gasExtraUnits(b),
@@ -724,10 +724,10 @@ export const WEAPON_SCALING = {
   // valued at capHitShare: the first one emptied most of the ring).
   pulseShare: 0.5,
   pulseDelay: 0.14,
-  pulseReach: 100, // px the wave rolls past the field's edge (a fixed band: a radius multiple outgrew the pack at LV 18)
+  pulseReach: 70, // px the wave rolls past the field's edge (a fixed band: a radius multiple outgrew the pack at LV 18)
   pulseHitShare: 2.4, // bt-bench: the shell past the field holds most of the pack the field never reaches
   capShare: 0.5,
-  capRadiusMult: 1.2, // the banked charge arcs a little wider than the field (reach: the field is damage-insensitive, #214)
+  capRadiusMult: 1.1, // the banked charge arcs a little wider than the field (reach: the field is damage-insensitive, #214)
   capDelay: 0.3,
   capHitShare: 0.35, // bt-bench: the first discharge emptied most of the ring
   fieldExtraUnits: (b) => (b.tf?.has('pulse') ? W.pulseShare * W.pulseHitShare : 0) + (b.tf?.has('capacitor') ? W.capShare * W.capHitShare : 0),
@@ -899,7 +899,7 @@ export const WEAPON_SCALING = {
   needleRange: 240,
   needleHitShare: 0.25, // bt-bench: needles finish off what the swarm already chewed
   ravenousMax: 1,
-  ravenousGrow: 0.45,
+  ravenousGrow: 0.6,
   ravenousValue: 0.3, // bt-bench: swarms rarely live out their full life on a pack
   naniteExtraUnits: (b) => (b.tf?.has('needles') ? W.needleMult * W.needleHitShare * W.naniteTick(b) / W.needleEvery : 0),
   naniteRavenous: (b) => (b.tf?.has('ravenous') ? 1 + W.ravenousMax * 0.5 * W.ravenousValue : 1),

@@ -574,7 +574,7 @@ export const EXTRA_TRANSFORMS = {
   ],
   nanites: [
     { id: 'needles', home: 6, name: 'Nano Needles', summary: 'Every Nanite Swarm fires nanite needles at the enemies just outside it.' },
-    { id: 'ravenous', home: 12, name: 'Ravenous Swarm', summary: 'Nanite Swarms get hungrier as they live: their bite grows up to twice as strong and they swell almost half again as they feed.' }
+    { id: 'ravenous', home: 12, name: 'Ravenous Swarm', summary: 'Nanite Swarms get hungrier as they live: their bite grows up to twice as strong and they swell to 60% bigger as they feed.' }
   ],
   shockfield: [
     { id: 'pulse', home: 6, name: 'Pulse Wave', summary: 'Every Electric Shield Field discharge sends a shock wave rolling out past the field, hitting what it reaches.' },
