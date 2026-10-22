@@ -63,6 +63,7 @@ export class RailLance {
     this.wakes = Array.from({ length: MAX_WAKES }, line);
     this.hits = [];   // [enemy, distance along the line] pairs, flattened, reused every shot
     this.order = [];
+    this.pierced = []; // [enemy, damage] pairs a lance just hit (Static Charge)
     this.clear();
   }
 
@@ -195,11 +196,14 @@ export class RailLance {
       ln.age = 0;
       const order = this.collect(game, ln, width);
       const hits = this.hits;
+      const pierced = this.pierced;
+      pierced.length = 0;
       let d = dmg;
       for (let k = 0; k < order.length; k++) {
         const e = hits[order[k]];
         if (e.dead) continue; // killed by an earlier lance this shot (the snapshot outlives the splice)
         game.hitEnemy(e, d, 'rail', ln.dx * W.railKnock, ln.dy * W.railKnock, 1, stat);
+        if (pierced.length < W.staticMax * 2) pierced.push(e, d);
         if (k < IMPACT_FX) {
           // Impact: sparks blown out the far side along the lance, a hot ring and a white pop on the hull.
           fx.spawnDirectionalSparks?.(e.x, e.y, Math.atan2(ln.dy, ln.dx), 0.5, overload ? 9 : 5, RAIL_HUE + 20, overload ? 16 : 12);
@@ -211,6 +215,8 @@ export class RailLance {
       }
       hits.length = 0;
       if (b.t8) this.addWake(ln, dmg * W.wakeShare / (W.wakeLife / W.wakeTick)); // an Overload's wake is as big as its beam
+      if (b.tf?.has('static')) this.staticArcs(game, ln, width);
+      if (b.tf?.has('reflect')) landed += this.reflect(game, ln, dmg * W.reflectShare, width, keep, stat);
       // Muzzle flash, a recoil ring and sparks kicked back off the turret, and a pulse down the grid along the line.
       fx.spawnFlash?.(ln.x1, ln.y1, overload ? 42 : 24, RAIL_HUE, overload ? 0.16 : 0.11);
       fx.spawnShockwave?.(ln.x1, ln.y1, overload ? 46 : 26, RAIL_HUE + 20, overload ? 4 : 2.5, 0.2);
@@ -224,6 +230,77 @@ export class RailLance {
     if (overload && landed > 0) game.requestHitStop?.(2);
     if (overload) game.chromaFlash = Math.max(game.chromaFlash || 0, 0.35);
     game.sound.playRailFire?.(overload, landed);
+  }
+
+  // Static Charge: each enemy this lance pierced (this.pierced: enemy, damage) arcs W.staticShare of its hit
+  // into the nearest enemy within W.staticRange that is off the line, so the static spreads into the pack.
+  staticArcs(game, ln, width) {
+    const list = this.pierced;
+    const enemies = game.enemyManager.enemies;
+    for (let i = 0; i < list.length; i += 2) {
+      const src = list[i];
+      let best = null;
+      let bestSq = W.staticRange * W.staticRange;
+      for (let j = 0; j < enemies.length; j++) {
+        const e = enemies[j];
+        if (e === src || !railTarget(e)) continue;
+        const dSq = (e.x - src.x) ** 2 + (e.y - src.y) ** 2;
+        if (dSq >= bestSq) continue;
+        const across = Math.abs((e.x - ln.x1) * ln.dy - (e.y - ln.y1) * ln.dx);
+        if (across <= width + (e.radius || 10)) continue; // on the line: the lance already hit it
+        bestSq = dSq;
+        best = e;
+      }
+      if (!best) continue;
+      game.particles.spawnLightning?.(src.x, src.y, best.x, best.y, RAIL_HUE + 30, 1.8, 0.22);
+      game.particles.spawnFlash?.(best.x, best.y, 10 + (best.radius || 10), RAIL_HUE + 30, 0.1);
+      game.hitEnemy(best, list[i + 1] * W.staticShare, 'rail', 0, 0, 0.5, 'rail');
+    }
+    if (list.length) game.sound.playArcZap?.(Math.min(6, list.length / 2));
+    list.length = 0;
+  }
+
+  // Reflector Rail: the lance bounces off the screen edge it ran into and sweeps back across the screen at
+  // `dmg`, losing `keep` per enemy as usual. Returns the enemies it hit.
+  reflect(game, ln, dmg, width, keep, stat) {
+    const l = game.camX || 0, t = game.camY || 0, r = l + (game.width || 1280), btm = t + (game.height || 720);
+    const edge = reachToEdge(ln.x1, ln.y1, ln.dx, ln.dy, l, t, r, btm);
+    if (!(edge > 0)) return 0;
+    const ex = ln.x1 + ln.dx * edge, ey = ln.y1 + ln.dy * edge;
+    // The wall it met: whichever bound the ray reached first.
+    const tx = ln.dx > 1e-9 ? (r - ln.x1) / ln.dx : ln.dx < -1e-9 ? (l - ln.x1) / ln.dx : Infinity;
+    const ty = ln.dy > 1e-9 ? (btm - ln.y1) / ln.dy : ln.dy < -1e-9 ? (t - ln.y1) / ln.dy : Infinity;
+    const rb = this.nextBeam();
+    rb.dx = tx <= ty ? -ln.dx : ln.dx;
+    rb.dy = tx <= ty ? ln.dy : -ln.dy;
+    rb.x1 = ex - ln.dx * 2;
+    rb.y1 = ey - ln.dy * 2;
+    rb.len = Math.max(MIN_REACH, reachToEdge(rb.x1, rb.y1, rb.dx, rb.dy, l, t, r, btm) + EDGE_MARGIN);
+    rb.x2 = rb.x1 + rb.dx * rb.len;
+    rb.y2 = rb.y1 + rb.dy * rb.len;
+    rb.width = width * 0.8;
+    rb.overload = ln.overload;
+    rb.age = 0;
+    const order = this.collect(game, rb, rb.width);
+    const hits = this.hits;
+    let d = dmg;
+    let landed = 0;
+    for (let k = 0; k < order.length; k++) {
+      const e = hits[order[k]];
+      if (e.dead) continue;
+      game.hitEnemy(e, d, 'rail', rb.dx * W.railKnock, rb.dy * W.railKnock, 1, stat);
+      if (k < IMPACT_FX) game.particles.spawnShockwave?.(e.x, e.y, (e.radius || 10) * 2, RAIL_HUE + 40, 2, 0.16);
+      d *= keep;
+      landed++;
+    }
+    hits.length = 0;
+    // The bounce: a hot splash on the screen edge and a ring of sparks off the wall.
+    const fx = game.particles;
+    fx.spawnFlash?.(rb.x1, rb.y1, 30, RAIL_HUE + 40, 0.14);
+    fx.spawnShockwave?.(rb.x1, rb.y1, 44, RAIL_HUE + 40, 3, 0.22);
+    fx.spawnDirectionalSparks?.(rb.x1, rb.y1, Math.atan2(rb.dy, rb.dx), 1.2, 8, RAIL_HUE + 40, 10);
+    game.grid?.applyImpulse?.(rb.x1, rb.y1, 18, 90, RAIL_HUE);
+    return landed;
   }
 
   // A pooled discharge line (the oldest is reused when the pool is full).

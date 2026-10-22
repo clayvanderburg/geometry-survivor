@@ -51,7 +51,12 @@ const TWEAKS = {
   // The blade ring orbits outside the default close ring: 32 targets spread the close ring onto the blades' path.
   orbitals: { dummies: { count: 32 } },
   // Swarms fly out to the packs: a wider ring under a wider frame shows the launches and the spread.
-  nanites: { zoom: 1, dummies: { formation: 'ring', count: 24 } }
+  nanites: { zoom: 1, dummies: { formation: 'ring', count: 24 } },
+  // A clip's own tweak (by clip name) wins over its weapon's. Parting Gift: turrets live 10 s, so the loop
+  // starts just before the first ones expire and blow.
+  'turret-gift': { warmup: 570, frames: 48 },
+  // Static Charge arcs to enemies beside the line: a denser pack gives them somewhere to jump.
+  'raillance-static': { dummies: { count: 28 } }
 };
 
 (async () => {
@@ -122,7 +127,7 @@ async function listWeapons(browser) {
 }
 
 async function capture(browser, clip, tmp) {
-  const tweak = TWEAKS[clip.weapon] || {};
+  const tweak = TWEAKS[clip.name] || TWEAKS[clip.weapon] || {};
   const range = {
     weapons: [{ id: clip.weapon, level: clip.level, custom: false, bt: clip.bt }],
     mods: {},

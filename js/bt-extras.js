@@ -170,3 +170,146 @@ export function afterSalvo(game, b, echo) {
   game.weaponFx.schedule({ x: p.x, y: p.y, delay: W.echoDelay, radius: 0, damage: 0, style: 'silent',
     after: (g) => g.fireSwarmMissiles(b, { echo: true }) });
 }
+
+// --- Escort Drones (js/deployables.js updateDrones) ---------------------------------------------------
+
+// Overdrive Sync: the formation's fire-rate multiplier this tick (overdriveMult for the last overdriveTime s of
+// every overdriveEvery s cycle). `state` holds the clock; the burst opens with a chirp and a flare on each drone.
+export function droneOverdrive(state, dt, level, game, drones, n) {
+  if (!has(level, 'overdrive')) {
+    state.odClock = 0;
+    state.overdrive = false;
+    return 1;
+  }
+  state.odClock = ((state.odClock || 0) + dt) % W.overdriveEvery;
+  const on = state.odClock >= W.overdriveEvery - W.overdriveTime;
+  if (on && !state.overdrive) {
+    for (let i = 0; i < n; i++) {
+      const d = drones[i];
+      if (d.launch > 0) continue;
+      game.particles.spawnShockwave(d.x, d.y, 26, W.overdriveHue, 2.5, 0.25);
+      game.particles.spawnFlash?.(d.x, d.y, 18, W.overdriveHue, 0.14);
+    }
+    game.sound.playDroneDock?.(Math.max(0, n - 1)); // the top of the docking chirp: the formation spins up
+  }
+  state.overdrive = on;
+  return on ? W.overdriveMult : 1;
+}
+
+// Kamikaze Wing: every kamikazeEvery s the rearmost docked drone dives on the densest pack near the ship.
+// Returns true while drone `d` is diving (it neither keeps station nor fires); on arrival it detonates for
+// `blast` damage and goes back into the hangar to relaunch.
+export function droneKamikazeTick(state, dt, level, game, drones, n) {
+  if (!has(level, 'kamikaze') || n === 0) return;
+  state.kamiT = (state.kamiT || 0) + dt;
+  if (state.kamiT < W.kamikazeEvery) return;
+  let diver = null;
+  for (let i = n - 1; i >= 0; i--) if (drones[i].docked && !drones[i].dive && !(drones[i].launch > 0)) { diver = drones[i]; break; }
+  const target = diver && densestEnemy(game, game.player.x, game.player.y, W.kamikazeRange, W.kamikazeRadius);
+  if (!target) { state.kamiT = W.kamikazeEvery - 0.5; return; } // try again shortly
+  state.kamiT = 0;
+  diver.dive = { target, x: target.x, y: target.y, t: 0 };
+  game.particles.spawnDirectionalSparks(diver.x, diver.y, Math.atan2(target.y - diver.y, target.x - diver.x) + Math.PI, 0.6, 6, 18, 8);
+}
+
+export function droneDive(game, d, dt, blast) {
+  const v = d.dive;
+  if (!v) return false;
+  if (!v.target.dead) { v.x = v.target.x; v.y = v.target.y; }
+  v.t += dt;
+  const dx = v.x - d.x, dy = v.y - d.y;
+  const dist = Math.hypot(dx, dy);
+  const step = W.kamikazeSpeed * (1 + v.t * 2);
+  d.angle = Math.atan2(dy, dx);
+  if (dist > step && v.t < 0.9) {
+    d.x += (dx / dist) * step;
+    d.y += (dy / dist) * step;
+    d.vx = (dx / dist) * step;
+    d.vy = (dy / dist) * step;
+    if (Math.random() < 0.8) game.particles.spawnDirectionalSparks(d.x, d.y, d.angle + Math.PI, 0.4, 2, 24, 6);
+    return true;
+  }
+  // Impact: a hot drone-blue core blowing out into an orange fireball, a hard shove on the grid.
+  const r = W.kamikazeRadius * (game.player.stats?.areaMult ?? 1);
+  game.particles.spawnFlash?.(v.x, v.y, r * 0.7, 30, 0.26);
+  game.particles.spawnShockwave(v.x, v.y, r, 24, 5, 0.42);
+  game.particles.spawnShockwave(v.x, v.y, r * 0.55, 190, 3, 0.3);
+  game.particles.spawnExplosionSparks(v.x, v.y, 26, 28, 3, 14, 2.4);
+  game.grid.applyImpulse(v.x, v.y, 60, r * 1.4, 30);
+  game.shake = Math.max(game.shake || 0, 5 * (game.tuningShake ?? 1));
+  game.sound.playExplosion?.(0.7);
+  game.damageEnemiesInRadius(v.x, v.y, r, blast, 28, 'drone', 1.6, undefined, 'drone');
+  d.dive = null;
+  d.launch = 1; // back to the hangar; it relaunches (and redocks) in a second
+  d.docked = false;
+  d.flight = 0;
+  d.trailCount = 0;
+  return true;
+}
+
+// The enemy within `range` of (x, y) with the most others within `radius` of it (a sample of up to 48).
+function densestEnemy(game, x, y, range, radius) {
+  const near = [];
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.invulnerable) continue;
+    if ((e.x - x) ** 2 + (e.y - y) ** 2 <= range * range) near.push(e);
+    if (near.length >= 48) break;
+  }
+  let best = null, bestN = -1;
+  for (const e of near) {
+    let c = 0;
+    for (const o of near) if ((o.x - e.x) ** 2 + (o.y - e.y) ** 2 <= radius * radius) c++;
+    if (c > bestN) { bestN = c; best = e; }
+  }
+  return best;
+}
+
+// --- Sentry Turret (js/deployables.js updateTurrets) ----------------------------------------------------
+
+// Parting Gift: an expiring turret blows for giftBolts of its bolts.
+export function turretGift(game, t, level, boltDamage) {
+  if (!has(level, 'gift')) return;
+  const r = W.giftRadius * (game.player.stats?.areaMult ?? 1);
+  game.particles.spawnFlash?.(t.x, t.y, r * 0.6, 40, 0.24);
+  game.particles.spawnShockwave(t.x, t.y, r, 34, 5, 0.4);
+  game.particles.spawnShockwave(t.x, t.y, r * 0.5, 56, 3, 0.28);
+  game.particles.spawnExplosionSparks(t.x, t.y, 30, 38, 3, 14, 2.4);
+  game.grid.applyImpulse(t.x, t.y, 70, r * 1.4, 36);
+  game.shake = Math.max(game.shake || 0, 6);
+  game.sound.playExplosion?.(0.8);
+  game.damageEnemiesInRadius(t.x, t.y, r, boltDamage * W.giftBolts, 36, 'turret', 1.8, undefined, 'turret');
+}
+
+// Overwatch Link: every linkTick s, live turrets within linkRange of each other are joined by a crackling
+// beam (drawn as lightning that lasts the tick) that hits every enemy touching it for linkShare of a bolt.
+export function turretLinks(state, dt, game, turrets, count, level, boltDamage) {
+  if (!has(level, 'link') || count < 2) return;
+  state.linkT = (state.linkT || 0) - dt;
+  if (state.linkT > 0) return;
+  state.linkT += W.linkTick;
+  const enemies = game.enemyManager.enemies;
+  let pairs = 0;
+  for (let i = 0; i < count && pairs < 8; i++) {
+    const a = turrets[i];
+    if (a.packing) continue;
+    for (let j = i + 1; j < count && pairs < 8; j++) {
+      const c = turrets[j];
+      if (c.packing) continue;
+      const lx = c.x - a.x, ly = c.y - a.y;
+      const len = Math.hypot(lx, ly);
+      if (len > W.linkRange || len < 1) continue;
+      pairs++;
+      game.particles.spawnLightning?.(a.x, a.y, c.x, c.y, 52, 1.3, W.linkTick * 1.1);
+      const ux = lx / len, uy = ly / len;
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const along = (e.x - a.x) * ux + (e.y - a.y) * uy;
+        if (along < 0 || along > len) continue;
+        if (Math.abs((e.x - a.x) * uy - (e.y - a.y) * ux) > W.linkWidth + (e.radius || 10)) continue;
+        game.hitEnemy(e, boltDamage * W.linkShare, 'turret', 0, 0, 0.3, 'turret');
+        game.particles.spawnFlash?.(e.x, e.y, 8 + (e.radius || 10) * 0.6, 52, 0.08);
+      }
+    }
+  }
+  if (pairs) game.sound.playArcZap?.(Math.min(4, pairs));
+}

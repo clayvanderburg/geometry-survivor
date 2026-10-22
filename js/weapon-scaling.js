@@ -411,7 +411,21 @@ export const WEAPON_SCALING = {
   turretFollowRadius: 95,
   overloadRate: 2,
   overloadSpread: 0.07, // rad: LMG Overload sprays a little
-  turretShotUnits: (b) => (b.t12 ? W.overloadRate : 1),
+  // Pool transforms (js/deployables.js): Parting Gift (an expiring turret blows for giftBolts of its bolts in
+  // giftRadius, valued at giftHitShare: a blast on whatever crowded it), Overwatch Link (turrets within
+  // linkRange are joined by a beam that hits every enemy on it for linkShare of a bolt every linkTick s,
+  // valued at linkHitShare enemies per tick: there's only a beam while two turrets are out near each other).
+  giftBolts: 14,
+  giftRadius: 120,
+  giftHitShare: 0.4, // bt-bench: turrets expire wherever they were planted, often after the pack moved on
+  linkRange: 340,
+  linkTick: 0.25,
+  linkShare: 0.5,
+  linkWidth: 10,
+  linkHitShare: 0.15, // bt-bench: a beam only crosses a few enemies a tick
+  turretExtraUnits: (b) => (1 + (b.tf?.has('gift') ? W.giftBolts * W.giftHitShare / (W.turretFireRate(b) * W.turretDuration(b)) : 0))
+    * (1 + (b.tf?.has('link') ? W.linkShare * W.linkHitShare / (W.linkTick * W.turretFireRate(b)) : 0)),
+  turretShotUnits: (b) => (b.t12 ? W.overloadRate : 1) * W.turretExtraUnits(b),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b),
   turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, W.turretShotUnits),
 
@@ -441,7 +455,23 @@ export const WEAPON_SCALING = {
   podEvery: 2.5,
   podShare: 0.22,
   podBlast: 60,
-  droneUnits: (b) => W.droneValue(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
+  // Pool transforms (js/deployables.js): Overdrive Sync (every overdriveEvery s the formation fires overdriveMult
+  // x as fast for overdriveTime s), Kamikaze Wing (every kamikazeEvery s the rearmost drone dives on the densest
+  // pack within kamikazeRange and blows for kamikazeShare of the formation's output over that time, valued at
+  // kamikazeHitShare: a pack blast, less the drone's guns while it's gone).
+  overdriveEvery: 5,
+  overdriveTime: 1.5,
+  overdriveMult: 3,
+  overdriveHue: 46,
+  kamikazeEvery: 6, // bt-bench: the blast count, not its damage, sets what it realizes
+  kamikazeShare: 0.3,
+  kamikazeHitShare: 1,
+  kamikazeRange: 420,
+  kamikazeRadius: 80,
+  kamikazeSpeed: 16,
+  droneExtraUnits: (b) => (b.tf?.has('overdrive') ? 1 + (W.overdriveMult - 1) * W.overdriveTime / W.overdriveEvery : 1)
+    * (1 + (b.tf?.has('kamikaze') ? W.kamikazeShare * W.kamikazeHitShare : 0)),
+  droneUnits: (b) => W.droneValue(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)) * W.droneExtraUnits(b),
   droneDamageMult: (b) => lv1Trim('drones') * lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
   podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b), // the lead's; a wingman's pods scale with its bolts
 
@@ -655,7 +685,18 @@ export const WEAPON_SCALING = {
   overloadWidth: 3,
   overloadHitShare: 1,
   railOverloadAvg: (b) => (b.t12 ? (W.overloadEvery - 1 + W.overloadMult * W.overloadHitShare) / W.overloadEvery : 1),
-  railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b),
+  // Pool transforms (EXTRA_TRANSFORMS, js/rail-lance.js): Static Charge (each of the first staticMax enemies a
+  // lance pierces arcs staticShare of the hit it took into the nearest enemy off the line within staticRange;
+  // valued at staticArcs arcs per lance), Reflector Rail (the lance bounces off the screen edge once and sweeps
+  // back at reflectShare, valued at reflectHitShare: the way back crosses fewer of the pack).
+  staticShare: 0.3,
+  staticRange: 160,
+  staticMax: 2, // bt-bench: arcs finish off weak enemies, so damage barely moves them; fewer arcs instead
+  staticArcs: 1,
+  reflectShare: 0.6,
+  reflectHitShare: 0.6,
+  railExtraUnits: (b) => (1 + (b.tf?.has('static') ? W.staticShare * W.staticArcs : 0)) * (1 + (b.tf?.has('reflect') ? W.reflectShare * W.reflectHitShare : 0)),
+  railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b) * W.railExtraUnits(b),
   // Damage of one lance hit on the first enemy in its line (an Overload Shot hits overloadMult x this).
   railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLances(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
   // One Ion Wake tick on one enemy.
@@ -1036,9 +1077,9 @@ export const POTENTIAL_DPS = {
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
     + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
   mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
-  turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b),
+  turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b) * W.turretExtraUnits(b),
   drones: (b) => (W.droneDamageMult(b) + (W.droneCount(b) - 1) * W.droneWingDamageMult(b)) / W.droneDamageMult(b)
-    * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
+    * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)) * W.droneExtraUnits(b),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
