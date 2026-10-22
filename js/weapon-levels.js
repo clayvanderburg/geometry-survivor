@@ -98,7 +98,7 @@ export const STAT_CARDS = {
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (the front pair, then the back row).', { maxLevel: 4 }),
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the back row behind the hull.', { maxLevel: 3 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
@@ -455,7 +455,7 @@ export const COUNT_STATS = Object.freeze({
   orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
   mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
   turret: countStat('charges', null, 2, 1, 'TURRET CHARGE'),
-  drones: countStat('wingmen', 'drones_wingmen', 4, 1, 'DRONE'),
+  drones: countStat('wingmen', 'drones_wingmen', 3, 1, 'DRONE'),
   grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
   flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
   cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
