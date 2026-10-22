@@ -31,6 +31,10 @@ export const BT_BOOST_RANKS = 1;
 export const CARD_MAX_RANKS = 11;
 const card = (weapon, id, stat, name, headline, summary, extra = {}) => ({ weapon, id, stat, name, headline, summary, maxLevel: CARD_MAX_RANKS, ...extra });
 const cap = (maxLevel) => ({ maxLevel });
+// A UTILITY stat whose formula stops improving after `maxLevel` ranks in all (hook size past the biggest
+// hookable hull, pierce keep at 100%, an element rank at ELEMENT_MAX_RANKS). ACROSS THE BOARD's free ranks
+// count toward it, so the card is never offered a rank that does nothing (upgrades.js levelRoom).
+const sharedCap = (maxLevel) => ({ maxLevel, boostCapped: true });
 
 export const STAT_CARDS = {
   blaster: [
@@ -90,7 +94,7 @@ export const STAT_CARDS = {
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation.', { maxLevel: 2 }),
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (the front pair, then the back row).', { maxLevel: 4 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
@@ -112,7 +116,7 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
     card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Spin Rotor', 'flameTurn', 'Flamethrower: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', cap(4)),
+    card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', sharedCap(4)),
     card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', cap(3))
   ],
   cryospray: [
@@ -121,7 +125,7 @@ export const STAT_CARDS = {
     card('cryospray', 'cryospray_range', 'range', 'Cryo Sprayer Nozzle Pressure', 'cryoRange', 'Cryo Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('cryospray', 'cryospray_cone', 'cone', 'Cryo Sprayer Wide Nozzle', 'cryoCone', 'Cryo Sprayer: a wider cone of frost. Only cone width.', cap(8)),
     card('cryospray', 'cryospray_turn', 'turn', 'Cryo Sprayer Spin Rotor', 'cryoTurn', 'Cryo Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', cap(4)),
+    card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', sharedCap(4)),
     card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', cap(3))
   ],
   acidspray: [
@@ -130,21 +134,21 @@ export const STAT_CARDS = {
     card('acidspray', 'acidspray_range', 'range', 'Acid Sprayer Nozzle Pressure', 'acidRange', 'Acid Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('acidspray', 'acidspray_cone', 'cone', 'Acid Sprayer Wide Nozzle', 'acidCone', 'Acid Sprayer: a wider cone of acid. Only cone width.', cap(8)),
     card('acidspray', 'acidspray_turn', 'turn', 'Acid Sprayer Spin Rotor', 'acidTurn', 'Acid Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
-    card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', cap(4)),
+    card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', sharedCap(4)),
     card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', cap(3))
   ],
   shockfield: [
     card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),
     card('shockfield', 'shockfield_recharge', 'recharge', 'Shock Field Capacitors', 'fieldCooldown', 'Electric Shield Field: recharges faster between discharges. Only recharge time.', cap(4)),
     card('shockfield', 'shockfield_radius', 'radius', 'Shock Field Radius', 'fieldRadius', 'Electric Shield Field: a wider field. Only its radius.', cap(8)),
-    card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', cap(4))
+    card('shockfield', 'shockfield_stun', 'stun', 'Shock Field Stun Coils', 'fieldStun', 'Electric Shield Field: its SHOCK stuns longer and more often. Only the stun.', sharedCap(4))
   ],
   raillance: [
     card('raillance', 'raillance_damage', 'damage', 'Rail Lance Slug Mass', 'railDamage', 'Rail Lance: a heavier slug. Only damage per lance.'),
     card('raillance', 'raillance_rate', 'rate', 'Rail Lance Capacitor Bank', 'railCycle', 'Rail Lance: charges faster, so it fires more often. Only charge time.', cap(6)),
     card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', cap(3)),
     card('raillance', 'raillance_width', 'width', 'Rail Lance Flux Lens', 'railWidth', 'Rail Lance: a wider line that clips more enemies. Only its width.', cap(6)),
-    card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', cap(5))
+    card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', sharedCap(5))
   ],
   glaive: [
     card('glaive', 'glaive_damage', 'damage', 'Glaive Edge', 'glaiveDamage', 'Glaive Discs: keener edges. Only damage per hit.'),
@@ -164,7 +168,7 @@ export const STAT_CARDS = {
     card('harpoon', 'harpoon_damage', 'damage', 'Claw Harpoon Tungsten Bit', 'harpoonDamage', 'Claw Harpoon: a harder drill bit. Only damage per hit.'),
     card('harpoon', 'harpoon_rate', 'rate', 'Claw Harpoon Winch Motor', 'harpoonRate', 'Claw Harpoon: a faster winch throws and reels in the claw more often. Only throw rate.', cap(8)),
     card('harpoon', 'harpoon_range', 'range', 'Claw Harpoon Tether Length', 'harpoonRange', 'Claw Harpoon: a longer tether, so the claw flies further. Only reach.', cap(8)),
-    card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', cap(6)),
+    card('harpoon', 'harpoon_grapple', 'grapple', 'Claw Harpoon Grapple Hooks', 'harpoonHook', 'Claw Harpoon: stronger hooks reel in bigger enemies. Only the size it can yank.', sharedCap(3)),
     card('harpoon', 'harpoon_drill', 'drill', 'Claw Harpoon Rock Drill', 'harpoonDrill', 'Claw Harpoon: the claw bores through more rock per throw before it bites to a stop. Only mining.', cap(8))
   ],
   quake: [
@@ -361,7 +365,7 @@ export const TRANSFORMS = {
     18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt a bit lighter.')
   },
   drones: {
-    6: tf('wingman', 'Extra Wingman', 'Escort Drones gain one more drone in the formation (past the usual 3).'),
+    6: tf('wingman', 'Escort Squadron', 'Escort Drones: 3 more drones join the formation (up to 8: 3 in front, 5 behind). Drones past 8 add their guns to the rest.'),
     12: tf('homing', 'Homing Bolts', 'Escort Drone bolts curve onto their targets.'),
     18: tf('pods', 'Micro-Missile Pods', 'Escort Drones launch homing micro-missiles every few seconds.')
   },
@@ -428,6 +432,48 @@ export const TRANSFORMS = {
 // charges back means more turrets out.
 export const POWER_STATS = new Set(['damage', 'rate', 'reload', 'recharge', 'cooldown', 'count', 'salvo', 'chain', 'prism', 'wingmen', 'duration', 'nozzles']);
 
+// REPLICATOR ARRAY (global card, v0.45): each rank adds +1 rank to the "how many" stat of every equipped
+// weapon that has one (COUNT_STATS), as a bonus outside the weapon level like ACROSS THE BOARD's ranks, so
+// Breakthrough timing never moves. The card ranks + Replicator ranks of a count stat never pass that stat
+// card's own cap (a weapon already at its cap gets nothing), and the count card's own room shrinks to match.
+// `stat` is the build rank key; `card` the weapon's count card (null: the Sentry Turret has no count card,
+// so its bonus is a turret charge, kept in r.charges); `cap` its rank cap; `per` the amount one rank adds
+// and `unit` the word on the card headline. Weapons missing here (Vortex Singularity, Gas Trail, Shock
+// Field, Nanite Swarm, Claw Harpoon) have no count stat and get nothing.
+export const REPLICATOR_ID = 'replicator_array';
+export const REPLICATOR_MAX_RANKS = 2;
+const countStat = (stat, card, cap, per, unit) => ({ stat, card, cap, per, unit });
+export const COUNT_STATS = Object.freeze({
+  blaster: countStat('prism', 'multishot', 5, 2, 'STREAMS'),
+  rockets: countStat('count', 'rockets_count', 6, 1, 'ROCKET'),
+  missiles: countStat('salvo', 'missiles_salvo', 8, 1, 'MISSILE'),
+  lightning: countStat('chain', 'lightning_chain', 6, 2, 'ARC JUMPS'),
+  orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
+  mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
+  turret: countStat('charges', null, 2, 1, 'TURRET'),
+  drones: countStat('wingmen', 'drones_wingmen', 4, 1, 'DRONE'),
+  grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
+  flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
+  cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
+  acidspray: countStat('nozzles', 'acidspray_nozzles', 3, 1, 'NOZZLE'),
+  raillance: countStat('count', 'raillance_count', 3, 1, 'LANCE'),
+  glaive: countStat('count', 'glaive_count', 4, 1, 'DISC'),
+  quake: countStat('count', 'quake_count', 4, 1, 'CHARGE')
+});
+export const replicatorRanks = (p) => p?.upgradeLevels?.[REPLICATOR_ID] || 0;
+// Replicator ranks a weapon actually gets (0..ranks): what fits under its count cap after its own card ranks.
+export function replicatorBonus(id, cardRanks, ranks) {
+  const cs = COUNT_STATS[id];
+  return cs && ranks > 0 ? Math.max(0, Math.min(ranks, cs.cap - (cardRanks || 0))) : 0;
+}
+// Count ranks a weapon can still take from one more Replicator rank (its card ranks + bonus under the cap).
+export function countRoom(p, id) {
+  const cs = COUNT_STATS[id];
+  if (!cs) return 0;
+  const own = cs.card ? p?.upgradeLevels?.[cs.card] || 0 : 0;
+  return Math.max(0, cs.cap - own - replicatorBonus(id, own, replicatorRanks(p)));
+}
+
 export const BOOST_NAME = 'Across the Board';
 export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} to every size, reach and range stat. No new tricks, just more of the same.`;
 
@@ -451,6 +497,14 @@ export function milestonesCrossed(from, to) {
   return BREAKTHROUGH_LEVELS.filter((m) => from < m && to >= m);
 }
 
+// Free UTILITY ranks a weapon has from its ACROSS THE BOARD Breakthroughs.
+export function boostRanks(p, id) {
+  const bt = p?.breakthroughs?.[id];
+  let n = 0;
+  if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') n++;
+  return n * BT_BOOST_RANKS;
+}
+
 // Chosen Breakthroughs of a weapon: { 6: 'transform' | 'boost', 12: ..., 18: ... }.
 export const weaponBreakthroughs = (p, id) => p.breakthroughs?.[id] || {};
 
@@ -463,7 +517,8 @@ export function statRanks(p, id) {
 
 // Everything the weapon formulas need: level (with any evolution bonus level), effective ranks
 // (card ranks + ACROSS THE BOARD ranks), which transforms are installed and how many boosts.
-export function makeBuild(id, lv, ranks = {}, bt = {}) {
+// `replicator`: REPLICATOR ARRAY ranks, added to the weapon's COUNT_STATS stat up to its cap.
+export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0) {
   let atb = 0;
   const t = {};
   for (const m of BREAKTHROUGH_LEVELS) {
@@ -472,6 +527,8 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
   }
   const r = {};
   for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
+  const cs = COUNT_STATS[id];
+  if (cs && replicator > 0) r[cs.stat] = (r[cs.stat] || 0) + replicatorBonus(id, ranks[cs.stat], replicator);
   // t4 / t8 / t12 name the first, second and third Breakthrough (now at LV 6 / 12 / 18).
   const [m1, m2, m3] = BREAKTHROUGH_LEVELS;
   return { id, lv, r, atb, t4: !!t[m1], t8: !!t[m2], t12: !!t[m3], transforms: (t[m1] ? 1 : 0) + (t[m2] ? 1 : 0) + (t[m3] ? 1 : 0) };
@@ -480,7 +537,7 @@ export function makeBuild(id, lv, ranks = {}, bt = {}) {
 // Build of an owned weapon. `levelKey` is the player.weapons key holding its level (loadout.js).
 export function weaponBuild(p, id, lv = null) {
   const level = lv ?? (id === 'blaster' ? Math.max(1, p.weapons?.blaster || 0) : (p.weapons?.[id] || 0));
-  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id));
+  return makeBuild(id, level, statRanks(p, id), weaponBreakthroughs(p, id), replicatorRanks(p));
 }
 
 // A weapon at a level with no stat ranks and no Breakthroughs (Storm Protocol's fixed chain level).
