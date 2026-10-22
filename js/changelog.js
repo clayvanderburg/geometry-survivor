@@ -17,7 +17,7 @@ export const CHANGELOG = Object.freeze([
     title: 'Breakthrough Pools',
     notes: [
       { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 you pick 1 of 3 options from that weapon\'s pool, including the new Overtuned Core (+20% damage).' },
-      { type: 'new', text: '32 new Breakthroughs across 16 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Sticky Plasma and White Hole.' },
+      { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
       { type: 'balance', text: 'Every Breakthrough transform now does about the same real damage, a little more than Across the Board, so the best pick depends on your build.' },
       { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only (Growth Lattice gives XP), Phase Nova Thrusters is just the shockwave, and spare bombs drop from lieutenants.' },
