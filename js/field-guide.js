@@ -448,7 +448,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'rarity', icon: '★', title: 'UPGRADE RARITY = LEVEL JUMP',
     body: () => [
-      'Each level-up card rolls how many levels it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. EVOLUTION cards are one-shot synergies with their own magenta tier.',
+      'Each level-up card rolls how many steps it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. Weapon cards (and passives) jump in LEVELS; every other card in RANKS of its own. EVOLUTION cards are one-shot synergies with their own magenta tier. Replicator Array is the one exception: it always takes a single rank, but it is rare to find, so it always shows RARE and says so on the card.',
       `Odds at base luck: ${jumpOdds()}. Luck multiplies every chance; a jump never passes the level cap. Every card shows exact before → after numbers.`
     ],
     rarity: true

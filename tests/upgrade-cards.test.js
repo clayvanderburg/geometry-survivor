@@ -193,7 +193,9 @@ test('rarity is the rolled level jump: +1 common up to +5 legendary; evolutions 
     const card = renderUpgradeCard(describeUpgrade(p, { ...byId('luck_boost'), levelJump: jump }), '[1]');
     assert.match(card.className, new RegExp(`\\brarity-${expected[jump - 1]}\\b`), `+${jump}`);
     assert.equal(card.html.includes('upg-jump-ribbon'), jump > 1);
-    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} LEVELS`));
+    // Luck is not a weapon: its jump is in RANKS (weapon cards say LEVELS, see the chest card above).
+    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} RANKS`));
+    assert.match(card.html, /→ RANK \d+/);
   }
   const evo = UPGRADE_POOL.find((u) => u.isSynergy);
   assert.match(renderUpgradeCard(describeUpgrade(p, { ...evo, levelJump: 1 }), '[1]').className, /\brarity-evolution\b/);

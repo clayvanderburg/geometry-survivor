@@ -12,7 +12,7 @@ import {
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
-import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel } from './loadout.js';
+import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
 import { clipHTML, breakthroughClip } from './weapon-media.js';
@@ -445,6 +445,10 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
 
   return {
     id: upg.id,
+    // Weapon (and passive) cards raise a LEVEL; every other card stacks RANKS of its own.
+    unit: sc || PASSIVES.some((x) => x.upgradeId === upg.id) ? 'LV' : 'RANK',
+    // A card pinned to a rarity tier above its jump (Replicator Array: always RARE, always one rank) says so.
+    rarityNote: upg.rarityFloor > jump ? `◆ ${RARITY[rarity].label} CARD · +${jump} RANK` : '',
     name: upg.name,
     category: upg.category,
     scope: cardScope(upg),
@@ -608,15 +612,16 @@ export const maxText = (level, maxLevel) => `<span class="upg-max"> / ${maxLevel
 export function levelText(d, installed = false) {
   if (d.levelHtml) return d.levelHtml;
   if (d.isSynergy) return installed ? '★ EVOLUTION INSTALLED ★' : '★ EVOLUTION // UNLOCK ★';
-  const from = d.fromLevel === 0 ? 'NEW' : `LV ${d.fromLevel}`;
-  return `${installed ? 'INSTALLED // ' : ''}${from} → LV ${d.toLevel}${bonusText(d.bonus)}${maxText(d.toLevel, d.maxLevel)}`;
+  const unit = d.unit || 'LV';
+  const from = d.fromLevel === 0 ? 'NEW' : `${unit} ${d.fromLevel}`;
+  return `${installed ? 'INSTALLED // ' : ''}${from} → ${unit} ${d.toLevel}${bonusText(d.bonus)}${maxText(d.toLevel, d.maxLevel)}`;
 }
 
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).
 export function renderUpgradeCard(d, keyLabel, installed = false) {
   const ribbon = d.jump > 1
-    ? `<div class="upg-jump-ribbon">${'★'.repeat(d.jump - 1)} +${d.jump} LEVELS</div>`
-    : '';
+    ? `<div class="upg-jump-ribbon">${'★'.repeat(d.jump - 1)} +${d.jump} ${d.unit === 'RANK' ? 'RANKS' : 'LEVELS'}</div>`
+    : d.rarityNote ? `<div class="upg-jump-ribbon">${d.rarityNote}</div>` : '';
   const rows = d.rows.map((r) => `
           <div class="upg-stat"><span class="upg-stat-label">${r.label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`).join('');
   const tags = d.tags && d.tags.length

@@ -130,7 +130,9 @@ test('Replicator Array: card preview lists each weapon\'s gain, rows read the ne
   const card = renderUpgradeCard(d, '[1]');
   assert.match(card.className, /\bscope-global\b/);
   assert.match(card.className, /\brarity-rare\b/);
-  assert.ok(!card.html.includes('upg-jump-ribbon'), 'no +N LEVELS ribbon: it is one rank');
+  // Its pinned RARE tier is not a +3 jump: the ribbon says so instead of '+3 RANKS'.
+  assert.match(card.html, /upg-jump-ribbon">◆ RARE CARD · \+1 RANK</);
+  assert.ok(!/\+\d (LEVELS|RANKS)/.test(card.html), 'no +N jump ribbon: it is one rank');
   // Preview never touches the player.
   assert.equal(p.upgradeLevels[REPLICATOR_ID], undefined);
   // The run overview's per-weapon potential DPS reads the bonus through weaponBuild.
