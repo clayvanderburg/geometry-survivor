@@ -16,9 +16,9 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
-      { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 you pick 1 of 3 options from that weapon\'s pool, including the new Overtuned Core (+20% damage).' },
+      { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 pick 1 of 3 from its pool (new: Overtuned Core, +20% damage). Every transform does about the same real damage.' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
-      { type: 'balance', text: 'Every Breakthrough transform now does about the same real damage, a little more than Across the Board, so the best pick depends on your build.' },
+      { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires spinning drill bits that pierce enemies and bore through rock as your mining. Nothing is pulled in any more.' },
       { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only (Growth Lattice gives XP), Phase Nova Thrusters is just the shockwave, and spare bombs drop from lieutenants.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
