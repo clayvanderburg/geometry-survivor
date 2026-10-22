@@ -362,7 +362,9 @@ test('the nozzle ignores the aim and spins slowly round the ship, faster with Sp
     return ((r.ft.swivel - a0) + Math.PI * 4) % (Math.PI * 2);
   };
   const lv1 = W.flameTurnRate(levelBuild('flamethrower', 1));
-  assert.ok(lv1 > 0.8 && lv1 < 1.6, `a slow spin (${lv1.toFixed(2)} rad/s, a turn every ${(2 * Math.PI / lv1).toFixed(1)} s)`);
+  assert.ok(lv1 > 1.2 && lv1 < 2.2, `a steady spin (${lv1.toFixed(2)} rad/s, a turn every ${(2 * Math.PI / lv1).toFixed(1)} s)`);
+  assert.equal(lv1, 1.2 * W.flameTurnTrim.flamethrower, 'the Flamethrower spins faster than its twins');
+  assert.equal(W.flameTurnRate(levelBuild('cryospray', 1)), 1.2);
   assert.ok(Math.abs(spun([]) - lv1 * 0.5) < 0.03, 'turns at a steady rate whatever the aim');
   assert.ok(Math.abs(spun([['flamethrower_turn', 6]]) - W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) * 0.5) < 0.05, 'Spin Rotor spins it faster');
   assert.ok(W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) > lv1 * 2.5);

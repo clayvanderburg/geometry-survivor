@@ -47,14 +47,14 @@ test('the calibration rescales the weapon\'s hits but not its potential: still e
   }
 });
 
-// A cheap live check on the bench (2 seeds, pack + chase): the transforms that were the worst outliers
+// A cheap live check on the blend bench (3 seeds of each play style): the transforms that were the worst outliers
 // before calibration (0.78x to 1.6x Across the Board) now realize within the band, with a noise margin.
 test('card bench: the old outliers realize within the band against Across the Board', async () => {
   const cases = [['blaster', 6, 'arc'], ['rockets', 18, 'mirv'], ['drones', 12, 'wingman'], ['raillance', 6, 'wake'], ['flamethrower', 6, 'ring']];
   const NOISE = 0.1;
   for (const [id, lv, option] of cases) {
     const [lo, hi] = BT_SPRAYERS.includes(id) ? BT_SPRAYER_BAND : BT_BENCH_BAND;
-    const ratio = (await bb.benchOption(id, lv, option, { seeds: 2 })) / (await bb.benchOption(id, lv, 'boost', { seeds: 2 }));
+    const ratio = (await bb.benchOption(id, lv, option, { seeds: 3, bench: 'blend' })) / (await bb.benchOption(id, lv, 'boost', { seeds: 3, bench: 'blend' }));
     assert.ok(ratio >= lo - NOISE && ratio <= hi + NOISE, `${id}:${option} LV ${lv} realizes ${ratio.toFixed(2)}x Across the Board`);
   }
 });
