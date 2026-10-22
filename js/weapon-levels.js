@@ -557,7 +557,7 @@ export const EXTRA_TRANSFORMS = {
     { id: 'lens', home: 12, name: 'Gravity Lens', summary: 'While a Graviton Mortar charge is in the air, it drags enemies toward where it will land, so its wave catches more of them.' }
   ],
   grenades: [
-    { id: 'sticky', home: 6, name: 'Sticky Plasma', summary: 'A Plasma Grenade that lands next to an enemy sticks to it, rides along, and hits it extra hard when it blows.' },
+    { id: 'sticky', home: 6, name: 'Sticky Plasma', summary: 'A Plasma Grenade that lands near an enemy sticks to it, rides along, and hits it extra hard when it blows.' },
     { id: 'geyser', home: 18, name: 'Plasma Geyser', summary: 'Every Plasma Grenade blast leaves a plasma vent that erupts twice more, a beat apart.' }
   ],
   mines: [
@@ -565,7 +565,7 @@ export const EXTRA_TRANSFORMS = {
     { id: 'napalm', home: 12, name: 'Napalm Mines', summary: 'Proximity Mines leave a pool of burning napalm where they blow.' }
   ],
   orbitals: [
-    { id: 'frenzy', home: 6, name: 'Blade Frenzy', summary: 'Every cut feeds the Orbit Blades: they grow and hit up to 60% harder while they keep cutting, cooling off when nothing is near.' },
+    { id: 'frenzy', home: 6, name: 'Blade Frenzy', summary: 'Every cut feeds the Orbit Blades: they grow up to half again and hit up to 60% harder while they keep cutting, cooling off when nothing is near.' },
     { id: 'vortex', home: 12, name: 'Vortex Ring', summary: 'The Orbit Blades whip up a vortex that drags nearby enemies onto the ring and into the blades.' }
   ]
 };

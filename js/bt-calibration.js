@@ -37,15 +37,15 @@ export const TF_REALIZED = {
   missiles: { cluster: [1, 1, 0.67], rain: [0.82, 0.77, 0.78], nuke: [0.64, 0.73, 0.68], hunter: [1, 1, 0.79], echo: [0.92, 1, 0.6] },
   lightning: { fork: [1.7, 1.7, 1.57], orb: [1.23, 1.7, 1], strike: [1.7, 1.7, 1] },
   singularity: { twin: [1.7, 1, 1], aftershock: [0.85, 0.6, 0.88], cascade: [0.6, 0.6, 0.75] },
-  orbitals: { counter: [1, 1, 1], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6], frenzy: [0.92, 0.88, 0.9], vortex: [1.15, 1, 1] },
-  mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 0.66], triad: [1.67, 1.61, 1.53], shock: [0.85, 0.8, 0.72], napalm: [1, 1, 1] },
+  orbitals: { counter: [1, 1, 1], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6], frenzy: [0.8, 0.7, 0.85], vortex: [1.25, 1.3, 1.3] },
+  mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 0.66], triad: [1.67, 1.61, 1.53], shock: [0.85, 0.8, 0.62], napalm: [1, 1.7, 0.7] },
   turret: { capacity: [0.6, 0.6, 0.78], mobile: [0.9, 1, 1], overload: [0.66, 0.66, 0.79], gift: [0.6, 0.6, 0.75], link: [0.6, 0.62, 0.78] },
   drones: { wingman: [1.12, 1.49, 1.15], homing: [1, 1, 1], pods: [1, 1, 0.82], overdrive: [1, 0.88, 0.92], kamikaze: [1.1, 0.75, 0.75] },
-  grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.69, 0.6], gravity: [1.58, 1.7, 1.45], sticky: [0.66, 0.85, 0.7], geyser: [0.95, 0.85, 0.78] }
+  grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.69, 0.6], gravity: [1.58, 1.7, 1.45], sticky: [0.6, 0.75, 0.62], geyser: [0.95, 1.15, 0.85] },
   gas: { seek: [0.6, 0.6, 0.6], pockets: [0.6, 0.6, 0.6], shroud: [0.6, 0.6, 0.6] },
   flamethrower: { fireballs: [0.91, 1, 0.68], napalm: [0.6, 0.64, 0.6], ring: [1, 1.7, 1.53] },
   cryospray: { shatter: [0.62, 0.82, 0.6], slicks: [0.6, 0.62, 0.6], blizzard: [0.71, 1, 0.95] },
-  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.4] }
+  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.4] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1] },
   raillance: { magnet: [1, 1, 1], wake: [1, 1.16, 1], overload: [0.6, 1, 1], static: [1.2, 1.45, 1], reflect: [1.1, 1, 1] },
   glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] },
@@ -90,6 +90,8 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'acidspray|caustic|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
   'raillance|overload|12': 'damage-insensitive in the bench (one lance already kills)',
   'raillance|overload|18': 'damage-insensitive in the bench (one lance already kills)',
+  'orbitals|frenzy|12': 'damage-insensitive at LV 12 like fling and nova (blades grind everything they touch)',
+  'mines|napalm|12': 'the pool holds the trailing pack at LV 12 (like triad 12): over the band at the BT_REALIZED_RANGE cap',
   'quake|crush|12': 'damage-insensitive at LV 12 at the BT_REALIZED_RANGE floor (skip and fault sit there too)',
 });
 
