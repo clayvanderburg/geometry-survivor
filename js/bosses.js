@@ -609,6 +609,11 @@ export const HORIZON = {
   pullRadius: 400, bend: 2.2, enemyPull: 0.9, eatHeal: 0.025, eatRadius: 1.05,
   breathEvery: 6, rageBreathEvery: 4.2, inhaleTime: 1.6, ring: 16, rageRing: 24, ringSpeed: 2.6,
   speed: 1.9, radius: 54, rageAt: 0.5, vortexes: 2, escortHulks: 2,
+  // Drift cap while the ship is inside the pull (px/tick): under the full tug the ship still climbs out at
+  // ~1.2-1.9 px/tick, so this must stay well below that (it was the full 1.9 in v0.44-0.45: inescapable).
+  holdSpeed: 0.5,
+  // After it touches the ship it lets go of it for spitTime s (no tug), so the ship can fly clear.
+  spitTime: 1.2,
   // Gravity wave: grows waveSpeed px/tick from the rim out to waveReach px, waveWidth thick, with
   // `gaps` safe gaps waveGap rad wide (rageGaps when enraged); a hit costs waveDamage of its contact
   // hit. The enraged ripple's second ring follows rippleDelay s behind, its gaps turned half a step.
@@ -667,6 +672,25 @@ const eventHorizon = {
     const drift = e.inhaleT > 0 ? 0.05 : 0.11;
     e.vx = (e.vx + env.dirX * drift) * 0.95;
     e.vy = (e.vy + env.dirY * drift) * 0.95;
+    // Once the ship is in its pull it HOLDS: it drifts slower than the ship can climb out against the tug,
+    // so the pull is a fight to escape, never a trap. Outside the pull it hunts at full speed.
+    e.speed = env.dist < HORIZON.pullRadius ? HORIZON.holdSpeed : HORIZON.speed;
+    // Touching the ship (the contact hit lands as usual) it SPITS IT OUT: a burst, a shove apart, and its
+    // grip on the ship lets go for spitTime s, so one touch costs one hit, not a drain while you're stuck.
+    if (e.spitT > 0) {
+      e.spitT -= dt;
+      if (e.spitT <= 0) e.gravityWell = true;
+    } else if (env.dist < e.radius + (env.player.radius ?? 15) + 4) {
+      e.spitT = HORIZON.spitTime;
+      e.gravityWell = false; // no tug on the ship and no shot bending while it lets go (js/main.js wells)
+      e.knockX = -env.dirX * 6;
+      e.knockY = -env.dirY * 6;
+      e.vx *= 0.2;
+      e.vy *= 0.2;
+      env.particles?.spawnShockwave?.(e.x, e.y, e.radius * 3.2, e.hue, 4, 0.35);
+      env.grid?.applyImpulse?.(e.x, e.y, 50, e.radius * 4, e.hue);
+      cue(m, 'horizon_wave');
+    }
     if (!e.enraged && e.hp <= e.maxHp * HORIZON.rageAt) {
       e.enraged = true;
       for (let k = 0; k < HORIZON.vortexes; k++) {

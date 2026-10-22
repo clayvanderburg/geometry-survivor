@@ -98,7 +98,7 @@ export const STAT_CARDS = {
   drones: [
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
-    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the formation (the front pair, then the back row).', { maxLevel: 4 }),
+    card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the back row behind the hull.', { maxLevel: 3 }),
     card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
@@ -455,8 +455,8 @@ export const COUNT_STATS = Object.freeze({
   lightning: countStat('chain', 'lightning_chain', 6, 2, 'ARC JUMPS'),
   orbitals: countStat('count', 'orbitals_count', 6, 1, 'BLADE'),
   mines: countStat('capacity', 'mines_capacity', 8, 1, 'MINE'),
-  turret: countStat('charges', null, 2, 1, 'TURRET'),
-  drones: countStat('wingmen', 'drones_wingmen', 4, 1, 'DRONE'),
+  turret: countStat('charges', null, 2, 1, 'TURRET CHARGE'),
+  drones: countStat('wingmen', 'drones_wingmen', 3, 1, 'DRONE'),
   grenades: countStat('count', 'grenades_count', 5, 1, 'GRENADE'),
   flamethrower: countStat('nozzles', 'flamethrower_nozzles', 3, 1, 'NOZZLE'),
   cryospray: countStat('nozzles', 'cryospray_nozzles', 3, 1, 'NOZZLE'),
@@ -627,6 +627,23 @@ export const EXTRA_TRANSFORMS = {
   gas: [
     { id: 'tendrils', home: 6, name: 'Toxic Tendrils', summary: 'Corrosive Gas Trail clouds lash toxic tendrils at the enemies near them.' },
     { id: 'spores', home: 12, name: 'Spore Burst', summary: 'Corrosive Gas Trail clouds pop in a corrosive burst as they fade.' }
+  ],
+  // The sprayers' pool transforms share two mechanics (bt-extras.js): a fast whirl, and a nozzle that seeks the pack.
+  flamethrower: [
+    { id: 'whirl', home: 6, name: 'Fire Whirl', summary: 'Every few seconds the Flamethrower nozzle whips round in a full, fast turn, a whirlwind of fire that scorches everything around you, and the nozzle spins faster.' },
+    { id: 'seeker', home: 12, name: 'Heat Seeker', summary: 'The Flamethrower nozzle stops spinning blind: it swings toward the thickest pack in reach and holds the flames on it.' }
+  ],
+  cryospray: [
+    { id: 'whirl', home: 6, name: 'Frost Cyclone', summary: 'Every few seconds the Cryo Sprayer nozzle whips round in a full, fast turn, a cyclone of frost that chills everything around you, and the nozzle spins faster.' },
+    { id: 'seeker', home: 12, name: 'Cold Front', summary: 'The Cryo Sprayer nozzle stops spinning blind: it swings toward the thickest pack in reach and holds the frost on it.' }
+  ],
+  acidspray: [
+    { id: 'whirl', home: 6, name: 'Acid Cyclone', summary: 'Every few seconds the Acid Sprayer nozzle whips round in a full, fast turn, a cyclone of acid that eats everything around you, and the nozzle spins faster.' },
+    { id: 'seeker', home: 12, name: 'Acid Hound', summary: 'The Acid Sprayer nozzle stops spinning blind: it sniffs out the thickest pack in reach and holds the acid on it.' }
+  ],
+  lightning: [
+    { id: 'lattice', home: 6, name: 'Arc Lattice', summary: 'Tesla Arc chains leave their jumps hanging in the air as live wires for a moment, zapping anything that crosses them.' },
+    { id: 'conductor', home: 12, name: 'Conductor', summary: 'Enemies a Tesla Arc chain hits stay charged for a moment: if one dies while charged, it bursts into an arc at its nearest neighbour.' }
   ]
 };
 export function transformPool(id) {

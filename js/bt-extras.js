@@ -608,3 +608,96 @@ export function gasSpore(game, gas, f) {
   game.weaponFx.schedule({ x: f.x, y: f.y, delay: 0, radius: Math.max(30, f.radius * W.sporeRadiusMult), damage: gas.damage * W.sporeMult,
     hue: 96, source: 'gas', style: 'charge', step: 2, knock: 0.6 });
 }
+
+// --- Flamethrower / Cryo Sprayer / Acid Sprayer (js/flamethrower.js swing) ----------------------------------
+
+// The nozzle's turn this tick (radians). Whirl: every whirlEvery s one extra full turn over whirlTime s.
+// Seeker: swing toward the densest pack in reach (re-read every seekEvery s) at seekTurn rad/s; spin when
+// nobody is in reach.
+export function sprayTurn(sp, game, p, b, dt, range) {
+  let turn = W.flameTurnRate(b) * dt;
+  if (has(b, 'seeker')) {
+    sp.seekT = (sp.seekT || 0) - dt;
+    if (sp.seekT <= 0) {
+      sp.seekT = W.seekEvery;
+      const t = densestEnemy(game, p.x, p.y, range, range * 0.35);
+      sp.seekA = t ? Math.atan2(t.y - p.y, t.x - p.x) : null;
+    }
+    if (sp.seekA != null) {
+      const diff = ((sp.seekA - sp.swivel) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+      const step = W.flameTurnRate(b) * (W.seekTurnMult[b.id] ?? 0.7) * dt;
+      turn = Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
+    }
+  }
+  if (has(b, 'whirl')) {
+    // The whirl window is the first whirlTime s of each whirlEvery s cycle; a tick earns the part of it that
+    // overlaps the window, so a whirl is exactly one extra turn at any frame rate.
+    const t0 = sp.whirlT || 0, t1 = t0 + dt;
+    const overlap = Math.max(0, Math.min(t1, W.whirlTime) - t0) + Math.max(0, Math.min(t1, W.whirlEvery + W.whirlTime) - Math.max(t0, W.whirlEvery));
+    if (t0 < W.whirlTime ? t0 === 0 : t1 >= W.whirlEvery) {
+      // The whirl kicks off: a hot ring round the hull and a whoosh.
+      game.particles.spawnShockwave(p.x, p.y, range * 0.8, sp.kind.hue, 4, W.whirlTime);
+      game.particles.spawnShockwave(p.x, p.y, range * 0.45, sp.kind.ringHue2, 2.5, W.whirlTime * 0.8);
+      game.sound.playFlameBurst?.(sp.kind.sound);
+    }
+    sp.whirlT = t1 % W.whirlEvery;
+    turn += (Math.PI * 2 / W.whirlTime) * overlap;
+  }
+  return turn;
+}
+
+// --- Tesla Arc (main.js fireChainLightning / killEnemy) -----------------------------------------------------
+
+// Arc Lattice: the chain's jumps (x0, y0, x1, y1 flattened in `segs`) stay live for latticeZaps zaps.
+export function arcLattice(game, b, segs, damage) {
+  if (!has(b, 'lattice') || !segs?.length) return;
+  const lines = segs.slice();
+  for (let z = 1; z <= W.latticeZaps; z++) {
+    game.weaponFx.schedule({ x: lines[0], y: lines[1], delay: W.latticeEvery * z, radius: 0, damage: 0, style: 'silent', after: (g) => {
+      const enemies = g.enemyManager.enemies;
+      for (let i = 0; i < lines.length; i += 4) {
+        const ax = lines[i], ay = lines[i + 1], bx = lines[i + 2], by = lines[i + 3];
+        const lx = bx - ax, ly = by - ay;
+        const len = Math.hypot(lx, ly) || 1;
+        g.particles.spawnLightning?.(ax, ay, bx, by, 268, 0.7 - 0.15 * z, 0.14, 0);
+        for (const e of enemies) {
+          if (e.dead) continue;
+          const along = ((e.x - ax) * lx + (e.y - ay) * ly) / len;
+          if (along < 0 || along > len) continue;
+          if (Math.abs((e.x - ax) * ly - (e.y - ay) * lx) / len > W.latticeWidth + (e.radius || 10)) continue;
+          g.hitEnemy(e, damage * W.latticeShare, 'lightning', 0, 0, 0.4, 'lightning');
+        }
+      }
+    } });
+  }
+}
+
+// Conductor: a chain marks what it hits; a charged enemy that dies arcs into its nearest neighbours.
+export function conductorCharge(game, b, e, damage) {
+  if (!has(b, 'conductor')) return;
+  e.teslaCharge = game.elapsedTime + W.conductTime;
+  e.teslaChargeDmg = damage;
+}
+export function conductorDeath(game, e) {
+  if (!(e.teslaCharge > game.elapsedTime)) return;
+  e.teslaCharge = 0;
+  const x = e.x, y = e.y, dmg = e.teslaChargeDmg * W.conductShare;
+  // A beat later, so the kill (and the list splice) finishes first.
+  game.weaponFx.schedule({ x, y, delay: 0.05, radius: 0, damage: 0, style: 'silent', after: (g) => {
+    const near = [];
+    for (const o of g.enemyManager.enemies) {
+      if (o.dead) continue;
+      const dSq = (o.x - x) ** 2 + (o.y - y) ** 2;
+      if (dSq <= W.conductRange * W.conductRange) near.push([dSq, o]);
+    }
+    near.sort((u, v) => u[0] - v[0]);
+    g.particles.spawnFlash?.(x, y, 22, 268, 0.14);
+    g.particles.spawnShockwave(x, y, 30, 268, 2, 0.16);
+    for (let k = 0; k < Math.min(W.conductArcs, near.length); k++) {
+      const o = near[k][1];
+      g.particles.spawnLightning?.(x, y, o.x, o.y, 268, 1.4, 0.18);
+      g.hitEnemy(o, dmg, 'lightning', 0, 0, 0.6, 'lightning');
+    }
+    if (near.length) g.sound.playArcZap?.(Math.min(3, near.length));
+  } });
+}

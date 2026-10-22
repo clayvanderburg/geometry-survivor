@@ -115,6 +115,8 @@ const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
 // Escort Drones flying at once (deployables.js pool size): a front pair and a back row of 3.
 export const DRONE_MAX = 8;
+// Drones at LV 1: the flight lead and one wingman, the front pair (Clay, v0.45: a lone drone made a hard start).
+export const DRONE_START = 2;
 // Drones in the FRONT row for a formation of n (the rest fly in the BACK row). One balanced fill order for
 // every drone, from Wingmen cards and the LV 6 Escort Squadron alike: 1 front centre, then the front pair,
 // the back row up to 3, the front centre (6), then the back row's outer sides (7, 8): 3 in front, 5 behind.
@@ -270,7 +272,23 @@ export const WEAPON_SCALING = {
   strikeRadius: 55,
   strikeFalloff: 0.8, // hits hard at the struck enemy, fading to 20% at the rim
   strikeHitShare: 2, // a strike on a pack catches its neighbours too (a lone chain cannot): valued at this share
-  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
+  // Pool transforms (main.js via bt-extras.js): Arc Lattice (each chain's jump lines stay live for latticeZaps
+  // zaps latticeEvery s apart, each hitting what touches a line for latticeShare of a jump, valued at
+  // latticeHitShare), Conductor (an enemy a chain hits stays charged conductTime s; if it dies charged it arcs
+  // into its conductArcs nearest neighbours within conductRange for conductShare of a jump each, valued at
+  // conductHitShare: not every charged enemy dies in time). Both in jump units of one chain.
+  latticeZaps: 3,
+  latticeEvery: 0.15,
+  latticeShare: 0.25,
+  latticeWidth: 10,
+  latticeHitShare: 0.5,
+  conductTime: 1.2,
+  conductArcs: 1, // bt-bench (blend): two arcs per charged kill read 1.82x at LV 12
+  conductShare: 0.5,
+  conductRange: 200,
+  conductHitShare: 0.5,
+  lightningExtra: (b) => (b.tf?.has('lattice') ? W.latticeZaps * W.latticeShare * W.latticeHitShare : 0) + (b.tf?.has('conductor') ? W.conductArcs * W.conductShare * W.conductHitShare : 0),
+  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0) + W.lightningExtra(b)),
   lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
@@ -486,10 +504,10 @@ export const WEAPON_SCALING = {
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
   // Formation: up to 3 in front of the nose and 5 behind the hull, DRONE_MAX in all, filled in one balanced
-  // order (droneFrontFor): Wingmen ranks give up to 5 (front pair + back row of 3), Escort Squadron (LV 6)
+  // order (droneFrontFor): LV 1 flies the front pair (DRONE_START), Wingmen ranks fill the back row to 5, Escort Squadron (LV 6)
   // adds 3 more (front centre + the back row's sides). Drones past DRONE_MAX are never wasted: droneSquad
   // counts them and their guns ride on the others.
-  droneSquad: (b) => 1 + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
+  droneSquad: (b) => DRONE_START + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
   droneCount: (b) => Math.min(DRONE_MAX, W.droneSquad(b)),
   droneFront: (b) => droneFrontFor(W.droneCount(b)),
   squadronRow: 3,
@@ -657,8 +675,19 @@ export const WEAPON_SCALING = {
   // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
   flameTfTurnRanks: 1,
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 ? W.flameTfTurnRanks : 0),
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
+  // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
+  // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
+  // whirlEvery s the nozzle adds one full turn over whirlTime s, plus flameTfTurnRanks Spin Rotor rank), Seeker (the
+  // nozzle swings toward the densest pack within its range at seekTurnMult x its spin speed instead of spinning;
+  // it spins on when nobody is in reach).
+  whirlEvery: 2.5,
+  whirlTime: 0.6,
+  // The nozzle swings at this share of its own spin speed (bt-bench, blend: 3.2 rad/s parked the cone on the pack,
+  // Cryo/Acid 1.45-1.52x). The Flamethrower spins flameTurnTrim faster, so its share is lower.
+  seekTurnMult: Object.freeze({ flamethrower: 0.6, cryospray: 0.7, acidspray: 0.7 }),
+  seekEvery: 0.25,
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Extra Nozzle cards (POWER, like Prism Split): flameNozzles(b) identical streams spaced evenly round
@@ -1212,7 +1241,7 @@ export const POTENTIAL_DPS = {
     const chains = W.lightningChains(b) * W.lightningJumpUnits(b) * W.lightningDamageMult(b); // later jumps at lightningJumpShare
     const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;
     const orb = b.t8 ? W.orbShare * chains : 0;
-    return (chains + strikes + orb) / W.lightningCooldown(b);
+    return (chains + strikes + orb + W.lightningExtra(b) * chains) / W.lightningCooldown(b);
   },
   singularity: (b) => {
     const core = W.singularityDamageMult(b) * W.singularityLife(b) * 60 + W.singularityCollapseDamageMult(b);

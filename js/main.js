@@ -2302,6 +2302,7 @@ export class Game {
     e.dead = true;
     enemies.splice(enemyIndex, 1);
     this.kills++;
+    if (e.teslaCharge) BTX.conductorDeath(this, e); // Conductor: a charged enemy arcs into its neighbours
     if (this.runStats) {
       // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
       const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
@@ -3678,6 +3679,8 @@ export class Game {
     // Storm Protocol (a plain level) keeps the arc damage of the slower pre-v0.46 discharge.
     const damage = weaponDamage(p, 'lightning', bb) * (typeof level === 'object' ? 1 : W.stormArcScale);
     this.arcStat = stat; // fireArcChain credits its hits to this run-stats key
+    this.arcSegs = bb.tf?.has('lattice') || bb.tf?.has('conductor') ? [] : null; // pool Breakthroughs read the jumps
+    this.arcBuild = bb;
     const hitSet = new Set();
     let hits = 0;
     for (let c = 0; c < W.lightningChains(bb); c++) {
@@ -3699,6 +3702,8 @@ export class Game {
         damage: damage * hits * W.orbShare / zaps, hue: ARC_HUE });
     }
     if (hits > 0) this.sound.playArcZap?.(hits);
+    BTX.arcLattice(this, bb, this.arcSegs, damage);
+    this.arcSegs = null;
   }
 
   // A single arc chain from (originX, originY); `hitSet` is shared between forks so they spread out.
@@ -3732,6 +3737,7 @@ export class Game {
 
       if (jump === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
       this.arcHopFx(currX, currY, target, jump, fork ? ARC_HUE + 40 : ARC_HUE);
+      if (this.arcSegs) { this.arcSegs.push(currX, currY, target.x, target.y); BTX.conductorCharge(this, this.arcBuild, target, damage); }
       hits++;
       last = target;
       const arc = Math.sqrt(bestDistSq) || 1;

@@ -397,3 +397,45 @@ test('Toxic Tendrils lash the nearest enemy outside a cloud; Spore Burst pops a 
   BTX.gasSpore(g, gas, gas.puffs[0]);
   assert.equal(g.weaponFx.events.length, 2);
 });
+
+test('Sprayer Whirl adds one fast full turn every whirlEvery s; Seeker swings the nozzle toward the pack', () => {
+  const { g, p } = fight('flamethrower', { 6: 'whirl' }, [[150, 0]]);
+  const b = weaponBuild(p, 'flamethrower');
+  const sp = { swivel: 0, kind: { hue: 28, ringHue2: 46, sound: 'flame' } };
+  let turned = 0;
+  const steps = Math.round(W.whirlEvery * 60);
+  for (let i = 0; i < steps; i++) turned += BTX.sprayTurn(sp, g, p, b, 1 / 60, 280);
+  const base = W.flameTurnRate(b) * W.whirlEvery;
+  assert.ok(Math.abs(turned - base - Math.PI * 2) < 0.15, `one extra turn per cycle (${(turned - base).toFixed(2)} rad)`);
+  // Seeker: with the pack due south, the nozzle swings there and holds.
+  const { g: g2, p: p2 } = fight('flamethrower', { 12: 'seeker' }, [[0, 150], [10, 160], [-10, 160]]);
+  const b2 = weaponBuild(p2, 'flamethrower');
+  const s2 = { swivel: 0, kind: { hue: 28, ringHue2: 46, sound: 'flame' } };
+  for (let i = 0; i < 120; i++) s2.swivel += BTX.sprayTurn(s2, g2, p2, b2, 1 / 60, 280);
+  assert.ok(Math.abs(s2.swivel - Math.PI / 2) < 0.15, `nozzle on the pack (${s2.swivel.toFixed(2)})`);
+});
+
+test('Arc Lattice zaps what crosses a chain line latticeZaps times; Conductor arcs a charged kill into its neighbours', () => {
+  const { g, p } = fight('lightning', { 6: 'lattice', 12: 'conductor' }, [[100, 0], [200, 4], [260, 40]]);
+  const [a, onLine, nb] = g.enemyManager.enemies;
+  const b = weaponBuild(p, 'lightning');
+  const hits = [];
+  g.hitEnemy = (e, d) => hits.push([e, d]);
+  g.weaponFx.events = [];
+  BTX.arcLattice(g, b, [p.x, p.y, p.x + 300, p.y], 10);
+  const zaps = g.weaponFx.events.filter((e) => e.style === 'silent');
+  assert.equal(zaps.length, W.latticeZaps);
+  zaps[0].after(g);
+  assert.ok(hits.some(([e, d]) => e === onLine && Math.abs(d - 10 * W.latticeShare) < 1e-9), 'the live wire zaps what lies on it');
+  assert.ok(!hits.some(([e]) => e === nb), 'off the line: untouched');
+  hits.length = 0;
+  g.weaponFx.events = [];
+  BTX.conductorCharge(g, b, a, 10);
+  BTX.conductorDeath(g, a);
+  g.weaponFx.events[0].after(g);
+  assert.equal(hits.length, W.conductArcs);
+  assert.ok(hits.every(([, d]) => Math.abs(d - 10 * W.conductShare) < 1e-9));
+  g.weaponFx.events = [];
+  BTX.conductorDeath(g, a);
+  assert.equal(g.weaponFx.events.length, 0, 'a charge discharges once');
+});

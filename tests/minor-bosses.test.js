@@ -259,3 +259,46 @@ test('REDUCE EFFECTS dims the boss glow flashes (telegraph blasts and boss flair
   assert.equal(sizes.length, 2);
   assert.ok(sizes[1] < sizes[0] * 0.5, `reduced ${sizes[1]} vs ${sizes[0]}`);
 });
+
+test('Event Horizon: its pull is a fight to escape, never a trap; touching the ship, it spits it out', async () => {
+  resetTuning();
+  const h = await import('../tools/balance/harness.mjs');
+  const fight = (start) => {
+    const g = h.createHeadlessGame();
+    g.resetRun(g.selectedMode, null);
+    g.state = 'PLAYING';
+    g.spawnCooldown = 1e9;
+    g.waveTimer = -1e9;
+    g.wave = 25;
+    const p = g.player;
+    g.enemyManager.queueSpawn('event_horizon', p.x - start, p.y, g.getWaveScale(), { instant: true, wave: 25 });
+    g.update(1 / 60);
+    g.update(1 / 60);
+    const b = g.enemyManager.enemies.find((e) => e.type === 'event_horizon');
+    b.ramT = 1e9; // no ram, no breathing: just the pull and the drift
+    b.aiTimer = 1e9;
+    return { g, p, b };
+  };
+  // Full thrust straight out from deep inside: the drifting core never keeps up (it held at 1.9 px/tick before).
+  for (const start of [120, 250]) {
+    const { g, p, b } = fight(start);
+    g.pollGamepad = () => ({ moveX: 1, moveY: 0, aimX: 0, aimY: 0, dash: false, bomb: false, pressed: () => false, buttons: [], active: false });
+    let t = 0;
+    for (; t < 60 * 10 && Math.hypot(p.x - b.x, p.y - b.y) < HORIZON.pullRadius; t++) { p.hp = p.maxHp; p.invuln = 1; g.update(1 / 60); }
+    assert.ok(t < 60 * 8, `from ${start} px the ship clears the pull (${(t / 60).toFixed(1)} s)`);
+    assert.ok(b.speed <= HORIZON.holdSpeed + 1e-9 || Math.hypot(p.x - b.x, p.y - b.y) >= HORIZON.pullRadius);
+  }
+  // A ship sitting on the core takes a hit, is let go (no tug) and the two are shoved apart.
+  const { g, p, b } = fight(40);
+  g.pollGamepad = () => ({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, dash: false, bomb: false, pressed: () => false, buttons: [], active: false });
+  let hits = 0;
+  const dp = g.damagePlayer.bind(g);
+  g.damagePlayer = (dmg, shake, by) => { if (by === 'event_horizon') hits++; return dp(Math.min(dmg, p.hp - 1), shake, by); };
+  g.update(1 / 60);
+  assert.ok(b.spitT > 0 && b.gravityWell === false, 'it lets go');
+  g.update(1 / 60);
+  assert.equal(p.gravityTug, 0, 'no tug while it lets go');
+  for (let t = 0; t < 60 * 3; t++) { p.hp = p.maxHp; g.update(1 / 60); }
+  // About one hit per spit window (plus the first), not one every 0.4 s of hit invulnerability (7+ in 3 s).
+  assert.ok(hits <= Math.ceil(3 / HORIZON.spitTime) + 2, `a ship left on the core is hit ${hits} times in 3 s`);
+});

@@ -122,7 +122,15 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'shockfield:pulse': ['Pulse Wave! The field reaches out and touches someone.', 'smug'],
   'shockfield:capacitor': ['Capacitor Bank! Zap, and then ZAP again.', 'eureka'],
   'gas:tendrils': ['Toxic Tendrils! The gas has arms now. Gross. Great!', 'eureka'],
-  'gas:spores': ['Spore Burst! Pop goes the cloud.', 'smug']
+  'gas:spores': ['Spore Burst! Pop goes the cloud.', 'smug'],
+  'flamethrower:whirl': ['Fire Whirl! I call it the spin cycle of DOOM.', 'smug'],
+  'flamethrower:seeker': ['Heat Seeker! The flames know where you live.', 'eureka'],
+  'cryospray:whirl': ['Frost Cyclone! Brr-illiant, if I say so myself.', 'smug'],
+  'cryospray:seeker': ['Cold Front! It finds them. It freezes them.', 'eureka'],
+  'acidspray:whirl': ['Acid Cyclone! Please stand clear of the splash zone.', 'oops'],
+  'acidspray:seeker': ['Acid Hound! Good boy. Corrosive boy.', 'eureka'],
+  'lightning:lattice': ['Arc Lattice! I made a fence out of lightning.', 'smug'],
+  'lightning:conductor': ['Conductor! They pass the zap along. So polite!', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.

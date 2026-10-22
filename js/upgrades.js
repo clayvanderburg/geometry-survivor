@@ -49,7 +49,7 @@ const CORE_INFO = {
   singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
   mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
   turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload over time.' },
-  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
+  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation, a pair off your nose and a row behind your hull, and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
   gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship (and a giant cloud every time you dash): enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
   flamethrower: { headline: 'flameRange', summary: 'A nozzle spins slowly round your ship spraying a cone of fire: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
@@ -223,7 +223,7 @@ export const UPGRADE_POOL = [
     overcharge: false,
     headline: 'bulletCount', // the card headline lists every weapon's gain (upgrade-cards.js replicatorHeadline)
     get weight() { return TUNING.replicatorWeight ?? 0.25; },
-    summary: 'Prints a copy of every weapon\'s launcher: one more of whatever each one fires (streams, rockets, drones, turrets, nozzles...). Never raises a weapon\'s level.',
+    summary: 'Prints a copy of every weapon\'s launcher: one more of whatever each one fires (streams, rockets, drones, turret charges, nozzles...). Never raises a weapon\'s level.',
     req: (player) => ownedWeapons(player).some((id) => countRoom(player, id) > 0),
     apply() {} // its rank in upgradeLevels is read by every weaponBuild
   },
