@@ -12,6 +12,21 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.46.0',
+    date: '2026-10-22',
+    title: 'Breakthrough Pools',
+    notes: [
+      { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 you pick 1 of 3 options from that weapon\'s pool, including the new Overtuned Core (+20% damage).' },
+      { type: 'new', text: '32 new Breakthroughs across 16 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Sticky Plasma and White Hole.' },
+      { type: 'balance', text: 'Every Breakthrough transform now does about the same real damage, a little more than Across the Board, so the best pick depends on your build.' },
+      { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
+      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only (Growth Lattice gives XP), Phase Nova Thrusters is just the shockwave, and spare bombs drop from lieutenants.' },
+      { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
+      { type: 'balance', text: 'Tesla Arc discharges twice as often, each a little lighter. The Flamethrower spins about 50% faster, and sprayer Breakthroughs speed the nozzle up too.' },
+      { type: 'balance', text: 'Weapon cards fill more of each level-up hand, and capped cards stop offering ranks that do nothing (Grapple Hooks max 3). Non-weapon cards now jump in RANKS.' }
+    ]
+  },
+  {
     version: '0.45.0',
     date: '2026-10-21',
     title: 'Squadron & Replicator',
