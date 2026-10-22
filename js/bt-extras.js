@@ -108,14 +108,16 @@ export function rocketBurst(game, r, e, hx, hy) {
   game.particles.spawnExplosionSparks(hx, hy, 10, 38, 3, 12, 1.4);
 }
 
-// A shrapnel shard in flight: a spinning, jagged hot-orange fragment on a glowing streak, cooling as it slows.
+// A shrapnel shard in flight: a spinning, jagged fragment on a glowing streak (hot orange; a shard with a
+// cool hue, 100+, shifts its ramp onto that hue), cooling as it slows.
 export function drawShrapnel(ctx, b) {
   const k = Math.max(0, b.life / (b.maxLife || 1));
+  const h = b.hue < 100 ? 0 : b.hue - 36; // the orange shards keep their warm ramp; others shift onto their hue
   const spin = (b.spin = (b.spin || 0) + 0.5);
   const len = 8, wid = 2.4 + 2 * Math.abs(Math.sin(spin));
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `hsla(36, 100%, 58%, ${0.45 * k + 0.1})`;
+  ctx.strokeStyle = `hsla(${36 + h}, 100%, 58%, ${0.45 * k + 0.1})`;
   ctx.lineWidth = 2.4;
   ctx.beginPath();
   ctx.moveTo(b.x - b.vx * 2.2, b.y - b.vy * 2.2);
@@ -123,8 +125,8 @@ export function drawShrapnel(ctx, b) {
   ctx.stroke();
   ctx.translate(b.x, b.y);
   ctx.rotate(spin);
-  ctx.fillStyle = `hsla(${30 + 20 * k}, 100%, ${62 + 22 * k}%, 0.95)`;
-  ctx.strokeStyle = 'hsla(22, 100%, 55%, 0.9)';
+  ctx.fillStyle = `hsla(${30 + h + 20 * k}, 100%, ${62 + 22 * k}%, 0.95)`;
+  ctx.strokeStyle = `hsla(${22 + h}, 100%, 55%, 0.9)`;
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(len, 0);
@@ -312,4 +314,110 @@ export function turretLinks(state, dt, game, turrets, count, level, boltDamage) 
     }
   }
   if (pairs) game.sound.playArcZap?.(Math.min(4, pairs));
+}
+
+// --- Glaive Discs (js/glaive.js) ---------------------------------------------------------------------
+
+// Arc Discs: a ricochet off `e` arcs arcDiscShare of the hit back into the enemy the disc left (`prev`).
+export function glaiveArc(game, b, prev, e, dmg) {
+  if (!has(b, 'arcdisc') || !prev || prev === e || prev.dead) return;
+  if ((prev.x - e.x) ** 2 + (prev.y - e.y) ** 2 > W.arcDiscRange * W.arcDiscRange) return;
+  game.particles.spawnLightning?.(e.x, e.y, prev.x, prev.y, 196, 1.5, 0.16);
+  game.particles.spawnFlash?.(prev.x, prev.y, 8 + (prev.radius || 10), 196, 0.1);
+  game.hitEnemy(prev, dmg * W.arcDiscShare, 'glaive', 0, 0, 0.5, 'glaive');
+}
+
+// Shatter Edge: a disc fading out bursts into shatterShards razor shards (Shrapnel Shells' shards, molten orange like the disc).
+export function glaiveShatter(game, b, d, dmg) {
+  if (!has(b, 'shatter')) return;
+  const n = W.shatterShards;
+  const spin = Math.random() * Math.PI * 2;
+  for (let k = 0; k < n; k++) {
+    const a = spin + (k / n) * Math.PI * 2;
+    const speed = W.shellSpeed * (0.9 + Math.random() * 0.3);
+    game.bullets.push({
+      x: d.x, y: d.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+      damage: dmg * W.shatterShare, pierce: 2, hue: 30, radius: 3.4, width: 1,
+      life: W.shellLife, maxLife: W.shellLife, spin: Math.random() * 6, source: 'glaive', stat: 'glaive', kind: 'shrapnel', knock: 0.5,
+      hitEnemies: new Set()
+    });
+  }
+  game.particles.spawnFlash?.(d.x, d.y, 20, 40, 0.12);
+  game.particles.spawnShockwave(d.x, d.y, 48, 30, 2.5, 0.2);
+  game.sound.playGlaiveSplit?.();
+}
+
+// --- Claw Harpoon (js/claw-harpoon.js) ----------------------------------------------------------------
+
+// Whip Tether: while reeling, the tether (socket -> tip) hits every enemy it lies across, once per throw.
+export function harpoonWhip(game, b, throwId, sx, sy, tx, ty, dmg) {
+  if (!has(b, 'whip')) return;
+  const lx = tx - sx, ly = ty - sy;
+  const len = Math.hypot(lx, ly);
+  if (len < 20) return;
+  const ux = lx / len, uy = ly / len;
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.harpoonWhip === throwId) continue;
+    const along = (e.x - sx) * ux + (e.y - sy) * uy;
+    if (along < 0 || along > len) continue;
+    if (Math.abs((e.x - sx) * uy - (e.y - sy) * ux) > W.whipWidth + (e.radius || 10)) continue;
+    e.harpoonWhip = throwId;
+    game.hitEnemy(e, dmg * W.whipShare, 'harpoon', uy * 2, -ux * 2, 0.7, 'harpoon');
+    game.particles.spawnDirectionalSparks(e.x, e.y, Math.atan2(-ux, uy), 0.6, 4, 40, 7);
+    game.particles.spawnShockwave(e.x, e.y, (e.radius || 10) * 1.8, 40, 1.5, 0.12);
+    game.sound.playHarpoonHit?.('enemy');
+  }
+}
+
+// Tesla Hook: the claw discharges at the end of a throw, arcing into up to teslaArcs enemies near the tip.
+export function harpoonTesla(game, b, x, y, dmg) {
+  if (!has(b, 'tesla')) return;
+  const near = [];
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.invulnerable) continue;
+    const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
+    if (dSq <= W.teslaRange * W.teslaRange) near.push([dSq, e]);
+  }
+  near.sort((u, v) => u[0] - v[0]);
+  const n = Math.min(W.teslaArcs, near.length);
+  game.particles.spawnFlash?.(x, y, 18, 196, 0.12);
+  game.particles.spawnShockwave(x, y, 34, 196, 2, 0.16);
+  for (let k = 0; k < n; k++) {
+    const e = near[k][1];
+    game.particles.spawnLightning?.(x, y, e.x, e.y, 196, 1.6, 0.18);
+    game.hitEnemy(e, dmg * W.teslaShare, 'harpoon', 0, 0, 0.5, 'harpoon');
+  }
+  if (n) game.sound.playArcZap?.(n);
+}
+
+// --- Graviton Mortar (js/quake-mortar.js) ---------------------------------------------------------------
+
+// Crush Field: a main landing leaves a gravity pool that grinds crushShare of the ring over crushLife s.
+export function quakeCrush(game, b, x, y, radius, dmg) {
+  if (!has(b, 'crush')) return;
+  const ticks = W.crushLife / W.crushTick;
+  game.weaponFx.addPool({ x, y, radius: radius * W.crushRadiusFrac, life: W.crushLife, tick: W.crushTick, damage: dmg * W.crushShare / ticks, hue: 44, source: 'quake' });
+  game.particles.spawnShockwave(x, y, radius * W.crushRadiusFrac, 44, 2.5, 0.3, true);
+}
+
+// Gravity Lens: a charge still in flight drags the enemies around its landing point toward it.
+export function quakeLens(game, b, s, dt) {
+  if (!has(b, 'lens')) return;
+  const r = s.radius * W.lensRadiusMult;
+  const pull = W.lensPull * dt;
+  for (const e of game.enemyManager.enemies) {
+    if (e.dead || e.isBoss) continue;
+    const dx = s.lx - e.x, dy = s.ly - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d > r || d < 6) continue;
+    const k = e.isLieutenant ? 0.4 : 1;
+    e.x += (dx / d) * pull * k;
+    e.y += (dy / d) * pull * k;
+  }
+  // The lens shimmers on the ground under the falling charge: an inward ring every so often.
+  s.lensT = (s.lensT || 0) - dt;
+  if (s.lensT <= 0) {
+    s.lensT = 0.32;
+    game.particles.spawnShockwave(s.lx, s.ly, r * 0.8, 300, 0.8, 0.3, true);
+  }
 }

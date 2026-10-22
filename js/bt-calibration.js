@@ -23,7 +23,7 @@ export const BT_REALIZED_RANGE = Object.freeze([0.6, 1.7]);
 export const BT_SPRAYERS = Object.freeze(['flamethrower', 'cryospray', 'acidspray']);
 export const BT_CONTROL = Object.freeze({
   shockfield: ['lash', 'repulse'], raillance: ['magnet'], grenades: ['gravity'], flamethrower: ['ring'],
-  cryospray: ['shatter', 'slicks', 'blizzard'], acidspray: ['caustic'], quake: ['epicenter']
+  cryospray: ['shatter', 'slicks', 'blizzard'], acidspray: ['caustic'], quake: ['epicenter', 'lens']
 });
 
 export const TF_REALIZED = {
@@ -43,10 +43,10 @@ export const TF_REALIZED = {
   acidspray: { meltdown: [0.6, 0.6, 0.6], pools: [0.6, 0.6, 0.6], caustic: [1, 1.7, 1] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1] },
   raillance: { magnet: [1.69, 1.25, 1], wake: [1, 1.19, 1], overload: [1, 1, 1], static: [1.2, 1.3, 1], reflect: [1.25, 1, 1] },
-  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.92], recall: [1, 1, 1] },
+  glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.92], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] },
   nanites: { fission: [1, 1.39, 1.69], goo: [1, 1, 1], plague: [0.6, 0.65, 0.83] },
-  harpoon: { slam: [1, 1, 0.78], spin: [0.89, 1, 0.84], chain: [0.86, 1, 0.6] },
-  quake: { skip: [0.79, 1, 0.72], fault: [0.92, 0.8, 0.82], epicenter: [1, 0.95, 0.95] }
+  harpoon: { slam: [1, 1, 0.78], spin: [0.89, 1, 0.84], chain: [0.86, 1, 0.6], whip: [1, 1, 1], tesla: [1, 1.12, 0.85] },
+  quake: { skip: [0.79, 1, 0.72], fault: [0.92, 0.8, 0.82], epicenter: [1, 0.95, 0.95], crush: [0.8, 0.68, 0.72], lens: [1, 1, 1] }
 };
 
 // Cases outside their band that damage numbers can't fix (the bench barely moves when their damage does,

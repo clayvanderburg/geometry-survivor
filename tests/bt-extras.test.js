@@ -244,3 +244,61 @@ test('Overwatch Link: two turrets in range zap an enemy standing between them, o
   assert.equal(hits.length, 1, 'out of range: no link');
   assert.ok(away);
 });
+
+test('Arc Discs: a ricochet arcs arcDiscShare of the hit back into the enemy the disc left', () => {
+  const { g, p } = fight('glaive', { 12: 'arcdisc' }, [[100, 0], [180, 0]]);
+  const [prev, e] = g.enemyManager.enemies;
+  const hits = [];
+  g.hitEnemy = (x, d) => hits.push([x, d]);
+  BTX.glaiveArc(g, weaponBuild(p, 'glaive'), prev, e, 10);
+  assert.deepEqual(hits, [[prev, 10 * W.arcDiscShare]]);
+  BTX.glaiveArc(g, weaponBuild(p, 'glaive'), e, e, 10);
+  assert.equal(hits.length, 1, 'no arc onto itself');
+});
+
+test('Shatter Edge: a fading disc bursts into shatterShards shards at shatterShare', () => {
+  const { g, p } = fight('glaive', { 6: 'shatter' }, [[400, 400]]);
+  g.bullets = [];
+  BTX.glaiveShatter(g, weaponBuild(p, 'glaive'), { x: p.x, y: p.y }, 10);
+  assert.equal(g.bullets.length, W.shatterShards);
+  assert.ok(g.bullets.every((s) => s.kind === 'shrapnel' && s.source === 'glaive' && Math.abs(s.damage - 10 * W.shatterShare) < 1e-9));
+});
+
+test('Whip Tether: the reeling tether hits each enemy it lies across once per throw', () => {
+  const { g, p } = fight('harpoon', { 6: 'whip' }, [[100, 0], [100, 60]]);
+  const [on, off] = g.enemyManager.enemies;
+  const hits = [];
+  g.hitEnemy = (x, d) => hits.push([x, d]);
+  const b = weaponBuild(p, 'harpoon');
+  BTX.harpoonWhip(g, b, 7, p.x, p.y, p.x + 200, p.y, 10);
+  BTX.harpoonWhip(g, b, 7, p.x, p.y, p.x + 200, p.y, 10);
+  assert.deepEqual(hits, [[on, 10 * W.whipShare]], 'once per throw, only on the line');
+  BTX.harpoonWhip(g, b, 8, p.x, p.y, p.x + 200, p.y, 10);
+  assert.equal(hits.length, 2, 'the next throw whips again');
+  assert.ok(off);
+});
+
+test('Tesla Hook: the claw tip arcs into up to teslaArcs enemies within teslaRange', () => {
+  const { g, p } = fight('harpoon', { 12: 'tesla' }, [[20, 0], [40, 0], [60, 0], [80, 0], [900, 0]]);
+  const hits = [];
+  g.hitEnemy = (x, d) => hits.push([x, d]);
+  BTX.harpoonTesla(g, weaponBuild(p, 'harpoon'), p.x, p.y, 10);
+  assert.equal(hits.length, W.teslaArcs);
+  assert.ok(hits.every(([, d]) => Math.abs(d - 10 * W.teslaShare) < 1e-9));
+  assert.ok(!hits.some(([e]) => e === g.enemyManager.enemies[4]), 'not past teslaRange');
+});
+
+test('Crush Field and Gravity Lens: a main shell leaves a crushing pool; in flight it drags enemies toward its landing', () => {
+  const { g, p } = fight('quake', { 6: 'crush', 12: 'lens' }, [[300, 0]]);
+  const e = g.enemyManager.enemies[0];
+  const b = weaponBuild(p, 'quake');
+  g.weaponFx.pools = [];
+  BTX.quakeCrush(g, b, e.x, e.y, 120, 10);
+  assert.equal(g.weaponFx.pools.length, 1);
+  const pool = g.weaponFx.pools[0];
+  assert.ok(Math.abs(pool.damage * (W.crushLife / W.crushTick) - 10 * W.crushShare) < 1e-9, 'crushShare of the ring over its life');
+  const s = { lx: e.x + 100, ly: e.y, radius: 120 };
+  const x0 = e.x;
+  for (let i = 0; i < 30; i++) BTX.quakeLens(g, b, s, 1 / 60);
+  assert.ok(e.x > x0 + 30, 'dragged toward the landing point');
+});
