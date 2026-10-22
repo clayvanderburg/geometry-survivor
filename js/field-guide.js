@@ -480,7 +480,7 @@ export const MECHANIC_ENTRIES = [
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
       `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures crack any rock they cross (broken rocks count as mined; bedrock never cracks).`,
-      'Field Amplifier makes every AREA weapon reach further.'
+      'Field Amplifier (a GLOBAL card) grows every blast, cloud, cone and field on every weapon.'
     ]
   },
   {

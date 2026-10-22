@@ -3,13 +3,13 @@
 // on a deep copy of the player and diffs STAT_ROWS, which read the same values and WEAPON_SCALING
 // formulas the game simulates with.
 import { TUNING } from './config.js';
-import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChances, acquireWeapon, UPGRADE_BY_ID } from './upgrades.js';
+import { RARITY, rarityFor, applyUpgradeLevels, applyBreakthrough, levelJumpChances, acquireWeapon, UPGRADE_BY_ID, globalReach } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, prismNewestGroup, weaponDamage, areaMult, missileBlastRadius, singularityPullRadius, novaRadius,
   tectonicBlastRadius, mineBlastRadius, wingRocketBlastRadius, critChance, critDamage, critMultiplier, chillSlow,
   blasterStreams, blasterFireRate, blasterPierce, POTENTIAL_DPS, DPS_TARGET, tagDamageMult, grenadeBlastRadius, gasCloudRadius, flameRange, fieldRadius, naniteRadius, quakeRadius,
   shockStun, shockLongStun, shockLongChance, statusPotency, statusDecay, statusDotShare, stacksPerBaseDamage, burnSpreadChance,
-  freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage
+  freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage, dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
 import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
@@ -19,7 +19,7 @@ import { clipHTML, breakthroughClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, TRANSFORMS, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, boostSummary,
   weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL,
-  REPLICATOR_ID, COUNT_STATS
+  REPLICATOR_ID, COUNT_STATS, globalMult
 } from './weapon-levels.js';
 
 // What a card affects, shown as a subtle outline + label (css .scope-utility / .scope-global):
@@ -27,15 +27,16 @@ import {
 //             Breakthroughs and evolutions. The default look, no marker.
 //   'utility' adds no DPS: weapon UTILITY stats (size, radius, pull, reach, pierce... weapon-levels.js
 //             POWER_STATS lists the rest) and ship utility (magnet, luck, mining, move speed, thrusters, dash, shield).
-//   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives.
+//   'global'  reaches every weapon or the whole ship: base damage, crit, specialist (tag), STATUS, passives,
+//             and the GLOBAL CARDS (Tempo, Cooldown, Persistence, Velocity, Field Amplifier's area), POWER or not.
 export const CARD_SCOPES = ['weapon', 'utility', 'global'];
-const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'move_speed', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
+const UTILITY_CARD_IDS = new Set(['mining_speed', 'luck_boost', 'magnet', 'xp_growth', 'move_speed', 'thrusters', 'dash_range', 'blink_drive', 'shield_capacitor']);
 const GLOBAL_CARD_IDS = new Set(['overdrive', 'shrapnel', 'crit_chance', 'crit_damage', REPLICATOR_ID]);
 export function cardScope(upg) {
   const stat = STAT_CARD_BY_ID[upg.id];
   if (stat) return POWER_STATS.has(stat.stat) ? 'weapon' : 'utility';
   if (UTILITY_CARD_IDS.has(upg.id)) return 'utility';
-  if (GLOBAL_CARD_IDS.has(upg.id) || upg.statusCard || upg.category === 'SPECIALIST') return 'global';
+  if (GLOBAL_CARD_IDS.has(upg.id) || upg.globalCard || upg.statusCard || upg.category === 'SPECIALIST') return 'global';
   return 'weapon';
 }
 const SCOPE_LABEL = { utility: 'UTILITY', global: 'GLOBAL' };
@@ -268,7 +269,7 @@ export const STAT_ROWS = [
   { id: 'glaiveBounces', label: 'Ricochets per disc', get: (p) => wb(p, 'glaive', W.glaiveBounces), fmt: int, headline: (b, a) => `+${a - b} RICOCHET${a - b > 1 ? 'S' : ''}` },
   { id: 'glaiveDamage', label: 'Disc damage', get: (p) => wb(p, 'glaive', (b) => weaponDamage(p, 'glaive', b)), fmt: dec1, headline: 'pct', unit: 'DISC DAMAGE' },
   { id: 'glaiveCooldown', label: 'Throw interval', get: (p) => wb(p, 'glaive', W.glaiveCooldown), fmt: secs, headline: 'pct', unit: 'GLAIVE THROW INTERVAL' },
-  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', W.glaiveSpeed), fmt: int, headline: 'pct', unit: 'DISC SPEED' },
+  { id: 'glaiveSpeed', label: 'Disc speed', get: (p) => wb(p, 'glaive', (b) => W.glaiveSpeed(b) * projectileSpeedMult(p)), fmt: int, headline: 'pct', unit: 'DISC SPEED' },
   { id: 'glaiveFission', label: 'Twins per disc', get: (p) => wb(p, 'glaive', (b) => (b.t4 ? 2 : null)), fmt: int, newText: () => 'DISCS SPLIT ON THEIR FIRST HIT' },
   { id: 'glaiveMomentum', label: 'Ricochet damage growth', get: (p) => wb(p, 'glaive', (b) => (b.t8 ? W.momentumGrowth - 1 : null)), fmt: pct, newText: (a, row) => `EVERY RICOCHET +${row.fmt(a)} DAMAGE` },
   { id: 'glaiveRecall', label: 'Return-trip hits', get: (p) => wb(p, 'glaive', (b) => (b.t12 ? W.recallHits : null)), fmt: int, newText: (a) => `DISCS RETURN // ${a} HITS ON THE WAY` },
@@ -318,9 +319,18 @@ export const STAT_ROWS = [
   { id: 'moveSpeed', label: 'Move speed', get: (p) => p.stats.moveSpeed, fmt: (v) => v.toFixed(2), headline: 'pct', unit: 'MOVE SPEED' },
   { id: 'maxHp', label: 'Max shield', get: (p) => p.maxHp, fmt: int, headline: 'count', unit: 'MAX SHIELD' },
   { id: 'hp', label: 'Shield now', get: (p) => p.hp, fmt: int },
-  { id: 'dashCooldown', label: 'Dash cooldown', get: (p) => W.dashCooldown(lv(p, 'dashNova'), TUNING.dashCooldownBase ?? 1.5), fmt: secs },
+  { id: 'dashCooldown', label: 'Dash cooldown', get: (p) => dashCooldownFor(p), fmt: secs },
   { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p)) * (p.dashDistanceMult ?? 1)), fmt: int, headline: 'size', unit: 'DASH DISTANCE' },
   { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) * (p.dashDistanceMult ?? 1) : null), fmt: int, headline: 'size', unit: 'BLINK DISTANCE', newText: () => 'DASH BLINKS' },
+  // GLOBAL CARDS: the card's own multiplier (each weapon's rows below show what it does there)
+  ...[['tempo', 'Attack rate, all weapons'], ['cooldown', 'Recharge speed, all weapons + dash'], ['persistence', 'Lifetime, lingering effects'], ['velocity', 'Shot speed, all weapons']]
+    .map(([kind, label]) => ({ id: `global_${kind}`, label, get: (p) => globalMult(p, kind), fmt: (v) => `+${Math.round((v - 1) * 100)}%` })),
+  // Velocity Coils: the shot speed of each flying weapon (px/s; grenades show their lob time)
+  ...[['blaster', 'Autocannon bolt speed', (p) => p.stats.bulletSpeed], ['rockets', 'Rocket speed', () => W.wingRocketSpeed],
+    ['missiles', 'Missile speed', () => W.missileSpeed], ['turret', 'Turret bolt speed', () => W.turretBoltSpeed],
+    ['drones', 'Drone bolt speed', () => W.droneBoltSpeed], ['nanites', 'Canister speed', () => W.naniteSpeed / 60]]
+    .map(([id, label, speed]) => ({ id: `${id}ShotSpeed`, label, get: (p) => wb(p, id, () => speed(p) * 60 * projectileSpeedMult(p)), fmt: int })),
+  { id: 'grenadeLob', label: 'Grenade lob time', get: (p) => wb(p, 'grenades', () => W.grenadeFlight / projectileSpeedMult(p)), fmt: secs },
   { id: 'novaRadius', label: 'Dash nova radius', get: (p) => owned(p, 'dashNova', (l) => novaRadius(p, l)), fmt: int },
   { id: 'novaDamage', label: 'Dash nova damage', get: (p) => owned(p, 'dashNova', (l) => weaponDamage(p, 'nova', l)), fmt: int },
 
@@ -388,13 +398,22 @@ const BUNDLE_HEADLINES = {
   status_application: () => 'ALL 4 STATUS REACTIONS STRONGER',
   status_duration: () => 'STACKS, FREEZES & STUNS LAST LONGER',
   shock_conductor: () => 'MORE & LONGER STUNS · MORE ARCING',
-  magnet: (r) => [
-    r.magnetRadius && `${pctUp(r.magnetRadius)} PICKUP`,
-    r.xpMultiplier && `${pctUp(r.xpMultiplier)} XP`,
-    r.bombs && `+${r.bombs.a - r.bombs.b} BOMB`
-  ].filter(Boolean).join(' · '),
-  thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'FASTER DASH + SHOCKWAVE' : 'FASTER DASH, BIGGER SHOCKWAVE')
+  thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'DASH SHOCKWAVE' : 'BIGGER DASH SHOCKWAVE')
 };
+
+// GLOBAL CARDS headline: the step and how many equipped weapons it reaches ("+10% ATTACK RATE · 3 WEAPONS").
+// Cooldown Matrix also names the dash; Field Amplifier counts the weapons whose area grows.
+const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'RECHARGE', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
+export function globalHeadline(kind, before, after) {
+  // The steps add up (rank 3 is +24%, not x1.08^3), so the headline names the points this card adds.
+  const gain = kind === 'area'
+    ? (after.stats.areaMult ?? 1) - (before.stats.areaMult ?? 1)
+    : globalMult(after, kind) - globalMult(before, kind);
+  if (!(gain > 0)) return '';
+  const n = globalReach(after, kind).length;
+  const reach = [n ? `${n} WEAPON${n > 1 ? 'S' : ''}` : '', kind === 'cooldown' ? 'DASH' : ''].filter(Boolean).join(' + ');
+  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}${reach ? ` · ${reach}` : ''}`;
+}
 
 // REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
 // +1 TURRET"). Weapons at their count cap (or with no count stat) are left out.
@@ -439,7 +458,8 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
 
   const lead = changed.find((r) => r.id === upg.headline) || changed[0];
   const bundle = upg.id === REPLICATOR_ID ? replicatorHeadline(player, copy)
-    : changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
+    : upg.globalCard ? globalHeadline(upg.globalCard, player, copy)
+      : changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
 

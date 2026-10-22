@@ -18,7 +18,7 @@
 // Every bite has source 'nanite' (CORRODE, damage-number colour); run stats split out the daughters and
 // the plague swarms as 'nanite_fission' / 'nanite_plague' (run-stats.js SUB_SOURCES).
 import { TUNING } from './config.js';
-import { WEAPON_SCALING as W, weaponDamage, naniteRadius } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, naniteRadius, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { isDeployableTarget } from './deployables.js';
 
@@ -187,7 +187,7 @@ export class NaniteSwarm {
     c.tx = pack.x;
     c.ty = pack.y;
     c.t = 0;
-    c.dur = Math.max(0.12, Math.hypot(pack.x - ox, pack.y - oy) / W.naniteSpeed);
+    c.dur = Math.max(0.12, Math.hypot(pack.x - ox, pack.y - oy) / (W.naniteSpeed * (p ? projectileSpeedMult(p) : 1)));
     c.kind = kind;
     c.seed = Math.random();
     if (kind === SWARM_MAIN) {
