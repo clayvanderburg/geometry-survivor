@@ -51,6 +51,8 @@ const TWEAKS = {
   quake: { frames: 60 }, // a volley every ~2.6 s: a longer loop catches two of them
   // The blade ring orbits outside the default close ring: 32 targets spread the close ring onto the blades' path.
   orbitals: { dummies: { count: 32 } },
+  // The vortex flies out and drags the ring after it: a wider frame keeps it in shot.
+  singularity: { zoom: 1.5 },
   // Swarms fly out to a pack ahead of the ship: the frame holds both, so the launch, the flight and the
   // feeding all read.
   nanites: { zoom: 1.4, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'pack', count: 16 } },
