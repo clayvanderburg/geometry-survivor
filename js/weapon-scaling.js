@@ -9,6 +9,7 @@
 import { TUNING } from './config.js';
 import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
+import { tfRealized } from './bt-calibration.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
 // stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
@@ -86,9 +87,10 @@ export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
 export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
-// transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make.
+// transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make; then
+// divided by the transforms' card-bench realized value (bt-calibration.js), which POTENTIAL_DPS counts back in.
 const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new Set(), transforms: 0 });
-const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) : 1);
+const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) / tfRealized(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
 // GLOBAL CARDS multipliers a build carries (weapon-levels.js GLOBAL_CARDS; 1 for bare builds, so LV 1 solves never move).
 const tempo = (b) => b?.g?.tempo ?? 1;
@@ -576,7 +578,7 @@ export const WEAPON_SCALING = {
   flamePuddleHitShare: 1.5,
   flameRingEvery: 2.5,
   flameRingRadiusMult: 1.3,
-  flameRingShare: 0.25,
+  flameRingShare: 0.03,
   flameRingHitShare: 2,
   flameRingKnock: 2.4,
   flameUnits: (b) => W.flameNozzleMult(b) * (W.flameHitShare + (b.t4 ? W.flameBurstShare * W.flameBurstHitShare : 0))
@@ -651,7 +653,7 @@ export const WEAPON_SCALING = {
   magnetHitShare: 1.3,
   wakeLife: 1.2,
   wakeTick: 0.2,
-  wakeShare: 0.5,
+  wakeShare: 0.2,
   wakeHitShare: 1.25,
   overloadEvery: 3,
   overloadMult: 2,
@@ -1080,6 +1082,11 @@ export const POTENTIAL_DPS = {
   // One volley: every charge's wave, rebounds and fractures, plus its share of the Graviton Surge.
   quake: (b) => W.quakeShells(b) * W.quakeDamageMult(b) * W.quakeUnits(b) / W.quakeCooldown(b)
 };
+// Transforms' card-bench realized value (bt-calibration.js) counted back in: their hits are 1 / value as hard,
+// so potential still adds exactly BT_TRANSFORM_DPS per transform. The sprayer twins read the Flamethrower's.
+for (const [id, raw] of Object.entries(POTENTIAL_DPS)) {
+  if (id !== 'cryospray' && id !== 'acidspray') POTENTIAL_DPS[id] = (b) => raw(b) * tfRealized(b);
+}
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
 // upgrade cards show them as chips. Keys are the weapons below, not damage-number sources.
