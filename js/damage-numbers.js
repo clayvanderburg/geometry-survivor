@@ -26,7 +26,7 @@ export const DAMAGE_SOURCE_COLORS = {
   rail: '#c9c0ff',        // Rail Lance lances, Ion Wake ticks and Overload Shots
   glaive: '#ffa45c',      // Glaive Disc hits and Boomerang Recall slices
   nanite: '#c4ff7a',      // Nanite Swarm bites (daughters and plague swarms too)
-  harpoon: '#ffd84a',     // Claw Harpoon throws, crushes, slams, spins and leaps
+  harpoon: '#ffd84a',     // Drill Driver bits, spins, ricochets, blasts and tunnels
   quake: '#ff8a5c',       // Graviton Mortar waves, rebounds, fractures and surges
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   corrode: '#9dff4a',     // CORROSIVE acid ticks (damage over time)

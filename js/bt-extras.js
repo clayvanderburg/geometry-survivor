@@ -348,49 +348,6 @@ export function glaiveShatter(game, b, d, dmg) {
   game.sound.playGlaiveSplit?.();
 }
 
-// --- Claw Harpoon (js/claw-harpoon.js) ----------------------------------------------------------------
-
-// Whip Tether: while reeling, the tether (socket -> tip) hits every enemy it lies across, once per throw.
-export function harpoonWhip(game, b, throwId, sx, sy, tx, ty, dmg) {
-  if (!has(b, 'whip')) return;
-  const lx = tx - sx, ly = ty - sy;
-  const len = Math.hypot(lx, ly);
-  if (len < 20) return;
-  const ux = lx / len, uy = ly / len;
-  for (const e of game.enemyManager.enemies) {
-    if (e.dead || e.harpoonWhip === throwId) continue;
-    const along = (e.x - sx) * ux + (e.y - sy) * uy;
-    if (along < 0 || along > len) continue;
-    if (Math.abs((e.x - sx) * uy - (e.y - sy) * ux) > W.whipWidth + (e.radius || 10)) continue;
-    e.harpoonWhip = throwId;
-    game.hitEnemy(e, dmg * W.whipShare, 'harpoon', uy * 2, -ux * 2, 0.7, 'harpoon');
-    game.particles.spawnDirectionalSparks(e.x, e.y, Math.atan2(-ux, uy), 0.6, 4, 40, 7);
-    game.particles.spawnShockwave(e.x, e.y, (e.radius || 10) * 1.8, 40, 1.5, 0.12);
-    game.sound.playHarpoonHit?.('enemy');
-  }
-}
-
-// Tesla Hook: the claw discharges at the end of a throw, arcing into up to teslaArcs enemies near the tip.
-export function harpoonTesla(game, b, x, y, dmg) {
-  if (!has(b, 'tesla')) return;
-  const near = [];
-  for (const e of game.enemyManager.enemies) {
-    if (e.dead || e.invulnerable) continue;
-    const dSq = (e.x - x) ** 2 + (e.y - y) ** 2;
-    if (dSq <= W.teslaRange * W.teslaRange) near.push([dSq, e]);
-  }
-  near.sort((u, v) => u[0] - v[0]);
-  const n = Math.min(W.teslaArcs, near.length);
-  game.particles.spawnFlash?.(x, y, 18, 196, 0.12);
-  game.particles.spawnShockwave(x, y, 34, 196, 2, 0.16);
-  for (let k = 0; k < n; k++) {
-    const e = near[k][1];
-    game.particles.spawnLightning?.(x, y, e.x, e.y, 196, 1.6, 0.18);
-    game.hitEnemy(e, dmg * W.teslaShare, 'harpoon', 0, 0, 0.5, 'harpoon');
-  }
-  if (n) game.sound.playArcZap?.(n);
-}
-
 // --- Graviton Mortar (js/quake-mortar.js) ---------------------------------------------------------------
 
 // Crush Field: a main landing leaves a gravity pool that grinds crushShare of the ring over crushLife s.

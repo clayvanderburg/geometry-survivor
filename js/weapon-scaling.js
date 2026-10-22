@@ -51,14 +51,14 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.6, drones: 0.8 }); // the Drill Driver's kills keep its bits at full bite, so its Damage cards compound: smaller steps hold it on the Autocannon's curve
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.2, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 // RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
 // its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
 // Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
 // build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
-export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6 });
+export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 / 0.6 }); // the Drill Driver's smaller card steps are for Damage only: its Spin-Up ranks match the Autocannon's
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
 // Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
@@ -77,7 +77,7 @@ export const WEAPON_CLASS = Object.freeze({
   shockfield: 'defensive', orbitals: 'defensive',
   raillance: 'aimed', // slow, huge aimed hits that pierce the whole line: held to the Autocannon in the card bench
   nanites: 'area',
-  harpoon: 'aimed', // Claw Harpoon: its mining and yank are utility, not DPS
+  harpoon: 'aimed', // Drill Driver: its mining is utility, not DPS
   quake: 'area'
 });
 export const CLASS_TARGET = Object.freeze({
@@ -917,59 +917,54 @@ export const WEAPON_SCALING = {
   // Damage of one bite to each enemy inside a swarm (daughters and plague swarms bite the same).
   naniteDamageMult: (b) => lv1('nanites', 'nanites', (b0) => DPS_TARGET(1) * W.naniteTick(b0) / (W.naniteUnits(b0) * W.naniteUptime(b0))) * hitMult(b) * tfScale(b, W.naniteUnits),
 
-  // --- Claw Harpoon (stats: damage, rate, range, grapple, drill) -----------------------------------
-  // Fires one drill claw on a tether along the turret aim while firing (js/claw-harpoon.js). The claw
-  // flies out to harpoonRange, piercing every enemy on its line once (each one behind takes
-  // TUNING.pierceFalloff of the last, like Autocannon bolts) and drilling through rock: it breaks rock
-  // worth harpoonDrill rock HP per throw (x the ship's drill speed) and bites to a stop in the first rock
-  // it can't break (bedrock always stops it). The first small enemy it hits (hull radius up to
-  // harpoonHookSize, never a boss or lieutenant) is hooked and reeled back into your other claw, which
-  // crushes it for harpoonCrushShare of a hit. One throw per harpoonCooldown: out, reel back, ready.
-  // Potential counts the throw hit plus the crush on one target.
-  harpoonCooldown: (b) => 0.45 / (1 + rateStep('harpoon') * (b.r.rate || 0)),
+  // --- Drill Driver, id harpoon (stats: damage, rate, range, pierce, drill) -------------------------
+  // Fires a spinning drill bit along the turret aim while firing (js/drill-driver.js), one per
+  // harpoonCooldown. The bit flies at harpoonSpeed out to harpoonRange, boring through every enemy on its
+  // line once (each one behind takes harpoonPierceKeep of the hit before it unless that one died) and
+  // through rock: it breaks rock worth harpoonDrill rock HP per bit (x the ship's drill speed) and bites to
+  // a stop in the first rock it can't break (bedrock always stops it). Nothing is pulled: every hit's
+  // knockback points away from the ship. Potential counts one bit on one target, like an Autocannon bolt.
+  harpoonCooldown: (b) => 0.22 / (1 + rateStep('harpoon') * (b.r.rate || 0)),
   harpoonRange: (b) => 330 + 40 * (b?.r?.range || 0),
-  harpoonHookSize: (b) => 17 + 5 * (b?.r?.grapple || 0),
+  harpoonSpeed: 1500, // px/s: a bit crosses its reach in about a fifth of a second
+  harpoonPierceKeep: (b) => Math.min(1, 0.7 + 0.05 * (b?.r?.pierce || 0)), // share kept past each enemy that survives the hit
   harpoonDrill: (b) => 130 * (1 + 0.6 * (b?.r?.drill || 0)),
   harpoonTipRadius: 9,
-  harpoonPierceKeep: 0.7, // damage kept past each enemy that survives the hit; a kill costs the claw no momentum
-  harpoonCrushShare: 0.5,
-  // Share of a throw's cycle spent flying out and reeling back (the rest is the claw back in its socket).
-  // A faster winch (Rate cards) flies and reels faster; the reach (Range cards) never changes the cycle.
-  harpoonOutShare: 0.36,
-  harpoonBackShare: 0.36,
-  // Transforms: Seismic Slam (every reel-in snaps your claws shut in a slamRadius blast at the nose worth
-  // slamShare of a hit, valued at slamHitShare), Drill Spin (the claw spins in place at the end of each
-  // throw for spinShare of the cycle, grinding everything round its tip spinTicks times for spinShare of
-  // a hit in total, valued at spinHitShare; it drills rock there too), Chain Harpoon (from the end of
-  // each throw the claw leaps on to up to chainLeaps more enemies within chainRange of the tip, piercing
-  // each for chainShare of a hit, valued at chainHitShare, hooking one if it has no catch yet).
-  slamShare: 0.45,
-  slamRadius: 85,
-  slamHitShare: 1.2, // the claws snap shut on whatever is pressing on your nose: a small pack
+  // Transforms: Twin Drills (every launch fires two bits twinSpread rad apart, the second valued at
+  // twinHitShare: on one target it lands about that often), Drill Spin (a bit spins where it stops for
+  // spinTime s, grinding everything within spinRadius spinTicks times for spinShare of a hit in total,
+  // valued at spinHitShare; it drills rock there too), Ricochet Bits (a spent bit caroms on to up to
+  // chainLeaps more enemies within chainRange of its tip, chainTime s each, for chainShare of a hit each,
+  // valued at chainHitShare).
+  twinSpread: 0.16,
+  twinHitShare: 0.6,
   spinShare: 0.6,
   spinTicks: 6,
-  spinTime: 0.2, // share of the cycle the claw spins (taken from its idle time in the socket)
+  spinTime: 0.3,
   spinRadius: 58,
   spinHitShare: 1.1,
   chainLeaps: 3,
   chainShare: 0.4,
   chainRange: 220,
-  chainTime: 0.04, // share of the cycle each leap takes
+  chainTime: 0.05,
   chainHitShare: 0.75, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
-  // Pool transforms (js/claw-harpoon.js via bt-extras.js): Whip Tether (reeling in, the tether hits every enemy
-  // it sweeps across once for whipShare, valued at whipHitShare enemies), Tesla Hook (at the end of every throw
-  // the tip arcs teslaShare of a hit into up to teslaArcs enemies within teslaRange, valued at teslaHitShare).
-  whipShare: 0.35,
-  whipWidth: 12,
-  whipHitShare: 1,
-  teslaArcs: 3,
-  teslaShare: 0.35,
-  teslaRange: 170,
-  teslaHitShare: 0.5,
-  harpoonUnits: (b) => 1 + W.harpoonCrushShare + (b.t4 ? W.slamShare * W.slamHitShare : 0)
+  // Pool transforms (js/drill-driver.js): Detonator Bit (a bit screws into the first enemy that survives it, or
+  // where it stopped, and blows detDelay s later in a detRadius blast for detShare of a hit, valued at
+  // detHitShare), Tunnel Bore (the line a bit bored keeps cutting for tunnelLife s, ticking every enemy within
+  // tunnelWidth of it every tunnelTick s for tunnelShare of a hit in all, valued at tunnelHitShare).
+  detDelay: 0.35,
+  detRadius: 70,
+  detShare: 0.6,
+  detHitShare: 1.3,
+  tunnelLife: 1,
+  tunnelTick: 0.2,
+  tunnelShare: 0.4,
+  tunnelWidth: 14,
+  tunnelHitShare: 1.2,
+  harpoonUnits: (b) => 1 + (b.t4 ? W.twinHitShare : 0)
     + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0)
-    + (b.tf?.has('whip') ? W.whipShare * W.whipHitShare : 0) + (b.tf?.has('tesla') ? W.teslaArcs * W.teslaShare * W.teslaHitShare : 0),
-  // Damage of one throw hit on the first enemy on its line.
+    + (b.tf?.has('detonate') ? W.detShare * W.detHitShare : 0) + (b.tf?.has('tunnel') ? W.tunnelShare * W.tunnelHitShare : 0),
+  // Damage of one bit on the first enemy on its line.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
   // --- Graviton Mortar, id quake (stats: damage, count, rate, radius, bore) -------------------------

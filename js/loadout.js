@@ -107,7 +107,7 @@ export const WEAPONS = [
     summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
   },
   {
-    id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
+    id: 'harpoon', name: 'Drill Driver', hudName: 'Drill Driver', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
     color: '#ffcc00',
     summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
   },

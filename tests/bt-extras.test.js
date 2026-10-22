@@ -264,30 +264,6 @@ test('Shatter Edge: a fading disc bursts into shatterShards shards at shatterSha
   assert.ok(g.bullets.every((s) => s.kind === 'shrapnel' && s.source === 'glaive' && Math.abs(s.damage - 10 * W.shatterShare) < 1e-9));
 });
 
-test('Whip Tether: the reeling tether hits each enemy it lies across once per throw', () => {
-  const { g, p } = fight('harpoon', { 6: 'whip' }, [[100, 0], [100, 60]]);
-  const [on, off] = g.enemyManager.enemies;
-  const hits = [];
-  g.hitEnemy = (x, d) => hits.push([x, d]);
-  const b = weaponBuild(p, 'harpoon');
-  BTX.harpoonWhip(g, b, 7, p.x, p.y, p.x + 200, p.y, 10);
-  BTX.harpoonWhip(g, b, 7, p.x, p.y, p.x + 200, p.y, 10);
-  assert.deepEqual(hits, [[on, 10 * W.whipShare]], 'once per throw, only on the line');
-  BTX.harpoonWhip(g, b, 8, p.x, p.y, p.x + 200, p.y, 10);
-  assert.equal(hits.length, 2, 'the next throw whips again');
-  assert.ok(off);
-});
-
-test('Tesla Hook: the claw tip arcs into up to teslaArcs enemies within teslaRange', () => {
-  const { g, p } = fight('harpoon', { 12: 'tesla' }, [[20, 0], [40, 0], [60, 0], [80, 0], [900, 0]]);
-  const hits = [];
-  g.hitEnemy = (x, d) => hits.push([x, d]);
-  BTX.harpoonTesla(g, weaponBuild(p, 'harpoon'), p.x, p.y, 10);
-  assert.equal(hits.length, W.teslaArcs);
-  assert.ok(hits.every(([, d]) => Math.abs(d - 10 * W.teslaShare) < 1e-9));
-  assert.ok(!hits.some(([e]) => e === g.enemyManager.enemies[4]), 'not past teslaRange');
-});
-
 test('Crush Field and Gravity Lens: a main shell leaves a crushing pool; in flight it drags enemies toward its landing', () => {
   const { g, p } = fight('quake', { 6: 'crush', 12: 'lens' }, [[300, 0]]);
   const e = g.enemyManager.enemies[0];

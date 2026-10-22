@@ -30,11 +30,11 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Drill Driver x0.6 (pierce compounds Damage), Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Drill Driver x2.2, Graviton Mortar x0.33', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.6, drones: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.2, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
-  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage)');
+  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 0.8 / 0.6 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks back to the Autocannon size');
   assert.ok(near(rateStep('lightning'), RATE_STEP * 0.6));
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
@@ -89,7 +89,7 @@ test('every stat formula reads only its own rank', () => {
     raillance: { rate: W.railCycle, count: W.railLances, width: W.railWidth, pierce: W.railKeep, damage: W.railDamageMult },
     glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult },
     nanites: { rate: W.naniteTick, radius: W.naniteRadius, duration: W.naniteLife, cooldown: W.naniteCooldown, damage: W.naniteDamageMult },
-    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, grapple: W.harpoonHookSize, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
+    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, pierce: W.harpoonPierceKeep, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
     quake: { count: W.quakeShells, rate: W.quakeCooldown, radius: W.quakeRadius, bore: W.quakeRockDamage, damage: W.quakeDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
@@ -262,9 +262,9 @@ test('class-based balance: Glaive Discs and Escort Drones stay ~85% of the Autoc
   }
 });
 
-// The Claw Harpoon is aimed single-target like the Autocannon: 100% per level (its mining and yank are
+// The Drill Driver is aimed single-target like the Autocannon: 100% per level (its mining and yank are
 // utility). Past ~LV 9 one throw overkills the bench's wave-6 targets, so the level-matched check stops at 9.
-test('class-based balance: aimed single-target weapons (Claw Harpoon) realize ~100% of the Autocannon at LV 1, 3, 6 and 9', () => {
+test('class-based balance: aimed single-target weapons (Drill Driver) realize ~100% of the Autocannon at LV 1, 3, 6 and 9', () => {
   for (const lv of [1, 3, 6, 9]) {
     const share = benchDps('harpoon', lv) / benchDps('blaster', lv);
     assert.ok(Math.abs(share - CLASS_TARGET.aimed.perTarget) <= 0.15, `harpoon LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
