@@ -461,35 +461,43 @@ function drawBlueprint(ctx, h) {
   ctx.lineCap = 'butt';
 }
 
-// Warning: the ring at its start radius and a bright spoke down each safe gap. Live: the ring
-// itself, drawn as arcs that skip the gaps.
+// Warning: the arcs at their start radius and a dashed spoke out of each, where it will sweep. Live:
+// the arcs themselves, rolling outward.
 function drawWave(ctx, h) {
   const k = h.state === 'warn' ? 1 - Math.max(0, h.t) / h.warn : 1;
   if (h.state === 'warn') {
-    ctx.strokeStyle = `hsla(140, 100%, 70%, ${0.25 + k * 0.55})`;
+    // Where each arc will sweep: a dashed spoke in the hazard's hue out of the middle of every arc.
+    const g0 = [...h.gaps].map(wrap).sort((p, q) => p - q);
+    ctx.strokeStyle = `hsla(${h.hue}, 100%, 70%, ${0.25 + k * 0.55})`;
     ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
     ctx.beginPath();
-    for (const g of h.gaps) {
-      const c = Math.cos(g), s = Math.sin(g);
+    for (let i = 0; i < g0.length; i++) {
+      const mid = (g0[i] + (i + 1 < g0.length ? g0[i + 1] : g0[0] + TAU)) / 2;
+      const c = Math.cos(mid), s = Math.sin(mid);
       ctx.moveTo(h.x + c * h.r, h.y + s * h.r);
       ctx.lineTo(h.x + c * (h.r + 60 + 160 * k), h.y + s * (h.r + 60 + 160 * k));
     }
     ctx.stroke();
+    ctx.setLineDash([]);
   }
   const alpha = h.state === 'warn' ? 0.25 + k * 0.4 : 0.85;
-  const steps = 48;
-  const step = TAU / steps;
+  // The solid arcs, drawn exactly between the gaps (a glow a little wider than the hit, then a hot core).
+  const gaps = [...h.gaps].map(wrap).sort((p, q) => p - q);
   for (let pass = 0; pass < 2; pass++) {
     ctx.strokeStyle = pass === 0 ? `hsla(${h.hue}, 100%, 60%, ${alpha * 0.45})` : `hsla(${h.hue}, 100%, 78%, ${alpha})`;
-    ctx.lineWidth = pass === 0 ? h.w : Math.max(2, h.w * 0.25);
+    ctx.lineWidth = pass === 0 ? h.w + 6 : Math.max(2.5, h.w * 0.4);
     ctx.beginPath();
-    let open = false;
-    for (let s = 0; s <= steps; s++) {
-      const a = s * step;
-      const x = h.x + Math.cos(a) * h.r;
-      const y = h.y + Math.sin(a) * h.r;
-      if (inGap(h, a)) { open = false; continue; }
-      if (!open) { ctx.moveTo(x, y); open = true; } else ctx.lineTo(x, y);
+    if (!gaps.length) {
+      ctx.moveTo(h.x + h.r, h.y);
+      ctx.arc(h.x, h.y, h.r, 0, TAU);
+    }
+    for (let i = 0; i < gaps.length; i++) {
+      const a0 = gaps[i] + h.gapWidth / 2;
+      const a1 = (i + 1 < gaps.length ? gaps[i + 1] : gaps[0] + TAU) - h.gapWidth / 2;
+      if (a1 <= a0) continue;
+      ctx.moveTo(h.x + Math.cos(a0) * h.r, h.y + Math.sin(a0) * h.r);
+      ctx.arc(h.x, h.y, h.r, a0, a1);
     }
     ctx.stroke();
   }

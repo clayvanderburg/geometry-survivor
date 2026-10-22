@@ -601,13 +601,14 @@ const wingCommander = {
 // --- EVENT HORIZON (wave 25, minor) ---------------------------------------------------------
 // A living black hole. It drifts after you with a huge pull: it tugs your ship (never past the escape
 // cap), bends your shots, and drags other hostiles in. Anything it swallows heals it. It breathes:
-// it INHALES (stronger pull) while green spokes mark the safe gaps, then EXHALES a GRAVITY WAVE, an
-// expanding ring that hits anything it crosses outside the gaps, with an orb ring riding it. At half
+// it INHALES (stronger pull) while dashed spokes mark where its short arcs will sweep, then EXHALES a
+// GRAVITY WAVE: 3 short arcs rolling outward that hit anything they cross, orbs flying out between them. At half
 // HP it spits out two vortexes, breathes faster and every wave comes as a double ripple whose second
 // ring turns its gaps. Arrives with two Hulks in tow.
 export const HORIZON = {
-  pullRadius: 400, bend: 2.2, enemyPull: 0.9, eatHeal: 0.025, eatRadius: 1.05,
-  breathEvery: 6, rageBreathEvery: 4.2, inhaleTime: 1.6, ring: 16, rageRing: 24, ringSpeed: 2.6,
+  pullRadius: 360, bend: 2.2, enemyPull: 0.9, eatHeal: 0.025, eatRadius: 1.05, // pull 400 before v0.45 (Clay: -10%)
+  // Orbs per exhale: they fly through the wave's gaps, evenly spaced (16 / 24 before v0.45: twice as tight).
+  breathEvery: 6, rageBreathEvery: 4.2, inhaleTime: 1.6, ring: 9, rageRing: 12, ringSpeed: 2.6,
   speed: 1.9, radius: 54, rageAt: 0.5, vortexes: 2, escortHulks: 2,
   // Drift cap while the ship is inside the pull (px/tick): under the full tug the ship still climbs out at
   // ~1.2-1.9 px/tick, so this must stay well below that (it was the full 1.9 in v0.44-0.45: inescapable).
@@ -617,7 +618,9 @@ export const HORIZON = {
   // Gravity wave: grows waveSpeed px/tick from the rim out to waveReach px, waveWidth thick, with
   // `gaps` safe gaps waveGap rad wide (rageGaps when enraged); a hit costs waveDamage of its contact
   // hit. The enraged ripple's second ring follows rippleDelay s behind, its gaps turned half a step.
-  waveSpeed: 3.4, waveReach: 760, waveWidth: 20, gaps: 3, rageGaps: 3, waveGap: 0.62, waveDamage: 0.5, rippleDelay: 0.55
+  // v0.45 (Clay: the wave's bars were unfair): 3 short arcs of ~0.44 rad, 6 px thick (were ~1.47 rad, 20 px:
+  // 30% of the size), so the gaps between them are wide.
+  waveSpeed: 3.4, waveReach: 760, waveWidth: 6, gaps: 3, rageGaps: 3, waveGap: 1.65, waveDamage: 0.5, rippleDelay: 0.55
 };
 
 // Mark a gravity wave from the core: it shows its safe gaps for `warn` s, then rolls outward.
@@ -628,22 +631,20 @@ function gravityWave(e, m, warn, gaps, onFire) {
   });
 }
 
-// The orb ring that rides a wave: `n` orbs spread over the solid arcs only, so the gaps stay clear.
+// The orb ring that rides a wave: `n` orbs flying out through its gaps.
 function exhaleOrbs(e, m, n, gaps) {
-  const solid = Math.PI * 2 - gaps.length * HORIZON.waveGap;
-  const per = gaps.length ? Math.max(1, Math.round(n / gaps.length)) : n;
-  const sorted = [...gaps].sort((a, b) => a - b);
-  if (!sorted.length) {
+  if (!gaps.length) {
     for (let k = 0; k < n; k++) fireOrb(m, e, (k / n) * Math.PI * 2, HORIZON.ringSpeed, 6);
     return;
   }
-  let fired = 0;
-  for (let g = 0; g < sorted.length && fired < n; g++) {
-    const from = sorted[g] + HORIZON.waveGap / 2;
-    const span = solid / sorted.length;
-    const count = g === sorted.length - 1 ? n - fired : per;
-    for (let k = 0; k < count; k++) fireOrb(m, e, from + span * ((k + 0.5) / count), HORIZON.ringSpeed, 6);
-    fired += count;
+  // n orbs shared out over the gaps, spread across 3/4 of each (never on an arc), with clear lanes between:
+  // 9 orbs sit ~0.62 rad apart, twice the old spacing.
+  const per = Math.max(1, Math.round(n / gaps.length));
+  for (const g of gaps) {
+    for (let k = 0; k < per; k++) {
+      const off = per === 1 ? 0 : (k / (per - 1) - 0.5) * HORIZON.waveGap * 0.75;
+      fireOrb(m, e, g + off, HORIZON.ringSpeed, 6);
+    }
   }
 }
 
@@ -734,7 +735,8 @@ const eventHorizon = {
     const reach = e.pullRadius;
     const pull = HORIZON.enemyPull * (e.inhaleT > 0 ? 1.6 : 1);
     for (const o of m.enemyIndex.query(e.x, e.y, reach)) {
-      if (o === e || o.dead || o.isBoss || o.leader || o.mount || o.doomQueued || o.type === 'blackhole') continue;
+      // Bosses, lieutenants (elites), boss parts and serpent plates are never pulled or swallowed: only regular hostiles.
+      if (o === e || o.dead || o.isBoss || o.isLieutenant || o.leader || o.mount || o.doomQueued || o.type === 'blackhole') continue;
       const gx = e.x - o.x;
       const gy = e.y - o.y;
       const d = Math.hypot(gx, gy) || 1;
