@@ -136,7 +136,22 @@ export const WEAPON_SCALING = {
   arcRoundJumps: 2,
   arcRoundShare: 0.3,
   arcRoundRange: 150,
-  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
+  // Pool transforms (EXTRA_TRANSFORMS): Tracer Slugs (every slugEvery-th shot is a slug worth slugMult bolts,
+  // slugPierce more pierce: utility; valued at slugValue, since a slug overkills small targets), Hot Barrel
+  // (sustained fire heats the barrel to +hotRateMax fire rate over hotHeatUp s, cooling over hotCool s; valued
+  // at hotValue of full heat, since the extra bolts overkill too). Both values from the card bench.
+  slugEvery: 4,
+  slugMult: 2.5,
+  slugPierce: 2,
+  slugRadiusMult: 1.8,
+  slugValue: 0.6,
+  hotRateMax: 0.6,
+  hotHeatUp: 2.5,
+  hotCool: 1.2,
+  hotValue: 0.45,
+  slugUnits: (b) => (b.tf?.has('slug') ? (W.slugEvery - 1 + W.slugMult * W.slugValue) / W.slugEvery : 1),
+  hotUnits: (b) => (b.tf?.has('hotbarrel') ? 1 + W.hotRateMax * W.hotValue : 1),
+  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)) * W.slugUnits(b) * W.hotUnits(b),
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Rocket Pods (stats: damage, count, reload, radius) -----------------------------------------
@@ -161,7 +176,24 @@ export const WEAPON_SCALING = {
   mirvRange: 320, // mini-rockets home on the nearest enemies this far ahead of the split
   mirvHoming: 0.12, // rad per tick
   mirvHitShare: 0.85, // three small payloads cover no more ground than one rocket's blast: each valued at this share
-  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
+  // Pool transforms: Shrapnel Shells (every blast throws shellShards shards at shellShare of the hit,
+  // valued at shellHitShare: they fan out, so few land), Rolling Thunder (a rocket drops a charge every
+  // thunderEvery s of flight, up to thunderMax, each thunderShare of the hit in thunderRadiusFrac of the
+  // blast; valued at thunderHitShare, from the card bench: most land behind the pack).
+  shellShards: 6,
+  shellShare: 0.25,
+  shellHitShare: 0.35,
+  shellSpeed: 9,
+  shellLife: 0.3,
+  thunderEvery: 0.09,
+  thunderMax: 4,
+  thunderShare: 0.25,
+  thunderDelay: 0.14,
+  thunderRadiusFrac: 0.6,
+  thunderHitShare: 0.2,
+  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)
+    + (b.tf?.has('shrapnel') ? W.shellShards * W.shellShare * W.shellHitShare : 0)
+    + (b.tf?.has('thunder') ? W.thunderMax * W.thunderShare * W.thunderHitShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
   wingRocketDamageMult: (b) => lv1Trim('rockets') * lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
@@ -189,7 +221,18 @@ export const WEAPON_SCALING = {
   nukeUnits: 1.88,
   nukeRadiusMult: 2.2,
   nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
-  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
+  // Pool transforms: Hunter-Killer (every blast launches one hunter at hunterShare, valued at hunterHitShare:
+  // it misses when nobody is beyond the blast), Echo Salvo (echoDelay s after each salvo a normal salvo at
+  // echoShare follows; echo missiles never echo again).
+  hunterShare: 0.5,
+  hunterHitShare: 0.8,
+  hunterRange: 420,
+  hunterBlastFrac: 0.6,
+  echoShare: 0.5,
+  echoDelay: 0.45,
+  echoHue: 280,
+  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (1 + (b.tf?.has('hunter') ? W.hunterShare * W.hunterHitShare : 0))
+    * ((b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1) + (b.tf?.has('echo') ? W.echoShare : 0)),
   missileDamageMult: (b) => lv1Trim('missiles') * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) * fireRateTrim('missiles') / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
@@ -981,15 +1024,10 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 // Breakthrough multipliers) at every level and stat mix; the balance tool reports it alongside real runs.
 // Autocannon is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
 export const POTENTIAL_DPS = {
-  blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
-    * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
-  rockets: (b) => W.wingRocketCount(b) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1) * W.wingRocketDamageMult(b)
-    * (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) / W.wingRocketCooldown(b),
-  missiles: (b) => {
-    const salvo = W.missileSalvo(b) * W.missileDamageMult(b) * (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)); // bomblets valued at their hit share
-    const avg = b.t12 ? ((W.nukeEvery - 1) * salvo + W.nukeUnits * W.nukeHitShare * salvo) / W.nukeEvery : salvo; // the nuke at its hit share
-    return avg / W.missileCooldown(b);
-  },
+  // Transform attacks at their hit shares (blasterUnits / rocketUnits / missileUnits).
+  blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b) * W.blasterUnits(b),
+  rockets: (b) => W.wingRocketCount(b) * W.wingRocketDamageMult(b) * W.rocketUnits(b) / W.wingRocketCooldown(b),
+  missiles: (b) => W.missileSalvo(b) * W.missileDamageMult(b) * W.missileUnits(b) / W.missileCooldown(b),
   lightning: (b) => {
     const chains = W.lightningChains(b) * W.lightningJumpUnits(b) * W.lightningDamageMult(b); // later jumps at lightningJumpShare
     const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;

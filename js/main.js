@@ -30,6 +30,7 @@ import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
 import { GlaiveDiscs } from './glaive.js';
 import { ClawHarpoon } from './claw-harpoon.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs (Tracer Slugs, Hot Barrel, Shrapnel Shells, ...)
 import { QuakeMortar } from './quake-mortar.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
@@ -3162,6 +3163,7 @@ export class Game {
       const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
       if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
       if (b.homing) this.steerHomingBolt(b);
+      if (b.bx?.thunder) BTX.rocketFlight(this, b, dt);
       if (b.mirvT > 0) {
         b.mirvT -= dt;
         if (b.mirvT <= 0 && b.mirvParts > 1) this.splitMirv(b);
@@ -3247,6 +3249,7 @@ export class Game {
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
         if (b.tandem || b.napalm || b.ricochet > 0 || b.arcRounds) this.boltBreakthroughs(b, e, hx, hy);
+        if (b.bx?.shrapnel) BTX.rocketBurst(this, b, e, hx, hy);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
@@ -3372,7 +3375,7 @@ export class Game {
     const targets = this.mirvTargets(b, parts);
     for (let k = 0; k < parts; k++) {
       const a = heading + (k - (parts - 1) / 2) * 0.22;
-      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies) };
+      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies), bx: b.bx && { ...b.bx } };
       part.vx = Math.cos(a) * speed;
       part.vy = Math.sin(a) * speed;
       part.radius = 3.4;
@@ -3445,6 +3448,7 @@ export class Game {
     const pierce = blasterPierce(p, b);
     // Breakthroughs: Flak Rounds burst on hit, Ricochet Rounds bounce once, Arc Rounds arc on hit.
     const flak = b.t4 ? { blastRadius: W.flakRadius * (p.stats.areaMult ?? 1), blastDamage: damage * W.flakShare, blastStat: 'blaster', blastHue: 28, flak: true } : null;
+    const slug = BTX.blasterVolley(this, b);
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
@@ -3455,7 +3459,7 @@ export class Game {
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
       const noseY = p.y + Math.sin(a) * 16 + sideY * stream.lateral;
 
-      this.bullets.push({
+      this.bullets.push(BTX.shapeBlasterBolt(this, b, {
         x: noseX,
         y: noseY,
         vx: Math.cos(a) * speed,
@@ -3469,7 +3473,7 @@ export class Game {
         ...flak,
         ricochet: b.t8 ? 1 : 0,
         arcRounds: b.t12
-      });
+      }, slug));
     }
 
     if (p.weapons.pulsarHelix) {
@@ -3491,7 +3495,8 @@ export class Game {
       }
     }
 
-    this.sound.playLaser();
+    this.sound.playLaser(BTX.blasterPitch(this, b));
+    BTX.blasterVolleyFx(this, p, slug);
     kickShipRecoil(p);
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
@@ -3529,7 +3534,7 @@ export class Game {
       const wy = p.y + hy * fwd + hx * side * out;
       const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
       const fx = Math.cos(a), fy = Math.sin(a);
-      this.bullets.push({
+      this.bullets.push(BTX.shapeRocket(b, {
         x: wx,
         y: wy,
         vx: fx * W.wingRocketSpeed * vel,
@@ -3548,25 +3553,27 @@ export class Game {
         napalm: b.t8,
         mirvT: b.t12 ? W.mirvTime : 0,
         mirvParts: mirv
-      });
+      }));
       this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
     }
     if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
     else this.sound.playLaser(0.55);
   }
 
-  fireSwarmMissiles(b = weaponBuild(this.player, 'missiles')) {
+  // `echo`: an Echo Salvo repeat (half strength, no nuke, never echoes again).
+  fireSwarmMissiles(b = weaponBuild(this.player, 'missiles'), { echo = false } = {}) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'missiles', b);
     const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const salvo = W.missileSalvo(b);
-    const damage = weaponDamage(p, 'missile', b);
+    const damage = weaponDamage(p, 'missile', b) * (echo ? W.echoShare : 1);
     const blastRadius = missileBlastRadius(p, b);
-    const hue = missileHue(p);
+    const hue = echo ? W.echoHue : missileHue(p);
+    BTX.afterSalvo(this, b, echo);
     const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, spread: W.clusterSpread, delay: W.clusterDelay } : null;
     // Tactical Nuke: every nukeEvery-th salvo is one huge missile carrying nukeUnits salvos of damage.
-    this.missileSalvos = (this.missileSalvos || 0) + 1;
-    const nuke = b.t12 && this.missileSalvos % W.nukeEvery === 0;
+    if (!echo) this.missileSalvos = (this.missileSalvos || 0) + 1;
+    const nuke = !echo && b.t12 && this.missileSalvos % W.nukeEvery === 0;
     const count = nuke ? 1 : salvo;
     const each = nuke ? damage * salvo * W.nukeUnits : damage;
     const radius = (nuke ? blastRadius * W.nukeRadiusMult : blastRadius) * (b.t8 ? W.rainRadiusMult : 1);
@@ -3579,8 +3586,12 @@ export class Game {
         const a = Math.random() * Math.PI * 2;
         const x = (t ? t.x : p.x + Math.cos(p.angle) * 200) + Math.cos(a) * Math.random() * jitter;
         const y = (t ? t.y : p.y + Math.sin(p.angle) * 200) + Math.sin(a) * Math.random() * jitter;
-        this.weaponFx.schedule({ x, y, delay: W.rainDelay + i * 0.05, radius, damage: each, hue, source: 'missile', style: nuke ? 'nuke' : 'strike', knock: KNOCKBACK.missile, cluster,
-          after: p.weapons.stormProtocol ? (g, ev) => g.fireChainLightning(W.stormChainLevel, ev.x, ev.y) : null });
+        const hunt = b.tf?.has('hunter');
+        this.weaponFx.schedule({ x, y, delay: W.rainDelay + i * 0.05 + (echo ? 0.1 : 0), radius, damage: each, hue, source: 'missile', style: nuke ? 'nuke' : 'strike', knock: KNOCKBACK.missile, cluster,
+          after: p.weapons.stormProtocol || hunt ? (g, ev) => {
+            if (p.weapons.stormProtocol) g.fireChainLightning(W.stormChainLevel, ev.x, ev.y);
+            if (hunt) BTX.missileBlast(g, { x: ev.x, y: ev.y, damage: ev.damage, source: 'missile', hunterArmed: true }, ev.radius);
+          } : null });
       }
       this.particles.spawnDirectionalSparks(p.x, p.y, -Math.PI / 2, 0.5, Math.min(20, 3 * count), hue, 12);
       this.particles.spawnShockwave(p.x, p.y, 40, hue, 3, 0.3);
@@ -3593,7 +3604,7 @@ export class Game {
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       const target = targets.length ? targets[i % targets.length] : null;
-      this.missiles.push({
+      this.missiles.push(BTX.shapeMissile(b, {
         target,
         aimX: target ? target.x : p.x + Math.cos(p.angle) * W.missileRange,
         aimY: target ? target.y : p.y + Math.sin(p.angle) * W.missileRange,
@@ -3609,8 +3620,9 @@ export class Game {
         life: (nuke ? W.missileLife * 1.25 : W.missileLife) / vel,
         source: 'missile',
         nuke,
-        cluster
-      });
+        cluster,
+        echo
+      }));
     }
     this.missileSalvoFx(p, count);
   }
@@ -5509,8 +5521,9 @@ export class Game {
 
     // 3. Primary Weapon Firing
     const shouldFire = !jumping && (this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)));
+    if (!shouldFire && this.barrelHeat) BTX.hotBarrelRate(this, dt, false, weaponBuild(p, 'blaster')); // Hot Barrel cools off
     if (shouldFire && ownsWeapon(p, 'blaster')) {
-      this.fireAccumulator += dt * blasterFireRate(p);
+      this.fireAccumulator += dt * blasterFireRate(p) * BTX.hotBarrelRate(this, dt, true, weaponBuild(p, 'blaster'));
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
@@ -5582,6 +5595,7 @@ export class Game {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.life -= dt;
+      if (m.chainSafe > 0) m.chainSafe -= dt; // a fresh Hunter-Killer clears its parent's blast first
       // Home on the locked target; if it dies first, fly on to where it was and burst there (no
       // retargeting, so a salvo spends itself on the targets it launched at).
       if (m.target && !m.target.dead) {
@@ -5629,6 +5643,7 @@ export class Game {
           else if (el === 'shock') this.particles.spawnShockwave(m.x, m.y, blast * 0.7, 62, 2, 0.25);
         }
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, source, KNOCKBACK.missile);
+        BTX.missileBlast(this, m, blast);
         if (m.cluster) {
           const c = m.cluster;
           this.weaponFx.hop(this, m.x, m.y, c.count, blast * 0.75, blast * c.spread, Math.max(36, blast * c.radiusFrac), m.damage * c.share, c.delay, 40, source);
@@ -5641,7 +5656,7 @@ export class Game {
         // Sympathetic detonation: other missiles caught in this blast go off where they are.
         for (let j = 0; j < this.missiles.length; j++) {
           const o = this.missiles[j];
-          if (o !== m && !o.chain && (o.x - m.x) ** 2 + (o.y - m.y) ** 2 <= blast * blast) o.chain = true;
+          if (o !== m && !o.chain && !(o.chainSafe > 0) && (o.x - m.x) ** 2 + (o.y - m.y) ** 2 <= blast * blast) o.chain = true;
         }
         this.missiles.splice(i, 1);
       }
@@ -7006,6 +7021,10 @@ export class Game {
       }
       if (b.kind === 'shard') {
         this.drawShard(ctx, b);
+        continue;
+      }
+      if (b.kind === 'shrapnel') {
+        BTX.drawShrapnel(ctx, b);
         continue;
       }
       const tailX = b.x - b.vx * 1.4;

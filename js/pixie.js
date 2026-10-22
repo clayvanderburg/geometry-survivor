@@ -86,7 +86,14 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'flamethrower:ring': ['Inferno Ring! Fire, but in a circle. Elegant.', 'smug'],
   'cryospray:blizzard': ['Blizzard Ring! Bring a sweater, Jack.', 'eureka'],
   'grenades:gravity': ['Gravity Grenades! Newton is spinning. Literally.', 'smug'],
-  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka']
+  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka'],
+  // Pool transforms (EXTRA_TRANSFORMS): every one has its own line (tests/breakthrough-pools.test.js).
+  'blaster:slug': ['Tracer Slugs! Every fourth shot is a BIG one. I counted.', 'smug'],
+  'blaster:hotbarrel': ['Hot Barrel! Don\'t touch it. Seriously, don\'t.', 'oops'],
+  'rockets:shrapnel': ['Shrapnel Shells! Pointy bits, everywhere, on purpose!', 'eureka'],
+  'rockets:thunder': ['Rolling Thunder! Ba-boom-boom-BOOM. That\'s the science.', 'smug'],
+  'missiles:hunter': ['Hunter-Killer! The missiles have missiles now!', 'eureka'],
+  'missiles:echo': ['Echo Salvo! I fired it once and the universe said it back.', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.
