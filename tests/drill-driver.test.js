@@ -112,10 +112,10 @@ test('a bit fires only while firing, one per cycle; Spin-Up Motor cards shorten 
   assert.ok(drill.charge < 0.2, 'the next bit starts spinning up the moment one leaves');
   const fast = makeBuild('harpoon', 4, { rate: 3 });
   assert.ok(near(W.harpoonCooldown(fast), W.harpoonCooldown(b) / (1 + rateStep('harpoon') * 3)), 'rate steps like the Autocannon');
-  assert.ok(near(rateStep('harpoon'), rateStep('blaster')), 'Spin-Up Motor ranks are Autocannon-sized');
+  assert.ok(near(rateStep('harpoon'), rateStep('blaster') * 1.3), 'Spin-Up Motor ranks are 1.3x the Autocannon\'s');
 });
 
-test('a bit bores every enemy on its line once, out to its reach; damage drops past survivors, not past kills', () => {
+test('a bit bores every enemy on its line once, out to its reach; damage drops past every enemy it bores', () => {
   const b1 = makeBuild('harpoon', 1);
   const reach = W.harpoonRange(b1);
   const { g, p, hits, foes, drill } = drillGame({ foes: [{ x: 100 }, { x: 180 }, { x: 260 }, { x: reach + 80 }, { x: 150, y: 90 }] });
@@ -127,16 +127,16 @@ test('a bit bores every enemy on its line once, out to its reach; damage drops p
   assert.ok(near(boreHits[0].dmg, dmg) && near(boreHits[1].dmg, dmg * keep) && near(boreHits[2].dmg, dmg * keep ** 2));
   assert.equal(drill.bits.length, 0, 'the spent bit crumbles');
 
-  // A kill costs no momentum: the enemy behind a one-shot target takes the full hit.
+  // A kill costs the same bite as a survivor (free kills made Damage cards compound).
   const k = drillGame({ foes: [{ x: 100, hp: 1 }, { x: 180 }] });
   oneShot(k.g);
   const after = k.hits.filter((x) => x.stat === 'harpoon');
   assert.ok(k.foes[0].dead || k.foes[0].hp <= 0);
-  assert.ok(near(after[1].dmg, weaponDamage(k.p, 'harpoon')));
+  assert.ok(near(after[1].dmg, weaponDamage(k.p, 'harpoon') * keep));
 
   // Hardened Threads keep more of the hit past each survivor (utility: the first hit is unchanged).
   assert.ok(near(W.harpoonPierceKeep(makeBuild('harpoon', 3, { pierce: 2 })), keep + 0.1));
-  assert.equal(W.harpoonPierceKeep(makeBuild('harpoon', 7, { pierce: 6 })), 1);
+  assert.equal(W.harpoonPierceKeep(makeBuild('harpoon', 6, { pierce: 5 })), 1);
 });
 
 test('mining: rock a bit breaks counts as your mining and it flies on; rock it cannot finish stops it; bedrock is untouched', () => {
@@ -217,7 +217,7 @@ test('Detonator Bit lodges in the first enemy that survives it and blows; Tunnel
   const reach = W.harpoonRange(makeBuild('harpoon', 1));
   const tun = drillGame({ bt: btWith('tunnel') });
   tick(tun.g, 1);
-  tick(tun.g, 20, false);
+  tick(tun.g, Math.ceil(reach / W.harpoonSpeed / DT) + 2, false);
   assert.equal(tun.drill.tunnels.length, 1, 'a spent bit leaves its bore');
   const crosser = addFoe(tun.g, { x: reach / 2, y: 6 });
   tick(tun.g, Math.ceil(W.tunnelLife / DT) + 2, false);
