@@ -619,7 +619,7 @@ export const WEAPON_SCALING = {
   // lash the nearest enemy outside them within tendrilRange for tendrilShare of a tick, valued at tendrilHitShare),
   // Spore Burst (a fading cloud pops for sporeMult ticks in sporeRadiusMult of it; valued as sporeUnits ticks'
   // worth per tick: clouds fade about as often as they vent).
-  tendrilMax: 5,
+  tendrilMax: 3, // bt-bench (blend, #220 no-dash kite): 5 realized 1.40-1.48x Across the Board
   tendrilShare: 1,
   tendrilRange: 280,
   tendrilHitShare: 0.15, // bt-bench: few enemies stand near the trail (gas reach, #214)
