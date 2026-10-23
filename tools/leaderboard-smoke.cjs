@@ -73,17 +73,41 @@ const text = (page, sel) => page.locator(sel).innerText();
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : { channel: 'chrome' }) });
   try {
-    // 1. Offline: aborted request.
+    // 1. Offline: aborted request. The run is queued in the outbox ("1 RUN WAITING TO UPLOAD"); once the
+    //    board is back, the next launch sends it with the same nonce and the hint goes away.
     {
-      const { page, errors, context } = await openGame(browser, route => route.abort());
+      let online = false;
+      const outboxPosts = [];
+      const api = (route) => {
+        if (!online) return route.abort();
+        const req = route.request();
+        if (req.method() === 'POST') {
+          const p = JSON.parse(req.postData());
+          outboxPosts.push(p.nonce);
+          return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank: 7, allTimeRank: 7, version: p.version, mode: p.mode, id: 'outbox-run', name: p.name, entries: [{ id: 'outbox-run', ...p, date: new Date().toISOString() }], total: 1, boardSize: 100 }) });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: 'all', mode: 'normal', current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: 100 }) });
+      };
+      const { page, errors, context } = await openGame(browser, api);
       await page.waitForFunction(() => /OFFLINE/.test(document.getElementById('highscore-note').textContent));
       const rows = await page.locator('#highscore-list .hs-row').count();
       if (rows < 1) throw Error('Offline title board should show the local runs');
       await page.screenshot({ path: 'leaderboard-offline-smoke.png' });
       await endRun(page);
-      await page.waitForFunction(() => /OFFLINE \/\/ RUN SAVED LOCALLY/.test(document.getElementById('go-global-rank').textContent));
+      await page.waitForFunction(() => /RUN QUEUED FOR UPLOAD/.test(document.getElementById('go-global-rank').textContent), null, { timeout: 15000 });
       if (!/OFFLINE/.test(await text(page, '#go-board-note'))) throw Error('Offline game-over board needs the OFFLINE note');
       if (await page.locator('#go-highscore-list .hs-current').count() !== 1) throw Error('Offline fallback should highlight the new local run');
+      if (await text(page, '#go-board-outbox') !== '◌ 1 RUN WAITING TO UPLOAD') throw Error('The game-over board should say a run is waiting to upload: ' + await text(page, '#go-board-outbox'));
+      const queuedNonce = await page.evaluate(() => JSON.parse(localStorage.getItem('vexolith_global_outbox_v1'))[0].payload.nonce);
+      online = true;
+      await page.reload();
+      await page.locator('#splash-screen').waitFor({ state: 'visible' });
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('vexolith_global_outbox_v1') || '[]').length === 0, null, { timeout: 10000 });
+      if (outboxPosts.length !== 1 || outboxPosts[0] !== queuedNonce) throw Error('The next launch should send the queued run once, with its nonce: ' + outboxPosts);
+      await page.waitForFunction(() => document.getElementById('title-board-outbox').classList.contains('hidden'));
+      await page.waitForTimeout(1500);
+      if (outboxPosts.length !== 1) throw Error('A sent run must never go up twice');
       if (errors.length) throw Error(errors.join('\n'));
       await context.close();
     }
@@ -362,6 +386,6 @@ const text = (page, sel) => page.locator(sel).innerText();
       if (errors.length) throw Error(errors.join('\n'));
       await context.close();
     }
-    console.log('Leaderboard smoke PASS: offline fallback (after quiet retries), a busy board retried with the same nonce, a stale CDN board ignored after a submit, a full 100-run board scrolling under a pinned head (wheel, d-pad, right stick, YOU #n jump; touch drag at phone width), slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version, NORMAL / HARDCORE / BLITZ boards (mouse + controller), a HARDCORE run on its own board; no page errors.');
+    console.log('Leaderboard smoke PASS: offline fallback (after quiet retries) with the run queued and sent once on the next launch, a busy board retried with the same nonce, a stale CDN board ignored after a submit, a full 100-run board scrolling under a pinned head (wheel, d-pad, right stick, YOU #n jump; touch drag at phone width), slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version, NORMAL / HARDCORE / BLITZ boards (mouse + controller), a HARDCORE run on its own board; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

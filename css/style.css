@@ -970,6 +970,15 @@ body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #c
 .hs-row.hs-top2 .hs-rank { color: #e0e8ff; }
 .hs-row.hs-top3 .hs-rank { color: #ff9955; }
 
+/* "N RUNS WAITING TO UPLOAD": runs the outbox will send when the board is reachable again. */
+.board-outbox {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #e2c6ff;
+}
+.board-outbox.hidden { display: none; }
+
 /* Column head, pinned to the top while the board scrolls under it. */
 .hs-head {
   position: sticky;
