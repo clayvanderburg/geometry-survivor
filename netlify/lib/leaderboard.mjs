@@ -41,8 +41,10 @@ export const RATE_PREFIX = 'ratelimit/';
 export const MIGRATION_PREFIX = 'migrations/';
 
 // GET answers on Netlify's CDN: fresh for 15 s, then served stale for up to 30 s more while one request
-// refreshes it. Browsers never cache them (cache-control), and each ?version / ?mode is its own entry.
-export const GET_CDN_CACHE = 'public, s-maxage=15, stale-while-revalidate=30';
+// refreshes it. `durable` shares one cached copy across every edge node (without it each node keeps its
+// own, and most requests still reached the function). Browsers never cache them (cache-control), and each
+// ?version / ?mode is its own entry.
+export const GET_CDN_CACHE = 'public, durable, s-maxage=15, stale-while-revalidate=30';
 export const GET_CACHE_HEADERS = Object.freeze({
   'cache-control': 'public, max-age=0, must-revalidate',
   'netlify-cdn-cache-control': GET_CDN_CACHE,
