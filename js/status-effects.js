@@ -31,14 +31,15 @@ import { ELEMENT_KEYS, FIXED_ELEMENTS, weaponElement } from './weapon-levels.js'
 export const STATUS_COLORS = { burn: TAG_INFO.burn.color, chill: TAG_INFO.chill.color, corrode: TAG_INFO.corrode.color, shock: TAG_INFO.shock.color };
 
 // Damage-over-time sources: they never crit and never re-apply statuses.
-export const DOT_SOURCES = { burn: true, corrode: true, shock: true };
+export const DOT_SOURCES = { burn: true, corrode: true, shock: true, frost: true };
 
 // DoT ticks are credited to the weapon that applied the stacks (run-stats.js SUB_SOURCES):
-// burn_<weapon>, corrode_<weapon>, shock_<weapon>.
+// burn_<weapon>, corrode_<weapon>, shock_<weapon>, frost_<weapon>.
 const STATUS_WEAPONS = [...Object.keys(ELEMENT_KEYS), ...Object.keys(FIXED_ELEMENTS)];
 export const BURN_STATS = Object.fromEntries(STATUS_WEAPONS.map((id) => [id, `burn_${id}`]));
 export const CORRODE_STATS = Object.fromEntries(STATUS_WEAPONS.map((id) => [id, `corrode_${id}`]));
 export const SHOCK_STATS = Object.fromEntries(STATUS_WEAPONS.map((id) => [id, `shock_${id}`]));
+export const FROST_STATS = Object.fromEntries(STATUS_WEAPONS.map((id) => [id, `frost_${id}`]));
 
 // Embers, sparks and conduction arcs are capped per frame so an afflicted 200-enemy swarm stays cheap.
 const MAX_EMBERS_PER_TICK = 4;
@@ -77,13 +78,15 @@ export const isFrozen = (e) => !!e.st && e.st.frozenT > 0;
 // Stunned or frozen: the hull holds still and can't attack (EnemyManager.update).
 export const isHeld = (e) => !!e.st && (e.st.stunT > 0 || e.st.frozenT > 0);
 
-// Corroded hulls take more damage from every source (DoTs included); frozen ones too.
+// Corroded hulls take more damage from every source (DoTs included); chilled ones a little more as cold
+// builds (W.chilledDamageTaken at the freeze threshold), and frozen ones more still.
 export function damageTakenMult(e) {
   const s = e.st;
   if (!s) return 1;
   let m = 1;
   if (s.corrode > 0) m += Math.min(s.corrodeCap, s.corrode * corrodeVulnPerStack());
   if (s.frozenT > 0) m *= 1 + W.frozenDamageTaken;
+  else if (s.cold > 0) m *= 1 + W.chilledDamageTaken * Math.min(1, s.cold / (s.coldMax || 1));
   return m;
 }
 
@@ -102,13 +105,14 @@ export function applyBurn(p, e, lv, dmg, weapon = 'blaster') {
   s.burnStat = BURN_STATS[weapon] || 'burn';
 }
 
-export function applyChill(p, e, lv, dmg) {
+export function applyChill(p, e, lv, dmg, weapon = 'cryospray') {
   const s = stateOf(e);
   if (s.frozenT > 0) return; // frozen solid: nothing more to build
   wake(s);
   s.cold += stacksForHit(p, lv, dmg);
   s.coldMax = freezeThreshold(p, e);
   s.coldRank = Math.max(s.coldRank, lv);
+  s.coldStat = FROST_STATS[weapon] || 'frost';
   updateSlow(e, s, p);
 }
 
@@ -165,7 +169,7 @@ export function applyOnHitStatuses(p, e, source, dmg = 0) {
   const lv = el.rank;
   switch (el.element) { // one element per weapon
     case 'fire': applyBurn(p, e, lv, dmg, weapon); break;
-    case 'frost': applyChill(p, e, lv, dmg); break;
+    case 'frost': applyChill(p, e, lv, dmg, weapon); break;
     case 'corrode': applyCorrode(p, e, lv, dmg, weapon); break;
     case 'shock': applyShockStacks(p, e, lv, dmg, weapon); break;
   }
@@ -246,6 +250,11 @@ function tickStacks(game, e, s, p, keep) {
   }
   if (s.corrode > 0) {
     game.hitEnemy(e, s.corrode * dotPerStack(p, 'corrode'), 'corrode', 0, 0, 0.2, s.corrodeStat || 'corrode');
+    if (e.dead) return;
+  }
+  if (s.cold > 0 && s.frozenT <= 0) {
+    // Frostbite: a light tick while cold builds (W.frostDotPerStack), so a slowed pack still bleeds.
+    game.hitEnemy(e, s.cold * dotPerStack(p, 'frost'), 'frost', 0, 0, 0.15, s.coldStat || 'frost');
     if (e.dead) return;
   }
   if (s.shock > 0) {

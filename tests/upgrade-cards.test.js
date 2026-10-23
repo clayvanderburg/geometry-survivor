@@ -168,7 +168,7 @@ test('only stats that change are listed', () => {
   assert.deepEqual(describeUpgrade(p, byId('firerate')).rows.map((r) => r.id), ['fireRate']);
   // Every weapon stat card shows exactly one stat: its own.
   for (const id of ['missiles', 'singularity', 'orbitals', 'mines']) applyUpgradeLevels(p, byId(id));
-  for (const id of ['singularity_pull', 'singularity_cooldown', 'singularity_core', 'orbitals_size', 'mines_fuse', 'missiles_radius', 'missiles_reload']) {
+  for (const id of ['singularity_pull', 'singularity_cooldown', 'orbitals_size', 'mines_radius', 'missiles_radius', 'missiles_reload']) {
     assert.equal(describeUpgrade(p, byId(id)).rows.length, 1, id);
   }
   p.bombs = 9; // bomb cap: the magnet card must not promise a bomb

@@ -51,14 +51,14 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8 }); // the Drill Driver's out-and-back throws start heavy and climb steeper: x1.1 holds it near the Autocannon from LV 6 on
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8, raillance: 1.2, shockfield: 1.2 }); // the Drill Driver's out-and-back throws start heavy and climb steeper: x1.1 holds it near the Autocannon from LV 6 on
 export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 // RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
 // its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
 // Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
 // build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
-export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
+export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
 // The Sentry Turret has two rate cards, so Loosen Bolts (charge reload) never meets the diminishing return
 // Tighten Springs (fire rate) puts on the other: each reload rank realized ~1.5x a Bigger Cogs (damage) rank on
 // the realistic benches (tools/balance/hand-bench.mjs). Its step is trimmed to match (v0.46).
@@ -136,6 +136,10 @@ export const WEAPON_SCALING = {
   blasterRateMult: (b) => (1 + W.blasterRateStep * (b.r.rate || 0)) * tempo(b),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
+  // Share of a hit each enemy behind the first takes from an Autocannon bolt (Phase Piercer). TUNING.pierceFalloff
+  // (0.7) before v0.46: a Piercer rank then out-realized a Plasma Charge rank ~1.5x early and mid-run
+  // (tools/balance/hand-bench.mjs), so the UTILITY card was the strictly better pick.
+  blasterPierceKeep: 0.4,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
   // bolt at 60% damage), Arc Rounds (every hit arcs into 2 nearby enemies for 30% each).
   flakShare: 0.5,
@@ -257,7 +261,7 @@ export const WEAPON_SCALING = {
   // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
   lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / cdr(b),
   stormArcScale: 2,
-  lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
+  lightningRange: (b) => 420 + 35 * (b.r.reach || 0), // +40% (was 300 + 25/rank); Reach card retired in v0.46 (dead pick)
   lightningChains: (b) => (b.t4 ? 2 : 1),
   // Potential counts the first jump of a chain as a full hit and every later jump at lightningJumpShare:
   // like a blast's splash, the extra jumps land on whatever pack is near, so a chain is valued close to
@@ -524,7 +528,7 @@ export const WEAPON_SCALING = {
   droneValue: (b) => 1 + W.droneWingHitShare * (W.droneSquad(b) - 1),
   droneWingDamageMult: (b) => (W.droneCount(b) > 1 ? W.droneDamageMult(b) * W.droneWingHitShare * (W.droneSquad(b) - 1) / (W.droneCount(b) - 1) : 0),
   droneFireRate: (b) => 7.6 * (1 + rateStep('drones') * (b.r.rate || 0)) * tempo(b), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
-  droneRange: (b) => 784 + 35 * b.r.range, // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
+  droneRange: (b) => 784 + 35 * (b.r.range || 0), // Range card retired in v0.46 (dead pick); // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
   droneBoltSpeed: 15,
   // Transforms: Escort Squadron (the back row of 3), Homing Bolts, Micro-Missile Pods (each drone
   // launches a homing micro-missile every podEvery s worth 22% of its bolt damage).
@@ -698,7 +702,7 @@ export const WEAPON_SCALING = {
   // the spin, each extra one valued at flameNozzleShare of a stream (cones that sweep past each other
   // catch fewer fresh enemies).
   flameNozzles: (b) => 1 + (b?.r?.nozzles || 0),
-  flameNozzleShare: 0.6,
+  flameNozzleShare: 0.45,
   flameNozzleMult: (b) => 1 + W.flameNozzleShare * (W.flameNozzles(b) - 1),
   // Transforms: the LV 6 burst (one per sprayer: Fireballs lobbed from every nozzle to the tip of its
   // stream every flameBurstEvery s; Shatter, a frozen enemy the spray hits bursts in ice shards;
@@ -795,6 +799,11 @@ export const WEAPON_SCALING = {
   railChargeShare: 0.8,
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
+  // Split Rails: each extra lance is worth railLanceShare of a lance (fanned lances share the pack, like the
+  // sprayers' extra nozzles). Every lance carries railLanceMult / lances of a hit, so the volley realizes what
+  // the model values it at; at full value a 2nd lance doubled the weapon (+50-105% vs a Slug Mass rank, v0.46).
+  railLanceShare: 0.5,
+  railLanceMult: (b) => 1 + W.railLanceShare * (W.railLances(b) - 1),
   railSpread: 0.12,                               // rad between Split Rails lances
   railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
@@ -831,7 +840,7 @@ export const WEAPON_SCALING = {
   railExtraUnits: (b) => (1 + (b.tf?.has('static') ? W.staticShare * W.staticArcs : 0)) * (1 + (b.tf?.has('reflect') ? W.reflectShare * W.reflectHitShare : 0)),
   railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b) * W.railExtraUnits(b),
   // Damage of one lance hit on the first enemy in its line (an Overload Shot hits overloadMult x this).
-  railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLances(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
+  railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLanceMult(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
   // One Ion Wake tick on one enemy.
   railWakeDamageMult: (b) => W.railDamageMult(b) * W.wakeShare / (W.wakeLife / W.wakeTick),
 
@@ -1088,10 +1097,11 @@ export const WEAPON_SCALING = {
   // Siege Battery: every turret bolt that hits bursts like a small mine.
   siegeShellRadius: 52,
   siegeShellDamageMult: 0.7,
-  // Critical hits: chance is additive per card level, damage is the crit multiplier.
+  // Critical hits: chance is additive per card level, damage is the crit multiplier. v0.46: +20% chance and +0.5x
+  // per rank (were +5% / +0.25x: a rank realized ~2-5% against Reactor Overdrive's ~10%, tools/balance/hand-bench.mjs).
   // Supercritical multiplies the crit *bonus* (multiplier - 1) against status-afflicted targets.
-  critChanceStep: 0.05,
-  critDamageStep: 0.25,
+  critChanceStep: 0.2,
+  critDamageStep: 0.5,
   supercritChance: 0.1,
   supercritBonusMult: 1.5,
 
@@ -1142,6 +1152,12 @@ export const WEAPON_SCALING = {
   freezeResistLieutenant: 1.5,
   freezeResistBoss: 3,
   frozenDamageTaken: 0.25,
+  // Chilled (not yet frozen) hulls take up to this much more damage, in step with their cold. FROST only slowed
+  // before v0.46, and a slowed pack reaches the guns later: FROST element cards realized -8% to -27% damage.
+  chilledDamageTaken: 0.2,
+  // FROSTBITE: cold stacks tick for this x base damage per stack (corrode's acid is 0.0035), so a FROST weapon
+  // never loses damage to its own slow (v0.46; it slowed packs out of reach and realized -8% to -27%).
+  frostDotPerStack: 0.006,
 
   // CORRODE (CORROSIVE): a light DoT, and every stack makes the target take corrodeVulnPerStack more
   // damage from every source (DoTs included), up to corrodeCap(lv).
@@ -1299,7 +1315,7 @@ export const POTENTIAL_DPS = {
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
     return (discharge + lash + clap + W.fieldExtraUnits(b) * d) / W.fieldCooldown(b);
   },
-  raillance: (b) => W.railLances(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
+  raillance: (b) => W.railLanceMult(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
   glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b),
   nanites: (b) => W.naniteDamageMult(b) * W.naniteUnits(b) * W.naniteUptime(b) / W.naniteTick(b),
   harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b),
@@ -1487,8 +1503,8 @@ export const stacksForHit = (p, lv, dmg) => (dmg > 0 ? (dmg / Math.max(1e-9, bas
 // on average (1 / decay: the first tick lands before any decay).
 export const statusDecay = (p) => W.statusDecay * Math.max(0.5, 1 - W.durationStep * rk(p, 'statusDuration'));
 // DoT per stack per tick, x base damage applied by the caller (status-effects.js multiplies by baseDamage).
-const DOT_PER_STACK = { fire: () => W.burnPerStack, corrode: () => W.corrodeDotPerStack, shock: () => W.shockDotPerStack };
-const DOT_TUNING = { fire: 'burnDamageMult', corrode: 'corrodeMult', shock: null };
+const DOT_PER_STACK = { fire: () => W.burnPerStack, corrode: () => W.corrodeDotPerStack, shock: () => W.shockDotPerStack, frost: () => W.frostDotPerStack };
+const DOT_TUNING = { fire: 'burnDamageMult', corrode: 'corrodeMult', shock: null, frost: null };
 export const dotPerStack = (p, element) => (DOT_PER_STACK[element] ? baseDamage(p) * DOT_PER_STACK[element]()
   * (DOT_TUNING[element] ? TUNING[DOT_TUNING[element]] ?? 1 : 1) * elementDamageMult(p, element) : 0);
 // Share of a hit's damage that comes back later as its element's DoT (burn, acid, or shock while touching).

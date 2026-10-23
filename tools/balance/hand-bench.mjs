@@ -11,12 +11,17 @@
 //   early     the Armory-free opening: each starting weapon alone at LV 1, its cards against Overdrive, crit
 //             and the global cards that can share its first hands.
 //
-//   node tools/balance/hand-bench.mjs --part weapons|globals|early [--only id,id] [--seeds 4] [--json out.json]
+//   node tools/balance/hand-bench.mjs --part weapons|globals|early [--only id,id] [--seeds 4] [--wave 10] [--json out.json]
+//
+// --wave sets the targets' wave (10 by default). A mid-run build one-shots wave-10 targets on some weapons
+// (Rail Lance, Shock Field), so a Damage card reads ~0 there: re-check those at a later wave before calling it dead.
 const h = await import('./harness.mjs');
 const U = await import('../../js/upgrades.js');
 const { STAT_CARDS, ELEMENT_CARDS, POWER_STATS } = await import('../../js/weapon-levels.js');
 const { WEAPON_BY_ID, START_WEAPON_CHOICES } = await import('../../js/loadout.js');
 
+const argWave = process.argv.indexOf('--wave');
+export const WAVE = argWave >= 0 ? Number(process.argv[argWave + 1]) : 10;
 const BENCHES = { real: { orbitRadius: 260, dash: true }, kite: { orbitRadius: 1200, dash: false } };
 const RATE = ['rate', 'reload', 'recharge', 'cooldown'];
 const COUNT = ['count', 'salvo', 'prism', 'wingmen', 'chain', 'nozzles'];
@@ -52,20 +57,20 @@ function dps(weapons, extra, mid, kind, seeds) {
   let sum = 0;
   for (let seedIndex = 0; seedIndex < seeds; seedIndex++) {
     const r = h.benchUpgrade({ seed: 'handbench', scenario: 'chase', seedIndex, setup: build(weapons, extra, mid),
-      bench: { ...h.BENCH, targets: 25, orbitRadius, targetWave: 10 }, dash });
+      bench: { ...h.BENCH, targets: 25, orbitRadius, targetWave: WAVE }, dash });
     for (const [src, v] of Object.entries(r.dps)) if (src !== 'nova' && src !== 'thrusters') sum += v;
   }
   return sum / seeds;
 }
 
 // Blended gain of each card set in `cards` ({ label: [ids] }) over the build without them.
-function gains(weapons, cards, mid, seeds) {
+function gains(weapons, cards, mid, seeds, baseExtra = []) {
   const out = {};
   const base = {};
-  for (const kind of Object.keys(BENCHES)) base[kind] = dps(weapons, [], mid, kind, seeds);
+  for (const kind of Object.keys(BENCHES)) base[kind] = dps(weapons, baseExtra, mid, kind, seeds);
   for (const [label, ids] of Object.entries(cards)) {
     const g = {};
-    for (const kind of Object.keys(BENCHES)) g[kind] = dps(weapons, ids, mid, kind, seeds) / Math.max(1e-9, base[kind]) - 1;
+    for (const kind of Object.keys(BENCHES)) g[kind] = dps(weapons, [...baseExtra, ...ids], mid, kind, seeds) / Math.max(1e-9, base[kind]) - 1;
     out[label] = { ...g, blend: Math.sqrt((1 + g.real) * (1 + g.kite)) - 1 };
   }
   return out;
@@ -89,6 +94,8 @@ export function globalCards(weapons, mid, seeds) {
   const cards = {};
   for (const id of GLOBAL_IDS) if (eligible(weapons, id, mid)) cards[id] = [id];
   const r = gains(weapons, cards, mid, seeds);
+  // Overkill Resonator waits for crit chance (CRIT_DAMAGE_MIN_CHANCE): price it after one Deadeye rank.
+  if (!cards.crit_damage) Object.assign(r, Object.fromEntries(Object.entries(gains(weapons, { crit_damage: ['crit_damage'] }, mid, seeds, ['crit_chance'])).map(([k, v]) => [`${k} (after crit_chance)`, v])));
   // One weapon card: each weapon's best single card (Damage, Rate or Count), averaged over the build.
   const best = weapons.map((w) => {
     const per = gains(weapons, Object.fromEntries([find(w, ['damage']), find(w, RATE), find(w, COUNT)].filter(Boolean).map((c) => [c.id, [c.id]])), mid, seeds);

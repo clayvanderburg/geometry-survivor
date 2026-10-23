@@ -183,7 +183,7 @@ export class RailLance {
     const overload = this.overloadNext(b);
     this.shots++;
     const n = Math.min(MAX_LANCES, W.railLances(b));
-    const dmg = weaponDamage(p, 'rail', b) * (overload ? W.overloadMult : 1);
+    const dmg = weaponDamage(p, 'rail', b) * (overload ? W.overloadMult : 1) * W.railLanceMult(b) / W.railLances(b);
     const width = W.railWidth(b) * (overload ? W.overloadWidth : 1);
     const keep = W.railKeep(b);
     const stat = overload ? 'overload' : 'rail';
