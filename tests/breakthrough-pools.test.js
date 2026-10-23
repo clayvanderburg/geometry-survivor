@@ -182,7 +182,7 @@ test('Overtuned Core: each weapon\'s own version is damage and POWER ranks only,
     for (const x of o.dmg) assert.ok(x >= 1 && x <= 2, `${id}: ${o.dmg}`);
     if (o.stat) {
       assert.ok(POWER_STATS.has(o.stat) && o.stat !== 'damage', `${id}: ${o.stat} is a POWER stat, never utility`);
-      assert.ok(Number.isInteger(o.ranks) && o.ranks >= 1, id);
+      assert.ok(Number.isInteger(o.ranks) && o.ranks >= 1 && o.label, id);
       assert.ok(overtunedRanks(id), `${id} has a ${o.stat} card`);
     } else assert.ok(o.dmg.every((x) => x > 1), `${id}: damage only, so more damage`);
   }
@@ -197,7 +197,7 @@ test('Overtuned Core: each weapon\'s own version is damage and POWER ranks only,
       assert.match(d.summary, new RegExp(`\\+${pct}% damage`), id);
     }
     if (otr) {
-      assert.ok(d.headline.includes(`+${otr.ranks} ${otr.card.name.toUpperCase()}`), `${id}: ${d.headline}`);
+      assert.ok(d.headline.includes(`+${otr.ranks} ${OVERTUNED[id].label.toUpperCase()}`), `${id}: ${d.headline}`);
       assert.ok(d.summary.includes(`+${otr.ranks} ${otr.card.name}`), `${id}: ${d.summary}`);
     }
     applyBreakthrough(p, id, 12, 'overtuned');

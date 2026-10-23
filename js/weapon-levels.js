@@ -34,26 +34,27 @@ export const BT_BOOST_RANKS = 1;
 // is a trap): `dmg` = [LV 6, LV 12, LV 18] damage per hit (between milestones it follows the weapon level, like
 // TF_REALIZED), and on weapons whose swarm output barely follows hit damage (cones, clouds, fields, mines: the
 // pack dies to the hits it already takes, so only more attacks or more coverage count) `ranks` free ranks of one
-// POWER stat. Each pick adds them, the card names both, and potential DPS counts both (weapon-scaling.js).
+// POWER stat (`label` names them on the card headline; `unit`: it counts things, so no 'rank'). Each pick adds
+// them, the card names both, and potential DPS counts both (weapon-scaling.js).
 export const BT_OVERTUNED_DPS = 1.3;
 export const BT_OVERTUNED_BAND = Object.freeze([1, 1.15]);
 export const OVERTUNED = Object.freeze({
-  blaster: { stat: 'rate', ranks: 1, dmg: [1.2, 1, 1] },
+  blaster: { stat: 'rate', ranks: 1, label: 'fire rate', dmg: [1.2, 1, 1] },
   missiles: { dmg: [1.4, 1.45, 1.4] },
-  singularity: { stat: 'cooldown', ranks: 1, dmg: [1.1, 1, 1.1] },
-  orbitals: { stat: 'count', ranks: 1, dmg: [1.2, 1.2, 1.2] },
-  mines: { stat: 'rate', ranks: 2, dmg: [1, 1, 1] },
+  singularity: { stat: 'cooldown', ranks: 1, label: 'cooldown', dmg: [1.1, 1, 1.1] },
+  orbitals: { stat: 'count', ranks: 1, label: 'blade', unit: true, dmg: [1.2, 1.2, 1.2] },
+  mines: { stat: 'rate', ranks: 2, label: 'drop rate', dmg: [1, 1, 1] },
   turret: { dmg: [1.5, 1.45, 1.3] },
-  grenades: { stat: 'rate', ranks: 1, dmg: [1.15, 1.15, 1.6] },
-  gas: { stat: 'rate', ranks: 3, dmg: [1.2, 1.2, 1.2] },
-  flamethrower: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
-  cryospray: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
-  acidspray: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
-  shockfield: { stat: 'recharge', ranks: 2, dmg: [1, 1, 1] },
-  raillance: { stat: 'rate', ranks: 1, dmg: [1, 1, 1] },
-  nanites: { stat: 'rate', ranks: 3, dmg: [1, 1, 1] },
+  grenades: { stat: 'rate', ranks: 1, label: 'throw rate', dmg: [1.15, 1.15, 1.6] },
+  gas: { stat: 'rate', ranks: 3, label: 'tick rate', dmg: [1.2, 1.2, 1.2] },
+  flamethrower: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
+  cryospray: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
+  acidspray: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
+  shockfield: { stat: 'recharge', ranks: 2, label: 'recharge', dmg: [1, 1, 1] },
+  raillance: { stat: 'rate', ranks: 1, label: 'charge rate', dmg: [1, 1, 1] },
+  nanites: { stat: 'rate', ranks: 3, label: 'bite rate', dmg: [1, 1, 1] },
   harpoon: { dmg: [1.5, 1.35, 1.3] },
-  quake: { stat: 'count', ranks: 1, dmg: [1, 1, 1] }
+  quake: { stat: 'count', ranks: 1, label: 'barrel', unit: true, dmg: [1, 1, 1] }
 });
 const OT_LEVELS = [6, 12, 18];
 // Overtuned Core's damage per hit on this weapon at this level.
@@ -604,7 +605,12 @@ const overtunedParts = (id, lv) => {
   const pct = overtunedPct(id, lv);
   return [pr && `+${pr.ranks} ${pr.card.name} rank${pr.ranks > 1 ? 's' : ''}`, (pct || !pr) && `${pct >= 0 ? '+' : ''}${pct}% damage`].filter(Boolean);
 };
-export const overtunedHeadline = (id, lv) => overtunedParts(id, lv).join(', ').toUpperCase();
+export const overtunedHeadline = (id, lv) => {
+  const o = OVERTUNED[id];
+  const pct = overtunedPct(id, lv);
+  const ranks = o?.label && `+${o.ranks} ${o.label}${o.unit ? (o.ranks > 1 ? 's' : '') : ` rank${o.ranks > 1 ? 's' : ''}`}`;
+  return [ranks, (pct || !ranks) && `${pct >= 0 ? '+' : ''}${pct}% damage`].filter(Boolean).join(', ').toUpperCase();
+};
 export const overtunedSummary = (weaponName, id, lv) => {
   const [a, b] = overtunedParts(id, lv);
   return `${weaponName}: ${b ? `${a} and ${b}` : a}${overtunedRanks(id) ? ' (free, on top of your cards)' : ' on every hit'}. No new tricks, no utility: just a hotter core.`;
