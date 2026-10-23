@@ -25,7 +25,12 @@ export const BT_BOOST_DPS = 1.08;
 // of 60 weapon milestones), so the hand is a real trade-off: utility for weapons that live on reach, size and
 // spin, raw damage for the ones that live on hits.
 // POWER stats get none: +1 Prism Split, fire rate and damage at once would multiply far past a transform.
-export const BT_BOOST_RANKS = 1;
+export const BT_BOOST_RANKS = 2;
+// Weapons that take 1 rank instead (v0.46 dominance audit): at 2 the sprayers' free spin, range and cone outran
+// every transform (1.3-2.8x), and on Gas, Mines, Nanites, Shock Field and Orbit Blades it already held its own at 1.
+// The Drill Driver keeps 1 while its own rework settles its reach.
+export const BOOST_RANKS = Object.freeze({ flamethrower: 1, cryospray: 1, acidspray: 1, gas: 1, mines: 1, nanites: 1, shockfield: 1, orbitals: 1, harpoon: 1 });
+export const boostRanksOf = (id) => BOOST_RANKS[id] ?? BT_BOOST_RANKS;
 // OVERTUNED CORE: the POWER flat (DRG: Survivor's clean overclocks): more damage output, no utility and nothing
 // new, a bigger number than a transform's potential (transforms are calibrated on realized damage,
 // js/bt-calibration.js) to pay for doing nothing new. BT_OVERTUNED_DPS is the default: x1.3 damage per hit.
@@ -36,23 +41,24 @@ export const BT_BOOST_RANKS = 1;
 // pack dies to the hits it already takes, so only more attacks or more coverage count) `ranks` free ranks of one
 // POWER stat (`label` names them on the card headline; `unit`: it counts things, so no 'rank'). Each pick adds
 // them, the card names both, and potential DPS counts both (weapon-scaling.js).
+// One pick never more than doubles single-target DPS, even on a build with none of that stat (Director, v0.46).
 export const BT_OVERTUNED_DPS = 1.3;
 export const BT_OVERTUNED_BAND = Object.freeze([1, 1.15]);
 export const OVERTUNED = Object.freeze({
-  blaster: { stat: 'rate', ranks: 1, label: 'fire rate', dmg: [1.2, 1, 1] },
+  blaster: { stat: 'rate', ranks: 1, label: 'fire rate', dmg: [1.45, 1.1, 1.05] },
   missiles: { dmg: [1.4, 1.45, 1.4] },
-  singularity: { stat: 'cooldown', ranks: 1, label: 'cooldown', dmg: [1.1, 1, 1.1] },
+  singularity: { stat: 'cooldown', ranks: 1, label: 'cooldown', dmg: [1.1, 1.05, 1.3] },
   orbitals: { stat: 'count', ranks: 1, label: 'blade', unit: true, dmg: [1.2, 1.2, 1.2] },
-  mines: { stat: 'rate', ranks: 2, label: 'drop rate', dmg: [1, 1, 1.3] },
+  mines: { stat: 'rate', ranks: 2, label: 'drop rate', dmg: [1, 1, 1.1] },
   turret: { dmg: [1.5, 1.45, 1.3] },
-  grenades: { stat: 'rate', ranks: 1, label: 'throw rate', dmg: [1.15, 1.15, 1.6] },
-  gas: { stat: 'rate', ranks: 3, label: 'tick rate', dmg: [1.2, 1.2, 1.2] },
+  grenades: { stat: 'rate', ranks: 1, label: 'throw rate', dmg: [1.15, 1.15, 1.4] },
+  gas: { stat: 'rate', ranks: 2, label: 'tick rate', dmg: [1.1, 1.1, 1.1] },
   flamethrower: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
   cryospray: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
   acidspray: { stat: 'nozzles', ranks: 1, label: 'nozzle', unit: true, dmg: [1, 1, 1] },
   shockfield: { stat: 'recharge', ranks: 2, label: 'recharge', dmg: [1, 1, 1] },
   raillance: { stat: 'rate', ranks: 1, label: 'charge rate', dmg: [1, 1, 1] },
-  nanites: { stat: 'rate', ranks: 3, label: 'bite rate', dmg: [1, 1, 1] },
+  nanites: { stat: 'cooldown', ranks: 2, label: 'cooldown', dmg: [1, 1, 1] },
   harpoon: { dmg: [1.5, 1.35, 1.3] },
   quake: { stat: 'count', ranks: 1, label: 'barrel', unit: true, dmg: [1, 1, 1] }
 });
@@ -317,7 +323,7 @@ const sprayElementRank = (weapon, cardId) => (p) => {
   const bt = p?.breakthroughs?.[weapon];
   let atb = 0;
   if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
-  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.[cardId] || 0) + atb * BT_BOOST_RANKS);
+  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.[cardId] || 0) + atb * boostRanksOf(weapon));
 };
 export const flameElementRank = sprayElementRank('flamethrower', 'flamethrower_burn');
 export const cryoElementRank = sprayElementRank('cryospray', 'cryospray_chill');
@@ -327,7 +333,7 @@ export function fieldElementRank(p) {
   const bt = p?.breakthroughs?.shockfield;
   let atb = 0;
   if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') atb++;
-  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.shockfield_stun || 0) + atb * BT_BOOST_RANKS);
+  return Math.min(ELEMENT_MAX_RANKS, 1 + (p?.upgradeLevels?.shockfield_stun || 0) + atb * boostRanksOf('shockfield'));
 }
 // Fixed-element weapons whose rank does not follow the level rule above.
 const FIXED_ELEMENT_RANK = { flamethrower: flameElementRank, cryospray: cryoElementRank, acidspray: acidElementRank, shockfield: fieldElementRank };
@@ -557,7 +563,7 @@ export function globalReaches(kind, id) {
 }
 
 export const BOOST_NAME = 'Across the Board';
-export const boostSummary = (weaponName) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${BT_BOOST_RANKS} rank in every UTILITY stat (size, reach, range, pierce, status rank...). No new tricks, just more of the same.`;
+export const boostSummary = (weaponName, id) => `${weaponName}: +${Math.round((BT_BOOST_DPS - 1) * 100)}% damage and +${boostRanksOf(id)} rank${boostRanksOf(id) > 1 ? 's' : ''} in every UTILITY stat (size, reach, range, pierce, status rank...). No new tricks, just more of the same.`;
 
 // In-world R&D lines for the Breakthrough header ({weapon} is the weapon's name).
 export const RD_LINES = [
@@ -584,7 +590,7 @@ export function boostRanks(p, id) {
   const bt = p?.breakthroughs?.[id];
   let n = 0;
   if (bt) for (const m of BREAKTHROUGH_LEVELS) if (bt[m] === 'boost') n++;
-  return n * BT_BOOST_RANKS;
+  return n * boostRanksOf(id);
 }
 
 // Chosen Breakthroughs of a weapon: { 6: option, 12: ..., 18: ... }. An option is a transform id
@@ -623,6 +629,11 @@ export const overtunedSummary = (weaponName, id, lv) => {
 // Draw weights of a transform: at its home milestone, and at any other one.
 export const BT_HOME_WEIGHT = 3;
 export const BT_AWAY_WEIGHT = 1;
+// Rarity as a balance lever (Clay, v0.46): a transform that stands out at one milestone stays as strong but comes up
+// less often there, where a number change would make it bland. 'weapon|transform|milestone' -> draw-weight factor.
+// Minefield Triad and Gravity Well cover three times the ground / pack the crowd at LV 12 (1.4-1.6x Across the Board,
+// at the BT_REALIZED_RANGE cap); Spore Trail at LV 6 out-realizes the other gas trails 1.3-1.7x on both benches.
+export const BT_DRAW_TRIM = Object.freeze({ 'mines|triad|12': 0.4, 'grenades|gravity|12': 0.4, 'gas|spores|6': 0.4 });
 // Chance the middle card is a transform (it is a flat otherwise).
 export const BT_MIDDLE_TRANSFORM_CHANCE = 0.5;
 
@@ -760,7 +771,7 @@ function weightedTake(items, rng) {
 export const BT_HAND_SIZE = 3;
 export function drawBreakthroughOptions(id, m, bt = {}, rng = Math.random) {
   const taken = takenTransforms(id, bt);
-  const tfs = transformPool(id).filter((t) => transformEligible(t, m, taken)).map((t) => ({ id: t.id, w: t.home === m ? BT_HOME_WEIGHT : BT_AWAY_WEIGHT }));
+  const tfs = transformPool(id).filter((t) => transformEligible(t, m, taken)).map((t) => ({ id: t.id, w: (t.home === m ? BT_HOME_WEIGHT : BT_AWAY_WEIGHT) * (BT_DRAW_TRIM[`${id}|${t.id}|${m}`] ?? 1) }));
   const flats = Object.keys(BT_FLATS).map((f) => ({ id: f, w: 1 }));
   const hand = [];
   const first = weightedTake(tfs, rng);
@@ -807,7 +818,7 @@ export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0, g = null)
     }
   }
   const r = {};
-  for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
+  for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * boostRanksOf(id));
   const otr = ot && overtunedRanks(id);
   if (otr) r[otr.stat] += ot * otr.ranks;
   const cs = COUNT_STATS[id];

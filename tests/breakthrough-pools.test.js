@@ -7,7 +7,7 @@ const h = await import('../tools/balance/harness.mjs');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, applyBreakthrough } = await import('../js/upgrades.js');
 const {
   STAT_CARDS, TRANSFORMS, BREAKTHROUGH_LEVELS, BT_FLATS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, BT_HAND_SIZE, overtunedAt, overtunedRanks, OVERTUNED, POWER_STATS, weaponBuild,
-  drawBreakthroughOptions, transformPool, makeBuild, btOption, EXTRA_TRANSFORMS
+  drawBreakthroughOptions, transformPool, makeBuild, btOption, EXTRA_TRANSFORMS, BT_DRAW_TRIM
 } = await import('../js/weapon-levels.js');
 const { describeBreakthrough } = await import('../js/upgrade-cards.js');
 const { POTENTIAL_DPS } = await import('../js/weapon-scaling.js');
@@ -207,5 +207,30 @@ test('Overtuned Core: each weapon\'s own version is damage and POWER ranks only,
     applyBreakthrough(p, id, 12, 'overtuned');
     const after = weaponBuild(p, id).r;
     for (const [st, v] of Object.entries(after)) assert.equal(v - before[st], st === otr?.stat ? otr.ranks : 0, `${id}: ${st}`);
+  }
+});
+
+test('a draw trim makes a standout transform rarer at that milestone, never gone', () => {
+  const rng = seeded(17);
+  for (const key of Object.keys(BT_DRAW_TRIM)) {
+    const [id, t, m] = key.split('|');
+    assert.ok(transformPool(id).some((x) => x.id === t) && BREAKTHROUGH_LEVELS.includes(Number(m)), `${key} names a pool transform`);
+    assert.ok(BT_DRAW_TRIM[key] > 0 && BT_DRAW_TRIM[key] < 1, key);
+    const seen = {};
+    for (let i = 0; i < 4000; i++) for (const o of drawBreakthroughOptions(id, Number(m), {}, rng)) seen[o] = (seen[o] || 0) + 1;
+    assert.ok(seen[t] > 0, `${key} still shows up`);
+    for (const p of transformPool(id)) if (p.id !== t && p.home !== Number(m)) assert.ok(seen[t] < seen[p.id], `${key}: rarer than ${p.id}`);
+  }
+});
+
+test('Overtuned Core at most doubles single-target DPS, even on a build with no ranks in the stat it adds', () => {
+  for (const id of WEAPONS) {
+    for (const m of BREAKTHROUGH_LEVELS) {
+      for (const c of STAT_CARDS[id]) {
+        const ranks = { [c.stat]: Math.min(m - 1, c.maxLevel ?? m) };
+        const gain = POTENTIAL_DPS[id](makeBuild(id, m, ranks, { [m]: 'overtuned' })) / POTENTIAL_DPS[id](makeBuild(id, m, ranks, {}));
+        assert.ok(gain <= 2 + 1e-9, `${id} LV ${m}, all ${c.stat}: x${gain.toFixed(2)}`);
+      }
+    }
   }
 });

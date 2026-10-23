@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 // of listing weapons, so new weapons can't make them stale. (Upgrade-pool summaries stay number-free:
 // tests/upgrade-cards.test.js.)
 await import('../tools/balance/harness.mjs'); // browser globals for the game modules
-const { TRANSFORMS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_BOOST_RANKS, boostSummary } = await import('../js/weapon-levels.js');
+const { TRANSFORMS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_BOOST_RANKS, BOOST_RANKS, boostSummary } = await import('../js/weapon-levels.js');
 const { WEAPON_SCALING: W, WEAPON_TAGS, TAG_INFO } = await import('../js/weapon-scaling.js');
 const { UPGRADE_POOL } = await import('../js/upgrades.js');
 const { MECHANIC_ENTRIES } = await import('../js/field-guide.js');
@@ -59,10 +59,11 @@ test('"about N% as strong / lighter" in Breakthrough summaries matches the trans
 test('Across the Board text quotes its real damage boost and free ranks (card and Field Guide)', () => {
   const pct = `+${Math.round((BT_BOOST_DPS - 1) * 100)}% damage`;
   assert.ok(boostSummary('Autocannon').includes(pct));
-  assert.ok(boostSummary('Autocannon').includes(`+${BT_BOOST_RANKS} rank in every UTILITY stat`));
+  assert.ok(boostSummary('Autocannon', 'blaster').includes(`+${BT_BOOST_RANKS} ranks in every UTILITY stat`));
+  for (const id of Object.keys(BOOST_RANKS)) assert.ok(boostSummary('X', id).includes(`+${BOOST_RANKS[id]} rank in every UTILITY stat`), id);
   const guide = MECHANIC_ENTRIES.find((e) => e.id === 'weaponlevels').body().join(' ');
   assert.ok(guide.includes(pct), guide);
-  assert.ok(guide.includes(`+${BT_BOOST_RANKS} rank in every UTILITY stat`), guide);
+  assert.ok(guide.includes(`+${BT_BOOST_RANKS} ranks in every UTILITY stat`), guide);
 });
 
 test('every tag card names the chip it boosts, so it covers every weapon showing that chip', () => {

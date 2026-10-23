@@ -11,7 +11,8 @@ Each weapon's pool holds two kinds of option:
 - **Transforms** (a new way the weapon works). The 60 we have, plus new ones from the content PRs. Each has a
   *home* milestone (today's `TRANSFORMS[id][6|12|18]`); new ones declare theirs.
 - **Flats** (shared by every weapon, no new mechanic; DRG's "clean/balanced" overclocks):
-  - **Across the Board**: ×1.08 damage and +1 rank in every UTILITY stat (×1.18 until v0.46: it beat Overtuned Core on 57 of 60 bench milestones).
+  - **Across the Board**: ×1.08 damage and +2 ranks in every UTILITY stat (+1 on the sprayers, Gas, Mines, Nanites,
+    Shock Field, Orbit Blades and the Drill Driver: `BOOST_RANKS`). ×1.18 and +1 rank until v0.46, when it beat Overtuned Core on 57 of 60 bench milestones.
   - **Overtuned Core**: more damage output, no utility: ×1.30 damage by default. Each weapon has its own version
     (`OVERTUNED` in `js/weapon-levels.js`), calibrated to realize 1.0–1.15× Across the Board: more damage where hits
     matter, free POWER ranks (+1 nozzle, +2 drop rate...) where the swarm already dies to the hits it takes.
@@ -48,14 +49,14 @@ under a transform, so the transforms stay the exciting pick (Director, Oct 22):
 |---|---|---|
 | any transform | ×1.22 (`BT_TRANSFORM_DPS`) | a new mechanic |
 | Overtuned Core | ×1.30 by default (`BT_OVERTUNED_DPS`); per weapon in `OVERTUNED` (×1.14–2.0) | nothing |
-| Across the Board | ×1.08 (`BT_BOOST_DPS`) | +1 every UTILITY rank |
+| Across the Board | ×1.08 (`BT_BOOST_DPS`) | +2 every UTILITY rank (+1 on some, `BOOST_RANKS`) |
 
 `tests/breakthroughs.test.js` pins every option's `dpsGain` to its row.
 
 **Realized calibration (card bench).** The model holds every transform at ×1.22, but what one *realizes* depends on
 how its attacks land, so before calibration the options ranged from 0.4× to 1.95× Across the Board. `js/bt-calibration.js`
 `TF_REALIZED` scales each transform's damage per milestone so it realizes **1.05–1.30× Across the Board** (control
-transforms 0.95–1.30×, sprayers too since Spin Rotor's retirement; every sprayer transform builds in 1 Spin Rotor rank), measured with `node tools/balance/bt-bench.mjs --seeds 6` (the blend bench: a chasing swarm of 25, as dense
+transforms 0.95–1.30×, sprayers 0.95–1.30×; every sprayer transform builds in 3 Spin Rotor ranks, since Across the Board's free rank still reaches spin), measured with `node tools/balance/bt-bench.mjs --seeds 6` (the blend bench: a chasing swarm of 25, as dense
 round the ship as in real runs, chasing both a bot-like tight loop and a human-like wide kite; targets at the wave a
 weapon reaches that level: 6 / 20 / 30). Potential DPS counts the value back in, so the ×1.22 rows above
 still hold. Values stay within 0.6–1.7 (a transform's boss damage never moves more than that); cases damage can't
