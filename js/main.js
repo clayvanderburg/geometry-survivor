@@ -61,7 +61,7 @@ import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
 import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, skipReward, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
 import { readyEvolutions, evolutionName } from './evolution-recipes.js';
-import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
+import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, describeOutbox, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
 import { TutorialUI } from './tutorial.js';
@@ -434,6 +434,7 @@ export class Game {
     this.syncModeUI();
     this.renderHubUI();
     this.refreshGlobalBoard();
+    this.flushGlobalOutbox(); // runs that couldn't be sent last time go up now
     this.initTunerDrawer();
 
     onTuningChange((_t, sandboxAction) => {
@@ -675,6 +676,7 @@ export class Game {
       const section = card?.querySelector(`[data-m-section="${btn.dataset.mOpen}"]`);
       if (!section) return;
       if (btn.dataset.mTab) card.querySelector(btn.dataset.mTab)?.click();
+      if (btn.dataset.mOpen === 'board') this.flushGlobalOutbox();
       this.closeMobileWindows();
       if (!section.querySelector(':scope > .m-back')) {
         const back = doc.createElement('button');
@@ -1471,6 +1473,13 @@ export class Game {
         newLocalId: this.lastRunHighlightId
       });
       renderBoardView(document.getElementById('highscore-list'), document.getElementById('highscore-note'), view);
+      const waiting = describeOutbox(this.globalBoard?.pendingUploads);
+      for (const id of ['title-board-outbox', 'go-board-outbox']) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.textContent = waiting;
+        el.classList.toggle('hidden', !waiting);
+      }
       renderBoardView(document.getElementById('go-highscore-list'), document.getElementById('go-board-note'), view);
       renderVersionOptions(document.getElementById('title-board-versions'), view.versions);
       renderVersionOptions(document.getElementById('go-board-versions'), view.versions);
@@ -1489,6 +1498,7 @@ export class Game {
 
   setBoardTab(tab) {
     this.boardTab = normalizeTab(tab);
+    if (this.boardTab === 'global') this.flushGlobalOutbox();
     // Re-opening GLOBAL after a failed fetch tries the network again.
     if (this.boardTab === 'global' && this.globalBoard && this.globalBoard.status !== 'ready') this.refreshGlobalBoard();
     else this.renderBoards();
@@ -1544,6 +1554,18 @@ export class Game {
       badge.className = `mode-badge mode-${rules.id}${rules.badge ? '' : ' hidden'}`;
       badge.title = rules.blurb;
     }
+  }
+
+  // Sends a run left in the outbox (js/leaderboard.js) by an earlier failed submit, then the next one a
+  // cooldown later while they keep going through. Called at launch, on the title and when the board opens.
+  flushGlobalOutbox() {
+    clearTimeout(this.outboxTimer);
+    const board = this.globalBoard;
+    if (!board?.pendingUploads || this.postGlobal === false || typeof board.flushOutbox !== 'function') return;
+    board.flushOutbox().then((r) => {
+      this.renderBoards();
+      if (r?.remaining && r.retryInMs != null) this.outboxTimer = setTimeout(() => this.flushGlobalOutbox(), r.retryInMs);
+    });
   }
 
   refreshGlobalBoard() {
@@ -1952,6 +1974,7 @@ export class Game {
     this.sound.setMusicScene?.('menu');
     this.renderHubUI();
     document.getElementById('title-modal')?.classList.remove('hidden');
+    this.flushGlobalOutbox();
   }
 
   showBanner(text) {

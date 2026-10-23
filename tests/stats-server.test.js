@@ -51,6 +51,7 @@ class FakeStore {
     if (!paginate) return Promise.resolve({ blobs: keys.map((key) => ({ key })), directories: [] });
     return (async function* () { for (const p of pages) yield p; })();
   }
+  async delete(key) { await null; this.blobs.delete(key); }
   json(key) { return JSON.parse(this.blobs.get(key).body); }
   keys(prefix = '') { return [...this.blobs.keys()].filter((k) => k.startsWith(prefix)); }
 }
@@ -93,7 +94,9 @@ test('POST stores one blob per run at runs/<version>/<date>/<id>.json, with no c
   assert.equal(stored.weapons.missiles.dmg, 900);
   const everything = JSON.stringify([...store.blobs]);
   assert.ok(!everything.includes('203.0.113.9'), 'the raw IP is stored nowhere');
-  assert.ok(store.keys(STATS_RATE_PREFIX + hashIp('203.0.113.9', 'vexolith-survivor')).length === 1, 'the rate limit keys on the salted hash');
+  const rateKeys = store.keys(STATS_RATE_PREFIX);
+  assert.equal(rateKeys.length, 1);
+  assert.match(rateKeys[0], new RegExp(`^ratelimit/\\d+/${hashIp('203.0.113.9', 'vexolith-survivor')}$`), 'the rate limit keys on a window and the salted hash');
 });
 
 test('rate limit: one upload per client per cooldown, then accepted again', async () => {
@@ -369,4 +372,22 @@ test('Void Armory ranks and cores spent are stored; older payloads without them 
   assert.equal(none.armoryTiers.find((t) => t.tier === 'partial').runs, 1, 'the tier counts cover every run');
   assert.ok(store.keys(summaryKey('all', 'none')).length === 1, 'each tier has its own cached summary');
   assert.equal((await get(handler, '?version=all&armory=rich')).status, 400);
+});
+
+test('rate-limit windows: a window boundary is no loophole, and older windows and pre-window keys are swept', async () => {
+  const { handler, store, advance } = setup();
+  const W = STATS_SERVER_LIMITS.RATE_WINDOW_MS;
+  const t0 = Date.parse('2026-10-18T12:00:00Z');
+  const bucket = Math.floor(t0 / W);
+  store.blobs.set(STATS_RATE_PREFIX + 'f'.repeat(32), { body: '{"t":1}', etag: '"x"' });
+  store.blobs.set(`${STATS_RATE_PREFIX}${bucket - 3}/${'a'.repeat(32)}`, { body: '{"t":1}', etag: '"x"' });
+  store.blobs.set(`${STATS_RATE_PREFIX}${bucket - 1}/${'b'.repeat(32)}`, { body: '{"t":1}', etag: '"x"' });
+  const toEdge = W - (t0 % W) - 5000;
+  advance(toEdge);
+  assert.equal((await post(handler, runBody(), { ip: '203.0.113.91' })).status, 201);
+  advance(10_000); // across the boundary, still inside the 15 s cooldown
+  assert.equal((await post(handler, runBody(), { ip: '203.0.113.91' })).status, 429);
+  const left = store.keys(STATS_RATE_PREFIX).map((k) => Number(k.split('/')[1]));
+  const now = Math.floor((t0 + toEdge + 10_000) / W);
+  assert.ok(left.every((b) => b >= now - 1), 'only the current and previous windows are left: ' + left);
 });

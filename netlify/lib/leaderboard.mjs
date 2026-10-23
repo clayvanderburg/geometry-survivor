@@ -25,6 +25,9 @@
 // Anti-cheat is deliberately "not trivially broken", not secure: the browser reports its own score,
 // so anyone who reads this file can submit a believable fake run. See README "Global leaderboard".
 import { createHash, randomUUID } from 'node:crypto';
+import { createRateLimiter, writeConditions } from './rate-limit.mjs';
+
+export { writeConditions };
 import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
@@ -327,14 +330,6 @@ export function backoffMs(attempt, limits = LIMITS, random = Math.random) {
   return Math.floor(random() * Math.min(limits.BACKOFF_CAP_MS, limits.BACKOFF_BASE_MS * 2 ** attempt));
 }
 
-// Compare-and-swap options for a blob read as `current` (null when it didn't exist). Netlify Blobs
-// returns an ETag on every read in production; the local `netlify dev` sandbox doesn't, and there we
-// fall back to a plain last-writer-wins write rather than failing every submission.
-export function writeConditions(current) {
-  if (!current) return { onlyIfNew: true };
-  return current.etag ? { onlyIfMatch: current.etag } : {};
-}
-
 // options.store(context): returns the Store (called per request with the Netlify context, after Netlify has
 // set up the blob context; production and previews get different stores, see deploy-context.mjs).
 // options.versions / currentVersion: the game versions with boards (newest first) and the live one;
@@ -391,55 +386,8 @@ export function createScoresHandler({
     }, GET_CACHE_HEADERS);
   }
 
-  // Claims this IP's submission slot in the current window (the previous window's blob still counts, so a
-  // window boundary is no loophole). Conditional write, so parallel requests can't all slip through.
-  // Resolves { retryAfter } (seconds, 0 when claimed) and the claimed key.
-  async function claimRateSlot(blobs, ipHash, t) {
-    const bucket = rateBucket(t, limits);
-    const key = rateKey(bucket, ipHash);
-    const [cur, prev] = await Promise.all([key, rateKey(bucket - 1, ipHash)].map((k) => blobs.getWithMetadata(k, { type: 'json' })));
-    const last = Math.max(Number(cur?.data?.t) || 0, Number(prev?.data?.t) || 0);
-    if (last && t - last < limits.COOLDOWN_MS) return { retryAfter: Math.ceil((limits.COOLDOWN_MS - (t - last)) / 1000), key };
-    const write = await blobs.setJSON(key, { t }, writeConditions(cur));
-    return { retryAfter: write.modified ? 0 : Math.ceil(limits.COOLDOWN_MS / 1000), key };
-  }
-
-  // A run the boards were too busy to take gives its cooldown slot back, so the game's retry isn't refused.
-  async function releaseRateSlot(blobs, key) {
-    try {
-      if (typeof blobs.delete === 'function') await blobs.delete(key);
-      else await blobs.setJSON(key, { t: 0 });
-    } catch (err) {
-      log?.warn?.('[scores] could not release a rate slot', err);
-    }
-  }
-
-  // Deletes rate-limit blobs from windows older than the previous one (and pre-window keys,
-  // ratelimit/<hash>), at most SWEEP_MAX_DELETES per sweep. Runs once per window per function instance;
-  // a failure is logged and retried next window.
-  let sweptBucket = null;
-  async function sweepRateLimits(blobs, t) {
-    const bucket = rateBucket(t, limits);
-    if (sweptBucket === bucket || typeof blobs.list !== 'function' || typeof blobs.delete !== 'function') return 0;
-    sweptBucket = bucket;
-    let removed = 0;
-    try {
-      const listing = await blobs.list({ prefix: RATE_PREFIX });
-      for (const b of listing?.blobs || []) {
-        if (removed >= limits.SWEEP_MAX_DELETES) break;
-        const rest = String(b.key).slice(RATE_PREFIX.length);
-        const slash = rest.indexOf('/');
-        const keyBucket = slash === -1 ? -Infinity : Number(rest.slice(0, slash));
-        if (!(keyBucket >= bucket - 1)) {
-          await blobs.delete(b.key);
-          removed++;
-        }
-      }
-    } catch (err) {
-      log?.warn?.('[scores] rate-limit sweep failed', err);
-    }
-    return removed;
-  }
+  // Per-IP cooldown in RATE_BUCKET_MS windows, swept once per window (./rate-limit.mjs).
+  const rate = createRateLimiter({ prefix: RATE_PREFIX, cooldownMs: limits.COOLDOWN_MS, windowMs: limits.RATE_BUCKET_MS, sweepMaxDeletes: limits.SWEEP_MAX_DELETES, log });
 
   // Merges one entry into a board blob (replacing an earlier copy of the same id: a retried submission).
   // Resolves { ranked, rank, updated } (rank null when it didn't make the board, in which case nothing is
@@ -480,10 +428,8 @@ export function createScoresHandler({
     run.version = version.version;
 
     const t = now();
-    const { retryAfter, key: slotKey } = await claimRateSlot(blobs, hashIp(clientIp(req, context), salt), t);
-    const sweep = sweepRateLimits(blobs, t);
-    if (typeof context?.waitUntil === 'function') context.waitUntil(sweep);
-    else await sweep;
+    const { retryAfter, key: slotKey } = await rate.claim(blobs, hashIp(clientIp(req, context), salt), t);
+    await rate.sweepSoon(blobs, t, context);
     if (retryAfter > 0) {
       return json(429, { error: 'slow down: one run per pilot every few seconds', retryAfter }, { 'retry-after': String(retryAfter) });
     }
@@ -500,7 +446,7 @@ export function createScoresHandler({
       ? await insertEntry(blobs, boardKey(run.version, mode), entry, { gameVersion: run.version })
       : await insertEntry(blobs, allTimeKey, entry);
     const busy = async (partial) => {
-      await releaseRateSlot(blobs, slotKey);
+      await rate.release(blobs, slotKey); // the game's retry isn't refused
       return json(503, { error: 'leaderboard busy, try again', partial }, { 'retry-after': '2' });
     };
     if (own.busy) return busy(false);

@@ -24,6 +24,15 @@ const MY_RUNS_MAX = 100;
 export const SUBMIT_RETRIES = 3;
 export const SUBMIT_BACKOFF_MS = 1000;
 const MAX_COOLDOWN_WAIT_S = 25;
+// Outbox: a run that still couldn't be sent after its retries (the board unreachable or busy, or the
+// uplink cooling down) is kept on this device and sent again, with the same nonce, on the next launch or
+// when the leaderboard is shown, one run at a time. The server keeps one copy per nonce, so a run that
+// did land (its answer lost) is never counted twice. Runs older than OUTBOX_MAX_AGE_MS, or that the server
+// turns down (a 4xx other than the cooldown), are dropped.
+export const OUTBOX_KEY = 'vexolith_global_outbox_v1';
+export const OUTBOX_MAX = 10;
+export const OUTBOX_MAX_AGE_MS = 3 * 24 * 3600 * 1000;
+export const OUTBOX_GAP_MS = 21_000; // between two outbox sends: just over the server's per-client cooldown
 const FALLBACK_NAME = 'PILOT';
 
 export const OFFLINE_NOTES = {
@@ -144,6 +153,8 @@ const boardId = (mode, version) => `${mode}|${version}`;
 export class GlobalLeaderboard {
   constructor({ endpoint = SCORES_ENDPOINT, fetchImpl, timeoutMs = 4500, storage = defaultStorage(), version = GAME_VERSION, sleep = defaultSleep } = {}) {
     this.sleep = sleep;
+    this.flushing = null;
+    this.nextFlushAt = 0;
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl !== undefined ? fetchImpl : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
     this.timeoutMs = timeoutMs;
@@ -159,6 +170,7 @@ export class GlobalLeaderboard {
     this.total = 0;
     this.boardSize = 100;
     this.myIds = this.loadMyIds();
+    this.outbox = this.loadOutbox();
     this.inflight = null;
     this.inflightBoard = null;
   }
@@ -170,6 +182,60 @@ export class GlobalLeaderboard {
     } catch {
       return new Set();
     }
+  }
+
+  // Queued runs: [{ payload, queuedAt, tries }], oldest first; expired or malformed ones are dropped.
+  loadOutbox(t = Date.now()) {
+    try {
+      const list = JSON.parse(this.storage?.getItem(OUTBOX_KEY) || '[]');
+      return (Array.isArray(list) ? list : [])
+        .filter((q) => q && typeof q.payload === 'object' && typeof q.payload?.nonce === 'string' && Number.isFinite(q.queuedAt) && t - q.queuedAt < OUTBOX_MAX_AGE_MS)
+        .slice(-OUTBOX_MAX);
+    } catch {
+      return [];
+    }
+  }
+
+  saveOutbox() {
+    try { this.storage?.setItem(OUTBOX_KEY, JSON.stringify(this.outbox)); } catch { /* storage blocked: kept for this session */ }
+  }
+
+  // Runs waiting to be sent (the "N RUNS WAITING TO UPLOAD" hint).
+  get pendingUploads() {
+    return this.outbox.length;
+  }
+
+  queueRun(payload, t = Date.now()) {
+    if (this.outbox.some((q) => q.payload.nonce === payload.nonce)) return;
+    this.outbox.push({ payload, queuedAt: t, tries: 0 });
+    if (this.outbox.length > OUTBOX_MAX) this.outbox.splice(0, this.outbox.length - OUTBOX_MAX);
+    this.saveOutbox();
+  }
+
+  // Sends the oldest queued run once (no quiet retries; the next launch or board view tries again).
+  // Resolves { sent, remaining, retryInMs } where retryInMs suggests when another send could go through
+  // (null when the next try should wait for the next launch or board view). Calls share one send.
+  flushOutbox(t = Date.now()) {
+    if (this.flushing) return this.flushing;
+    const fresh = this.outbox.filter((q) => t - q.queuedAt < OUTBOX_MAX_AGE_MS);
+    if (fresh.length !== this.outbox.length) {
+      this.outbox = fresh;
+      this.saveOutbox();
+    }
+    if (!this.outbox.length) return Promise.resolve({ sent: false, remaining: 0, retryInMs: null });
+    if (t < this.nextFlushAt) return Promise.resolve({ sent: false, remaining: this.outbox.length, retryInMs: this.nextFlushAt - t });
+    const item = this.outbox[0];
+    this.flushing = this.submitOnce(item.payload).then((result) => {
+      const drop = result.ok || (result.status >= 400 && result.status < 500 && result.status !== 429);
+      if (drop) this.outbox = this.outbox.filter((q) => q !== item);
+      else item.tries++;
+      this.saveOutbox();
+      const wait = Math.max(OUTBOX_GAP_MS, (result.retryAfter || 0) * 1000);
+      this.nextFlushAt = t + wait;
+      const again = this.outbox.length && (result.ok || result.status === 429) ? wait : null;
+      return { sent: !!result.ok, remaining: this.outbox.length, retryInMs: again, result };
+    }).finally(() => { this.flushing = null; });
+    return this.flushing;
   }
 
   rememberId(id) {
@@ -296,6 +362,11 @@ export class GlobalLeaderboard {
       this.reason = result.reason;
     }
     const { retry, retryAfter, ...out } = result;
+    // Still not through (unreachable, busy, cooling down): keep the run and send it again later.
+    if (!result.ok && (retry || result.reason === 'cooldown')) {
+      this.queueRun(payload);
+      out.queued = true;
+    }
     return out;
   }
 
@@ -433,10 +504,21 @@ export function describeSubmit(state) {
     if (state.rank && version) return { text: `◎ #${state.rank} ON ${version} // OUTSIDE ALL-TIME TOP ${state.boardSize || 100}${censor}`, tone: 'cyan' };
     return { text: `OUTSIDE GLOBAL TOP ${state.boardSize || 100} // KEEP FLYING${censor}`, tone: 'cyan' };
   }
+  if (state.queued) {
+    return state.reason === 'cooldown'
+      ? { text: 'GLOBAL UPLINK COOLING DOWN // RUN QUEUED FOR UPLOAD', tone: 'dim' }
+      : { text: 'GLOBAL BOARD UNREACHABLE // RUN QUEUED FOR UPLOAD', tone: 'dim' };
+  }
   if (state.reason === 'cooldown') return { text: 'GLOBAL UPLINK COOLING DOWN // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'outdated') return { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' };
   if (state.reason === 'rejected') return { text: 'GLOBAL BOARD REJECTED THIS RUN // SAVED LOCALLY', tone: 'danger' };
   return { text: 'OFFLINE // RUN SAVED LOCALLY', tone: 'dim' };
+}
+
+// The outbox hint under the board: '' when nothing waits.
+export function describeOutbox(count) {
+  if (!(count > 0)) return '';
+  return `◌ ${count} RUN${count === 1 ? '' : 'S'} WAITING TO UPLOAD`;
 }
 
 // Marks the active tab on a set of tab buttons ([data-board-tab]).
