@@ -430,22 +430,6 @@ export const UPGRADE_POOL = [
     }
   },
   {
-    id: 'tag_electric',
-    name: 'Overvolt Coils',
-    category: 'SPECIALIST',
-    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
-    tags: ['electric'],
-    maxLevel: 5,
-    headline: 'electricDamage',
-    req(player) {
-      return hasTag(player, 'electric');
-    },
-    summary: 'Every weapon with the ELECTRIC chip hits harder: Tesla arcs (Storm Protocol and EMP arcs too) and Shock Field discharges.',
-    apply(player) {
-      addTagDamage(player, 'electric');
-    }
-  },
-  {
     // The global AREA card (v0.46: it was an AREA specialist): every blast, cloud, cone, field and pull on
     // every weapon grows, so it sits with the GLOBAL CARDS. Keeps its id; weighted like the other global cards.
     id: 'tag_area',
@@ -510,7 +494,7 @@ export const UPGRADE_POOL = [
     name: 'SYNERGY: Storm Protocol',
     category: 'MISSILES + TESLA ARC',
     ownersAll: ['missiles', 'lightning'],
-    tags: ['explosive', 'electric'],
+    tags: ['explosive', 'shock'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -545,7 +529,7 @@ export const UPGRADE_POOL = [
     name: 'SYNERGY: EMP Grenades',
     category: 'GRENADES + TESLA ARC',
     ownersAll: ['grenades', 'lightning'],
-    tags: ['explosive', 'electric'],
+    tags: ['explosive', 'shock'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -589,6 +573,13 @@ function hasTag(player, tag) {
 }
 
 export const UPGRADE_BY_ID = Object.fromEntries(UPGRADE_POOL.map((u) => [u.id, u]));
+// Non-stat cards that no longer exist, by id: old run stats still name them (stats-dashboard.js). Runs are not
+// saved mid-run, and every lookup walks UPGRADE_POOL, so a leftover rank in upgradeLevels does nothing.
+// tag_electric: Overvolt Coils, retired in v0.46 with the ELECTRIC tag (Clay: "get rid of electric and have
+// shock"): Tesla Arc and the Shock Field are SHOCK, and Shock Amplifier is their damage card.
+export const RETIRED_CARDS = Object.freeze({ tag_electric: 'Overvolt Coils (retired)' });
+// A retired card's ranks carried over where a saved config still holds them (the Weapon Range's mods).
+export const RETIRED_CARD_SUCCESSOR = Object.freeze({ tag_electric: 'shock_damage' });
 
 // What kind of card an upgrade is in a level-up hand: 'weapon' (a stat card: raises an equipped
 // weapon's level), 'element' (a weapon's element card: raises its level too, level-up hands only),
@@ -952,7 +943,7 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
       drillScale: t.drillScale,
       critChance: (t.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
       critDamage: (t.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
-      tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
+      tagDamage: { kinetic: 1, explosive: 1 },
       areaMult: bonuses.areaMult || 1
     }
   };

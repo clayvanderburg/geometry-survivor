@@ -40,7 +40,7 @@ function makePlayer() {
       bulletCount: 2, spreadAngle: 0.14, pierce: 1, damage: TUNING.baseDamage,
       magnetRadius: TUNING.magnetRadius, xpMultiplier: TUNING.xpMultiplier, luck: TUNING.baseLuck,
       coreDropMult: 1, miningSpeed: TUNING.miningSpeed, miningRange: TUNING.miningRange, drillScale: TUNING.drillScale,
-      critChance: TUNING.baseCritChance, critDamage: TUNING.baseCritDamage, tagDamage: { kinetic: 1, explosive: 1, electric: 1 }, areaMult: 1
+      critChance: TUNING.baseCritChance, critDamage: TUNING.baseCritDamage, tagDamage: { kinetic: 1, explosive: 1 }, areaMult: 1
     },
     weapons: {
       missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0,

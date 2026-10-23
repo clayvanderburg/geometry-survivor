@@ -129,7 +129,7 @@ test('a tag or Field Amplifier card in the hand always has a pill: a carried wea
       }
     }
   }
-  assert.deepEqual([...offered].sort(), ['tag_area', 'tag_electric', 'tag_explosive', 'tag_kinetic']);
+  assert.deepEqual([...offered].sort(), ['tag_area', 'tag_explosive', 'tag_kinetic']);
   assert.ok(SHIP_SOURCES.every((s) => WEAPON_TAGS[s.source]), 'sources are real tag keys');
 });
 

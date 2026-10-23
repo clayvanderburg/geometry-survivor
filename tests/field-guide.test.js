@@ -281,7 +281,7 @@ test('WEAPONS and UPGRADES tabs are thin adapters: weapons on one, every other c
   const g = weaponGuide({ plasma_whip: 2 }, fake);
   const whip = g.categories.find(c => c.id === 'MELEE').items[0];
   assert.deepEqual([whip.name, whip.owned, whip.tags[0].label], ['Plasma Whip', 2, 'KINETIC']);
-  assert.ok(g.rarity.some(r => r.id === 'legendary') && g.tags.some(t => t.id === 'electric'));
+  assert.ok(g.rarity.some(r => r.id === 'legendary') && g.tags.some(t => t.id === 'shock'));
 });
 
 test('keys pressed in the guide never activate the screen behind it', () => {

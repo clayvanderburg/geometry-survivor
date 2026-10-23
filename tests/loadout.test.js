@@ -62,14 +62,14 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   for (const id of ['blaster_damage', 'multishot', 'firerate', 'pierce', 'blaster_fire', 'blaster_shock', 'overdrive', 'crit_chance', 'shrapnel', 'tag_kinetic']) {
     assert.ok(seen.has(id), `${id} is offered at run start`);
   }
-  for (const id of ['rockets', 'rockets_damage', 'rockets_frost', 'tag_explosive', 'tag_area', 'missiles', 'missiles_salvo', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'grenades_corrode', 'tag_electric', 'evo_tempest', 'evo_siege', 'status_potency']) {
+  for (const id of ['rockets', 'rockets_damage', 'rockets_frost', 'tag_explosive', 'tag_area', 'missiles', 'missiles_salvo', 'lightning', 'orbitals', 'singularity', 'mines', 'turret', 'drones', 'grenades_corrode', 'shock_damage', 'evo_tempest', 'evo_siege', 'status_potency']) {
     assert.ok(!seen.has(id), `${id} needs its weapon first`);
   }
-  // Equipping Tesla Arc unlocks its stat cards and the ELECTRIC tag card (never its equip line: weapons
-  // come only from NEW WEAPON cards). It is always SHOCK, so it has no element cards.
+  // Equipping Tesla Arc unlocks its stat cards and Shock Amplifier (never its equip line: weapons come only
+  // from NEW WEAPON cards). It is always SHOCK, so it has no element cards (and no ELECTRIC tag since v0.46).
   acquireWeapon(p, 'lightning');
   const ids = eligibleUpgrades(p).map((u) => u.id);
-  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'tag_electric']) assert.ok(ids.includes(id), id);
+  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'shock_damage']) assert.ok(ids.includes(id), id);
   assert.ok(!ids.some((id) => /^lightning_(fire|frost|corrode|shock)$/.test(id)), 'no Tesla Arc element cards');
   assert.ok(!ids.includes('lightning'), 'equip line is never offered');
   assert.ok(!ids.includes('evo_tempest'), 'Storm Protocol still needs missiles');
@@ -227,7 +227,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   fill(p, ['rockets', 'missiles', 'lightning']);
   for (const id of ['missiles_salvo', 'lightning_chain', 'rockets_frost']) applyUpgradeLevels(p, { ...UPGRADE_BY_ID[id], levelJump: 2 });
   applyUpgradeLevels(p, UPGRADE_BY_ID.evo_tempest);
-  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.tag_electric, levelJump: 2 });
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.tag_explosive, levelJump: 2 });
   assert.equal(p.weapons.missiles, 4, 'LV 3 + Storm Protocol launcher');
 
   const removed = discardWeapon(p, 'missiles').map((r) => r.id).sort();
@@ -236,7 +236,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.equal(p.weapons.missiles, 0);
   assert.equal(p.weapons.stormProtocol, 0);
   assert.equal(p.upgradeLevels.rockets_frost, 2, 'other weapons keep their elements');
-  assert.equal(p.upgradeLevels.tag_electric, 2, 'tag cards are general and stay');
+  assert.equal(p.upgradeLevels.tag_explosive, 2, 'tag cards are general and stay');
   assert.equal(p.upgradeLevels.overdrive, 2);
   assert.equal(freeSlots(p), 2);
   assert.equal(canOfferNewWeapon(p), true);
@@ -249,7 +249,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.equal(p.weapons.rockets, 0);
   // Stats are rebuilt exactly: same as before any weapon was added.
   const kept = JSON.parse(JSON.stringify({ stats: p.stats, maxHp: p.maxHp }));
-  kept.stats.tagDamage.electric = clean.stats.tagDamage.electric; // Overvolt Coils stays installed
+  kept.stats.tagDamage.explosive = clean.stats.tagDamage.explosive; // Shaped Charges stays installed
   assert.deepEqual(kept, clean);
   // The last weapon cannot be discarded through the UI, but the slot logic still works.
   assert.deepEqual(p.loadout, ['blaster']);

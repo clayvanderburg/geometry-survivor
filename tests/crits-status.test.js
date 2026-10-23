@@ -30,7 +30,7 @@ function makePlayer() {
     stats: {
       moveSpeed: 5, fireRate: 6.5, bulletSpeed: 14, bulletCount: 2, spreadAngle: 0.14, pierce: 1, damage: 10,
       magnetRadius: 145, xpMultiplier: 1, luck: 1, coreDropMult: 1, miningSpeed: 75, miningRange: 43, drillScale: 1.15,
-      critChance: 0.05, critDamage: 1.5, tagDamage: { kinetic: 1, explosive: 1, electric: 1 }, areaMult: 1
+      critChance: 0.05, critDamage: 1.5, tagDamage: { kinetic: 1, explosive: 1 }, areaMult: 1
     },
     weapons: { missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0, supercritical: 0 }
   };
@@ -360,13 +360,14 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   g.fireSwarmMissiles(1);
   assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius(levelBuild('missiles', 1)) * (1 + W.areaStep));
 
-  applyUpgradeLevels(p, byId('tag_electric'));
-  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * (1 + W.tagDamageStep.electric));
+  // Tesla Arc is SHOCK (v0.46: no ELECTRIC tag): Shock Amplifier is its damage card.
+  applyUpgradeLevels(p, byId('shock_damage'));
+  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * (1 + W.elementDamageStep));
 });
 
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
   const p = makePlayer(); // equips only Autocannon (PROJECTILE KINETIC)
-  for (const id of ['tag_explosive', 'tag_electric', 'tag_area']) assert.equal(byId(id).req(p), false, id);
+  for (const id of ['tag_explosive', 'tag_area']) assert.equal(byId(id).req(p), false, id);
   for (const id of ['rockets_frost', 'grenades_corrode']) assert.equal(loadoutAllows(p, byId(id)), false, id);
   assert.equal(byId('tag_kinetic').req(p), true, 'the Autocannon is kinetic');
   assert.equal(loadoutAllows(p, byId('blaster_fire')), true, 'Autocannon bolts can burn');
@@ -410,7 +411,7 @@ test('resetRun seeds crit stats from tuning and clears status bookkeeping', () =
   g.resetRun();
   assert.equal(g.player.stats.critChance, 0.12);
   assert.equal(g.player.stats.critDamage, TUNING.baseCritDamage);
-  assert.deepEqual(g.player.stats.tagDamage, { kinetic: 1, explosive: 1, electric: 1 });
+  assert.deepEqual(g.player.stats.tagDamage, { kinetic: 1, explosive: 1 });
   assert.equal(g.player.stats.areaMult, 1);
   assert.ok(!Object.keys(g.player.weapons).some((k) => /_(fire|frost|corrode|shock)$/.test(k)), 'no weapon starts with an element');
   assert.equal(g.statusStamp, 0);
