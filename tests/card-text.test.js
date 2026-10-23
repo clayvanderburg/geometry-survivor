@@ -109,7 +109,7 @@ test('RARE weapon cards (Phase Piercer, Extra Nozzle, Split Rails) stay strong b
   }
 });
 
-test('Reactor Overdrive turns up a little less as the loadout grows (it out-realizes a weapon card with 6 weapons)', async () => {
+test('Reactor Overdrive turns up a little less as the loadout grows (it out-realizes a weapon card with a full loadout)', async () => {
   const U = await import('../js/upgrades.js');
   const h = await import('../tools/balance/harness.mjs');
   const g = h.createHeadlessGame();
@@ -119,6 +119,6 @@ test('Reactor Overdrive turns up a little less as the loadout grows (it out-real
   assert.equal(w(), 1, '1 weapon: a full share');
   for (const id of ['rockets', 'missiles']) U.acquireWeapon(g.player, id);
   assert.equal(w(), 1, '3 weapons: still a full share');
-  for (const id of ['lightning', 'glaive', 'quake']) U.acquireWeapon(g.player, id);
-  assert.ok(Math.abs(w() - 0.7) < 1e-9, '6 weapons: 0.7');
+  for (const id of ['lightning', 'glaive']) U.acquireWeapon(g.player, id);
+  assert.ok(Math.abs(w() - 0.8) < 1e-9, '5 weapons (a full loadout): 0.8');
 });

@@ -209,7 +209,7 @@ export const DEFAULT_TUNING = {
   // instead of the old LV 20 / LV 40 steps (+150 / +500 per level).
   xpCurveAccel: 3.6,
   xpCurveAccelFrom: 15,
-  weaponSlots: 6,
+  weaponSlots: 5,             // Clay (v0.46): 5, the card pool is already diluted at 5 (was 6)
   newWeaponChanceBy1: 0.8,
   newWeaponChanceBy2: 0.7,
   newWeaponChanceBy3: 0.6,
@@ -228,7 +228,7 @@ export const DEFAULT_TUNING = {
   handWeaponShare: 0.55,
   globalCardWeight: 1,      // each GLOBAL card (Tempo, Cooldown, Persistence, Velocity, Area): like Overdrive or a crit card
   weaponLineWeight: 1.5,
-  overdriveWeightTaper: 0.1, // Reactor Overdrive's hand weight drops this much per weapon carried past 3 (0.7 at 6)
+  overdriveWeightTaper: 0.1, // Reactor Overdrive's hand weight drops this much per weapon carried past 3 (0.8 at a full 5)
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.45,       // tag cards: strong in a one-family build, so uncommon (rarityFloor 2) and lighter
   statusCardWeight: 0.7,    // each global STATUS card

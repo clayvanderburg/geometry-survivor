@@ -8,7 +8,7 @@ const { Game } = await import('../js/main.js');
 const { PAD } = await import('../js/gamepad.js');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { eligibleUpgrades, applyUpgradeLevels, discardWeapon, acquireWeapon, UPGRADE_BY_ID, UPGRADE_POOL } = await import('../js/upgrades.js');
-const { ownedWeapons, unownedWeapons } = await import('../js/loadout.js');
+const { ownedWeapons, unownedWeapons, weaponSlots } = await import('../js/loadout.js');
 const {
   GOLD_ICON, goldPerVein, goldCoins, rerollCost, lockCost, trySpend, refreshLockedCard, rollHandAround
 } = await import('../js/gold.js');
@@ -238,7 +238,7 @@ test('a carried lock that is no longer valid is dropped with a note', () => {
 });
 
 test('a locked NEW WEAPON card carries over as NEW WEAPON, and drops when no slot is free', () => {
-  const g = freshGame(100);
+  const g = freshGame(100, ['rockets', 'missiles']); // the pick fills slot 4: no capstone Breakthrough in the way
   withTuning(odds(1), () => g.triggerLevelUp());
   const nw = g.currentChoices.findIndex((c) => c.isNewWeapon);
   assert.ok(nw >= 0);
@@ -265,7 +265,7 @@ test('a locked NEW WEAPON card carries over as NEW WEAPON, and drops when no slo
   g2.toggleCardLock(i2);
   g2.selectUpgrade(i2 === 0 ? 1 : 0);
   for (const id of unownedWeapons(g2.player)) acquireWeapon(g2.player, id);
-  assert.equal(ownedWeapons(g2.player).length, 6);
+  assert.equal(ownedWeapons(g2.player).length, weaponSlots());
   plainHand(g2);
   assert.equal(g2.handLock, null);
   assert.ok(!g2.currentChoices.some((c) => c.isNewWeapon));
