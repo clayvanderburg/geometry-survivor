@@ -9,7 +9,7 @@
 // panel lives in js/weapon-range-ui.js. Everything else here is DOM-free, so tests drive it headless.
 import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, FIXED_ELEMENTS, elementKey, makeBuild, TRANSFORMS, transformPool, BT_FLATS } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponSlots, weaponLevel } from './loadout.js';
-import { UPGRADE_BY_ID, acquireWeapon, applyUpgradeLevels, applyBreakthrough, markBreakthroughOffered, loadoutAllows } from './upgrades.js';
+import { UPGRADE_BY_ID, RETIRED_CARD_SUCCESSOR, acquireWeapon, applyUpgradeLevels, applyBreakthrough, markBreakthroughOffered, loadoutAllows } from './upgrades.js';
 import { waveScaleAt, LIGHT_ENEMY_TYPES } from './enemies.js';
 import { DAMAGE_SOURCE_COLORS } from './damage-numbers.js';
 import { buildSourceGroups } from './run-stats.js';
@@ -63,7 +63,7 @@ export const RANGE_MOD_GROUPS = [
   // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.
   { id: 'status', label: 'STATUS', ids: ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'fire_damage', 'frost_damage', 'corrode_damage', 'shock_damage'] },
   { id: 'synergies', label: 'SYNERGIES', ids: ['evo_pulsar', 'evo_tempest', 'evo_siege', 'evo_emp', 'evo_supercrit'] },
-  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] },
+  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] },
   { id: 'globals', label: 'GLOBAL', ids: ['tempo_core', 'cooldown_matrix', 'persistence_field', 'velocity_coils', 'replicator_array'] }
 ];
 export const RANGE_MOD_IDS = RANGE_MOD_GROUPS.flatMap((g) => g.ids);
@@ -189,8 +189,11 @@ export function sanitizeRangeConfig(raw) {
     weapons.push({ id: w.id, level: clampInt(w.level, 1, WEAPON_MAX_LEVEL, 1), custom, ranks, bt, element, elementRank });
   }
   const mods = {};
+  // A retired card's ranks move to its successor (Overvolt Coils -> Shock Amplifier) unless that has its own.
+  const srcMods = { ...(src.mods && typeof src.mods === 'object' ? src.mods : {}) };
+  for (const [old, next] of Object.entries(RETIRED_CARD_SUCCESSOR)) if (srcMods[old] && !srcMods[next]) srcMods[next] = srcMods[old];
   for (const id of RANGE_MOD_IDS) {
-    const lv = clampInt(src.mods?.[id], 0, UPGRADE_BY_ID[id]?.maxLevel ?? 0, 0);
+    const lv = clampInt(srcMods[id], 0, UPGRADE_BY_ID[id]?.maxLevel ?? 0, 0);
     if (lv > 0) mods[id] = lv;
   }
   const d = src.dummies && typeof src.dummies === 'object' ? src.dummies : {};

@@ -36,7 +36,7 @@ export const STAT_GROUPS = [
       { id: 'critChance', label: 'Crit chance', kind: 'add', fmt: 'pct', get: (s) => Math.min(1, s.stats.critChance ?? 0) },
       { id: 'critDamage', label: 'Crit damage', kind: 'add', fmt: 'pct', get: (s) => s.stats.critDamage ?? 1.5 },
       { id: 'area', label: 'Area size', kind: 'add', fmt: 'pct', get: (s) => s.stats.areaMult ?? 1 },
-      ...['kinetic', 'explosive', 'electric'].map((tag) => ({
+      ...['kinetic', 'explosive'].map((tag) => ({
         id: `tag_${tag}`, label: `${tag[0].toUpperCase()}${tag.slice(1)} weapon damage`, kind: 'add', fmt: 'pct', get: (s) => s.stats.tagDamage?.[tag] ?? 1
       }))
     ]

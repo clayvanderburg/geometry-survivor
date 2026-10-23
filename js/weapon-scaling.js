@@ -1120,7 +1120,8 @@ export const WEAPON_SCALING = {
   // Per tag-card rank, added. v0.45: 0.2 / 0.3 / 0.3, which realized 1.5-2.3x Reactor Overdrive whenever every
   // carried weapon had the tag (hand-bench.mjs). v0.46 keeps them strong but rarer (Clay: balance with rarity):
   // 0.2 / 0.25 / 0.25, always at least UNCOMMON (rarityFloor 2) and drawn at TUNING.tagCardWeight 0.45 (was 0.7).
-  tagDamageStep: { kinetic: 0.2, explosive: 0.25, electric: 0.25 },
+  // v0.46 (Clay: "get rid of electric and have shock"): no ELECTRIC tag; Tesla Arc and the Shock Field are SHOCK, Shock Amplifier's.
+  tagDamageStep: { kinetic: 0.2, explosive: 0.25 },
   // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
   // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
   // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
@@ -1348,7 +1349,7 @@ export const WEAPON_TAGS = {
   shrapnel: ['projectile', 'kinetic'],
   orbital: ['orbital', 'kinetic'],
   missile: ['projectile', 'explosive', 'area'],
-  lightning: ['electric'],
+  lightning: ['shock'],
   singularity: ['gravity', 'area'],
   nova: ['area'],
   tectonic: ['explosive', 'area'],
@@ -1362,7 +1363,7 @@ export const WEAPON_TAGS = {
   flame: ['area', 'burn'],
   cryo: ['area', 'chill'],
   acid: ['area', 'corrode'],
-  shockfield: ['electric', 'area'],
+  shockfield: ['shock', 'area'],
   rail: ['kinetic'],
   glaive: ['projectile', 'kinetic'],
   nanite: ['deployable', 'area', 'corrode'],
@@ -1375,7 +1376,6 @@ export const TAG_INFO = {
   projectile: { label: 'PROJECTILE', color: '#7ffbff' },
   kinetic: { label: 'KINETIC', color: '#d6dde8' },
   explosive: { label: 'EXPLOSIVE', color: '#ff9b3d' },
-  electric: { label: 'ELECTRIC', color: '#c79bff' },
   area: { label: 'AREA', color: '#ffe45c' },
   orbital: { label: 'ORBITAL', color: '#6dff9e' },
   gravity: { label: 'GRAVITY', color: '#ff6ad5' },

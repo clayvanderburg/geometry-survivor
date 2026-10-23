@@ -36,7 +36,7 @@ export const LOADOUTS = {
   deployers: ['turret', 'nanites', 'blaster', 'orbitals', 'grenades'] // the weapons with a charge timer (Cooldown Matrix)
 };
 // Non-weapon cards that add damage and can share a hand with weapon cards (ship utility is left out: it adds none).
-export const GLOBAL_IDS = ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area',
+export const GLOBAL_IDS = ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_area',
   'tempo_core', 'cooldown_matrix', 'persistence_field', 'velocity_coils', 'replicator_array', 'shrapnel'];
 
 // The build: `weapons` equipped at LV 1, or (mid) Damage x3, rate x2, count x1 each; then `extra` cards.

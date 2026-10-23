@@ -41,11 +41,11 @@ async function loadNames() {
     for (const w of [...WEAPONS, ...PASSIVES]) names.weapon[w.id] = w.name;
   } catch { /* ids only */ }
   try {
-    const { UPGRADE_POOL } = await import('./upgrades.js');
+    const { UPGRADE_POOL, RETIRED_CARDS } = await import('./upgrades.js');
     for (const u of UPGRADE_POOL) names.card[u.id] = u.name.replace('SYNERGY: ', '★ ');
     names.card.new_weapon = 'NEW WEAPON';
     const { RETIRED_STAT_CARDS } = await import('./weapon-levels.js');
-    Object.assign(names.card, RETIRED_STAT_CARDS);
+    Object.assign(names.card, RETIRED_STAT_CARDS, RETIRED_CARDS);
   } catch { /* ids only */ }
   try {
     const { HOSTILE_ENTRIES } = await import('./field-guide.js');
