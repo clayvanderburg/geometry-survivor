@@ -19,9 +19,13 @@
 //   --snap DIR        instead of timing, save the canvas after the warmup and every 30 ticks (5 frames) as
 //                     raw RGBA (DIR/<scene>-<n>.rgba), with performance.now() stepped 1/60 s per tick so
 //                     two runs draw the same frames; `--diff DIR_A DIR_B` compares two such folders
-//   --css "..."       levelup scene: extra CSS once the hand is dealt (e.g. try a modal style)
-//   --no-game-draw    levelup scene: stop drawing the canvas under the modal
+//   --css "..."       extra CSS for the page (try a style change without editing the game)
+//   --no-game-draw    modal scenes: stop drawing the canvas under the modal
+//   --paints          with --natural: count Chromium Paint events per frame (a trace)
 //   --mutations       print the DOM mutations per element during the --natural frames
+//   --shot DIR        modal scenes: screenshot the whole page (canvas, blur, modal) once the world has settled,
+//                     with every CSS animation paused at 0, 1/2 and 1 times its duration (pulse ends and peaks): DIR/<scene>-<n>.png
+//                     (seeded like --snap; --diff compares them too, via ffmpeg)
 //   --json FILE       write the results
 //
 // cpu ms = update + draw (the JS side of a frame: simulation and canvas calls). raster ms = a 1 px
@@ -45,7 +49,8 @@ const FLUSH = !args.includes('--no-flush');
 const GPU = !args.includes('--no-gpu');
 const PHASES = args.includes('--phases');
 const NATURAL = Number(opt('natural', 120));
-const SNAP = opt('snap', null);
+const SHOT = opt('shot', null);
+const SNAP = opt('snap', null) || SHOT;
 
 const LOADOUT_A = ['drones', 'flamethrower', 'gas', 'lightning', 'singularity', 'grenades'];
 const LOADOUT_B = ['harpoon', 'cryospray', 'acidspray', 'missiles', 'nanites', 'rockets'];
@@ -53,7 +58,9 @@ const SCENES = {
   swarm35: { wave: 35, weapons: LOADOUT_A },
   swarm45: { wave: 45, weapons: LOADOUT_B },
   boss40: { wave: 40, weapons: LOADOUT_A, boss: 'conductor' },
-  levelup: { wave: 35, weapons: LOADOUT_A, levelUp: true }
+  levelup: { wave: 35, weapons: LOADOUT_A, modal: 'levelup' },
+  pause: { wave: 35, weapons: LOADOUT_A, modal: 'pause' },
+  cache: { wave: 35, weapons: LOADOUT_A, modal: 'cache' }
 };
 const pick = opt('scenes', null);
 const sceneIds = pick ? pick.split(',') : Object.keys(SCENES);
@@ -69,6 +76,12 @@ if (args.includes('--diff') || process.argv[2] === '--diff') {
     const ta = fs.readFileSync(path.join(a, f), 'utf8').split('\n'), tb = fs.readFileSync(path.join(b, f), 'utf8').split('\n');
     const at = ta.findIndex((v, k) => v !== tb[k]);
     if (at >= 0) { diverged.add(f.replace('.trace', '')); console.log(`${f.replace('.trace', '')}: the simulation diverged at tick ${at} (nondeterministic run): snap it again`); }
+  }
+  for (const dir of [a, b]) {
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.png'))) {
+      const raw = path.join(dir, f.replace(/\.png$/, '.rgba'));
+      if (!fs.existsSync(raw)) require('node:child_process').execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', path.join(dir, f), '-f', 'rawvideo', '-pix_fmt', 'rgba', raw]);
+    }
   }
   for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.rgba')).sort()) {
     if (!fs.existsSync(path.join(b, f)) || diverged.has(f.replace(/-\d+\.rgba$/, ''))) continue;
@@ -103,7 +116,8 @@ if (args.includes('--diff') || process.argv[2] === '--diff') {
     if (s.snap) { console.log(`${id}: snapshots in ${s.snap}${s.errors.length ? ' errors: ' + s.errors.join('; ') : ''}`); continue; }
     const f = (o) => `p50 ${o.p50.toFixed(2)} · p95 ${o.p95.toFixed(2)} · max ${o.max.toFixed(1)}`;
     console.log(`${id.padEnd(9)} cpu ${f(s.frame)} | update ${f(s.update)} | draw ${f(s.draw)} | raster ${f(s.raster)} | geoms ${s.counts.geomsInView}/${s.counts.geoms} (gold ${s.counts.gold}) enemies ${s.counts.enemies} sparks ${s.counts.sparks} bullets ${s.counts.bullets}`);
-    if (s.raf) console.log(`${''.padEnd(9)} rAF interval ${f(s.raf)} | loop ${f(s.loop)} | style ${s.dom.styleMs.toFixed(2)} ms (${s.dom.styles.toFixed(1)}x) · layout ${s.dom.layoutMs.toFixed(2)} ms (${s.dom.layouts.toFixed(1)}x) per frame`);
+    if (s.paints) console.log(`${''.padEnd(9)} paints ${s.paints.perFrame.toFixed(2)} per frame, ${s.paints.ms.toFixed(2)} ms per frame`);
+    if (s.raf) console.log(`${''.padEnd(9)} rAF interval ${f(s.raf)} · ${(s.raf.over20 * 100).toFixed(0)}% > 20 ms | loop ${f(s.loop)} | style ${s.dom.styleMs.toFixed(2)} ms (${s.dom.styles.toFixed(1)}x) · layout ${s.dom.layoutMs.toFixed(2)} ms (${s.dom.layouts.toFixed(1)}x) per frame`);
     if (s.phases) for (const [k, v] of Object.entries(s.phases)) if (v >= 0.2) console.log(`${''.padEnd(11)}${v.toFixed(2).padStart(7)} ms/frame  ${k}`);
     if (s.top) for (const t of s.top) console.log(`${''.padEnd(11)}${t.selfMs.toFixed(0).padStart(6)} ms ${(t.share * 100).toFixed(1).padStart(5)}%  ${t.fn}  ${t.at}`);
   }
@@ -225,17 +239,27 @@ async function runScene(browser, id, scene) {
           g.waveTimer = Math.min(g.waveTimer, 5); // stay on this wave
           g.pendingBossSpawns.length = 0;
           const k = g.__kite;
-          k.t += 1 / 60;
-          p.x = k.x + Math.cos(k.t * 150 / k.r) * k.r;
-          p.y = k.y + Math.sin(k.t * 150 / k.r) * k.r;
+          if (g.state === 'PLAYING') { // the ship circles (never behind a modal: the world is paused there)
+            k.t += 1 / 60;
+            p.x = k.x + Math.cos(k.t * 150 / k.r) * k.r;
+            p.y = k.y + Math.sin(k.t * 150 / k.r) * k.r;
+          }
           p.invuln = 1e9;
           if (g.state === 'UPGRADE' && !g.__keepModal) g.selectUpgrade?.(0);
-          if (g.state === 'CHEST') g.closeChestModal?.();
+          if (g.state === 'CHEST' && !g.__keepModal) g.closeChestModal?.();
         };
         if (scene.boss) g.enemyManager.queueSpawn(scene.boss, p.x + 420, p.y, g.getWaveScale(), { instant: true, wave: scene.wave });
+        // The modal scenes: a level-up hand (luck 6, so rare frames turn up), the pause menu, a cache.
+        g.__openModal = (modal) => {
+          g.__keepModal = true;
+          if (modal === 'levelup') { p.stats.luck = 6; g.triggerLevelUp(); }
+          else if (modal === 'pause') g.togglePause();
+          else if (modal === 'cache') g.openRelicChest({ x: p.x, y: p.y, rotation: 0, guaranteedSuper: true });
+        };
       };
       if (!window.__freeze) g.__start();
     }, scene);
+    if (opt('css', null)) await page.addStyleTag({ content: opt('css', null) });
     // Warm up in chunks (one long evaluate would trip the protocol timeout on a slow machine).
     for (let done = 0; !SNAP && done < WARMUP; done += 300) {
       await page.evaluate((n) => { const g = window.__g; for (let i = 0; i < n; i++) { g.__hold(); g.update(1 / 60); } g.draw(); }, Math.min(300, WARMUP - done));
@@ -248,13 +272,47 @@ async function runScene(browser, id, scene) {
         for (const e of g.enemyManager.enemies) if (e.isBoss) { e.maxHp *= 50; e.hp = e.maxHp; }
       }, scene);
     }
-    if (scene.levelUp && !SNAP) {
-      await page.evaluate(() => { const g = window.__g; g.__keepModal = true; g.player.stats.luck = 6; g.triggerLevelUp(); });
+    if (scene.modal && !SNAP) {
+      await page.evaluate((modal) => window.__g.__openModal(modal), scene.modal);
       await page.waitForTimeout(600); // the hand deals in
-      if (opt('css', null)) await page.addStyleTag({ content: opt('css', null) });
       if (args.includes('--no-game-draw')) await page.evaluate(() => { window.__g.draw = () => {}; });
     }
 
+    if (SHOT && scene.modal) {
+      fs.mkdirSync(SHOT, { recursive: true });
+      await page.evaluate(({ warmup, modal }) => {
+        const g = window.__g;
+        g.__start();
+        const rnd = Math.random;
+        let calls = 0;
+        Math.random = () => { calls++; return rnd(); };
+        const trace = window.__trace = [];
+        for (let i = 0; i < warmup; i++) { g.__hold(); g.update(1 / 60); trace.push(calls); }
+        g.__openModal(modal);
+        for (let i = 0; i < 600; i++) { window.__tick(); g.update(1 / 60); } // the level-up burst plays out
+        g.shieldRotation = 1;
+        g.frameSeconds = 1;
+        // The game's own frame: a build with Game.holdFrozenFrame keeps its still frame, otherwise draw().
+        if (g.holdFrozenFrame) { g.frozenKey = null; if (!g.holdFrozenFrame()) g.draw(); } else g.draw();
+      }, { warmup: WARMUP, modal: scene.modal });
+      fs.writeFileSync(path.join(SHOT, `${id}.trace`), (await page.evaluate(() => window.__trace)).join('\n'));
+      await page.mouse.move(2, 2); // no card under the pointer (:hover)
+      await page.waitForTimeout(400);
+      for (const [n, frac] of [[0, 0], [1, 0.5], [2, 1]]) {
+        await page.evaluate((frac) => {
+          for (const a of document.getAnimations()) {
+            a.pause();
+            const t = a.effect?.getComputedTiming?.();
+            const delay = t?.delay || 0, dur = typeof t?.duration === 'number' ? t.duration : 0;
+            // Entrance animations (one iteration) at their end; looping ones at frac of a cycle.
+            a.currentTime = delay + (t?.iterations === Infinity ? dur * frac : dur * (t?.iterations || 1));
+          }
+        }, frac);
+        await page.waitForTimeout(150);
+        await page.screenshot({ path: path.join(SHOT, `${id}-${n}.png`) });
+      }
+      return { snap: SHOT, errors };
+    }
     if (SNAP) {
       fs.mkdirSync(SNAP, { recursive: true });
       await page.evaluate((warmup) => {
@@ -379,7 +437,20 @@ async function runScene(browser, id, scene) {
         new MutationObserver((ms) => { for (const m of ms) { const k = `${m.type}:${m.attributeName || ''}:${name(m.target)}`; counts[k] = (counts[k] || 0) + 1; } })
           .observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
       });
+      if (scene.modal) {
+        // Let the level-up burst play out behind the modal first (a build that keeps a still frame then does).
+        await page.evaluate(async () => {
+          const g = window.__g, loop = window.__loop;
+          let n = 0;
+          await new Promise((resolve) => {
+            g.loop = function (now) { g.__hold(); loop.call(g, now); if (++n >= 60) { g.loop = () => {}; resolve(); } };
+            requestAnimationFrame((t) => g.loop(t));
+          });
+        });
+      }
       const m0 = await metrics();
+      const TRACE = args.includes('--paints');
+      if (TRACE) await browser.startTracing(page, { categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline'] });
       const r = await page.evaluate(async (n) => {
         const g = window.__g;
         const loop = window.__loop;
@@ -400,6 +471,11 @@ async function runScene(browser, id, scene) {
         return { raf, inLoop };
       }, NATURAL);
       const m1 = await metrics();
+      if (TRACE) {
+        const events = JSON.parse((await browser.stopTracing()).toString()).traceEvents || [];
+        const paints = events.filter((e) => e.name === 'Paint' && e.ph === 'X');
+        result.paints = { perFrame: paints.length / NATURAL, ms: paints.reduce((a, e) => a + (e.dur || 0), 0) / 1000 / NATURAL };
+      }
       if (args.includes('--mutations')) console.log(id, JSON.stringify(await page.evaluate(() => Object.entries(window.__mut).sort((a, b) => b[1] - a[1]).slice(0, 25))));
       const per = (k) => (m1[k] - m0[k]) / NATURAL;
       result.raf = stats(r.raf);
@@ -421,7 +497,7 @@ async function runScene(browser, id, scene) {
 function stats(a) {
   const s = [...a].sort((x, y) => x - y);
   const q = (p) => s[Math.min(s.length - 1, Math.floor(s.length * p))];
-  return { p50: q(0.5), p95: q(0.95), max: s[s.length - 1], mean: s.reduce((x, y) => x + y, 0) / s.length };
+  return { p50: q(0.5), p90: q(0.9), p95: q(0.95), max: s[s.length - 1], mean: s.reduce((x, y) => x + y, 0) / s.length, over20: s.filter((v) => v > 20).length / s.length };
 }
 
 // Self time per function (name + file:line), from a V8 CPU profile.

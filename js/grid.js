@@ -277,6 +277,23 @@ export class WarpGrid {
     return slot;
   }
 
+  // At rest in the simulated region: no ripple running, no point moving or glowing visibly (the springs
+  // ring down asymptotically, so "visibly" is a hundredth of a pixel per tick and 1% glow).
+  settled() {
+    if (this.activeRipples() > 0) return false;
+    const b = this.simBounds;
+    if (!b) return true;
+    const pts = this.points;
+    for (let r = b.minR; r <= b.maxR; r++) {
+      const rowOffset = r * this.cols;
+      for (let c = b.minC; c <= b.maxC; c++) {
+        const pt = pts[rowOffset + c];
+        if (Math.abs(pt.vx) + Math.abs(pt.vy) > 0.01 || pt.energy > 0.01) return false;
+      }
+    }
+    return true;
+  }
+
   activeRipples() {
     let n = 0;
     for (const rp of this.ripples) if (rp.active) n++;
