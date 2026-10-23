@@ -17,6 +17,13 @@ export const SCORES_ENDPOINT = '/api/scores';
 export const BOARD_TABS = ['global', 'local'];
 const MY_RUNS_KEY = 'vexolith_global_runs_v1';
 const MY_RUNS_MAX = 100;
+// Quiet retries of a submit the server couldn't take (503 busy), that timed out or met a network error:
+// up to SUBMIT_RETRIES more tries, each after SUBMIT_BACKOFF_MS x 2^n (plus jitter, or the server's
+// retry-after). A retry after a lost answer may meet the cooldown (429): it waits that out once. Every
+// try carries the same nonce, so the server keeps one copy of the run however many times it arrives.
+export const SUBMIT_RETRIES = 3;
+export const SUBMIT_BACKOFF_MS = 1000;
+const MAX_COOLDOWN_WAIT_S = 25;
 const FALLBACK_NAME = 'PILOT';
 
 export const OFFLINE_NOTES = {
@@ -47,7 +54,9 @@ export async function requestJson(fetchImpl, url, { method = 'GET', body, timeou
         method,
         headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        cache: 'no-store',
+        // GETs may come from the CDN's short cache (the browser itself never keeps them: the server says
+        // max-age=0). 'no-store' would add a no-cache request header the CDN could honour, skipping it.
+        cache: method === 'GET' ? 'default' : 'no-store',
         credentials: 'same-origin',
         signal: controller?.signal
       });
@@ -70,6 +79,18 @@ export async function requestJson(fetchImpl, url, { method = 'GET', body, timeou
     clearTimeout(timer);
   }
 }
+
+// A random run nonce (the server derives the run's id from it, so retries never land twice).
+export function runNonce(random = Math.random) {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid.replace(/-/g, '');
+  let out = '';
+  for (let i = 0; i < 32; i++) out += Math.floor(random() * 16).toString(16);
+  return out;
+}
+
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const stamp = (value) => (typeof value === 'string' ? Date.parse(value) || 0 : 0);
 
 function cleanEntries(list) {
   return (Array.isArray(list) ? list : []).filter(e => e && typeof e === 'object' && typeof e.name === 'string' && Number.isFinite(e.score));
@@ -121,7 +142,8 @@ export function buildModeOptions(selected = DEFAULT_MODE) {
 const boardId = (mode, version) => `${mode}|${version}`;
 
 export class GlobalLeaderboard {
-  constructor({ endpoint = SCORES_ENDPOINT, fetchImpl, timeoutMs = 4500, storage = defaultStorage(), version = GAME_VERSION } = {}) {
+  constructor({ endpoint = SCORES_ENDPOINT, fetchImpl, timeoutMs = 4500, storage = defaultStorage(), version = GAME_VERSION, sleep = defaultSleep } = {}) {
+    this.sleep = sleep;
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl !== undefined ? fetchImpl : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
     this.timeoutMs = timeoutMs;
@@ -130,7 +152,7 @@ export class GlobalLeaderboard {
     this.version = ALL_TIME; // the board on screen: ALL_TIME (default) or a single version as a filter
     this.mode = DEFAULT_MODE; // ...of this game mode (each mode has its own boards)
     this.versions = [];     // versions the server reports runs for
-    this.cache = new Map(); // 'mode|version' -> { entries, total }, so switching back is instant
+    this.cache = new Map(); // 'mode|version' -> { entries, total, updated }, so switching back is instant
     this.status = 'idle'; // idle | loading | ready | offline
     this.reason = '';
     this.entries = [];
@@ -191,14 +213,21 @@ export class GlobalLeaderboard {
 
   // Takes a server board (a GET or POST answer) for `version` of `mode`. It only replaces what's on
   // screen when that board is the selected one; a late answer for a board the player switched away from
-  // is cached.
+  // is cached. GET answers come through the CDN and may be a few seconds old: one whose `updated` stamp is
+  // older than the copy already held (say, the board a just-posted run came back with) is ignored.
   adopt(data, version = this.version, mode = this.mode) {
     const entries = cleanEntries(data?.entries);
     const total = Number(data?.total) || entries.length;
+    const updated = stamp(data?.updated);
     const shown = version === this.version && mode === this.mode;
     if (Array.isArray(data?.versions) && shown) this.versions = data.versions.filter(isVersionString);
     if (Number(data?.boardSize) > 0) this.boardSize = Number(data.boardSize);
-    this.cache.set(boardId(mode, version), { entries, total });
+    const held = this.cache.get(boardId(mode, version));
+    if (held && updated < held.updated) {
+      if (shown && this.status !== 'offline') this.status = 'ready';
+      return;
+    }
+    this.cache.set(boardId(mode, version), { entries, total, updated });
     if (!shown) return;
     this.entries = entries;
     this.total = total;
@@ -237,16 +266,48 @@ export class GlobalLeaderboard {
 
   // Submits one run, tagged with this client's version and the run's mode. Resolves
   // { ok, rank, allTimeRank, onBoard, id, name, censored, version, mode } or { ok: false, reason, status, error }.
-  // The answer carries the run's own version board, which is adopted (and shown if it's the selected one).
-  async submit(run) {
-    const payload = buildRunPayload({ ...run, version: this.current });
+  // The answer carries every board the run landed on (its version board and the all-time board), which are
+  // adopted, so the run shows at once without re-reading a board from the CDN. A busy server, a timeout or
+  // a network error is retried quietly (SUBMIT_RETRIES) before the game reports it.
+  async submit(run, { onRetry } = {}) {
+    const payload = { ...buildRunPayload({ ...run, version: this.current }), nonce: runNonce() };
     if (payload.score < 1) return { ok: false, reason: 'skipped' };
+    let result = null;
+    let waitedCooldown = false;
+    for (let attempt = 0; attempt <= SUBMIT_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const base = SUBMIT_BACKOFF_MS * 2 ** (attempt - 1);
+        const hinted = result.retryAfter > 0 ? result.retryAfter * 1000 : 0;
+        onRetry?.(attempt);
+        await this.sleep(Math.max(hinted, base * (0.75 + Math.random() * 0.5)));
+      }
+      result = await this.submitOnce(payload);
+      if (result.ok || !result.retry) break;
+      // A 429 on a retry means an earlier try did land and only its answer was lost: wait out the cooldown
+      // once and resubmit (same nonce, so it replaces itself and returns the rank).
+      if (result.status === 429) {
+        if (attempt === 0 || waitedCooldown || !(result.retryAfter <= MAX_COOLDOWN_WAIT_S)) break;
+        waitedCooldown = true;
+      }
+    }
+    if (!result.ok && (result.reason === 'timeout' || result.reason === 'offline')) {
+      // Network trouble: the GLOBAL tab falls back to local runs with the matching OFFLINE note.
+      this.status = 'offline';
+      this.reason = result.reason;
+    }
+    const { retry, retryAfter, ...out } = result;
+    return out;
+  }
+
+  // One POST of a run. Resolves the submit() result, plus `retry` when trying again may help.
+  async submitOnce(payload) {
     try {
       const res = await requestJson(this.fetchImpl, this.endpoint, { method: 'POST', body: payload, timeoutMs: this.timeoutMs + 1500 });
       if (res.ok && res.data?.accepted) {
         this.rememberId(res.data.id);
         const version = res.data.version === undefined ? payload.version : res.data.version;
         this.adopt(res.data, version || ALL_TIME, payload.mode);
+        if (res.data.allTime && version) this.adopt(res.data.allTime, ALL_TIME, payload.mode);
         return {
           ok: true,
           rank: Number.isInteger(res.data.rank) ? res.data.rank : null,
@@ -264,14 +325,15 @@ export class GlobalLeaderboard {
         const error = typeof res.data?.error === 'string' ? res.data.error : '';
         const reason = res.status === 429 ? 'cooldown' : res.status >= 500 ? 'unavailable'
           : res.status === 422 && /unknown game version/i.test(error) ? 'outdated' : 'rejected';
-        return { ok: false, reason, status: res.status, error };
+        const retryAfter = Number(res.data?.retryAfter) || (res.status === 503 ? 2 : 0);
+        return { ok: false, reason, status: res.status, error, retry: res.status >= 500 || res.status === 429, retryAfter };
       }
-      // Network trouble: the GLOBAL tab falls back to local runs with the matching OFFLINE note.
-      this.status = 'offline';
-      this.reason = res.reason || 'unavailable';
-      return { ok: false, reason: this.reason, status: res.status };
+      // A timeout, a network error or a gateway error page may pass; no API at all (the local server's 404
+      // page, no fetch) won't, so that isn't retried.
+      const reason = res.reason || 'unavailable';
+      return { ok: false, reason, status: res.status, retry: reason === 'timeout' || reason === 'offline' || res.status >= 500, retryAfter: 0 };
     } catch {
-      return { ok: false, reason: 'unavailable', status: 0 };
+      return { ok: false, reason: 'unavailable', status: 0, retry: false, retryAfter: 0 };
     }
   }
 
@@ -354,6 +416,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
 // Game-over line for the submit state: { text, tone } where tone is gold | cyan | dim | danger.
 export function describeSubmit(state) {
   if (!state) return { text: '', tone: 'dim' };
+  if (state.pending && state.retrying) return { text: '◎ GLOBAL BOARD BUSY // RETRYING UPLINK…', tone: 'cyan' };
   if (state.pending) return { text: '◎ UPLINKING RUN TO GLOBAL BOARD…', tone: 'cyan' };
   if (state.reason === 'optout') return { text: 'GLOBAL POSTING OFF // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'tainted') return { text: 'DEV TUNER USED // RUN NOT SENT TO GLOBAL BOARD', tone: 'dim' };
