@@ -76,6 +76,22 @@ test('left/right on a focused slider changes its value instead of moving focus',
   assert.equal(slider.clicks, 0);
 });
 
+test('up / down on a focused scrolling board scrolls it until its end, then moves focus on', () => {
+  const board = fakeEl(rect(0, 0));
+  const below = fakeEl(rect(0, 300));
+  Object.assign(board, { dataset: { gpScroll: '' }, scrollTop: 0, scrollHeight: 1000, clientHeight: 200 });
+  board.scrollBy = ({ top }) => { board.scrollTop = Math.max(0, Math.min(800, board.scrollTop + top)); };
+  const nav = new MenuNavigator();
+  const south = { navX: 0, navY: 1 }, idle = { navX: 0, navY: 0 };
+  nav.update(root([board, below]), south, 1 / 60, board);
+  assert.equal(nav.focused, board);
+  assert.equal(board.scrollTop, 80, 'one press scrolls 40% of the panel');
+  board.scrollTop = 800; // at the end of the board
+  nav.update(root([board, below]), idle, 1 / 60, board);
+  nav.update(root([board, below]), south, 1 / 60, board);
+  assert.equal(nav.focused, below, 'past the end, focus moves on');
+});
+
 test('pressing A to launch a run does not also dash on the next tick', async () => {
   const g = {};
   const launch = fakeEl(rect(0, 0));

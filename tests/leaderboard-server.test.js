@@ -139,6 +139,21 @@ test('board keeps only the top N, GET returns the public top slice, and a low ru
   assert.equal(low.allTimeRank, null);
 });
 
+test('GET and POST return the whole board: up to 100 runs (the GLOBAL list scrolls through them)', async () => {
+  assert.equal(LIMITS.PUBLIC_SIZE, LIMITS.BOARD_SIZE);
+  assert.equal(LIMITS.BOARD_SIZE, 100);
+  const { handler, store } = setup();
+  let last;
+  for (let i = 1; i <= 104; i++) last = await body(await post(handler, run({ name: `P${i}`, score: 1_000_000 + i * 1000 })));
+  assert.equal(store.board().length, 100);
+  const pub = await body(await get(handler, 'all'));
+  assert.equal(pub.entries.length, 100);
+  assert.equal(pub.total, 100);
+  assert.equal(pub.entries[0].name, 'P104');
+  assert.equal(pub.entries[99].name, 'P5');
+  assert.equal(last.entries.length, 100, 'the submit answer carries the whole board too');
+});
+
 test('one callsign holds at most MAX_PER_NAME places', async () => {
   const { handler, store } = setup();
   for (let i = 1; i <= LIMITS.MAX_PER_NAME + 2; i++) await post(handler, run({ name: 'SPAM', score: i * 1000 }));

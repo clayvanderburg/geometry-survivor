@@ -943,7 +943,7 @@ body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #c
   gap: 6px;
 }
 
-.hs-row {
+.hs-row, .hs-head {
   display: grid;
   grid-template-columns: 32px 1fr auto auto;
   align-items: center;
@@ -966,9 +966,48 @@ body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #c
   color: var(--cyan);
 }
 
-.hs-row:nth-child(1) .hs-rank { color: var(--gold); }
-.hs-row:nth-child(2) .hs-rank { color: #e0e8ff; }
-.hs-row:nth-child(3) .hs-rank { color: #ff9955; }
+.hs-row.hs-top1 .hs-rank { color: var(--gold); }
+.hs-row.hs-top2 .hs-rank { color: #e0e8ff; }
+.hs-row.hs-top3 .hs-rank { color: #ff9955; }
+
+/* Column head, pinned to the top while the board scrolls under it. */
+.hs-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: #060a18; /* opaque: rows scroll under it */
+  border-color: rgba(0, 243, 255, 0.18);
+  box-shadow: 0 6px 8px -4px rgba(2, 4, 12, 0.9);
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  pointer-events: none;
+}
+.hs-head span { color: var(--text-dim); font-size: inherit; }
+.hs-head .hs-score { text-align: right; }
+
+/* "YOU #n": jumps to the player's best run while it's out of sight. Pinned to the bottom of the list. */
+.hs-jump {
+  position: sticky;
+  bottom: 2px;
+  z-index: 2;
+  align-self: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(181, 101, 255, 0.85);
+  background: rgba(40, 18, 70, 0.95);
+  color: #e2c6ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(181, 101, 255, 0.4);
+}
+.hs-jump:hover, .hs-jump.gp-focus { background: rgba(181, 101, 255, 0.35); color: #fff; }
+.hs-jump.hidden { display: none; }
 
 .hs-name {
   font-weight: 700;
@@ -1054,6 +1093,10 @@ body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #c
   position: relative; /* rows' offsetTop is relative to the list, for scrolling the new run into view */
   max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain; /* a drag or wheel at the end of the board doesn't scroll the page behind */
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 243, 255, 0.4) transparent;
   padding-right: 2px;
@@ -1997,7 +2040,7 @@ body:not(.reduce-effects) .new-weapon-card > .card-glow { display: block; }
   .gameover-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .go-global-rank.tone-gold { font-size: 16px; letter-spacing: 1.5px; }
   .name-input { min-width: 0; width: 100%; }
-  .hs-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; padding: 7px 8px; }
+  .hs-row, .hs-head { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; padding: 7px 8px; }
   .hs-meta { font-size: 0; }
   .hs-meta .hs-ver { font-size: 9.5px; margin-right: 0; }
 }
@@ -4815,6 +4858,9 @@ body.touch-mode .m-window {
   background: #040712 !important; /* opaque: the menu behind must not bleed through */
   text-align: left;
 }
+/* The leaderboard window gives the board most of the screen; it scrolls inside, under its pinned head. */
+body.touch-mode .m-window #highscore-list,
+body.touch-mode .m-window #go-highscore-list { max-height: max(220px, calc(100dvh - 310px)); }
 body.touch-mode .m-back { position: sticky; top: 0; z-index: 2; margin: 0 0 10px; padding: 9px 16px; font-size: 13px; }
 body.touch-mode .modal-overlay { padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left)); }
 body.touch-mode .modal-card { max-height: 100%; padding: 14px 18px; border-radius: 12px; }

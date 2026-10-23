@@ -5392,6 +5392,8 @@ export class Game {
     const fallback = this.state === 'UPGRADE' ? root.querySelector?.('.upgrade-option') || null
       : this.quitConfirm ? document.getElementById('btn-quit-cancel') : primary;
     this.menuNav.update(root, gp, dt, fallback);
+    // The right stick scrolls the highscore board on the title and game-over screens.
+    if (gp.aimY && (this.state === 'TITLE' || this.state === 'GAMEOVER')) root.querySelector?.('.highscore-list')?.scrollBy?.({ top: gp.aimY * 16, behavior: 'instant' });
     if (this.menuGrace > 0) return;
 
     if (this.state === 'RANGE_EDIT' && (gp.pressed(PAD.B) || gp.pressed(PAD.BACK) || gp.pressed(PAD.START))) {
