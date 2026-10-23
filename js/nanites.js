@@ -25,6 +25,7 @@ import * as BTX from './bt-extras.js'; // pool Breakthroughs: Nano Needles, Rave
 
 export const NANITE_HUE = 96;   // acid lime glow; the motes run chrome-mint, the rims pale lime
 const MOTE_HUE = 150;
+import { kickMount, mountWorld } from './hardpoints.js';
 const MAX_SWARMS = 24;          // >= swarms alive at once (mains + daughters + plague), oldest recycled past it
 const MAX_CANISTERS = 6;
 const MAX_INFECTED = 96;        // Nanite Plague: infected enemies tracked at once (oldest dropped past it)
@@ -183,8 +184,11 @@ export class NaniteSwarm {
     const pack = this.findPack(game, x, y, range, this._pack || (this._pack = { x: 0, y: 0, n: 0 }));
     if (!pack) return false;
     const c = this.canisters[this.canCount++];
-    const ox = p ? x + Math.cos(p.hullAngle ?? p.angle ?? 0) * 6 : x;
-    const oy = p ? y + Math.sin(p.hullAngle ?? p.angle ?? 0) * 6 : y;
+    // The ship's canisters leave the nanite hive (hardpoints.js).
+    const hive = p ? mountWorld(p, 'nanites', this._hive ||= {}, game) : null;
+    const ox = hive ? hive.x : x;
+    const oy = hive ? hive.y : y;
+    if (p) kickMount(p, 'nanites', Math.atan2(pack.y - oy, pack.x - ox));
     c.x = c.sx = ox;
     c.y = c.sy = oy;
     c.tx = pack.x;

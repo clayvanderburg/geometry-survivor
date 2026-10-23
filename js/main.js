@@ -105,6 +105,7 @@ import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.
 import { playPreset, semis } from './sfx-layers.js';
 import { GlowSprites } from './glow-sprite.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
+import { kickMount, mountWorld, WINGTIP } from './hardpoints.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -3577,6 +3578,7 @@ export class Game {
     this.sound.playLaser(BTX.blasterPitch(this, b));
     BTX.blasterVolleyFx(this, p, slug);
     kickShipRecoil(p);
+    kickMount(p, 'blaster');
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
   }
@@ -3607,8 +3609,8 @@ export class Game {
       const hx = Math.cos(heading), hy = Math.sin(heading);
       // Pod mount in hull space: out at the wingtips (ship-renderer.js: tips at -0.95r, 1.76r), well clear of
       // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
-      const fwd = -p.radius * 0.5 - tier * 7;
-      const out = p.radius * 1.7 + tier * 4;
+      const fwd = p.radius * WINGTIP.x - tier * 7; // the wingtip pods drawn by hardpoints.js
+      const out = p.radius * WINGTIP.y + tier * 4;
       let wx = p.x + hx * fwd - hy * side * out;
       let wy = p.y + hy * fwd + hx * side * out;
       // A pod buried in the rock face being mined would launch its rocket inside the rock, where it died
@@ -3641,6 +3643,7 @@ export class Game {
       this.particles?.spawnFlash?.(wx, wy, 18, 24, 0.14);
       this.particles?.spawnDirectionalSparks?.(wx, wy, a + Math.PI, 0.7, 4, 30, 6);
     }
+    kickMount(p, 'rockets');
     if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
     else this.sound.playLaser(0.55);
   }
@@ -3709,6 +3712,7 @@ export class Game {
     // Each missile locks its own target: the nearest enemies in range, one each, doubling up only when
     // there are fewer enemies than missiles.
     const targets = this.missileTargets(p, count);
+    const rack = mountWorld(p, 'missiles', {}, this); // the wing rack (hardpoints.js)
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       const target = targets.length ? targets[i % targets.length] : null;
@@ -3716,8 +3720,8 @@ export class Game {
         target,
         aimX: target ? target.x : p.x + Math.cos(p.angle) * W.missileRange,
         aimY: target ? target.y : p.y + Math.sin(p.angle) * W.missileRange,
-        x: p.x,
-        y: p.y,
+        x: rack.x,
+        y: rack.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
         speed: W.missileSpeed * vel * (nuke ? 0.8 : 1),
@@ -3732,7 +3736,8 @@ export class Game {
         echo
       }));
     }
-    this.missileSalvoFx(p, count);
+    kickMount(p, 'missiles', targets.length ? Math.atan2(targets[0].y - p.y, targets[0].x - p.x) : p.angle);
+    this.missileSalvoFx(p, count, rack);
   }
 
   // Swarm Missile targets: the nearest `count` enemies within W.missileRange of the ship (missiles and
@@ -3751,11 +3756,11 @@ export class Game {
 
   // Salvo launch (visual/audio only): a bloom and puff ring behind the hull and an exhaust spray
   // along the launch fan, so a salvo reads as one volley leaving the ship.
-  missileSalvoFx(p, count) {
+  missileSalvoFx(p, count, rack = null) {
     const fx = this.particles;
     const back = p.angle + Math.PI;
-    const rx = p.x + Math.cos(back) * (p.radius * 0.8);
-    const ry = p.y + Math.sin(back) * (p.radius * 0.8);
+    const rx = rack ? rack.x : p.x + Math.cos(back) * (p.radius * 0.8);
+    const ry = rack ? rack.y : p.y + Math.sin(back) * (p.radius * 0.8);
     const hue = missileHue(p);
     fx.spawnFlash?.(rx, ry, 24 + Math.min(count, 8) * 2, hue, 0.2);
     fx.spawnShockwave(rx, ry, 34 + Math.min(count, 8) * 3, hue, 3, 0.3);
@@ -3808,6 +3813,7 @@ export class Game {
         damage: damage * hits * W.orbShare / zaps, hue: ARC_HUE });
     }
     if (hits > 0) this.sound.playArcZap?.(hits);
+    if (hits > 0 && originX === p.x && originY === p.y) kickMount(p, 'lightning');
     BTX.arcLattice(this, bb, this.arcSegs, damage);
     this.arcSegs = null;
   }
@@ -3841,8 +3847,12 @@ export class Game {
       const target = enemies[bestIdx];
       hitSet.add(target);
 
-      if (jump === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
-      this.arcHopFx(currX, currY, target, jump, fork ? ARC_HUE + 40 : ARC_HUE);
+      // The first arc leaps from the Tesla coil (hardpoints.js); range and targeting stay from the ship.
+      const p = this.player;
+      const coil = jump === 0 && currX === p.x && currY === p.y ? mountWorld(p, 'lightning', this._coil ||= {}) : null;
+      const sx = coil ? coil.x : currX, sy = coil ? coil.y : currY;
+      if (jump === 0) this.arcEmitterFx(sx, sy, target.x, target.y);
+      this.arcHopFx(sx, sy, target, jump, fork ? ARC_HUE + 40 : ARC_HUE);
       if (this.arcSegs) { this.arcSegs.push(currX, currY, target.x, target.y); BTX.conductorCharge(this, this.arcBuild, target, damage); }
       hits++;
       last = target;
@@ -3902,11 +3912,12 @@ export class Game {
     }
     const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
     const life = W.singularityLife(b);
+    const lens = mountWorld(p, 'singularity', {}, this); // the Vortex projector (hardpoints.js)
     for (let k = 0; k < count; k++) {
       const a = angles[k] ?? angle;
       this.singularities.push({
-        x: p.x,
-        y: p.y,
+        x: lens.x,
+        y: lens.y,
         vx: Math.cos(a) * 4.2,
         vy: Math.sin(a) * 4.2,
         radius: W.singularityCoreRadius(b),
@@ -3928,8 +3939,9 @@ export class Game {
         hue: 290
       });
     }
-    this.particles.spawnFlash?.(p.x, p.y, 34, 290, 0.22);
-    this.particles.spawnShockwave(p.x, p.y, 60, 290, 3, 0.3, true);
+    kickMount(p, 'singularity', angle);
+    this.particles.spawnFlash?.(lens.x, lens.y, 34, 290, 0.22);
+    this.particles.spawnShockwave(lens.x, lens.y, 60, 290, 3, 0.3, true);
     this.sound.playSingularityLaunch?.();
   }
 

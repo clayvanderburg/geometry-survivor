@@ -15,6 +15,7 @@ import { WEAPON_SCALING as W, weaponDamage, projectileSpeedMult } from './weapon
 import { weaponBuild } from './weapon-levels.js';
 import * as BTX from './bt-extras.js'; // pool Breakthroughs: Shatter Edge, Arc Discs
 import { shieldBlocks } from './archetypes.js';
+import { kickMount, mountWorld, setMountCharge } from './hardpoints.js';
 
 export const GLAIVE_HUE = 24;     // molten orange
 const POOL = 96;
@@ -76,6 +77,7 @@ export class GlaiveDiscs {
     if (b) {
       if (this.timer > 0) this.timer = Math.max(0, this.timer - dt);
       if (this.timer <= 0 && this.throwDiscs(game, p, b)) this.timer = W.glaiveCooldown(b);
+      setMountCharge(p, 'glaive', 1 - this.timer / W.glaiveCooldown(b)); // the disc spins up as it reloads
     }
     let n = 0;
     for (const d of this.discs) {
@@ -123,10 +125,12 @@ export class GlaiveDiscs {
       const t = picks[i % picks.length].e;
       const round = Math.floor(i / picks.length);
       const a = Math.atan2(t.y - p.y, t.x - p.x) + (round ? (round % 2 ? 1 : -1) * 0.35 * Math.ceil(round / 2) : 0);
-      const off = (p.radius || 15) + 6;
+      // Flung from the glaive launcher (hardpoints.js).
+      const slot = mountWorld(p, 'glaive', this._slot ||= {}, game);
+      kickMount(p, 'glaive', a);
       d.active = true;
-      d.x = p.x + Math.cos(a) * off;
-      d.y = p.y + Math.sin(a) * off;
+      d.x = slot.x;
+      d.y = slot.y;
       d.speed = d.launch = speed;
       d.vx = Math.cos(a) * speed;
       d.vy = Math.sin(a) * speed;

@@ -23,6 +23,7 @@ export const FIELD_HUE = 188;     // electric cyan
 const MAX_BOLTS = 6;              // discharge bolts drawn per discharge (all enemies are still hit)
 const MAX_LASH = 8;               // >= W.lashArcs
 const CLAP_KNOCK = 2.4;
+import { kickMount, setMountCharge } from './hardpoints.js';
 const CRACKLE_BOLTS = 5;          // jagged sparks round a charged ring
 const HUD_STEPS = 10;             // HUD charge gauge resolution (keeps the chip HTML from changing every tick)
 
@@ -93,6 +94,7 @@ export class ShockField {
     if (!b.t12) this.store = 0;
     else if (this.store >= W.overchargeStore && this.packClosing(game, p, r)) this.thunderclap(game, b, r);
     if (this.timer <= 0 && this.anyInside(game, p, r)) this.discharge(game, b, r);
+    setMountCharge(p, 'shockfield', this.charge); // the emitter dish glows as it charges (hardpoints.js)
   }
 
   anyInside(game, p, r) {
@@ -173,6 +175,7 @@ export class ShockField {
   discharge(game, b, r) {
     const p = game.player;
     const dmg = weaponDamage(p, 'shockfield', b);
+    kickMount(p, 'shockfield');
     this.collect(game, p, r);
     const n = this.strike(game, p, dmg, b.t8 ? 0 : W.fieldKnock, b.t8, 'shockfield');
     if (b.t4) this.lash(game, p, r, dmg);

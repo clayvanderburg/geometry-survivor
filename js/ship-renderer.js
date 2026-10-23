@@ -1,4 +1,5 @@
 // Shared game and tuning-preview rendering. Animation state is supplied by the caller.
+import { drawHardpoints, drawOrbitHub, drawRail, drawBarrelFx, updateMounts, wingLean, ownedWeapons } from './hardpoints.js';
 
 // Andrew's monotone chain; returns the convex hull counter-clockwise (math orientation).
 function convexHull(points) {
@@ -211,6 +212,7 @@ export function updateShipAnimation(p, dt) {
   p.bank = (p.bank || 0) + (Math.max(-1, Math.min(1, turn / 7)) - (p.bank || 0)) * Math.min(1, dt * 8);
 
   if (p.recoil > 0) p.recoil = Math.max(0, p.recoil - dt * 14);
+  updateMounts(p, dt); // hardpoint flash, recoil, heat and swivel (hardpoints.js)
 
   // Engine wake: the thruster nozzle's world position each tick, newest first; points are recycled.
   const wake = (p.wake ||= []);
@@ -304,9 +306,8 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     // into a turn foreshortens the inside wing and stretches the outside one a touch.
     const bank = Math.max(-1, Math.min(1, p.bank || 0));
     for (let side = -1; side <= 1; side += 2) {
-      const lean = bank * side;
       ctx.save();
-      ctx.scale(1, 1 - (lean > 0 ? 0.26 : -0.06) * Math.abs(lean));
+      ctx.scale(1, wingLean(bank, side));
       for (let pass = 0; pass < 2; pass++) {
         ctx.strokeStyle = pass === 0 ? carapaceCol : '#ffffff';
         ctx.globalAlpha = (pass === 0 ? 0.55 : 0.95) * flashAlpha;
@@ -366,6 +367,9 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.lineTo(r * 0.52, r * 0.35);
     ctx.closePath();
     ctx.stroke();
+
+    // 1e. Weapon hardpoints: a part per equipped weapon, leaning with the wings (js/hardpoints.js).
+    drawHardpoints(ctx, p, bank, now);
 
     ctx.restore(); // End hull orientation
 
@@ -465,16 +469,22 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
     ctx.rotate(p.angle);
     const recoil = Math.max(0, Math.min(1, p.recoil || 0));
     ctx.translate(-recoil * 1.5, 0);
+    drawOrbitHub(ctx, p, now);
 
-    ctx.strokeStyle = recoil > 0.5 ? '#ffffff' : carapaceCol;
-    ctx.lineWidth = 2.2;
-    // Twin Turret Barrels
-    ctx.beginPath();
-    ctx.moveTo(2, -3.5);
-    ctx.lineTo(r * 0.95 - recoil * 3, -3.5);
-    ctx.moveTo(2, 3.5);
-    ctx.lineTo(r * 0.95 - recoil * 3, 3.5);
-    ctx.stroke();
+    // Twin Turret Barrels (the Autocannon's mount; gone once it's discarded), and the Rail Lance's rail
+    // between them.
+    if (ownedWeapons(p).includes('blaster')) {
+      ctx.strokeStyle = recoil > 0.5 ? '#ffffff' : carapaceCol;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(2, -3.5);
+      ctx.lineTo(r * 0.95 - recoil * 3, -3.5);
+      ctx.moveTo(2, 3.5);
+      ctx.lineTo(r * 0.95 - recoil * 3, 3.5);
+      ctx.stroke();
+      drawBarrelFx(ctx, p);
+    }
+    drawRail(ctx, p);
 
     // Central Diamond Turret Hub
     ctx.fillStyle = '#051024';
