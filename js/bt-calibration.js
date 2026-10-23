@@ -50,7 +50,7 @@ export const TF_REALIZED = {
   raillance: { magnet: [1, 1, 1], wake: [1, 1.16, 1], overload: [0.6, 1, 1], static: [1.2, 1.45, 1], reflect: [1.1, 1, 1] },
   glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] },
   nanites: { fission: [0.6, 0.79, 0.85], goo: [0.6, 0.66, 0.7], plague: [0.6, 0.6, 0.6], needles: [0.8, 0.7, 0.62], ravenous: [0.72, 0.68, 0.7] },
-  harpoon: { twin: [1, 1.1, 1.02], spin: [0.72, 0.6, 0.6], chain: [0.92, 1.15, 0.7], detonate: [0.7, 0.6, 0.6], tunnel: [0.84, 0.86, 0.66] },
+  harpoon: { twin: [1, 1.3, 1.02], spin: [0.72, 0.6, 0.6], chain: [0.92, 1.35, 0.7], detonate: [0.7, 0.6, 0.6], tunnel: [0.84, 0.86, 0.66] },
   quake: { skip: [0.79, 0.6, 0.72], fault: [1, 0.65, 0.75], epicenter: [1, 0.95, 0.95], crush: [0.8, 0.6, 0.72], lens: [0.9, 0.85, 0.85] }
 };
 
