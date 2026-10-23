@@ -1,4 +1,4 @@
-# Ship hardpoints (v0.47 design)
+# Ship hardpoints (v0.46 design)
 
 Clay: "It would be cool if all the weapons you choose actually **mounted a visible part on the ship** that they
 launch from." Every equipped weapon (5 slots max) shows a small part on the hull in its weapon colour, and its
