@@ -468,6 +468,7 @@ export class Game {
     this.handRerolls = 0; // rerolls of the current level-up hand (sets the next reroll's cost)
     this.pickRerolls = 0; // rerolls of the current NEW WEAPON pick (its own price, from 40 gold)
     this.handLock = null; // { card, slot }: the locked card in the hand on screen
+    this.handLockPaid = 0; // gold the lock on screen cost in this hand (0 for a lock carried in): refunded if it is let go
     this.carriedLock = null; // locked card passed over: guaranteed in the next level-up hand
     this.handPhase = null; // 'hand' (rerolls and locks allowed), 'weapon' (the NEW WEAPON pick) or 'breakthrough'
     // Weapon milestones (LV 6 / 12 / 18) reached by a card, waiting for their BREAKTHROUGH choice, in order.
@@ -4371,6 +4372,7 @@ export class Game {
     this.handPhase = 'hand';
     this.handRerolls = 0;
     this.handLock = null;
+    this.handLockPaid = 0; // a carried lock was paid for in its own hand: letting it go refunds nothing
     this.lockNote = '';
     this.banishMode = false;
     this.banishArmed = -1;
@@ -4430,6 +4432,24 @@ export class Game {
     this.updateHUD();
   }
 
+  // Give back what the lock on screen cost in this hand (toggleCardLock): the counters tick back up with a
+  // gain flash, a little coin chime and a float. `how` words the float; nothing happens for a carried lock.
+  refundHandLock(how = 'unlocked') {
+    const paid = this.handLockPaid || 0;
+    this.handLockPaid = 0;
+    if (!(paid > 0)) return 0;
+    this.gold += paid;
+    this.goldSpent = Math.max(0, (this.goldSpent || 0) - paid);
+    if (how !== 'moved') { // a moved lock nets out: the new lock's spend flash says it all
+      this.flashGold('refund');
+      const p = this.player;
+      if (p) this.particles?.spawnFloatText?.(p.x, p.y - 22, `+${paid} ${GOLD_ICON} LOCK REFUNDED`, '#ffcc00', 12);
+      this.sound?.playGoldPickup?.();
+    }
+    this.updateHUD?.();
+    return paid;
+  }
+
   // Spend gold (never below 0); flashes the counters either way.
   spendGold(amount) {
     if (!trySpend(this, amount)) {
@@ -4447,7 +4467,7 @@ export class Game {
     for (const id of ['gold-hud-display', 'hand-gold-count']) {
       const el = globalThis.document?.getElementById(id);
       if (!el?.classList) continue;
-      el.classList.remove('gold-flash-gain', 'gold-flash-spend', 'gold-flash-short');
+      el.classList.remove('gold-flash-gain', 'gold-flash-spend', 'gold-flash-short', 'gold-flash-refund');
       void el.offsetWidth; // restart the CSS animation
       el.classList.add(`gold-flash-${kind}`);
     }
@@ -4529,7 +4549,10 @@ export class Game {
     if (!this.spendGold(banishCost())) { this.renderHandControls(); return false; }
     this.player.banished[card.id] = true;
     this.runStats?.banish();
-    if (this.handLock?.card === card) this.handLock = null;
+    if (this.handLock?.card === card) {
+      this.handLock = null;
+      this.refundHandLock(); // its lock was for nothing: paid in this hand, it comes back
+    }
     const inHand = new Set(this.currentChoices.map((c) => c.id));
     const fresh = rollUpgrades(this.player, 3).find((c) => !inHand.has(c.id));
     if (fresh) this.currentChoices[index] = fresh;
@@ -4653,17 +4676,24 @@ export class Game {
     return true;
   }
 
-  // LOCK toggle on card `index`: locking costs gold (moving the lock to another card costs it again,
-  // since only one card can be locked); unlocking is free and refunds nothing.
+  // LOCK toggle on card `index`: locking costs gold, and only one card can be locked. Letting go of a lock
+  // placed in this hand refunds it in full (unlocking it, moving it to another card, banishing the locked
+  // card), so changing your mind is free; a lock carried in from an earlier hand was paid for there and
+  // refunds nothing. Moving the lock refunds first, so the gold for one lock is always enough.
   toggleCardLock(index) {
     if (!this.canEditHand()) return false;
     const card = this.currentChoices[index];
     if (!card) return false;
     if (this.handLock?.card === card) {
       this.handLock = null;
+      this.refundHandLock();
     } else {
+      const refund = this.handLockPaid;
+      if (this.gold + refund < lockCost()) return this.spendGold(lockCost()); // flashes SHORT, changes nothing
+      this.refundHandLock(this.handLock ? 'moved' : 'unlocked');
       if (!this.spendGold(lockCost())) return false;
       this.handLock = { card, slot: index };
+      this.handLockPaid = lockCost();
       this.runStats?.lock();
     }
     this.lockNote = '';

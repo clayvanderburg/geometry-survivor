@@ -193,19 +193,96 @@ test('a locked card passed over is guaranteed in the next hand, with one fewer r
   assert.equal(g.handLock, null);
 });
 
-test('only one card can be locked; unlocking refunds nothing', () => {
+test('only one card can be locked; letting go of a lock placed in this hand refunds it (Clay, v0.46)', () => {
   const g = freshGame(100);
   plainHand(g);
   g.toggleCardLock(0);
+  assert.equal(g.gold, 95);
   g.toggleCardLock(1);
   assert.equal(g.handLock.card, g.currentChoices[1]);
   assert.equal(g.handLock.slot, 1);
-  assert.equal(g.gold, 90, 'moving the lock pays again');
+  assert.equal(g.gold, 95, 'moving the lock costs one lock in all');
   g.toggleCardLock(1);
   assert.equal(g.handLock, null);
-  assert.equal(g.gold, 90, 'no refund');
+  assert.equal(g.gold, 100, 'unlocking refunds it in full');
+  assert.equal(g.goldSpent, 0, 'a refunded lock is not counted as spent');
   g.selectUpgrade(0);
   assert.equal(g.carriedLock, null, 'nothing carried once unlocked');
+});
+
+test('lock A, unlock A, lock B in one hand costs the same as locking B once', () => {
+  const single = freshGame(100);
+  plainHand(single);
+  single.toggleCardLock(1);
+  const g = freshGame(100);
+  plainHand(g);
+  g.toggleCardLock(0);
+  g.toggleCardLock(0);
+  g.toggleCardLock(1);
+  assert.equal(g.gold, single.gold);
+  assert.equal(g.goldSpent, single.goldSpent);
+  assert.equal(g.handLock.card, g.currentChoices[1]);
+  // Exactly the gold for one lock is enough to move it: the old lock refunds before the new one is paid.
+  const tight = freshGame(5);
+  plainHand(tight);
+  assert.ok(tight.toggleCardLock(0));
+  assert.equal(tight.gold, 0);
+  assert.ok(tight.toggleCardLock(1), 'moved with no gold in hand');
+  assert.equal(tight.gold, 0);
+  assert.equal(tight.handLock.card, tight.currentChoices[1]);
+});
+
+test('spamming lock / unlock / move never makes gold', () => {
+  const g = freshGame(37);
+  plainHand(g);
+  const n = g.currentChoices.length;
+  let seed = 7;
+  for (let i = 0; i < 400; i++) {
+    seed = (seed * 16807) % 2147483647;
+    g.toggleCardLock(seed % n);
+    assert.ok(g.gold <= 37, `step ${i}: ${g.gold} gold`);
+    assert.equal(g.gold, g.handLock ? 32 : 37, `step ${i}: one lock held costs one lock, none costs nothing`);
+  }
+  if (g.handLock) g.toggleCardLock(g.currentChoices.indexOf(g.handLock.card));
+  assert.equal(g.gold, 37);
+  assert.equal(g.goldSpent, 0);
+});
+
+test('a lock carried in from an earlier hand was paid there: unlocking or moving it refunds nothing', () => {
+  const g = freshGame(100);
+  g.player.banished = Object.fromEntries(UPGRADE_POOL.filter((u) => u.elementCard).map((u) => [u.id, true]));
+  plainHand(g);
+  g.toggleCardLock(2);
+  g.selectUpgrade(0); // passed over: carried, its 5 gold spent for good
+  assert.equal(g.gold, 95);
+  plainHand(g);
+  assert.ok(g.handLock, 'carried in');
+  g.toggleCardLock(g.currentChoices.indexOf(g.handLock.card));
+  assert.equal(g.handLock, null);
+  assert.equal(g.gold, 95, 'no refund for a carried lock');
+  // Re-locking it in this hand is a new lock: that one refunds.
+  g.toggleCardLock(0);
+  assert.equal(g.gold, 90);
+  g.toggleCardLock(0);
+  assert.equal(g.gold, 95);
+});
+
+test('banishing the locked card refunds its lock from this hand; the banish itself is final', async () => {
+  const { banishCost } = await import('../js/gold.js');
+  const g = freshGame(100);
+  plainHand(g);
+  g.toggleCardLock(0);
+  assert.equal(g.gold, 95);
+  assert.ok(g.banishCard(0, true));
+  assert.equal(g.handLock, null);
+  assert.equal(g.gold, 100 - banishCost(), 'the lock came back, the banish is paid');
+  // REROLL keeps the lock and its refund: unlocking after a reroll still refunds the lock (the reroll stays paid).
+  const r = freshGame(100);
+  plainHand(r);
+  r.toggleCardLock(0);
+  assert.ok(r.rerollHand());
+  r.toggleCardLock(r.currentChoices.indexOf(r.handLock.card));
+  assert.equal(r.gold, 100 - 20);
 });
 
 test('a carried lock that is no longer valid is dropped with a note', () => {
