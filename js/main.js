@@ -103,6 +103,7 @@ import {
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
 import { playPreset, semis } from './sfx-layers.js';
+import { GlowSprites } from './glow-sprite.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
@@ -201,8 +202,51 @@ function dealInCard(card, idx, className, doc = globalThis.document) {
   card.appendChild(shimmer);
 }
 
-const setHidden = (el, hidden) => {
-  if (el) el.classList[hidden ? 'add' : 'remove']('hidden');
+// Pickup glows: stamped from cached sprites (js/glow-sprite.js) rather than a shadowBlur inside the
+// additive layer, which costs a full-canvas blur per coin.
+const coinPath = (ctx, r) => {
+  for (let s = 0; s < 6; s++) {
+    const a = (s * Math.PI) / 3;
+    if (s === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+};
+const bombPath = (ctx, r) => {
+  for (let s = 0; s < 16; s++) {
+    const a = (s * Math.PI) / 8;
+    const rr = s % 2 ? r * 0.42 : r;
+    if (s === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath();
+};
+const GEOM_ALPHA = 0.92;
+const COIN_GLOW = Object.freeze({ blur: 12, color: '#ffcc00', fill: `hsla(46, 100%, 52%, ${GEOM_ALPHA})`, path: coinPath });
+const BOMB_GLOW = Object.freeze({ blur: 16, color: '#ffcc00', fill: `hsla(48, 100%, 60%, ${GEOM_ALPHA})`, path: bombPath });
+const pickupGlows = new GlowSprites();
+
+// Adds or removes a class only when that changes it: the HUD calls these every tick, and even a no-op
+// classList.add() rewrites the class attribute.
+const setClass = (el, cls, on) => {
+  const list = el?.classList;
+  if (!list || list.contains?.(cls) === !!on) return;
+  list[on ? 'add' : 'remove']?.(cls);
+};
+const setHidden = (el, hidden) => setClass(el, 'hidden', hidden);
+
+// The HUD is refreshed every tick. Rewriting a text or a width that hasn't changed still invalidates
+// style and layout for the frame, so these write only when the value differs from the last one written.
+const setText = (el, text) => {
+  if (el && el.textContent !== text) el.textContent = text;
+};
+const setStyle = (el, prop, value) => {
+  if (!el) return;
+  const last = (el.hudStyle ??= {});
+  if (last[prop] === value) return;
+  last[prop] = value;
+  if (prop.startsWith('--')) el.style.setProperty?.(prop, value);
+  else el.style[prop] = value;
 };
 
 // Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
@@ -2715,7 +2759,7 @@ export class Game {
       cardEl.style.animation = '';
     }
     setHidden(cardEl, !card);
-    if (card) cardEl.classList[this.ltCardTimer < 0.4 ? 'add' : 'remove']('lt-card-out');
+    if (card) setClass(cardEl, 'lt-card-out', this.ltCardTimer < 0.4);
   }
 
   showBossCard(kind, kicker, e, detail) {
@@ -2765,11 +2809,11 @@ export class Game {
     const on = glow && !this.novaCalloutByPixie;
     setHidden(el, !on);
     setHidden(arrow, !on);
-    for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[glow ? 'add' : 'remove']('nova-callout-target');
+    for (const id of ['nova-indicator', 'touch-nova']) setClass(document.getElementById(id), 'nova-callout-target', glow);
     if (!on || !el || !arrow) return;
     const fading = this.novaCalloutTimer < 0.45;
-    el.classList[fading ? 'add' : 'remove']('nova-callout-out');
-    arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
+    setClass(el, 'nova-callout-out', fading);
+    setClass(arrow, 'nova-callout-out', fading);
     const text = `TRY A SUPERNOVA BOMB! (${this.novaKeyLabel()})`;
     const titleEl = document.getElementById('nova-callout-title');
     if (titleEl && titleEl.textContent !== text) titleEl.textContent = text;
@@ -2897,10 +2941,10 @@ export class Game {
     setHidden(warnEl, !model.warning);
     if (model.warning) {
       const w = model.warning;
-      document.getElementById('boss-warning-text').textContent = w.count > 1
+      setText(document.getElementById('boss-warning-text'), w.count > 1
         ? `${w.count} BOSSES INBOUND // NEXT: ${w.name}`
-        : `${w.name} INBOUND // ${w.epithet}`;
-      document.getElementById('boss-warning-eta').textContent = `T-${w.eta.toFixed(1)}s`;
+        : `${w.name} INBOUND // ${w.epithet}`);
+      setText(document.getElementById('boss-warning-eta'), `T-${w.eta.toFixed(1)}s`);
     }
 
     setHidden(document.getElementById('boss-bars'), !model.visible);
@@ -2908,17 +2952,17 @@ export class Game {
       const row = model.rows[i];
       setHidden(document.getElementById(`boss-bar-${i}`), !row);
       if (!row) continue;
-      document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
+      setText(document.getElementById(`boss-bar-name-${i}`), row.name);
       // The last BOSS_ESCAPE.warnAt s before it escapes, the title gives way to a red countdown.
       const escaping = row.escape !== null && row.escape !== undefined && row.escape <= BOSS_ESCAPE.warnAt;
       const epithetEl = document.getElementById(`boss-bar-epithet-${i}`);
-      epithetEl.textContent = escaping ? `ESCAPING IN ${Math.ceil(row.escape)}s` : row.epithet;
-      epithetEl.classList?.toggle?.('boss-bar-escaping', escaping);
-      document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
+      setText(epithetEl, escaping ? `ESCAPING IN ${Math.ceil(row.escape)}s` : row.epithet);
+      setClass(epithetEl, 'boss-bar-escaping', escaping);
+      setStyle(document.getElementById(`boss-bar-fill-${i}`), 'width', `${(row.pct * 100).toFixed(1)}%`);
     }
     const moreEl = document.getElementById('boss-bar-more');
     setHidden(moreEl, model.overflow <= 0);
-    if (model.overflow > 0) moreEl.textContent = `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`;
+    if (model.overflow > 0) setText(moreEl, `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`);
 
     const cardEl = document.getElementById('boss-card');
     if (card && card.id !== this.bossCardShownId) {
@@ -2934,7 +2978,7 @@ export class Game {
       cardEl.style.animation = '';
     }
     setHidden(cardEl, !card);
-    if (cardEl) cardEl.classList[card && this.bossCardTimer < 0.45 ? 'add' : 'remove']('boss-card-out');
+    setClass(cardEl, 'boss-card-out', card && this.bossCardTimer < 0.45);
   }
 
   spawnWavePack() {
@@ -5891,22 +5935,22 @@ export class Game {
 
   updateHUD() {
     const p = this.player;
-    document.getElementById('score-display').textContent = this.score.toLocaleString();
-    document.getElementById('multiplier-display').textContent = `x${this.multiplier.toFixed(1)}`;
-    document.getElementById('luck-hud-display').textContent = `🍀 ${Math.round((p.stats.luck || 1) * 100)}% LUCK`;
-    document.getElementById('cores-hud-display').textContent = `❖ ${this.sessionCores} CORES (${this.progression.data.cores} BANKED)`;
+    setText(document.getElementById('score-display'), this.score.toLocaleString());
+    setText(document.getElementById('multiplier-display'), `x${this.multiplier.toFixed(1)}`);
+    setText(document.getElementById('luck-hud-display'), `🍀 ${Math.round((p.stats.luck || 1) * 100)}% LUCK`);
+    setText(document.getElementById('cores-hud-display'), `❖ ${this.sessionCores} CORES (${this.progression.data.cores} BANKED)`);
     const goldHud = document.getElementById('gold-hud-display');
-    if (goldHud) goldHud.textContent = `${GOLD_ICON} ${this.gold ?? 0} GOLD`;
-    document.getElementById('wave-display').textContent = `WAVE ${this.wave}`;
+    setText(goldHud, `${GOLD_ICON} ${this.gold ?? 0} GOLD`);
+    setText(document.getElementById('wave-display'), `WAVE ${this.wave}`);
 
     const mins = Math.floor(this.elapsedTime / 60);
     const secs = Math.floor(this.elapsedTime % 60);
-    document.getElementById('timer-display').textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    setText(document.getElementById('timer-display'), `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
 
     const xpPct = Math.min(100, (p.xp / p.xpToNext) * 100);
-    document.getElementById('xp-bar-fill').style.width = `${xpPct}%`;
+    setStyle(document.getElementById('xp-bar-fill'), 'width', `${xpPct}%`);
     const levelEl = document.getElementById('level-display');
-    levelEl.textContent = `LVL ${p.level}`;
+    setText(levelEl, `LVL ${p.level}`);
     // A new level pops the HUD readout (skipped with REDUCE EFFECTS).
     if (this.hudLevelShown !== p.level) {
       if (this.hudLevelShown !== undefined && !isReduceEffects()) {
@@ -5917,22 +5961,22 @@ export class Game {
     }
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-    document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
+    setStyle(document.getElementById('hp-bar-fill'), 'width', `${hpPct}%`);
     // The ghost trails the fill (CSS transition delay), so a hit leaves a fading chunk behind.
     const ghost = document.getElementById('hp-bar-ghost');
-    if (ghost) ghost.style.width = `${hpPct}%`;
+    setStyle(ghost, 'width', `${hpPct}%`);
     const shieldLevel = hpPct < 35 ? 'low' : hpPct < 70 ? 'mid' : 'high'; // colours the bar (CSS)
     const shieldGroup = document.getElementById('shield-group');
     if (shieldGroup?.getAttribute?.('data-level') !== shieldLevel) shieldGroup?.setAttribute?.('data-level', shieldLevel);
-    document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
+    setText(document.getElementById('hp-text'), `${Math.ceil(p.hp)}/${p.maxHp}`);
     this.updateLowShieldVignette();
 
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     const dashEl = document.getElementById('dash-indicator');
-    dashEl?.style?.setProperty?.('--ready', (dashReadyPct / 100).toFixed(3));
-    dashEl?.classList?.[dashReadyPct >= 100 ? 'add' : 'remove']('ready');
-    document.getElementById('bombs-count').textContent = p.bombs;
-    document.getElementById('nova-indicator')?.classList?.[p.bombs > 0 ? 'remove' : 'add']('empty');
+    if (dashEl?.style) setStyle(dashEl, '--ready', (dashReadyPct / 100).toFixed(3));
+    setClass(dashEl, 'ready', dashReadyPct >= 100);
+    setText(document.getElementById('bombs-count'), String(p.bombs));
+    setClass(document.getElementById('nova-indicator'), 'empty', !(p.bombs > 0));
     // The bottom dock centres itself in the space left of the radar (bottom-right) on narrow windows.
     const radarReserve = this.radarVisible && !this.touchMode
       ? Math.round((radarSize(this.width, this.height) + 18) * (this.viewScale || 1)) : 0;
@@ -5997,7 +6041,7 @@ export class Game {
       if (text) text.textContent = `${toast.text} · [G]`;
     }
     setHidden(el, !toast);
-    if (toast) el.classList[this.guideToastTimer < 0.4 ? 'add' : 'remove']('guide-toast-out');
+    if (toast) setClass(el, 'guide-toast-out', this.guideToastTimer < 0.4);
   }
 
   // "· 2 NEW" on every Field Guide button while unread entries wait.
@@ -6964,7 +7008,7 @@ export class Game {
     for (let i = 0; i < this.geoms.length; i++) {
       const g = this.geoms[i];
       if (g.x < this.camX - 40 || g.x > this.camX + this.width + 40 || g.y < this.camY - 40 || g.y > this.camY + this.height + 40) continue;
-      const alpha = 0.92;
+      const alpha = GEOM_ALPHA;
       ctx.save();
       ctx.translate(g.x, g.y);
       ctx.rotate(g.rotation);
@@ -7001,34 +7045,27 @@ export class Game {
         ctx.beginPath();
         ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = `hsla(48, 100%, 60%, ${alpha})`;
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 16;
-        ctx.beginPath();
-        for (let s = 0; s < 16; s++) {
-          const a = (s * Math.PI) / 8;
-          const rr = s % 2 ? r * 0.42 : r;
-          if (s === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
-          else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        ctx.fillStyle = BOMB_GLOW.fill;
+        if (!pickupGlows.draw(ctx, 'bomb', r, rs, BOMB_GLOW)) {
+          ctx.shadowColor = BOMB_GLOW.color;
+          ctx.shadowBlur = BOMB_GLOW.blur;
         }
-        ctx.closePath();
+        ctx.beginPath();
+        bombPath(ctx, r);
         ctx.fill();
         ctx.shadowBlur = 0;
       } else if (g.isGold) {
         // Gold coin: a solid, glowing hexagon with a dark diamond stamped in (XP geoms are hollow outlines).
         const r = 8 + Math.sin(performance.now() * 0.008 + i) * 0.8;
-        ctx.fillStyle = `hsla(46, 100%, 52%, ${alpha})`;
+        ctx.fillStyle = COIN_GLOW.fill;
         ctx.strokeStyle = `rgba(255, 246, 200, ${alpha})`;
         ctx.lineWidth = 1.6;
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        for (let s = 0; s < 6; s++) {
-          const a = (s * Math.PI) / 3;
-          if (s === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-          else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        if (!pickupGlows.draw(ctx, 'coin', r, rs, COIN_GLOW)) {
+          ctx.shadowColor = COIN_GLOW.color;
+          ctx.shadowBlur = COIN_GLOW.blur;
         }
-        ctx.closePath();
+        ctx.beginPath();
+        coinPath(ctx, r);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.stroke();
