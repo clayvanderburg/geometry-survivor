@@ -95,7 +95,7 @@ test('a supply-cache level is the starting level of the next level-up card and t
   withRandom([], () => g.triggerLevelUp());
   assert.equal(g.state, 'UPGRADE');
   assert.equal(g.currentChoices[0].id, 'multishot');
-  const levelCard = elements.get('upgrade-choices').children[0];
+  const levelCard = g.choiceCardEls[0]; // the card itself (the grid holds card slots: card + LOCK / BANISH strip)
   assert.match(levelCard.innerHTML, /LV 3 → LV 4/);
   assert.deepEqual(describeUpgrade(g.player, g.currentChoices[0]).rows.find((r) => r.id === 'bulletCount'),
     { id: 'bulletCount', label: 'Projectiles', before: '6', after: '8' });
