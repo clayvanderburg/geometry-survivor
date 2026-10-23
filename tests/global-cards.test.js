@@ -165,20 +165,20 @@ test('Velocity speeds every flying shot, and shots with a lifetime keep the same
   assert.ok(Math.abs(Math.hypot(bolt.vx, bolt.vy) - p.stats.bulletSpeed * v) < 1e-9, 'faster bolts');
   assert.ok(Math.abs(Math.hypot(bolt.vx, bolt.vy) * bolt.life - p.stats.bulletSpeed * 1.25) < 1e-9, 'same reach');
   const card = describeUpgrade(p, { ...byId('velocity_coils'), levelJump: 1 });
-  assert.match(card.headline, new RegExp(`^\\+15% SHOT SPEED · ${VELOCITY_WEAPONS.length} WEAPONS$`));
+  assert.equal(card.headline, '+15% SHOT SPEED', 'no weapon count: the scope chip says EVERY SHOT WEAPON');
   for (const id of ['blasterShotSpeed', 'rocketsShotSpeed', 'missilesShotSpeed', 'grenadeLob', 'glaiveSpeed']) assert.ok(card.rows.some((r) => r.id === id) || card.hiddenRows > 0, id);
 });
 
 test('card headlines name the step and the reach; preview rows show each weapon\'s change', () => {
   const p = player(['blaster', 'rockets', 'singularity']);
   const tempo = describeUpgrade(p, { ...byId('tempo_core'), levelJump: 1 });
-  assert.equal(tempo.headline, '+8% ATTACK RATE · 1 WEAPON');
+  assert.equal(tempo.headline, '+8% ATTACK RATE');
   assert.ok(tempo.rows.some((r) => r.id === 'fireRate'), 'Autocannon fire rate row');
   const cd = describeUpgrade(p, { ...byId('cooldown_matrix'), levelJump: 1 });
-  assert.equal(cd.headline, '+10% RECHARGE · 2 WEAPONS + DASH');
+  assert.equal(cd.headline, '+10% RECHARGE + DASH');
   for (const id of ['rocketCooldown', 'singularityCooldown', 'dashCooldown']) assert.ok(cd.rows.some((r) => r.id === id), id);
   const persist = describeUpgrade(p, { ...byId('persistence_field'), levelJump: 2 });
-  assert.equal(persist.headline, '+30% LIFETIME · 1 WEAPON');
+  assert.equal(persist.headline, '+30% LIFETIME');
   assert.ok(persist.rows.some((r) => r.id === 'singularityLife'));
   // Offered only while something equipped takes it (Cooldown always: the dash).
   const bare = player(['raillance']);

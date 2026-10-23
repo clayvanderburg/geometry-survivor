@@ -59,10 +59,10 @@ test('a weapon card shows its weapon pill and drops the weapon from its badge', 
 test('tag and global cards list the weapons they boost, and their per-weapon rows lead with pills', () => {
   const p = freshPlayer(['rockets', 'missiles', 'grenades']);
   const tag = card(p, 'tag_explosive');
-  assert.match(tag.html, /BOOSTS<\/span><span class="wpn-pill" style="--wc:#ff9b3d">Rocket Pods<\/span><span class="wpn-pill" style="--wc:#ffe14d">Missiles<\/span><span class="wpn-pill" style="--wc:#[0-9a-f]+">Grenades<\/span>/);
+  assert.match(tag.html, /EVERY EXPLOSIVE WEAPON<\/span><span class="wpn-pill" style="--wc:#ff9b3d">Rocket Pods<\/span><span class="wpn-pill" style="--wc:#ffe14d">Missiles<\/span><span class="wpn-pill" style="--wc:#[0-9a-f]+">Grenades<\/span>/);
   assert.match(tag.html, /upg-stat-label"><span class="wpn-pill" style="--wc:#ff9b3d">Rocket Pods<\/span>Rocket hit/);
   const tempo = card(p, 'tempo_core');
-  assert.match(tempo.html, /BOOSTS/);
+  assert.match(tempo.html, /upg-reach-scope"[^>]*>ALL WEAPONS<\/span><span class="wpn-pill"/);
   assert.match(tempo.html, /upg-stat-label"><span class="wpn-pill"[^>]*>Autocannon<\/span>Fire rate/);
 });
 
@@ -103,4 +103,50 @@ test('a pill row keeps its own label unless it is an element row naming the weap
   applyUpgradeLevels(q, { ...UPGRADE_BY_ID.rockets_fire, levelJump: 1 });
   const status = card(q, 'status_potency');
   assert.match(status.html, /upg-stat-label"><span class="wpn-pill" style="--wc:#ff9b3d">Rocket Pods<\/span>burn \(of hit damage\)/);
+});
+
+// Clay: a global card must never count the weapons you carry ("· 3 WEAPONS"): it reads as if weapons picked
+// up later miss out. It shows a scope chip (ALL WEAPONS, EVERY KINETIC WEAPON...) and today's pills instead.
+test('no global, tag, crit, STATUS or Replicator card counts weapons, on the card or in the Field Guide', async () => {
+  const { UPGRADE_POOL } = await import('../js/upgrades.js');
+  const { cardScope } = await import('../js/upgrade-cards.js');
+  const { upgradesHTML } = await import('../js/field-guide-ui.js');
+  const globals = UPGRADE_POOL.filter((u) => cardScope(u) === 'global' || u.globalCard || u.statusCard);
+  assert.ok(globals.length >= 15, `${globals.length} global cards checked`);
+  const COUNT = /\d+\s*weapons?\b/i;
+  const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const loadouts = [[], ['rockets'], ['rockets', 'missiles', 'grenades', 'lightning', 'flamethrower'], ['singularity', 'mines', 'turret', 'gas', 'nanites']];
+  let shown = 0;
+  for (const weapons of loadouts) {
+    const p = freshPlayer(weapons);
+    applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_fire, levelJump: 1 });
+    for (const u of globals) {
+      const d = describeUpgrade(p, { ...u, levelJump: 1 });
+      const t = text(renderUpgradeCard(d, '[1]').html);
+      assert.ok(!COUNT.test(t), `${u.id} with ${weapons.join('+') || 'Autocannon'}: "${t.match(COUNT)?.[0]}"`);
+      assert.ok(!COUNT.test(d.headline), `${u.id} headline`);
+      if (d.reach) {
+        shown++;
+        assert.match(d.reach.label, /^(ALL WEAPONS|EVERY [A-Z ]+WEAPON)/, `${u.id} scope says it covers later weapons too`);
+      }
+    }
+  }
+  assert.ok(shown > 40, `${shown} scope chips rendered`);
+  for (const u of globals) assert.ok(!COUNT.test(u.summary || ''), `${u.id} summary`);
+  assert.ok(!COUNT.test(text(upgradesHTML())), 'Field Guide UPGRADES tab');
+});
+
+test('a global card leads with its scope chip, then the weapons it boosts now', () => {
+  const p = freshPlayer(['rockets', 'missiles']);
+  applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_fire, levelJump: 1 });
+  const scope = (id) => card(p, id).html.match(/upg-reach-scope"[^>]*>([^<]+)</)?.[1];
+  assert.equal(scope('tempo_core'), 'ALL WEAPONS');
+  assert.equal(scope('cooldown_matrix'), 'ALL WEAPONS + DASH');
+  assert.equal(scope('overdrive'), 'ALL WEAPONS');
+  assert.equal(scope('crit_chance'), 'ALL WEAPONS');
+  assert.equal(scope('tag_explosive'), 'EVERY EXPLOSIVE WEAPON');
+  assert.equal(scope('fire_damage'), 'EVERY FIRE WEAPON');
+  assert.equal(scope('status_potency'), 'EVERY ELEMENT WEAPON');
+  assert.match(card(p, 'fire_damage').html, /EVERY FIRE WEAPON<\/span><span class="wpn-pill" style="--wc:#ff9b3d">Rocket Pods<\/span><\/div>/, 'only the FIRE weapon');
+  assert.equal(scope('rockets_damage'), undefined, 'a weapon card has no scope chip');
 });
