@@ -43,7 +43,7 @@ const CHASERS = { formation: 'ring', count: 16, move: 'ai' }; // targets that fo
 const TWEAKS = {
   gas: { drift: true, dash: 70, dummies: CHASERS },
   shockfield: { drift: true, dash: 60, dummies: CHASERS },
-  harpoon: { dummies: { ...CHASERS, count: 20 }, frames: 48 }, // chasers to skewer, yank and crush
+  harpoon: { dummies: { ...CHASERS, count: 20 }, frames: 48 }, // chasers for the bits to bore through
   // Mines drop behind the ship: it circles outside a ring of still targets under a fixed camera, laying a
   // ring of armed mines in shot; a second in, the targets are released and charge through them.
   mines: { orbit: 170, fixedCam: true, zoom: 1.4, warmup: 360, frames: 60, release: 15, dummies: { count: 10 } },
@@ -58,13 +58,18 @@ const TWEAKS = {
   nanites: { zoom: 1.4, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'pack', count: 16 } },
   // A piercing line reads best against a LINE of targets: the ship sits left of frame and every charge
   // skewers the whole row to the edge.
-  raillance: { zoom: 1.5, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'line', count: 8 } }
+  raillance: { zoom: 1.5, fixedCam: true, camShift: { x: 170, y: 0 }, dummies: { formation: 'line', count: 8 } },
+  // A clip's own tweak (by clip name) wins over its weapon's. Parting Gift: turrets live 10 s, so the loop
+  // starts just before the first ones expire and blow.
+  'turret-gift': { warmup: 570, frames: 48 },
+  // Static Charge arcs to enemies beside the line: a denser pack gives them somewhere to jump.
+  'raillance-static': { dummies: { count: 28 } }
 };
 
 (async () => {
   const { chromium } = require(playwrightPath || 'playwright');
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  const weaponIds = await listWeapons(browser);
+  const { weaponIds, extras } = await listWeapons(browser);
   const clips = [];
   for (const id of weaponIds) {
     clips.push({ name: id, weapon: id, level: WEAPON_CLIP_LEVEL, bt: {} });
@@ -72,6 +77,12 @@ const TWEAKS = {
       const bt = {};
       for (const m of BREAKTHROUGH_LEVELS) if (m <= lv) bt[m] = m === lv ? 'transform' : 'boost';
       clips.push({ name: `${id}-${lv}`, weapon: id, level: lv, bt });
+    }
+    // Pool transforms added later (EXTRA_TRANSFORMS): at their home milestone, earlier ones the boost.
+    for (const t of extras[id] || []) {
+      const bt = {};
+      for (const m of BREAKTHROUGH_LEVELS) if (m <= t.home) bt[m] = m === t.home ? t.id : 'boost';
+      clips.push({ name: `${id}-${t.id}`, weapon: id, level: t.home, bt });
     }
   }
   const todo = clips.filter((c) => !only || only.has(c.name) || only.has(c.weapon));
@@ -113,14 +124,17 @@ async function listWeapons(browser) {
   try {
     const page = await context.newPage();
     await page.goto('http://127.0.0.1:8096/index.html');
-    return await page.evaluate(async () => (await import('/js/loadout.js')).WEAPONS.map((w) => w.id));
+    return await page.evaluate(async () => ({
+      weaponIds: (await import('/js/loadout.js')).WEAPONS.map((w) => w.id),
+      extras: JSON.parse(JSON.stringify((await import('/js/weapon-levels.js')).EXTRA_TRANSFORMS))
+    }));
   } finally {
     await context.close();
   }
 }
 
 async function capture(browser, clip, tmp) {
-  const tweak = TWEAKS[clip.weapon] || {};
+  const tweak = TWEAKS[clip.name] || TWEAKS[clip.weapon] || {};
   const range = {
     weapons: [{ id: clip.weapon, level: clip.level, custom: false, bt: clip.bt }],
     mods: {},

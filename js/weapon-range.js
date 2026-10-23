@@ -7,7 +7,7 @@
 // be hurt; kills drop nothing (no XP, caches, cores or score) and the run is never recorded or uploaded.
 // main.js keeps a handful of one-line hooks (startGame, update, hitEnemy, killEnemy, game over); the
 // panel lives in js/weapon-range-ui.js. Everything else here is DOM-free, so tests drive it headless.
-import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, FIXED_ELEMENTS, elementKey, makeBuild } from './weapon-levels.js';
+import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, ELEMENTS, ELEMENT_CARDS, ELEMENT_MAX_RANKS, ELEMENT_WEAPONS, FIXED_ELEMENTS, elementKey, makeBuild, TRANSFORMS, transformPool, BT_FLATS } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, STARTING_WEAPONS, weaponSlots, weaponLevel } from './loadout.js';
 import { UPGRADE_BY_ID, acquireWeapon, applyUpgradeLevels, applyBreakthrough, markBreakthroughOffered, loadoutAllows } from './upgrades.js';
 import { waveScaleAt, LIGHT_ENEMY_TYPES } from './enemies.js';
@@ -57,13 +57,14 @@ const MIXED_TYPES = RANGE_TARGETS.map((t) => t.id).filter((id) => id !== 'mixed'
 
 export const DUMMY_COUNTS = [1, 3, 6, 12, 24, 40, 60];
 
-// Non-weapon cards the panel can install, by group. Tectonic Claw Bore is left out: it needs asteroids,
+// Non-weapon cards the panel can install, by group. Tectonic Drill Bore is left out: it needs asteroids,
 // and the range has none.
 export const RANGE_MOD_GROUPS = [
   // Elements are per weapon (LOADOUT tab); these are the global STATUS cards that strengthen them.
   { id: 'status', label: 'STATUS', ids: ['status_potency', 'status_application', 'status_duration', 'shock_conductor', 'fire_damage', 'frost_damage', 'corrode_damage', 'shock_damage'] },
   { id: 'synergies', label: 'SYNERGIES', ids: ['evo_pulsar', 'evo_tempest', 'evo_siege', 'evo_emp', 'evo_supercrit'] },
-  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] }
+  { id: 'general', label: 'GENERAL', ids: ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area', 'shrapnel', 'move_speed', 'thrusters'] },
+  { id: 'globals', label: 'GLOBAL', ids: ['tempo_core', 'cooldown_matrix', 'persistence_field', 'velocity_coils', 'replicator_array'] }
 ];
 export const RANGE_MOD_IDS = RANGE_MOD_GROUPS.flatMap((g) => g.ids);
 
@@ -74,7 +75,7 @@ const STAT_LABELS = {
   mine: 'Proximity Mines', turret: 'Sentry Turret', siege: 'Siege Battery', drone: 'Escort Drones', grenade: 'Plasma Grenades', gas: 'Gas Trail', gas_pocket: 'Gas Pockets', gas_shroud: 'Toxic Shroud',
   burn: 'Burn', burn_blaster: 'Autocannon Burn', burn_rockets: 'Rocket Pod Burn', burn_missiles: 'Missile Burn', burn_lightning: 'Tesla Burn',
   burn_grenades: 'Grenade Burn', flame: 'Flamethrower', burn_flamethrower: 'Flamethrower Burn', corrode: 'Acid', shock: 'Shock Arcs', cryo: 'Cryo Sprayer', acid: 'Acid Sprayer', fireball: 'Fireballs', shatter: 'Shatter', meltdown: 'Meltdown',
-  corrode_gas: 'Gas Trail Acid', shock_shockfield: 'Shock Field Arcs', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', rail: 'Rail Lance', ionwake: 'Ion Wake', overload: 'Overload Shot', glaive: 'Glaive Discs', glaive_recall: 'Boomerang Recall', nanite: 'Nanite Swarm', nanite_fission: 'Fission Swarms', nanite_plague: 'Nanite Plague', harpoon: 'Claw Harpoon', harpooncrush: 'Harpoon Crush', harpoonslam: 'Seismic Slam', harpoonspin: 'Drill Spin', harpoonchain: 'Chain Harpoon', quake: 'Graviton Mortar', quake_skip: 'Rebound Pulse', quake_fault: 'Spacetime Fractures', quake_epicenter: 'Graviton Surge', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
+  corrode_gas: 'Gas Trail Acid', shock_shockfield: 'Shock Field Arcs', shockfield: 'Shock Field', fieldlash: 'Arc Lash', thunderclap: 'Thunderclap', rail: 'Rail Lance', ionwake: 'Ion Wake', overload: 'Overload Shot', glaive: 'Glaive Discs', glaive_recall: 'Boomerang Recall', nanite: 'Nanite Swarm', nanite_fission: 'Fission Swarms', nanite_plague: 'Nanite Plague', harpoon: 'Drill Driver', harpoonreel: 'Reel-In', harpooncrush: 'Crush (retired)', harpoonslam: 'Seismic Slam (retired)', harpoonspin: 'Drill Spin', harpoonchain: 'Ricochet Bits', harpoonblast: 'Detonator Bit', harpoontunnel: 'Tunnel Bore', quake: 'Graviton Mortar', quake_skip: 'Rebound Pulse', quake_fault: 'Spacetime Fractures', quake_epicenter: 'Graviton Surge', shrapnel: 'Volatile Shatter', nova: 'Phase Nova', supernova: 'Supernova', blackhole: 'Vortex Burst', other: 'Other'
 };
 // Status DoT ticks: '<weapon> Burn' / '<weapon> Acid' / '<weapon> Shock' unless named above.
 const DOT_LABEL = { burn: 'Burn', corrode: 'Acid', shock: 'Shock' };
@@ -140,11 +141,19 @@ export const entryRanks = (w) => (w.custom
   : autoRanks(w.id, Math.max(1, w.level - elementRanks(w))));
 export const entryLevel = (w) => 1 + Object.values(entryRanks(w)).reduce((a, b) => a + b, 0) + elementRanks(w);
 
+// Options the panel cycles through at a milestone: its home transform first, then the weapon's other pool
+// transforms, then the flats (docs/BREAKTHROUGH_POOLS.md).
+export function rangeBtOptions(id, m) {
+  const home = TRANSFORMS[id]?.[m]?.id;
+  return ['transform', ...transformPool(id).filter((t) => t.id !== home).map((t) => t.id), ...Object.keys(BT_FLATS)];
+}
+const validBt = (id, m, v) => rangeBtOptions(id, m).includes(v);
+
 // Breakthroughs an entry has at its level (each milestone reached: its choice, TRANSFORM by default).
 export function entryBreakthroughs(w) {
   const lv = entryLevel(w);
   const out = {};
-  for (const m of BREAKTHROUGH_LEVELS) if (lv >= m) out[m] = w.bt?.[m] === 'boost' ? 'boost' : 'transform';
+  for (const m of BREAKTHROUGH_LEVELS) if (lv >= m) out[m] = validBt(w.id, m, w.bt?.[m]) ? w.bt[m] : 'transform';
   return out;
 }
 
@@ -172,7 +181,7 @@ export function sanitizeRangeConfig(raw) {
   for (const w of Array.isArray(src.weapons) ? src.weapons : def.weapons) {
     if (!w || !WEAPON_BY_ID[w.id] || weapons.some((x) => x.id === w.id) || weapons.length >= weaponSlots()) continue;
     const bt = {};
-    for (const m of BREAKTHROUGH_LEVELS) if (w.bt?.[m] === 'boost' || w.bt?.[m] === 'transform') bt[m] = w.bt[m];
+    for (const m of BREAKTHROUGH_LEVELS) if (validBt(w.id, m, w.bt?.[m])) bt[m] = w.bt[m];
     const custom = w.custom === true;
     const element = ELEMENT_CARDS[w.id] && ELEMENTS.includes(w.element) ? w.element : null;
     const elementRank = clampInt(w.elementRank, 1, ELEMENT_MAX_RANKS, 1);

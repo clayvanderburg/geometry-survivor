@@ -58,7 +58,7 @@ function runOneThrow(g, seconds = 6) {
 
 const pack = (n, d = 140, spacing = 70) => Array.from({ length: n }, (_, k) => ({ d: d + (k % 3) * spacing, a: (k / n) * Math.PI * 2 }));
 
-test('Glaive Discs is an AUTONOMOUS automatic single-target weapon: source glaive, PROJECTILE + KINETIC, five single-stat cards', () => {
+test('Glaive Discs is an AUTONOMOUS automatic single-target weapon: source glaive, PROJECTILE + KINETIC, four single-stat cards', () => {
   const w = WEAPON_BY_ID.glaive;
   assert.equal(w.name, 'Glaive Discs');
   assert.equal(w.category, 'AUTONOMOUS');
@@ -69,8 +69,8 @@ test('Glaive Discs is an AUTONOMOUS automatic single-target weapon: source glaiv
   assert.ok(DAMAGE_SOURCE_COLORS.glaive);
   const groups = buildSourceGroups(WEAPONS);
   for (const stat of ['glaive', 'glaive_recall']) assert.equal(groups[stat], 'glaive', stat);
-  assert.deepEqual(STAT_CARDS.glaive.map((c) => c.stat), ['damage', 'count', 'chain', 'rate', 'speed']);
-  assert.deepEqual(STAT_CARDS.glaive.map((c) => POWER_STATS.has(c.stat)), [true, true, true, true, false]);
+  assert.deepEqual(STAT_CARDS.glaive.map((c) => c.stat), ['damage', 'count', 'chain', 'rate']); // Glaive Spin retired in v0.46 (a dead pick)
+  assert.deepEqual(STAT_CARDS.glaive.map((c) => POWER_STATS.has(c.stat)), [true, true, true, true]);
   assert.equal(ELEMENT_CARDS.glaive, undefined);
   for (const c of STAT_CARDS.glaive) assert.match(c.summary, /^Glaive Discs:/);
   for (const m of BREAKTHROUGH_LEVELS) assert.ok(TRANSFORMS.glaive[m], `transform at LV ${m}`);
@@ -218,8 +218,6 @@ test('cards preview the discs exactly: the pick leads with discs per throw, each
   const chain = describeUpgrade(g.player, { ...UPGRADE_BY_ID.glaive_chain, levelJump: 1 });
   assert.match(chain.headline, /\+1 RICOCHET/);
   assert.equal(chain.toLevel, 2);
-  const speed = describeUpgrade(g.player, { ...UPGRADE_BY_ID.glaive_speed, levelJump: 1 });
-  assert.ok(speed.rows.some((r) => r.id === 'glaiveSpeed'));
   for (const [m, row] of [[6, 'glaiveFission'], [12, 'glaiveMomentum'], [18, 'glaiveRecall']]) {
     const card = describeBreakthrough(g.player, 'glaive', m, 'transform');
     assert.equal(card.category, 'GLAIVE DISCS');

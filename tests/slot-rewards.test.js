@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Slot rewards (js/slot-rewards.js): level-up hands grow with weapons equipped (2 / 3 / 3 / 4 cards),
-// slots 3 and 5 add +5% damage to every weapon, the weapon filling slot 6 starts with its LV 6
-// Breakthrough (once per run), and the NEW WEAPON pick can be rerolled with gold (40, 80, 160...).
+// slots 3 and 5 add +5% damage to every weapon, and the weapon filling slot 5 (the last) also starts
+// with its LV 6 Breakthrough (once per run), and the NEW WEAPON pick can be rerolled with gold (40, 80, 160...).
 // The balance harness stubs the browser and builds a real Game, so the level-up flow is the game's own.
 const h = await import('../tools/balance/harness.mjs');
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
@@ -81,40 +81,41 @@ test('damage: +5% for every weapon at 3 equipped and +10% at 5; a discard takes 
   assert.equal(loadoutDamageMult({ stats: {} }), 1);
 });
 
-test('slot 6: that weapon starts with its LV 6 Breakthrough, once per run, in place of its LV 6 one', () => {
-  const g = freshGame(['rockets', 'missiles', 'lightning', 'mines']);
+test('slot 5: that weapon starts with its LV 6 Breakthrough, once per run, in place of its LV 6 one', () => {
+  const g = freshGame(['rockets', 'missiles', 'lightning']);
   const p = g.player;
-  assert.deepEqual(pendingBreakthroughs(p, 'mines'), [], 'slot 5 gets no Breakthrough');
-  // Take the 6th weapon through the real level-up flow.
+  assert.deepEqual(pendingBreakthroughs(p, 'lightning'), [], 'slot 4 gets no Breakthrough');
+  // Take the 5th weapon through the real level-up flow.
   withTuning(odds(1), () => g.triggerLevelUp());
   g.selectUpgrade(g.currentChoices.findIndex((c) => c.isNewWeapon));
   assert.equal(g.handPhase, 'weapon');
   const id = g.currentChoices[0].weaponId;
   g.selectUpgrade(0);
-  assert.equal(ownedWeapons(p).length, 6);
+  assert.equal(ownedWeapons(p).length, 5);
   assert.equal(weaponLevel(p, id), 1);
   assert.equal(g.handPhase, 'breakthrough', 'the Breakthrough opens right away');
   assert.deepEqual(g.breakthrough, { weaponId: id, level: 6 });
+  const pick = g.currentChoices[0].option;
   g.selectUpgrade(0);
   assert.equal(g.state, 'PLAYING');
-  assert.equal(p.breakthroughs[id][6], 'transform');
+  assert.equal(p.breakthroughs[id][6], pick);
   // It counts as the LV 6 Breakthrough: reaching LV 6 offers nothing more, LV 12 still does.
   const card = UPGRADE_BY_ID[`${id}_damage`] || Object.values(UPGRADE_BY_ID).find((u) => u.id.startsWith(id));
   applyUpgradeLevels(p, { ...card, levelJump: 5 });
   assert.ok(weaponLevel(p, id) >= 6);
   assert.deepEqual(pendingBreakthroughs(p, id), []);
-  // Discarding it and filling slot 6 again gives nothing: once per run.
+  // Discarding it and filling slot 5 again gives nothing: once per run.
   discardWeapon(p, id);
   const next = unownedWeapons(p).find((w) => w !== id);
   acquireWeapon(p, next);
-  assert.equal(ownedWeapons(p).length, 6);
+  assert.equal(ownedWeapons(p).length, 5);
   assert.deepEqual(pendingBreakthroughs(p, next), []);
 });
 
 test('NEW WEAPON card: the slot bonus is the message, with no summary or stat rows', () => {
   const g = freshGame();
   const p = g.player;
-  const expect = { 2: '+1 CARD CHOICE', 3: '+5% DAMAGE', 4: '+1 CARD CHOICE', 5: '+5% DAMAGE', 6: 'FREE BREAKTHROUGH' };
+  const expect = { 2: '+1 CARD CHOICE', 3: '+5% DAMAGE', 4: '+1 CARD CHOICE', 5: '+5% DAMAGE · FREE BREAKTHROUGH' };
   for (const [slot, short] of Object.entries(expect)) {
     const d = describeNewWeapon(p);
     assert.equal(d.reward.slot, Number(slot));
@@ -128,13 +129,14 @@ test('NEW WEAPON card: the slot bonus is the message, with no summary or stat ro
   }
   assert.match(slotReward(2).text, /3 cards instead of 2/);
   assert.match(slotReward(5).text, /\+10% total/);
+  assert.match(slotReward(5).text, /LV 6 Breakthrough/, 'the last slot is the capstone');
   assert.equal(slotReward(1), null);
-  assert.equal(slotReward(7), null);
+  assert.equal(slotReward(6), null);
 });
 
 test('slot tip: opens once over the first hand with a NEW WEAPON card, and only GOT IT / a key / a button closes it', () => {
-  const tip = slotTip(6);
-  assert.deepEqual(tip.rewards.map((r) => r.slot), [2, 3, 4, 5, 6]);
+  const tip = slotTip(5);
+  assert.deepEqual(tip.rewards.map((r) => r.slot), [2, 3, 4, 5]);
   const store = new Map();
   const saved = globalThis.localStorage;
   globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };

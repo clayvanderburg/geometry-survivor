@@ -6,9 +6,9 @@ import assert from 'node:assert/strict';
 // (size, radius, reach, pull...) add none. The TARGET (Clay, v0.43.1) is class-based: realized damage per
 // target vs the Autocannon at equal level, by WEAPON_CLASS / CLASS_TARGET, measured in the card bench.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, RATE_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep, TURRET_RELOAD_TRIM } = await import('../js/weapon-scaling.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, discardWeapon } = await import('../js/upgrades.js');
-const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
+const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, boostDpsOf, boostRanksOf, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
 // Weapons whose damage depends on something other than attacking: shards need kills, the dash nova
 // needs dashes. They stay outside the DPS curve.
@@ -30,10 +30,13 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Claw Harpoon card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x2.7, Sentry Turret x2.8, Rail Lance x2, Glaive Discs x3.5 with Autocannon card steps, Claw Harpoon x2.9, Graviton Mortar x0.33', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Drill Driver x1.1, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Drill Driver x1.45, Graviton Mortar x0.33', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8, raillance: 1.2, shockfield: 1.2 }, 'Rail Lance and Shock Field Damage ranks x1.2: they read dead next to Split Rails / Radius (hand-bench.mjs, v0.46)');
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
+  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks x1.3 (its late game on the realistic benches)');
+  assert.ok(near(rateStep('lightning'), RATE_STEP * 0.6));
+  assert.equal(TURRET_RELOAD_TRIM, 0.65, 'Sentry Turret Loosen Bolts ranks x0.65: it out-realized Bigger Cogs ~1.5x (tools/balance/hand-bench.mjs)');
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));
   assert.equal(damageGrowth('rockets'), DAMAGE_GROWTH);
@@ -87,7 +90,7 @@ test('every stat formula reads only its own rank', () => {
     raillance: { rate: W.railCycle, count: W.railLances, width: W.railWidth, pierce: W.railKeep, damage: W.railDamageMult },
     glaive: { count: W.glaiveCount, chain: W.glaiveBounces, rate: W.glaiveCooldown, speed: W.glaiveSpeed, damage: W.glaiveDamageMult },
     nanites: { rate: W.naniteTick, radius: W.naniteRadius, duration: W.naniteLife, cooldown: W.naniteCooldown, damage: W.naniteDamageMult },
-    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, grapple: W.harpoonHookSize, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
+    harpoon: { rate: W.harpoonCooldown, range: W.harpoonRange, pierce: W.harpoonPierceKeep, drill: W.harpoonDrill, damage: W.harpoonDamageMult },
     quake: { count: W.quakeShells, rate: W.quakeCooldown, radius: W.quakeRadius, bore: W.quakeRockDamage, damage: W.quakeDamageMult }
   };
   for (const [id, fs] of Object.entries(FORMULAS)) {
@@ -102,7 +105,7 @@ test('every stat formula reads only its own rank', () => {
   }
 });
 
-test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BOARD exactly BT_BOOST_DPS (+1 utility rank)', () => {
+test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BOARD exactly BT_BOOST_DPS (+its utility ranks)', () => {
   for (const id of IDS) {
     for (const m of BREAKTHROUGH_LEVELS) {
       const ranks = { damage: 2 };
@@ -111,8 +114,8 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BO
       assert.ok(near(t, plain * BT_TRANSFORM_DPS), `${id} LV ${m} transform: x${(t / plain).toFixed(3)}`);
       const boost = makeBuild(id, m, ranks, { [m]: 'boost' });
       assert.equal(boost.r.damage, 2, 'no free POWER ranks');
-      for (const c of STAT_CARDS[id]) if (!POWER_STATS.has(c.stat)) assert.equal(boost.r[c.stat], 1, `${id} ${c.stat} +1`);
-      assert.ok(near(POTENTIAL_DPS[id](boost), plain * BT_BOOST_DPS), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
+      for (const c of STAT_CARDS[id]) if (!POWER_STATS.has(c.stat)) assert.equal(boost.r[c.stat], boostRanksOf(id), `${id} ${c.stat} +${boostRanksOf(id)}`);
+      assert.ok(near(POTENTIAL_DPS[id](boost), plain * boostDpsOf(id)), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
     }
     const all = POTENTIAL_DPS[id](makeBuild(id, 12, {}, { 6: 'transform', 12: 'transform', 18: 'transform' }));
     assert.ok(near(all, lv1(id) * BT_TRANSFORM_DPS ** 3), `${id} three transforms`);
@@ -247,23 +250,31 @@ test('class-based balance: automatic single-target weapons realize ~85% of the A
 });
 
 // Past ~LV 9 the bench's wave-6 targets die to single hits, so late levels are measured against targets
-// that never die (pure per-target DPS). Glaive Discs grow on the Autocannon's own trimmed card steps
-// (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
-test('class-based balance: Glaive Discs stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
+// that never die (pure per-target DPS). Glaive Discs and Escort Drones grow on the Autocannon's own trimmed
+// card steps (CARD_STEP_TRIM), so they stay on the automatic class target all the way to LV 18.
+test('class-based balance: Glaive Discs and Escort Drones stay ~85% of the Autocannon at LV 12 and 18 against targets that never die', () => {
   const tank = { enemyHpMult: 1e6 };
   for (const lv of [12, 18]) {
-    const share = benchDps('glaive', lv, tank) / benchDps('blaster', lv, tank);
-    assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `glaive LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    const ref = benchDps('blaster', lv, tank);
+    for (const id of ['glaive', 'drones']) {
+      const share = benchDps(id, lv, tank) / ref;
+      assert.ok(Math.abs(share - CLASS_TARGET.auto.perTarget) <= 0.15, `${id} LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
+    }
   }
 });
 
-// The Claw Harpoon is aimed single-target like the Autocannon: 100% per level (its mining and yank are
-// utility). Past ~LV 9 one throw overkills the bench's wave-6 targets, so the level-matched check stops at 9.
-test('class-based balance: aimed single-target weapons (Claw Harpoon) realize ~100% of the Autocannon at LV 1, 3, 6 and 9', () => {
-  for (const lv of [1, 3, 6, 9]) {
+// The Drill Driver is aimed single-target like the Autocannon: 100% per level (its mining is utility). Its
+// bits pierce everything on the line, so once one bit kills the bench's wave-6 targets outright (from ~LV 9)
+// every Damage rank hits a whole column for free: the card bench overrates it there. Its LV 6-18 standing is
+// fitted on the realistic benches instead (bt-bench --class, wave-matched targets: ~0.8x the Autocannon),
+// so the level-matched check stops at LV 6 and LV 9 only has to stay under that overkill ceiling.
+test('class-based balance: aimed single-target weapons (Drill Driver) realize ~100% of the Autocannon at LV 1, 3 and 6', () => {
+  for (const lv of [1, 3, 6]) {
     const share = benchDps('harpoon', lv) / benchDps('blaster', lv);
     assert.ok(Math.abs(share - CLASS_TARGET.aimed.perTarget) <= 0.15, `harpoon LV ${lv}: ${(share * 100).toFixed(0)}% of the Autocannon`);
   }
+  const share9 = benchDps('harpoon', 9) / benchDps('blaster', 9);
+  assert.ok(share9 >= 0.85 && share9 <= 1.35, `harpoon LV 9: ${(share9 * 100).toFixed(0)}% of the Autocannon (overkill ceiling 135%)`);
 });
 
 test('LV 1 numbers keep the earlier retunes: fast light missiles, turrets and drones; wide mines', () => {

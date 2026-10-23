@@ -45,14 +45,14 @@ function withSeed(seed, fn) {
 const levelUp = (g) => withTuning(noNewWeapon, () => g.triggerLevelUp());
 const isForced = (g) => g.state === 'UPGRADE' && g.handPhase === 'weapon';
 
-test('floor table: 2 weapons by LV 6, 3 by 12, 4 by 18, 5 by 24, all 6 by 30', () => {
+test('floor table: 2 weapons by LV 6, 3 by 12, 4 by 18, all 5 by 24 (5 slots since v0.46)', () => {
   assert.equal(WEAPON_FLOOR_STEP, 6);
   assert.equal(DEFAULT_TUNING.weaponFloorStep, 6);
   assert.ok(TUNING_SCHEMA.flatMap((grp) => grp.items).some((i) => i.key === 'weaponFloorStep'), 'tunable in the dev tuner');
   const at = (lv) => weaponFloor(lv);
-  assert.deepEqual([1, 5, 6, 11, 12, 17, 18, 23, 24, 29, 30, 60].map(at), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6]);
+  assert.deepEqual([1, 5, 6, 11, 12, 17, 18, 23, 24, 29, 30, 60].map(at), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5]);
   // Tightened to every 5 levels.
-  assert.deepEqual([5, 10, 15, 20, 25].map((lv) => withTuning({ weaponFloorStep: 5 }, () => weaponFloor(lv))), [2, 3, 4, 5, 6]);
+  assert.deepEqual([5, 10, 15, 20, 25].map((lv) => withTuning({ weaponFloorStep: 5 }, () => weaponFloor(lv))), [2, 3, 4, 5, 5]);
   // Never above the weapon slots.
   assert.equal(withTuning({ weaponSlots: 4 }, () => weaponFloor(30)), 4);
 });
@@ -190,7 +190,7 @@ test('no free slot or no weapon left to offer: the normal hand rolls', () => {
     levelUp(g);
     assert.notEqual(g.handPhase, 'weapon');
   });
-  // No free slot (guard: can't happen below 6 weapons with the default slots).
+  // No free slot (guard: can't happen below 5 weapons with the default slots).
   const p = { level: 30, loadout: ['blaster', 'rockets'], upgradeLevels: {} };
   assert.equal(withTuning({ weaponSlots: 2 }, () => weaponFloorDue(p)), false);
 });

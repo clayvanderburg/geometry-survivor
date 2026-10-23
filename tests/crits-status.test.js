@@ -14,7 +14,7 @@ const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { DamageNumbers, CRIT_COLOR } = await import('../js/damage-numbers.js');
 const { EnemyManager } = await import('../js/enemies.js');
-const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows, cardWeight } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, WEAPON_TAGS, TAG_INFO, weaponDamage, critMultiplier } = await import('../js/weapon-scaling.js');
 const { updateStatusEffects, damageTakenMult, isAfflicted, shockCritBonus } = await import('../js/status-effects.js');
@@ -106,12 +106,15 @@ test('players without crit stats never crit, and burn ticks never crit', () => {
 test('crit cards and the Supercritical synergy preview the exact multipliers hitEnemy uses', () => {
   reset();
   const p = makePlayer();
-  assert.equal(describeUpgrade(p, byId('crit_chance')).headline, '+5% CRIT CHANCE');
-  assert.equal(describeUpgrade(p, byId('crit_damage')).headline, '+25% CRIT DAMAGE');
+  assert.equal(describeUpgrade(p, byId('crit_chance')).headline, `+${Math.round(W.critChanceStep * 100)}% CRIT CHANCE`);
+  assert.equal(describeUpgrade(p, byId('crit_damage')).headline, `+${Math.round(W.critDamageStep * 100)}% CRIT DAMAGE`);
+  // Overkill Resonator waits until the ship crits often (CRIT_DAMAGE_MIN_CHANCE): at the base 5% a rank added ~2%.
+  assert.equal(byId('crit_damage').req(p), false, 'not offered at the base crit chance');
   applyUpgradeLevels(p, { ...byId('crit_chance'), levelJump: 2 });
+  assert.equal(byId('crit_damage').req(p), true, 'offered once crit chance is invested');
   applyUpgradeLevels(p, byId('crit_damage'));
-  assert.equal(p.stats.critChance.toFixed(2), '0.15');
-  assert.equal(p.stats.critDamage, 1.75);
+  assert.equal(p.stats.critChance.toFixed(2), (0.05 + 2 * W.critChanceStep).toFixed(2));
+  assert.equal(p.stats.critDamage, 1.5 + W.critDamageStep);
 
   // Supercritical needs crit chance LV 2 and a weapon with an element.
   const syn = byId('evo_supercrit');
@@ -120,7 +123,7 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   assert.equal(syn.req(p), true);
   const card = describeUpgrade(p, syn);
   assert.equal(card.rarity, 'evolution');
-  assert.equal(card.headline, `AFFLICTED CRITS // ${(1 + 0.75 * W.supercritBonusMult).toFixed(2)}x`);
+  assert.equal(card.headline, `AFFLICTED CRITS // ${(1 + (0.5 + W.critDamageStep) * W.supercritBonusMult).toFixed(2)}x`);
   applyUpgradeLevels(p, syn);
 
   // Against an afflicted target the crit bonus is multiplied; elsewhere it is the plain crit.
@@ -133,7 +136,7 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   withRandom(0, () => g.hitEnemy(burning, 10, 'orbital'));
   assert.equal(hpBefore - burning.hp, 10 * critMultiplier(p, true));
   withRandom(0, () => g.hitEnemy(clean, 10, 'orbital'));
-  assert.equal(1e6 - clean.hp, 10 * 1.75);
+  assert.equal(1e6 - clean.hp, 10 * (1.5 + W.critDamageStep));
 });
 
 test('BURN: stacks follow the hit, tick every half second, lose a fifth each tick, and deal the previewed share of the hit', () => {
@@ -336,29 +339,29 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   const g = game([], p);
 
   const kinetic = describeUpgrade(p, byId('tag_kinetic'));
-  assert.equal(kinetic.headline, '+20% KINETIC DAMAGE');
+  assert.equal(kinetic.headline, `+${Math.round(W.tagDamageStep.kinetic * 100)}% KINETIC DAMAGE`);
   assert.deepEqual(kinetic.tags, ['kinetic']);
   for (const id of ['damage', 'orbitalDamage']) assert.ok(kinetic.rows.some((r) => r.id === id), id);
   assert.ok(!kinetic.rows.some((r) => r.id === 'missileDamage'), 'missiles are not kinetic');
   applyUpgradeLevels(p, byId('tag_kinetic'));
   g.firePrimaryWeapon();
-  assert.equal(g.bullets[0].damage, 10 * 1.2);
+  assert.equal(g.bullets[0].damage, 10 * (1 + W.tagDamageStep.kinetic));
   assert.equal(g.bullets[0].damage.toFixed(1), row('damage').fmt(row('damage').get(p)));
 
   applyUpgradeLevels(p, byId('tag_explosive'));
   g.fireSwarmMissiles(1);
-  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * 1.3);
+  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * (1 + W.tagDamageStep.explosive));
 
   const area = describeUpgrade(p, byId('tag_area'));
-  assert.equal(area.headline, '+15% AREA SIZE');
-  assert.ok(area.rows.some((r) => r.id === 'missileBlast' && r.before === '75' && r.after === '86'));
+  assert.equal(area.headline, '+10% AREA SIZE', 'the global AREA card names no weapon count (its scope chip says EVERY AREA WEAPON)');
+  assert.ok(area.rows.some((r) => r.id === 'missileBlast' && r.before === '75' && r.after === String(Math.round(75 * (1 + W.areaStep)))));
   assert.ok(area.rows.some((r) => r.id === 'novaRadius'));
   applyUpgradeLevels(p, byId('tag_area'));
   g.fireSwarmMissiles(1);
-  assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius(levelBuild('missiles', 1)) * 1.15);
+  assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius(levelBuild('missiles', 1)) * (1 + W.areaStep));
 
   applyUpgradeLevels(p, byId('tag_electric'));
-  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * 1.3);
+  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * (1 + W.tagDamageStep.electric));
 });
 
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
@@ -434,4 +437,15 @@ test('live tuning re-derives crit stats from the tuned base plus owned crit card
   assert.ok(Math.abs(p.stats.critChance - (DEFAULT_TUNING.baseCritChance + 2 * W.critChanceStep + W.supercritChance)) < 1e-9);
   assert.equal(p.stats.critDamage, DEFAULT_TUNING.baseCritDamage + W.critDamageStep);
   reset();
+});
+
+test('tag cards are strong in a one-family build, so they are rarer: always UNCOMMON and lighter than Overdrive', () => {
+  // Clay (v0.46): balance swingy cards with rarity. A tag rank beats Reactor Overdrive's +12% inside its family
+  // (1.5-2x on hand-bench.mjs at 1 weapon), so it shows at least UNCOMMON and turns up about half as often.
+  for (const [tag, step] of Object.entries(W.tagDamageStep)) {
+    assert.ok(step > 0.12 && step <= 0.25 + 1e-9, `${tag}: +12-25% per rank`);
+    const card = UPGRADE_POOL.find((u) => u.category === 'SPECIALIST' && u.tags[0] === tag);
+    assert.equal(card.rarityFloor, 2, `${tag}: always at least UNCOMMON`);
+  }
+  assert.ok((TUNING.tagCardWeight ?? 0.45) <= 0.5 * cardWeight(byId('overdrive')), 'about half as often as Overdrive');
 });

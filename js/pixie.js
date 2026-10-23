@@ -6,7 +6,7 @@
 // Lines are short (≤ 60 characters), PG, nerdy mad science with an 80s streak. Each pool is a per-run
 // shuffle bag, so no line repeats until the pool runs dry, and never twice in a row. A line is
 // [text, mood]; {weapon} and {name} fill in the weapon and the Breakthrough's name.
-import { TRANSFORMS, BOOST_NAME } from './weapon-levels.js';
+import { BT_FLATS, btOption } from './weapon-levels.js';
 import { isReduceEffects } from './juice.js';
 
 export const PIXIE_MAX_CHARS = 60;
@@ -69,7 +69,7 @@ export const PIXIE_WEAPON_LINES = Object.freeze({
   raillance: [['The Rail Lance goes through ROCK now. Oops?', 'oops']],
   glaive: [['Frisbees of DOOM. Patent pending!', 'smug']],
   nanites: [['The nanites ate my lunch. Promising!', 'eureka']],
-  harpoon: [['Your claw has a leash now. Good claw!', 'eureka']],
+  harpoon: [['You shoot DRILLS now. Rocks fear you.', 'eureka']],
   quake: [['Graviton Mortar! Space-time just hiccuped.', 'smug']]
 });
 
@@ -80,13 +80,57 @@ export const PIXIE_PICK_LINES = Object.freeze({
   'singularity:twin': ['TWO black holes? I\'ll update the insurance.', 'oops'],
   'blaster:ricochet': ['Ricochet Rounds! Geometry is on OUR side now!', 'smug'],
   'rockets:mirv': ['MIRV Rockets! Rockets that make rockets!', 'eureka'],
-  'drones:wingman': ['Another wingman! I\'ll knit it a tiny scarf.', 'eureka'],
+  'drones:wingman': ['A whole squadron! I\'ll knit them tiny scarves.', 'eureka'],
   'lightning:strike': ['Thunderstrike! I cleared the forecast myself.', 'smug'],
   'orbitals:fling': ['Blade Fling! Keep your fingers inside the ship.', 'oops'],
   'flamethrower:ring': ['Inferno Ring! Fire, but in a circle. Elegant.', 'smug'],
   'cryospray:blizzard': ['Blizzard Ring! Bring a sweater, Jack.', 'eureka'],
   'grenades:gravity': ['Gravity Grenades! Newton is spinning. Literally.', 'smug'],
-  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka']
+  'mines:seeker': ['Seeker Mines! They\'re SO excited to meet them.', 'eureka'],
+  'harpoon:twin': ['Twin Drills! Two bits, one trigger!', 'eureka'],
+  'harpoon:spin': ['Drill Spin! The bit just LOVES its job.', 'smug'],
+  'harpoon:chain': ['Ricochet Bits! They bounce now. Not my fault.', 'oops'],
+  // Pool transforms (EXTRA_TRANSFORMS): every one has its own line (tests/breakthrough-pools.test.js).
+  'blaster:slug': ['Tracer Slugs! Every fourth shot is a BIG one. I counted.', 'smug'],
+  'blaster:hotbarrel': ['Hot Barrel! Don\'t touch it. Seriously, don\'t.', 'oops'],
+  'rockets:shrapnel': ['Shrapnel Shells! Pointy bits, everywhere, on purpose!', 'eureka'],
+  'rockets:thunder': ['Rolling Thunder! Ba-boom-boom-BOOM. That\'s the science.', 'smug'],
+  'missiles:hunter': ['Hunter-Killer! The missiles have missiles now!', 'eureka'],
+  'missiles:echo': ['Echo Salvo! I fired it once and the universe said it back.', 'eureka'],
+  'raillance:static': ['Static Charge! Don\'t pet the enemies. Or do!', 'smug'],
+  'raillance:reflect': ['Reflector Rail! The screen edge is a mirror now. Oops.', 'oops'],
+  'drones:overdrive': ['Overdrive Sync! They practiced in formation. All night.', 'eureka'],
+  'drones:kamikaze': ['Kamikaze Wing! Don\'t worry, I build them in bulk.', 'oops'],
+  'turret:gift': ['Parting Gift! Turrets that go out with a BANG.', 'smug'],
+  'turret:link': ['Overwatch Link! Turrets holding hands. Zappy hands!', 'eureka'],
+  'glaive:shatter': ['Shatter Edge! The frisbees explode now. You\'re welcome.', 'smug'],
+  'glaive:arcdisc': ['Arc Discs! Spinning AND sparking. Peak engineering.', 'eureka'],
+  'harpoon:detonate': ['Detonator Bit! Screws in, says goodbye. Loudly.', 'smug'],
+  'harpoon:tunnel': ['Tunnel Bore! Mind the gap. It bites.', 'eureka'],
+  'quake:crush': ['Crush Field! Gravity, but rude about it.', 'smug'],
+  'quake:lens': ['Gravity Lens! Everything wants to be near the boom.', 'eureka'],
+  'grenades:sticky': ['Sticky Plasma! Do NOT shake hands with it.', 'oops'],
+  'grenades:geyser': ['Plasma Geyser! Boom, boom, and one more boom.', 'smug'],
+  'mines:shock': ['Shock Mines! Stunned AND exploded. Efficient!', 'smug'],
+  'mines:napalm': ['Napalm Mines! The floor is lava. On purpose.', 'eureka'],
+  'orbitals:frenzy': ['Blade Frenzy! They get sharper the more they cut!', 'eureka'],
+  'orbitals:vortex': ['Vortex Ring! Come closer. Closer. Into the blades.', 'smug'],
+  'singularity:accretion': ['Accretion Disk! The black hole throws things now!', 'eureka'],
+  'singularity:whitehole': ['White Hole! What goes in must come out. LOUDLY.', 'oops'],
+  'nanites:needles': ['Nano Needles! Tiny robots, tinier harpoons.', 'smug'],
+  'nanites:ravenous': ['Ravenous Swarm! Don\'t feed them after midnight.', 'oops'],
+  'shockfield:pulse': ['Pulse Wave! The field reaches out and touches someone.', 'smug'],
+  'shockfield:capacitor': ['Capacitor Bank! Zap, and then ZAP again.', 'eureka'],
+  'gas:tendrils': ['Toxic Tendrils! The gas has arms now. Gross. Great!', 'eureka'],
+  'gas:spores': ['Spore Burst! Pop goes the cloud.', 'smug'],
+  'flamethrower:whirl': ['Fire Whirl! I call it the spin cycle of DOOM.', 'smug'],
+  'flamethrower:seeker': ['Heat Seeker! The flames know where you live.', 'eureka'],
+  'cryospray:whirl': ['Frost Cyclone! Brr-illiant, if I say so myself.', 'smug'],
+  'cryospray:seeker': ['Cold Front! It finds them. It freezes them.', 'eureka'],
+  'acidspray:whirl': ['Acid Cyclone! Please stand clear of the splash zone.', 'oops'],
+  'acidspray:seeker': ['Acid Hound! Good boy. Corrosive boy.', 'eureka'],
+  'lightning:lattice': ['Arc Lattice! I made a fence out of lightning.', 'smug'],
+  'lightning:conductor': ['Conductor! They pass the zap along. So polite!', 'eureka']
 });
 
 // After the pick: any other transform, and Across the Board.
@@ -105,6 +149,15 @@ export const PIXIE_BOOST_LINES = Object.freeze([
   ['A bit of everything! Like a lab buffet.', 'eureka'],
   ['Turned every dial up one notch. You\'re welcome!', 'smug']
 ]);
+
+// Flats with their own reactions (Across the Board uses PIXIE_BOOST_LINES).
+export const PIXIE_FLAT_LINES = Object.freeze({
+  overtuned: Object.freeze([
+    ['Overtuned Core! I removed the safety limiter. And the label.', 'oops'],
+    ['Hotter core, bigger hits. Simple science!', 'smug'],
+    ['It\'s glowing a color I haven\'t named yet. Overtuned!', 'eureka']
+  ])
+});
 
 export const fillLine = (text, vars = {}) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
@@ -193,15 +246,18 @@ export class PixieDirector {
     return { who: 'pixie', text: fillLine(line[0], { weapon: weaponName }), mood: line[1] };
   }
 
-  // The player chose `pick` ({ weaponId, level, kind: 'transform' | 'boost' }).
+  // The player chose `pick` ({ weaponId, level, option }: a transform id or a flat id; `kind` alone, as
+  // older callers pass it, means the milestone's home transform or Across the Board). Lines key on the
+  // option, so a transform's line plays at whichever milestone it was taken.
   pickLine(pick) {
-    if (pick.kind === 'boost') {
-      const line = this.boostBag.next();
-      return { who: 'pixie', text: fillLine(line[0], { name: BOOST_NAME }), mood: line[1] };
+    const opt = btOption(pick.weaponId, pick.level, pick.option ?? pick.kind);
+    if (opt && opt.kind !== 'transform') {
+      const own = PIXIE_FLAT_LINES[opt.id];
+      const line = own ? own[Math.floor(this.rng() * own.length)] : this.boostBag.next();
+      return { who: 'pixie', text: fillLine(line[0], { name: BT_FLATS[opt.id].name }), mood: line[1] };
     }
-    const tf = TRANSFORMS[pick.weaponId]?.[pick.level];
-    const line = (tf && PIXIE_PICK_LINES[`${pick.weaponId}:${tf.id}`]) || this.transformBag.next();
-    return { who: 'pixie', text: fillLine(line[0], { name: tf?.name || 'It' }), mood: line[1] };
+    const line = (opt && PIXIE_PICK_LINES[`${pick.weaponId}:${opt.id}`]) || this.transformBag.next();
+    return { who: 'pixie', text: fillLine(line[0], { name: opt?.name || 'It' }), mood: line[1] };
   }
 
   offer(weaponId, weaponName) {

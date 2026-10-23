@@ -6,6 +6,9 @@ export const WEAPON_MEDIA_DIR = 'assets/weapons/';
 
 export const weaponClip = (weaponId) => `${WEAPON_MEDIA_DIR}${weaponId}.webp`;
 export const breakthroughClip = (weaponId, level) => `${WEAPON_MEDIA_DIR}${weaponId}-${level}.webp`;
+// A pool transform's clip ({ id, home, slot } from weapon-levels.js transformPool): the original three keep
+// their milestone clips, transforms added later are recorded under their own id.
+export const transformClip = (weaponId, t) => (t.slot >= 0 ? breakthroughClip(weaponId, t.home) : `${WEAPON_MEDIA_DIR}${weaponId}-${t.id}.webp`);
 
 const attr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 

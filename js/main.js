@@ -9,10 +9,10 @@ import { EnemyManager, BOSS_NAME, contactDamageAt, damageRampAt, waveScaleAt, xp
 import { pickWavePack, packRoster, hpBudgetScale } from './waves.js';
 import { bossTier, isBossWave, bossesForWave, waveTheme, BOSS_SCHEDULE, BOSS_EVERY } from './wave-plan.js';
 import { updateBossWarps, drawBossWarps } from './boss-warp.js';
-import { applyBossHazards } from './boss-hazards.js';
-import { playBossCue } from './boss-sfx-major.js';
+import { playBossCues } from './boss-sfx-major.js';
 import { isCampaignWin, resetVictory, tickVictory, showVictory, continueEndless, endVictoriousRun, victoryKey, resultsHeadline } from './victory.js';
 import { holdsWave, blocksSpawning, tickFinalStand, finalBossDown, resetFinalStand, finalStandMusic } from './final-stand.js';
+import { tickBossEscapes, escapeLeft, BOSS_ESCAPE } from './boss-escape.js';
 import { resetScoreBonus, awardWaveBonus, scoreBreakdown } from './score-bonus.js';
 import { BOSS_DEFS, BOSS_TIER, bossDef, bossBuilt } from './bosses.js';
 import { HOSTILE_INFO, HOSTILE_DEATH_TIER, REPULSOR } from './hostiles.js';
@@ -29,7 +29,8 @@ import { Flamethrower } from './flamethrower.js';
 import { ShockField } from './shock-field.js';
 import { RailLance } from './rail-lance.js';
 import { GlaiveDiscs } from './glaive.js';
-import { ClawHarpoon } from './claw-harpoon.js';
+import { DrillDriver } from './drill-driver.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs (Tracer Slugs, Hot Barrel, Shrapnel Shells, ...)
 import { QuakeMortar } from './quake-mortar.js';
 import { RiftManager } from './rifts.js';
 import { AsteroidManager } from './asteroids.js';
@@ -41,9 +42,10 @@ import {
   MINING_SPEED_STEP, TECTONIC_MINING_SPEED, TECTONIC_MINING_RANGE, TECTONIC_DRILL_SCALE, MOVE_SPEED_STEP } from './upgrades.js';
 import {
   WEAPON_SCALING as W, TAG_INFO, weaponDamage, prismStreams, missileBlastRadius, singularityPullRadius, novaRadius, tectonicBlastRadius,
-  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement
+  wingRocketBlastRadius, critChance, critMultiplier, blasterStreams, blasterFireRate, blasterPierce, DPS_TARGET, POTENTIAL_DPS, sourceElement,
+  dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
-import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, TRANSFORMS, BOOST_NAME, WEAPON_MAX_LEVEL, rdLine, RD_LINES } from './weapon-levels.js';
+import { weaponBuild, levelBuild, milestonesCrossed, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, rdLine, RD_LINES, drawBreakthroughOptions, btOption } from './weapon-levels.js';
 import { WeaponEffects } from './weapon-fx.js';
 import { WEAPONS, STARTING_WEAPONS, START_WEAPON_CHOICES, readStartWeapon, writeStartWeapon, WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, passiveLevel, ownsWeapon, weaponSlots, weaponLevel, weaponTags, unownedWeapons } from './loadout.js';
 import {
@@ -57,7 +59,8 @@ import {
 import { handSizeFor, slotReward, slotTip, readSlotTipSeen, writeSlotTipSeen } from './slot-rewards.js';
 import { weaponFloor, weaponFloorDue } from './weapon-floor.js';
 import { META_UPGRADES, ARMORY_CATEGORIES, ProgressionManager, formatArmoryValue } from './progression.js';
-import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { GOLD_ICON, goldPerVein, goldCoins, rerollCost, weaponRerollCost, lockCost, banishCost, skipReward, trySpend, refreshLockedCard, rollHandAround } from './gold.js';
+import { readyEvolutions, evolutionName } from './evolution-recipes.js';
 import { GlobalLeaderboard, buildBoardView, renderBoardView, renderVersionOptions, renderModeOptions, syncTabButtons, describeSubmit, normalizeTab } from './leaderboard.js';
 import { GAME_VERSION, versionLabel } from './version.js';
 import { PatchNotesUI } from './patch-notes.js';
@@ -100,6 +103,7 @@ import {
 import { MODES, MODE_IDS, DEFAULT_MODE, modeRules, modeBonuses, normalizeMode, readStoredMode, writeStoredMode, cycleMode } from './modes.js';
 import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.js';
 import { playPreset, semis } from './sfx-layers.js';
+import { GlowSprites } from './glow-sprite.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
@@ -175,6 +179,9 @@ const missileHue = (p) => (p.weapons.stormProtocol ? 325 : 42);
 const BOSS_RANKS = ['WARDEN', 'SENTINEL', 'TYRANT', 'SOVEREIGN', 'ANNIHILATOR'];
 const BOSS_CARD_TIME = 2.8;
 const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges pulse red
+// Supernova bomb pickups (v0.46: the spare bomb left the Geom Attractor card): a rare drop, scaled by Luck.
+// Lieutenants drop one most often; void wells and hulks now and then. Bosses still add one straight away.
+export const BOMB_DROP = Object.freeze({ lieutenant: 0.35, blackhole: 0.04, hulk: 0.02, max: 9 });
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
@@ -186,8 +193,20 @@ export function bossEpithet(wave) {
 }
 
 // Choice cards deal in one after another (css: card-deal); rare and better ones get a shimmer sweep.
+// Pulsing cards get their glow on a layer of its own (css: .card-glow), first so the card's ribbons and
+// shimmer stay above it.
+const GLOW_CARDS = /\b(rarity-floored|breakthrough-card|new-weapon-card)\b/;
+function addCardGlow(card, className, doc = globalThis.document) {
+  if (!GLOW_CARDS.test(className) || !doc?.createElement || !card.insertBefore) return;
+  const glow = doc.createElement('span');
+  glow.className = 'card-glow';
+  glow.setAttribute?.('aria-hidden', 'true');
+  card.insertBefore(glow, card.firstChild ?? null);
+}
+
 function dealInCard(card, idx, className, doc = globalThis.document) {
   card.style?.setProperty?.('--deal-i', idx);
+  addCardGlow(card, className, doc);
   if (/rarity-(common|uncommon)\b/.test(className) || !doc?.createElement) return;
   const shimmer = doc.createElement('span');
   shimmer.className = 'card-shimmer';
@@ -195,8 +214,53 @@ function dealInCard(card, idx, className, doc = globalThis.document) {
   card.appendChild(shimmer);
 }
 
-const setHidden = (el, hidden) => {
-  if (el) el.classList[hidden ? 'add' : 'remove']('hidden');
+// Pickup glows: stamped from cached sprites (js/glow-sprite.js) rather than a shadowBlur inside the
+// additive layer, which costs a full-canvas blur per coin.
+const coinPath = (ctx, r) => {
+  for (let s = 0; s < 6; s++) {
+    const a = (s * Math.PI) / 3;
+    if (s === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+};
+const bombPath = (ctx, r) => {
+  for (let s = 0; s < 16; s++) {
+    const a = (s * Math.PI) / 8;
+    const rr = s % 2 ? r * 0.42 : r;
+    if (s === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath();
+};
+// Game states where the world is paused behind a modal (Game.holdFrozenFrame).
+const FROZEN_STATES = new Set(['PAUSED', 'UPGRADE', 'CHEST']);
+const GEOM_ALPHA = 0.92;
+const COIN_GLOW = Object.freeze({ blur: 12, color: '#ffcc00', fill: `hsla(46, 100%, 52%, ${GEOM_ALPHA})`, path: coinPath });
+const BOMB_GLOW = Object.freeze({ blur: 16, color: '#ffcc00', fill: `hsla(48, 100%, 60%, ${GEOM_ALPHA})`, path: bombPath });
+const pickupGlows = new GlowSprites();
+
+// Adds or removes a class only when that changes it: the HUD calls these every tick, and even a no-op
+// classList.add() rewrites the class attribute.
+const setClass = (el, cls, on) => {
+  const list = el?.classList;
+  if (!list || list.contains?.(cls) === !!on) return;
+  list[on ? 'add' : 'remove']?.(cls);
+};
+const setHidden = (el, hidden) => setClass(el, 'hidden', hidden);
+
+// The HUD is refreshed every tick. Rewriting a text or a width that hasn't changed still invalidates
+// style and layout for the frame, so these write only when the value differs from the last one written.
+const setText = (el, text) => {
+  if (el && el.textContent !== text) el.textContent = text;
+};
+const setStyle = (el, prop, value) => {
+  if (!el) return;
+  const last = (el.hudStyle ??= {});
+  if (last[prop] === value) return;
+  last[prop] = value;
+  if (prop.startsWith('--')) el.style.setProperty?.(prop, value);
+  else el.style[prop] = value;
 };
 
 // Durability tiers: tougher hulls die harder so a pinwheel kill never reads like a swarmer pop.
@@ -455,7 +519,7 @@ export class Game {
       xp: 0,
       xpToNext: xpToNextLevel(1),
       upgradeLevels: {},
-      // Breakthroughs chosen per weapon at LV 6 / 12 / 18: { singularity: { 6: 'transform', 12: 'boost' } }.
+      // Breakthroughs chosen per weapon at LV 6 / 12 / 18, as option ids: { singularity: { 6: 'twin', 12: 'boost' } }.
       breakthroughs: {},
       breakthroughsOffered: {}, // milestones already shown, so none is ever offered twice
       // Equipped weapons in slot order (loadout.js); NEW WEAPON pity counter (upgrades.js rollLevelUpHand).
@@ -521,7 +585,7 @@ export class Game {
     (this.railLance ||= new RailLance()).clear();
     (this.glaive ||= new GlaiveDiscs()).clear();
     (this.nanites ||= new NaniteSwarm()).clear();
-    (this.clawHarpoon ||= new ClawHarpoon()).clear();
+    (this.drillDriver ||= new DrillDriver()).clear();
     (this.quakeMortar ||= new QuakeMortar()).clear();
     (this.weaponFx ||= new WeaponEffects()).clear();
     (this.rifts ||= new RiftManager()).clear();
@@ -538,6 +602,8 @@ export class Game {
     this.missileTimer = 0;
     this.lightningTimer = 0;
     this.singularityTimer = 0;
+    this.barrelHeat = 0; // Hot Barrel
+    this.barrelSinceHit = Infinity;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
     this.bladeFlingTimer = this.bladeNovaTimer = undefined;
@@ -560,6 +626,7 @@ export class Game {
   // this.width / this.height are the view in world px (bigger than the window on small screens, see
   // viewScale); draw() scales them onto the canvas by renderScale.
   resize() {
+    this.frozenKey = null; // resizing clears the canvas
     const vw = window.innerWidth, vh = window.innerHeight;
     // Touch screens draw sharper (up to 1.5 device px per CSS px): phones are dense, but pay for every pixel.
     const dpr = isTouchDevice() ? Math.min(1.5, window.devicePixelRatio || 1) : 1;
@@ -992,6 +1059,10 @@ export class Game {
     });
     document.querySelectorAll?.('[data-go-tab]').forEach((btn) => btn.addEventListener('click', () => this.setGameOverTab(btn.dataset.goTab)));
     document.getElementById('btn-reroll-hand')?.addEventListener('click', () => this.rerollHand());
+    // Like the cards, a tap that lands as the hand appears (still firing / steering) doesn't skip it.
+    document.getElementById('btn-skip-hand')?.addEventListener('click', () => {
+      if (performance.now() - (this.choicesShownAt || 0) >= CHOICE_CLICK_GUARD_MS) this.skipHand();
+    });
     for (const id of ['btn-title-guide', 'btn-pause-guide', 'btn-go-guide']) {
       document.getElementById(id)?.addEventListener('click', () => this.openGuide());
     }
@@ -1894,7 +1965,7 @@ export class Game {
       guaranteedSuper
     });
     this.particles.spawnShockwave(x, y, 140, 48, 4, 0.45);
-    this.particles.spawnFloatText(x, y - 18, '★ RELIC CACHE DROPPED! ★', '#ffcc00', 15);
+    this.particles.spawnFloatText(x, y - 18, '★ ALIEN TECH CACHE DROPPED! ★', '#ffcc00', 15);
   }
 
   openRelicChest(chest) {
@@ -1908,8 +1979,8 @@ export class Game {
 
     // Roll Chest Jackpot Tier based on Luck — multi-upgrade jackpots are genuinely rare!
     let rewardCount = 1;
-    let tierTitle = 'RELIC SUPPLY CACHE (1X)';
-    let tierSub = '★ TACTICAL CACHE UNLOCKED ★';
+    let tierTitle = 'ALIEN TECH CACHE (1X)';
+    let tierSub = '★ ALIEN TECH UNLOCKED ★';
     let bonusCores = 1;
 
     const pentaChance = Math.min(0.45, (TUNING.chestPentaChance ?? 0.003) * luck * superMult);
@@ -1924,11 +1995,11 @@ export class Game {
     } else if (roll < tripleChance) {
       rewardCount = 3;
       tierTitle = '★ TRIPLE POWERUP JACKPOT! (3X) ★';
-      tierSub = '★★ SUPER RELIC CACHE UNLOCKED ★★';
+      tierSub = '★★ SUPER ALIEN TECH CACHE UNLOCKED ★★';
       bonusCores = 2;
     } else if (roll < doubleChance) {
       rewardCount = 2;
-      tierTitle = '★ DOUBLE SUPPLY CACHE! (2X) ★';
+      tierTitle = '★ DOUBLE ALIEN TECH CACHE! (2X) ★';
       tierSub = '★ LUCKY CACHE UNLOCKED ★';
       bonusCores = 1;
     }
@@ -1967,6 +2038,7 @@ export class Game {
       const view = renderUpgradeCard(d, `FREE #${idx + 1}`, true);
       card.className = `${view.className} installed`;
       card.innerHTML = view.html;
+      addCardGlow(card, view.className);
       gridEl.appendChild(card);
     });
 
@@ -1989,7 +2061,7 @@ export class Game {
   // Every broken rock comes through here: the ship's drill, or an elite grinding a path (rock.brokenBy
   // === 'elite'). Both get the same shatter effects, sound and ore drops (geoms, cores, gold-vein chest
   // roll) for the ship to collect. Only the ship's own drilling counts as rocks mined, heals from a
-  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Claw Bore blast.
+  // shield vein (an instant heal, not a pickup) or sets off the Tectonic Drill Bore blast.
   onRockShattered(rock) {
     const byElite = rock.brokenBy === 'elite';
     if (!byElite) this.rocksMined++;
@@ -2067,7 +2139,7 @@ export class Game {
       });
     }
 
-    // Tectonic Claw Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
+    // Tectonic Drill Bore synergy blasts nearby enemies when you drill a rock (does NOT mine other rocks)
     if (this.player.weapons.tectonicBore && !byElite) {
       const blast = tectonicBlastRadius(this.player);
       this.particles.spawnShockwave(rock.x, rock.y, blast, 48, 4.5, 0.35);
@@ -2083,7 +2155,7 @@ export class Game {
     // with the invulnerability to match.
     const reach = W.dashDistanceMult(Math.min(UPGRADE_BY_ID.dash_range.maxLevel, p.upgradeLevels?.dash_range || 0)) * (p.dashDistanceMult ?? 1);
     p.dashTimer = W.dashDuration * reach;
-    p.dashCooldown = W.dashCooldown(p.weapons.dashNova || 0, TUNING.dashCooldownBase ?? 1.5) * (p.dashCooldownMult ?? 1);
+    p.dashCooldown = dashCooldownFor(p, TUNING.dashCooldownBase ?? 1.5);
     p.dashCooldownDuration = p.dashCooldown;
     p.invuln = Math.max(p.invuln, W.dashInvuln + W.dashDuration * (reach - 1));
 
@@ -2164,6 +2236,7 @@ export class Game {
     this.enemyManager.enemyBullets?.clear();
 
     const enemies = this.enemyManager.enemies;
+    const kills0 = this.kills;
     for (const e of [...enemies].reverse()) {
       if (e.dead || e.deflect) continue; // armored bodies shrug it off (they die with their head)
       if (Math.hypot(e.x - p.x, e.y - p.y) > maxR * 1.15) continue;
@@ -2181,6 +2254,7 @@ export class Game {
       }
     }
 
+    this.runStats?.bomb(this.kills - kills0);
     for (let i = 0; i < this.geoms.length; i++) {
       this.geoms[i].magnetized = true;
     }
@@ -2291,6 +2365,7 @@ export class Game {
     e.dead = true;
     enemies.splice(enemyIndex, 1);
     this.kills++;
+    if (e.teslaCharge) BTX.conductorDeath(this, e); // Conductor: a charged enemy arcs into its neighbours
     if (this.runStats) {
       // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
       const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
@@ -2449,6 +2524,13 @@ export class Game {
       });
     }
 
+    // A Supernova bomb pickup (BOMB_DROP), never while the bomb bay is full.
+    const bombChance = (e.isLieutenant ? BOMB_DROP.lieutenant : e.type === 'blackhole' ? BOMB_DROP.blackhole : e.type === 'hulk' ? BOMB_DROP.hulk : 0) * luck;
+    if (!bossPay && bombChance > 0 && this.player.bombs < BOMB_DROP.max && Math.random() < bombChance) {
+      const ba = Math.random() * Math.PI * 2;
+      this.geoms.push({ isBomb: true, x: e.x, y: e.y, vx: Math.cos(ba) * 3, vy: Math.sin(ba) * 3, xp: 0, rotation: 0, hue: 48, magnetized: fromBomb });
+    }
+
     const maxWaveCores = Math.ceil((TUNING.maxWaveCores ?? 3) * this.player.stats.coreDropMult);
     if (bossPay || this.coresDroppedThisWave < maxWaveCores) {
       const coreChance = (
@@ -2603,7 +2685,7 @@ export class Game {
     this.enemyBulletHit ||= (b) => {
       if (this.player.invuln > 0 || this.player.hp <= 0 || this.range?.active) return false; // range: orbs pass through
       this.particles.spawnExplosionSparks(b.x, b.y, 10, 14, 2, 8, 2);
-      this.damagePlayer(this.enemyBulletDamage(b), 10, b.from);
+      this.damagePlayer(this.enemyBulletDamage(b), b.shake ?? 10, b.from);
       return true;
     };
     this.enemyManager.enemyBullets?.update(dt, this.player, this.asteroidManager, this.particles, this.worldWidth, this.worldHeight, this.enemyBulletHit);
@@ -2693,7 +2775,7 @@ export class Game {
       cardEl.style.animation = '';
     }
     setHidden(cardEl, !card);
-    if (card) cardEl.classList[this.ltCardTimer < 0.4 ? 'add' : 'remove']('lt-card-out');
+    if (card) setClass(cardEl, 'lt-card-out', this.ltCardTimer < 0.4);
   }
 
   showBossCard(kind, kicker, e, detail) {
@@ -2743,11 +2825,11 @@ export class Game {
     const on = glow && !this.novaCalloutByPixie;
     setHidden(el, !on);
     setHidden(arrow, !on);
-    for (const id of ['nova-indicator', 'touch-nova']) document.getElementById(id)?.classList[glow ? 'add' : 'remove']('nova-callout-target');
+    for (const id of ['nova-indicator', 'touch-nova']) setClass(document.getElementById(id), 'nova-callout-target', glow);
     if (!on || !el || !arrow) return;
     const fading = this.novaCalloutTimer < 0.45;
-    el.classList[fading ? 'add' : 'remove']('nova-callout-out');
-    arrow.classList[fading ? 'add' : 'remove']('nova-callout-out');
+    setClass(el, 'nova-callout-out', fading);
+    setClass(arrow, 'nova-callout-out', fading);
     const text = `TRY A SUPERNOVA BOMB! (${this.novaKeyLabel()})`;
     const titleEl = document.getElementById('nova-callout-title');
     if (titleEl && titleEl.textContent !== text) titleEl.textContent = text;
@@ -2801,7 +2883,7 @@ export class Game {
     this.grid.applyImpulse(e.x, e.y, 140, 600, 48);
     this.grid.ripple?.(e.x, e.y, 680, 48, 1.3);
     this.sound.playBossDefeat();
-    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER RELIC CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
+    const rewards = [`+${pts.toLocaleString()} PTS`, 'SUPER ALIEN TECH CACHE', `${BOSS_TIER[e.bossTier]?.cores ?? 3} ❖ VOID CORES`];
     if (bombGain > 0) rewards.push(`+${bombGain} BOMB`);
     this.showBossCard('defeat', '★ BOSS DESTROYED ★', e, rewards.join(' · '));
     if (isCampaignWin(this, e)) finalBossDown(this); // the final boss: clear the sector, then VICTORY (js/final-stand.js)
@@ -2858,7 +2940,8 @@ export class Game {
         epithet: e.epithet || '',
         hp: Math.max(0, Math.ceil(e.hp)),
         maxHp: Math.round(e.maxHp),
-        pct: Math.max(0, Math.min(1, e.hp / e.maxHp))
+        pct: Math.max(0, Math.min(1, e.hp / e.maxHp)),
+        escape: escapeLeft(this, e) // s until it escapes (null: never)
       })),
       overflow: bosses.length - shown.length,
       warning: soonest
@@ -2874,10 +2957,10 @@ export class Game {
     setHidden(warnEl, !model.warning);
     if (model.warning) {
       const w = model.warning;
-      document.getElementById('boss-warning-text').textContent = w.count > 1
+      setText(document.getElementById('boss-warning-text'), w.count > 1
         ? `${w.count} BOSSES INBOUND // NEXT: ${w.name}`
-        : `${w.name} INBOUND // ${w.epithet}`;
-      document.getElementById('boss-warning-eta').textContent = `T-${w.eta.toFixed(1)}s`;
+        : `${w.name} INBOUND // ${w.epithet}`);
+      setText(document.getElementById('boss-warning-eta'), `T-${w.eta.toFixed(1)}s`);
     }
 
     setHidden(document.getElementById('boss-bars'), !model.visible);
@@ -2885,13 +2968,17 @@ export class Game {
       const row = model.rows[i];
       setHidden(document.getElementById(`boss-bar-${i}`), !row);
       if (!row) continue;
-      document.getElementById(`boss-bar-name-${i}`).textContent = row.name;
-      document.getElementById(`boss-bar-epithet-${i}`).textContent = row.epithet;
-      document.getElementById(`boss-bar-fill-${i}`).style.width = `${(row.pct * 100).toFixed(1)}%`;
+      setText(document.getElementById(`boss-bar-name-${i}`), row.name);
+      // The last BOSS_ESCAPE.warnAt s before it escapes, the title gives way to a red countdown.
+      const escaping = row.escape !== null && row.escape !== undefined && row.escape <= BOSS_ESCAPE.warnAt;
+      const epithetEl = document.getElementById(`boss-bar-epithet-${i}`);
+      setText(epithetEl, escaping ? `ESCAPING IN ${Math.ceil(row.escape)}s` : row.epithet);
+      setClass(epithetEl, 'boss-bar-escaping', escaping);
+      setStyle(document.getElementById(`boss-bar-fill-${i}`), 'width', `${(row.pct * 100).toFixed(1)}%`);
     }
     const moreEl = document.getElementById('boss-bar-more');
     setHidden(moreEl, model.overflow <= 0);
-    if (model.overflow > 0) moreEl.textContent = `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`;
+    if (model.overflow > 0) setText(moreEl, `+${model.overflow} MORE BOSS${model.overflow > 1 ? 'ES' : ''} ON RADAR`);
 
     const cardEl = document.getElementById('boss-card');
     if (card && card.id !== this.bossCardShownId) {
@@ -2907,7 +2994,7 @@ export class Game {
       cardEl.style.animation = '';
     }
     setHidden(cardEl, !card);
-    if (cardEl) cardEl.classList[card && this.bossCardTimer < 0.45 ? 'add' : 'remove']('boss-card-out');
+    setClass(cardEl, 'boss-card-out', card && this.bossCardTimer < 0.45);
   }
 
   spawnWavePack() {
@@ -3146,6 +3233,7 @@ export class Game {
       const x0 = b.sweepX ?? b.x, y0 = b.sweepY ?? b.y;
       if (b.sweepX !== undefined) b.sweepX = b.sweepY = undefined;
       if (b.homing) this.steerHomingBolt(b);
+      if (b.bx?.thunder) BTX.rocketFlight(this, b, dt);
       if (b.mirvT > 0) {
         b.mirvT -= dt;
         if (b.mirvT <= 0 && b.mirvParts > 1) this.splitMirv(b);
@@ -3185,6 +3273,7 @@ export class Game {
           const hx = x0 + (b.x - x0) * hit.t;
           const hy = y0 + (b.y - y0) * hit.t;
           this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          if (b.kind === 'rocket') this.rocketRockBurst(b, hx, hy);
           if (b.ricochet > 0) this.ricochetOffRock(b, hit.rock, hx, hy);
           break;
         }
@@ -3201,6 +3290,7 @@ export class Game {
         if (e.dead) continue;
         // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last.
         const pierceMult = Math.pow(TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
+        if (b.bx?.hot) BTX.hotBoltHit(this, b); // Hot Barrel: a landed bolt stokes the barrel
         b.hitEnemies.add(e);
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
@@ -3231,11 +3321,12 @@ export class Game {
           this.damageEnemiesInRadius(hx, hy, b.blastRadius, b.blastDamage, b.hue, b.source || 'other', KNOCKBACK.area * 0.5, undefined, b.blastStat || b.source || 'other');
         }
         if (b.tandem || b.napalm || b.ricochet > 0 || b.arcRounds) this.boltBreakthroughs(b, e, hx, hy);
+        if (b.bx?.shrapnel) BTX.rocketBurst(this, b, e, hx, hy);
         if (b.pierce <= 0) break;
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
         this.bullets.push(b);
-      }
+      } else if (b.bx?.hot) BTX.hotBoltMiss(this, b); // gone without a hit: the barrel vents
     }
   }
 
@@ -3356,7 +3447,7 @@ export class Game {
     const targets = this.mirvTargets(b, parts);
     for (let k = 0; k < parts; k++) {
       const a = heading + (k - (parts - 1) / 2) * 0.22;
-      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies) };
+      const part = k === 0 ? b : { ...b, hitEnemies: new Set(b.hitEnemies), bx: b.bx && { ...b.bx } };
       part.vx = Math.cos(a) * speed;
       part.vy = Math.sin(a) * speed;
       part.radius = 3.4;
@@ -3429,29 +3520,33 @@ export class Game {
     const pierce = blasterPierce(p, b);
     // Breakthroughs: Flak Rounds burst on hit, Ricochet Rounds bounce once, Arc Rounds arc on hit.
     const flak = b.t4 ? { blastRadius: W.flakRadius * (p.stats.areaMult ?? 1), blastDamage: damage * W.flakShare, blastStat: 'blaster', blastHue: 28, flak: true } : null;
+    const slug = BTX.blasterVolley(this, b);
     // Prism Split streams keep fixed slots (forward pair first), so new streams never bend old ones.
     const sideX = -Math.sin(p.angle);
     const sideY = Math.cos(p.angle);
-    for (const stream of prismStreams(blasterStreams(p, b))) {
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster bolts, same reach
+    const speed = p.stats.bulletSpeed * vel;
+    const streams = prismStreams(blasterStreams(p, b));
+    for (const stream of streams) {
       const a = p.angle + stream.angle;
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
       const noseY = p.y + Math.sin(a) * 16 + sideY * stream.lateral;
 
-      this.bullets.push({
+      this.bullets.push(BTX.shapeBlasterBolt(this, b, {
         x: noseX,
         y: noseY,
-        vx: Math.cos(a) * p.stats.bulletSpeed,
-        vy: Math.sin(a) * p.stats.bulletSpeed,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
         damage,
         pierce,
         hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
         radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
-        life: 1.25,
+        life: 1.25 / vel,
         width: AUTOCANNON_DRAW_WIDTH,
         ...flak,
         ricochet: b.t8 ? 1 : 0,
         arcRounds: b.t12
-      });
+      }, slug, streams.length));
     }
 
     if (p.weapons.pulsarHelix) {
@@ -3461,19 +3556,20 @@ export class Game {
         this.bullets.push({
           x: p.x,
           y: p.y,
-          vx: Math.cos(ha) * (p.stats.bulletSpeed * 0.85),
-          vy: Math.sin(ha) * (p.stats.bulletSpeed * 0.85),
+          vx: Math.cos(ha) * (speed * 0.85),
+          vy: Math.sin(ha) * (speed * 0.85),
           damage: weaponDamage(p, 'helix', b),
           pierce,
           hue: 305, // evolution magenta: reads apart from cyan Autocannon shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
-          life: 1.3
+          life: 1.3 / vel
         });
       }
     }
 
-    this.sound.playLaser();
+    this.sound.playLaser(BTX.blasterPitch(this, b));
+    BTX.blasterVolleyFx(this, p, slug);
     kickShipRecoil(p);
     // Muzzle recoil nudges the grid but adds no glow: the ship's own light (draw) lights its lines.
     this.grid.applyImpulse(p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, 5.5, 110, 188, 0);
@@ -3485,6 +3581,7 @@ export class Game {
   fireWingRockets(b = weaponBuild(this.player, 'rockets')) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'rockets', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const heading = p.hullAngle ?? p.drillAngle ?? p.angle; // hull heading: where the wing pods are
     const aim = p.angle;
     // MIRV rockets carry all three payloads until they split.
@@ -3506,20 +3603,23 @@ export class Game {
       // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
       const fwd = -p.radius * 0.5 - tier * 7;
       const out = p.radius * 1.7 + tier * 4;
-      const wx = p.x + hx * fwd - hy * side * out;
-      const wy = p.y + hy * fwd + hx * side * out;
+      let wx = p.x + hx * fwd - hy * side * out;
+      let wy = p.y + hy * fwd + hx * side * out;
+      // A pod buried in the rock face being mined would launch its rocket inside the rock, where it died
+      // on its first tick, unseen, under the launch sound. That pod fires from the hull centre instead.
+      if (this.rockOnSegment(p.x, p.y, wx, wy, 4.5)) { wx = p.x; wy = p.y; }
       const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
       const fx = Math.cos(a), fy = Math.sin(a);
-      this.bullets.push({
+      this.bullets.push(BTX.shapeRocket(b, {
         x: wx,
         y: wy,
-        vx: fx * W.wingRocketSpeed,
-        vy: fy * W.wingRocketSpeed,
+        vx: fx * W.wingRocketSpeed * vel,
+        vy: fy * W.wingRocketSpeed * vel,
         damage,
         pierce: 1,
         hue: 354,
         radius: 4.5,
-        life: W.wingRocketLife,
+        life: W.wingRocketLife / vel,
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
@@ -3529,24 +3629,50 @@ export class Game {
         napalm: b.t8,
         mirvT: b.t12 ? W.mirvTime : 0,
         mirvParts: mirv
-      });
+      }));
       this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
     }
     if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
     else this.sound.playLaser(0.55);
   }
 
-  fireSwarmMissiles(b = weaponBuild(this.player, 'missiles')) {
+  // Whether a live asteroid crosses the segment (x0, y0) -> (x1, y1), widened by `pad`.
+  rockOnSegment(x0, y0, x1, y1, pad = 0) {
+    const manager = this.asteroidManager;
+    if (!manager?.asteroids?.length) return false;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const cells = Math.ceil((len / 2 + (manager.maxRockRadius ?? 120) + pad) / manager.cellSize);
+    for (const rock of manager.getNearbyAsteroids((x0 + x1) / 2, (y0 + y1) / 2, cells)) {
+      if (rock.hp > 0 && this.segmentHitTime(x0, y0, x1, y1, rock.x, rock.y, rock.radius + pad) !== null) return true;
+    }
+    return false;
+  }
+
+  // A Rocket Pod rocket striking cover: rocks still stop it cold (no damage gets through), but it bursts
+  // on the rock face with a flash, a small ring and a pop instead of vanishing in two sparks.
+  rocketRockBurst(b, x, y) {
+    const r = (b.blastRadius || 50) * 0.55;
+    this.particles.spawnFlash?.(x, y, r * 0.5, 24, 0.12);
+    this.particles.spawnShockwave(x, y, r, 18, 2, 0.24);
+    this.particles.spawnExplosionSparks(x, y, 5, 30, 2, 8, 1.2);
+    this.grid.applyImpulse(x, y, 8, r * 2, 18, 0);
+    this.sound.playMissileImpact?.(0.45);
+  }
+
+  // `echo`: an Echo Salvo repeat (half strength, no nuke, never echoes again).
+  fireSwarmMissiles(b = weaponBuild(this.player, 'missiles'), { echo = false } = {}) {
     const p = this.player;
     if (typeof b === 'number') b = weaponBuild(p, 'missiles', b);
+    const vel = projectileSpeedMult(p); // Velocity Coils: faster, same reach
     const salvo = W.missileSalvo(b);
-    const damage = weaponDamage(p, 'missile', b);
+    const damage = weaponDamage(p, 'missile', b) * (echo ? W.echoShare : 1);
     const blastRadius = missileBlastRadius(p, b);
-    const hue = missileHue(p);
+    const hue = echo ? W.echoHue : missileHue(p);
+    BTX.afterSalvo(this, b, echo);
     const cluster = b.t4 ? { count: W.clusterBomblets, share: W.clusterShare, radiusFrac: W.clusterRadiusFrac, spread: W.clusterSpread, delay: W.clusterDelay } : null;
     // Tactical Nuke: every nukeEvery-th salvo is one huge missile carrying nukeUnits salvos of damage.
-    this.missileSalvos = (this.missileSalvos || 0) + 1;
-    const nuke = b.t12 && this.missileSalvos % W.nukeEvery === 0;
+    if (!echo) this.missileSalvos = (this.missileSalvos || 0) + 1;
+    const nuke = !echo && b.t12 && this.missileSalvos % W.nukeEvery === 0;
     const count = nuke ? 1 : salvo;
     const each = nuke ? damage * salvo * W.nukeUnits : damage;
     const radius = (nuke ? blastRadius * W.nukeRadiusMult : blastRadius) * (b.t8 ? W.rainRadiusMult : 1);
@@ -3559,8 +3685,12 @@ export class Game {
         const a = Math.random() * Math.PI * 2;
         const x = (t ? t.x : p.x + Math.cos(p.angle) * 200) + Math.cos(a) * Math.random() * jitter;
         const y = (t ? t.y : p.y + Math.sin(p.angle) * 200) + Math.sin(a) * Math.random() * jitter;
-        this.weaponFx.schedule({ x, y, delay: W.rainDelay + i * 0.05, radius, damage: each, hue, source: 'missile', style: nuke ? 'nuke' : 'strike', knock: KNOCKBACK.missile, cluster,
-          after: p.weapons.stormProtocol ? (g, ev) => g.fireChainLightning(W.stormChainLevel, ev.x, ev.y) : null });
+        const hunt = b.tf?.has('hunter');
+        this.weaponFx.schedule({ x, y, delay: W.rainDelay + i * 0.05 + (echo ? 0.1 : 0), radius, damage: each, hue, source: 'missile', style: nuke ? 'nuke' : 'strike', knock: KNOCKBACK.missile, cluster,
+          after: p.weapons.stormProtocol || hunt ? (g, ev) => {
+            if (p.weapons.stormProtocol) g.fireChainLightning(W.stormChainLevel, ev.x, ev.y);
+            if (hunt) BTX.missileBlast(g, { x: ev.x, y: ev.y, damage: ev.damage, source: 'missile', hunterArmed: true }, ev.radius);
+          } : null });
       }
       this.particles.spawnDirectionalSparks(p.x, p.y, -Math.PI / 2, 0.5, Math.min(20, 3 * count), hue, 12);
       this.particles.spawnShockwave(p.x, p.y, 40, hue, 3, 0.3);
@@ -3573,7 +3703,7 @@ export class Game {
     for (let i = 0; i < count; i++) {
       const launchAngle = p.angle + Math.PI + (Math.random() - 0.5) * 1.8;
       const target = targets.length ? targets[i % targets.length] : null;
-      this.missiles.push({
+      this.missiles.push(BTX.shapeMissile(b, {
         target,
         aimX: target ? target.x : p.x + Math.cos(p.angle) * W.missileRange,
         aimY: target ? target.y : p.y + Math.sin(p.angle) * W.missileRange,
@@ -3581,16 +3711,17 @@ export class Game {
         y: p.y,
         vx: Math.cos(launchAngle) * 7,
         vy: Math.sin(launchAngle) * 7,
-        speed: W.missileSpeed * (nuke ? 0.8 : 1),
+        speed: W.missileSpeed * vel * (nuke ? 0.8 : 1),
         damage: each,
         blastRadius: radius,
         hue: nuke ? 30 : hue,
         trail: [],
-        life: nuke ? W.missileLife * 1.25 : W.missileLife,
+        life: (nuke ? W.missileLife * 1.25 : W.missileLife) / vel,
         source: 'missile',
         nuke,
-        cluster
-      });
+        cluster,
+        echo
+      }));
     }
     this.missileSalvoFx(p, count);
   }
@@ -3642,8 +3773,11 @@ export class Game {
     const p = this.player;
     // Storm Protocol passes a plain level: no stat ranks or Breakthroughs.
     const bb = typeof level === 'object' ? level : levelBuild('lightning', level);
-    const damage = weaponDamage(p, 'lightning', bb);
+    // Storm Protocol (a plain level) keeps the arc damage of the slower pre-v0.46 discharge.
+    const damage = weaponDamage(p, 'lightning', bb) * (typeof level === 'object' ? 1 : W.stormArcScale);
     this.arcStat = stat; // fireArcChain credits its hits to this run-stats key
+    this.arcSegs = bb.tf?.has('lattice') || bb.tf?.has('conductor') ? [] : null; // pool Breakthroughs read the jumps
+    this.arcBuild = bb;
     const hitSet = new Set();
     let hits = 0;
     for (let c = 0; c < W.lightningChains(bb); c++) {
@@ -3665,6 +3799,8 @@ export class Game {
         damage: damage * hits * W.orbShare / zaps, hue: ARC_HUE });
     }
     if (hits > 0) this.sound.playArcZap?.(hits);
+    BTX.arcLattice(this, bb, this.arcSegs, damage);
+    this.arcSegs = null;
   }
 
   // A single arc chain from (originX, originY); `hitSet` is shared between forks so they spread out.
@@ -3698,6 +3834,7 @@ export class Game {
 
       if (jump === 0) this.arcEmitterFx(currX, currY, target.x, target.y);
       this.arcHopFx(currX, currY, target, jump, fork ? ARC_HUE + 40 : ARC_HUE);
+      if (this.arcSegs) { this.arcSegs.push(currX, currY, target.x, target.y); BTX.conductorCharge(this, this.arcBuild, target, damage); }
       hits++;
       last = target;
       const arc = Math.sqrt(bestDistSq) || 1;
@@ -3745,13 +3882,14 @@ export class Game {
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
     // Twin Singularities: the second core heads for the nearest enemy on the far side (over 100 degrees
-    // from the first) so the two pulls never half-overlap; with nobody back there it stacks on the first.
+    // from the first); with nobody back there the pair fans out W.twinFan rad either side of the aim, so
+    // the two cores always fly apart and read as two (never stacked on one spot).
     const count = W.singularityCount(b);
     const angles = [angle];
     if (count > 1) {
       const far = this.findNearestEnemyAway(p.x, p.y, angle, 1.75, 700);
       if (far) angles.push(Math.atan2(far.y - p.y, far.x - p.x));
-      else angles.push(angle);
+      else angles.splice(0, 1, angle - W.twinFan, angle + W.twinFan);
     }
     const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
     const life = W.singularityLife(b);
@@ -3772,6 +3910,9 @@ export class Game {
         // Aftershock Collapse: a tighter second implosion; Hawking Cascade: mini-singularities on collapse.
         aftershock: b.t8 ? weaponDamage(p, 'collapse', b) * W.aftershockDamageMult(b) / W.singularityCollapseDamageMult(b) : 0,
         cascade: b.t12 ? b : null,
+        // Accretion Disk (per debris bolt) and White Hole (the bounce-back blast), as shares of a cast.
+        accretion: b.tf?.has('accretion') ? weaponDamage(p, 'collapse', b) * W.accretionShare * W.singularityCastDamage(b) / W.singularityCollapseDamageMult(b) * W.accretionEvery / life : 0,
+        whiteHole: b.tf?.has('whitehole') ? weaponDamage(p, 'collapse', b) * W.whiteShare * W.singularityCastDamage(b) / W.singularityCollapseDamageMult(b) : 0,
         life,
         maxLife: life,
         spin: 0,
@@ -4005,6 +4146,8 @@ export class Game {
       sg.vx *= 0.985;
       sg.vy *= 0.985;
       sg.life -= dt;
+      if (!sg.mini) this.separateSingularity(sg, i);
+      BTX.singularityAccretion(this, sg, dt);
 
       const imploding = sg.life <= SINGULARITY_IMPLODE_TIME;
       if (imploding && !sg.implodeCued) {
@@ -4044,16 +4187,36 @@ export class Game {
     }
   }
 
+  // Full singularity cores never pull each other (the pull above only drags enemies) and never merge: a
+  // core that drifts within W.twinMinSeparation px of another is eased back out (a share of the gap per
+  // tick, so a fresh pair glides apart from the ship instead of popping) and a pair stays two.
+  separateSingularity(sg, i) {
+    const min = W.twinMinSeparation;
+    for (let j = 0; j < i; j++) {
+      const o = this.singularities[j];
+      if (o.mini) continue;
+      let dx = sg.x - o.x, dy = sg.y - o.y;
+      let d = Math.hypot(dx, dy);
+      if (d >= min) continue;
+      if (d < 1e-6) { dx = Math.cos(i); dy = Math.sin(i); d = 1; }
+      const push = (min - d) * 0.06;
+      sg.x += dx / d * push; sg.y += dy / d * push;
+      o.x -= dx / d * push; o.y -= dy / d * push;
+    }
+  }
+
   // Orbit Blades: the ring(s) grind whatever they touch. Counter-Rotating Ring adds a wider ring spinning
   // the other way; Blade Fling throws saw discs outward; Nova Ring bursts every blade on a timer.
   updateOrbitals(dt, b) {
     const p = this.player;
     this.orbitalAngle += dt * W.orbitalSpin(b);
     const count = W.orbitalBlades(b);
-    const bladeR = W.orbitalBladeRadius(b);
-    const damage = weaponDamage(p, 'orbital', b);
+    const damage = weaponDamage(p, 'orbital', b) * BTX.frenzyMult(this, dt, b);
+    const bladeR = W.orbitalBladeRadius(b) * BTX.frenzySize(this, b);
+    const sparkHue = BTX.frenzyHue(this, b);
     const enemies = this.enemyManager.enemies;
     const rings = this.orbitalRings(b);
+    BTX.orbitalVortex(this, dt, b, p.x, p.y, rings[0].radius);
     for (const ring of rings) {
       for (let o = 0; o < count; o++) {
         const oa = ring.dir * this.orbitalAngle + ring.offset + (o * Math.PI * 2) / count;
@@ -4068,10 +4231,11 @@ export class Game {
           const reach = e.radius + bladeR;
           if (dx * dx + dy * dy < reach * reach) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
-            this.particles.spawnExplosionSparks(ox, oy, 3, 150, 2, 7, 1.6);
-            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, 150, 0.1);
+            this.particles.spawnExplosionSparks(ox, oy, 3, sparkHue, 2, 7, 1.6);
+            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, sparkHue, 0.1);
             this.sound.playBladeHit?.();
             this.hitEnemy(e, damage, 'orbital', 0, 0, 0.6);
+            BTX.frenzyHit(this, b);
           }
         }
       }
@@ -4132,6 +4296,7 @@ export class Game {
         source: 'singularity', style: 'implode', knock: KNOCKBACK.area, falloff: TUNING.singularityCollapseEdgeFalloff ?? 0.75, kind: 'collapse' });
     }
     if (sg.cascade) this.spawnCascade(sg);
+    BTX.whiteHole(this, sg, r);
   }
 
   triggerLevelUp() {
@@ -4188,6 +4353,7 @@ export class Game {
     this.lockNote = '';
     this.banishMode = false;
     this.banishArmed = -1;
+    this.skipArmed = false;
     // NEW WEAPON pity counts level-ups, not rerolls: every reroll of this hand starts from here.
     this.handDrought = this.player.newWeaponDrought || 0;
     const carried = this.carriedLock;
@@ -4267,7 +4433,8 @@ export class Game {
   }
 
   // Level-up modal keys: [1]-[4] pick, Shift+[1]-[4] lock/unlock that card, [R] rerolls (R is the
-  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels).
+  // radar toggle only during play), [B] then [1]-[4] banishes that card ([B] again or [Esc] cancels),
+  // [K] skips the hand for gold.
   handleUpgradeKey(code, shift = false) {
     if (this.state !== 'UPGRADE') return false;
     if (this.slotTipOpen) {
@@ -4295,16 +4462,23 @@ export class Game {
       return true;
     }
     if (code === 'KeyR') return this.rerollHand();
+    if (code === 'KeyK') return this.skipHand();
     return false;
   }
 
   // Level-up modal controller extras (A still picks the focused card): X rerolls, Y locks or unlocks
-  // the focused card. Neither button does anything else in this modal.
+  // the focused card, RB twice banishes it, LB twice skips the hand (LB is also dash, so one press only
+  // arms it; any other button disarms).
   handleUpgradePad(gp) {
     if (this.state !== 'UPGRADE' || !gp) return false;
     if (this.slotTipOpen) {
       if ([PAD.A, PAD.B, PAD.X, PAD.Y, PAD.START].some((b) => gp.pressed(b))) this.closeSlotTip();
       return true; // nothing under the tip can be picked while it is open
+    }
+    if (gp.pressed(PAD.LB)) return this.skipHand(false);
+    if (this.skipArmed && [PAD.A, PAD.B, PAD.X, PAD.Y, PAD.RB].some((b) => gp.pressed(b))) {
+      this.skipArmed = false;
+      this.renderHandControls();
     }
     if (gp.pressed(PAD.X)) return this.rerollHand();
     if (gp.pressed(PAD.Y)) {
@@ -4350,6 +4524,50 @@ export class Game {
 
   canEditHand() {
     return this.state === 'UPGRADE' && this.handPhase === 'hand' && this.currentChoices.length > 0;
+  }
+
+  // SKIP: take no card and bank skipReward() gold (js/gold.js). A locked card carries into the next hand,
+  // as if another card had been picked. `confirmed` false (controller LB) only arms it the first time.
+  skipHand(confirmed = true) {
+    if (!this.canEditHand() || this.slotTipOpen) return false;
+    if (!confirmed && !this.skipArmed) {
+      this.skipArmed = true;
+      this.renderHandControls();
+      this.sound?.playUiSelect?.();
+      return true;
+    }
+    this.skipArmed = false;
+    if (this.handLock) this.carriedLock = { card: this.handLock.card, slot: this.handLock.slot };
+    this.handLock = null;
+    this.runStats?.skip?.();
+    const p = this.player;
+    const reward = skipReward();
+    this.gold += reward;
+    this.goldEarned += reward;
+    this.flashGold('gain');
+    // The hand is flicked away and the gold rings in: a warm ring, a spray of coin glints, a coin chord.
+    this.particles.spawnFloatText(p.x, p.y - 24, reward ? `SKIPPED // +${reward} ${GOLD_ICON} GOLD` : 'SKIPPED', '#ffcc00', 15);
+    burst(this, 'pick', p.x, p.y, { hue: 48, scale: 0.9 });
+    for (let i = 0; i < Math.min(6, Math.max(2, Math.round(reward / 2))); i++) {
+      const a = (i / 6) * Math.PI * 2;
+      burst(this, 'gold', p.x + Math.cos(a) * 26, p.y + Math.sin(a) * 26, { scale: 0.8 });
+    }
+    playPreset(this.sound, 'skipCash');
+    this.sound?.playGoldPickup?.();
+    this.closeUpgradeModal();
+    return true;
+  }
+
+  // EVOLUTION READY: an evolution whose recipe the last pick completed can now turn up in level-ups.
+  announceEvolutions(readyBefore) {
+    const p = this.player;
+    const fresh = readyEvolutions(p).filter((id) => !readyBefore.includes(id));
+    fresh.forEach((id, i) => {
+      this.particles.spawnFloatText(p.x, p.y - 46 - i * 18, `⚗ EVOLUTION READY: ${evolutionName(id).toUpperCase()}`, RARITY.evolution.color, 15);
+    });
+    if (!fresh.length) return;
+    burst(this, 'pick', p.x, p.y, { hue: hueOf(RARITY.evolution.color, 315), scale: 1.2 });
+    playPreset(this.sound, 'shimmer', { pitch: semis(3) });
   }
 
   // REROLL: the unlocked cards are replaced by a fresh roll (same gating, NEW WEAPON odds and rarity
@@ -4463,6 +4681,17 @@ export class Game {
       reroll.title = inPick && !open ? 'No other weapons left to offer'
         : affordable ? `Reroll the ${inPick ? 'weapons on offer' : 'unlocked cards'} for ${cost} gold` : `Need ${cost} gold to reroll (you have ${this.gold})`;
     }
+    // SKIP (level-up hands only): no card, a little gold. Controller LB arms it, a second LB skips.
+    const skip = doc?.getElementById('btn-skip-hand');
+    if (skip) {
+      const sr = skipReward();
+      skip.classList?.[inHand ? 'remove' : 'add']('hidden');
+      skip.classList?.[this.skipArmed ? 'add' : 'remove']('armed');
+      skip.innerHTML = this.skipArmed
+        ? `⏭ CONFIRM SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">LB</span>`
+        : `⏭ SKIP · +${sr} ${GOLD_ICON} <span class="hand-key">[K] / LB×2</span>`;
+      skip.title = `Take no card this level-up and bank ${sr} gold${this.handLock ? ' (your locked card comes back next level-up)' : ''}`;
+    }
     const note = doc?.getElementById('hand-lock-note');
     if (note && inPick) {
       note.textContent = this.canRerollWeaponPick() ? `↻ ${cost} ${GOLD_ICON} swaps these for different weapons` : 'Every weapon left is on offer';
@@ -4487,7 +4716,8 @@ export class Game {
         badge.textContent = '🔒 LOCKED';
         el.appendChild(badge);
       } else if (!locked && badge) badge.remove?.();
-      const banish = el.querySelector?.('.card-banish-toggle');
+      // LOCK / BANISH live in the card's own action strip under it (renderChoiceCards), not on the card.
+      const banish = this.choiceBanishEls?.[idx];
       if (banish) {
         const bc = banishCost();
         const armed = this.banishArmed === idx;
@@ -4495,13 +4725,13 @@ export class Game {
         banish.classList?.[nw ? 'add' : 'remove']('hidden');
         banish.classList?.[this.gold >= bc ? 'remove' : 'add']('unaffordable');
         banish.classList?.[armed || this.banishMode ? 'add' : 'remove']('armed');
-        banish.textContent = armed ? `✕ CONFIRM ${bc} ${GOLD_ICON}` : `✕ ${bc} ${GOLD_ICON}`;
-        banish.title = this.gold >= bc ? `Banish for ${bc} gold: it never comes up again this run (click twice)` : `Need ${bc} gold to banish`;
+        banish.innerHTML = armed ? `✕ CONFIRM <span class="act-cost">${bc} ${GOLD_ICON}</span>` : `✕ <span class="act-word">BANISH</span> <span class="act-cost">${bc} ${GOLD_ICON}</span>`;
+        banish.title = this.gold >= bc ? `Banish for ${bc} gold: this card never comes up again this run, at any level (click twice)` : `Need ${bc} gold to banish`;
       }
-      const toggle = el.querySelector?.('.card-lock-toggle');
+      const toggle = this.choiceLockEls?.[idx];
       if (!toggle) return;
       const affordable = locked || this.gold >= lc;
-      toggle.textContent = locked ? '🔓 UNLOCK' : `🔒 ${lc} ${GOLD_ICON}`;
+      toggle.innerHTML = locked ? '🔓 UNLOCK' : `🔒 <span class="act-word">LOCK</span> <span class="act-cost">${lc} ${GOLD_ICON}</span>`;
       toggle.classList?.[affordable ? 'remove' : 'add']('unaffordable');
       toggle.classList?.[locked ? 'add' : 'remove']('on');
       toggle.setAttribute?.('aria-pressed', String(locked));
@@ -4534,7 +4764,10 @@ export class Game {
     this.closeCardDetail();
     container.classList?.[descs.length >= 4 ? 'add' : 'remove']('cards-4');
     const shownAt = performance.now();
+    this.choicesShownAt = shownAt;
     this.choiceCardEls = [];
+    this.choiceLockEls = [];
+    this.choiceBanishEls = [];
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
@@ -4554,27 +4787,34 @@ export class Game {
         this.openCardDetail(idx, view);
       });
       card.appendChild(more);
-      // Gold LOCK toggle (level-up hands only; renderHandControls labels it). Not a <button>, so the
-      // controller's focus stays on whole cards: it locks the focused card with Y.
+      // Each card sits in a slot; in level-up hands the slot adds a strip of big LOCK / BANISH buttons
+      // UNDER the card, outside it and past a gap, so a near-miss can never pick the card (the card only
+      // listens for clicks on itself). renderHandControls labels them. Not <button>s, so the controller's
+      // focus stays on whole cards: Y locks and RB×2 banishes the focused card.
+      const slot = document.createElement('div');
+      slot.className = 'card-slot';
+      slot.appendChild(card);
       if (this.handPhase === 'hand') {
-        const lock = document.createElement('div');
-        lock.className = 'card-lock-toggle';
-        lock.setAttribute?.('role', 'button');
-        lock.addEventListener('click', (e) => {
-          e.stopPropagation?.();
-          this.toggleCardLock(idx);
-        });
-        card.appendChild(lock);
-        const banish = document.createElement('div');
-        banish.className = 'card-banish-toggle';
-        banish.setAttribute?.('role', 'button');
-        banish.addEventListener('click', (e) => {
-          e.stopPropagation?.();
-          this.banishCard(idx);
-        });
-        card.appendChild(banish);
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+        actions.style?.setProperty?.('--deal-i', idx);
+        const action = (cls, fn) => {
+          const el = document.createElement('div');
+          el.className = `card-action ${cls}`;
+          el.setAttribute?.('role', 'button');
+          el.addEventListener('click', (e) => {
+            e.stopPropagation?.();
+            if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+            fn();
+          });
+          actions.appendChild(el);
+          return el;
+        };
+        this.choiceLockEls[idx] = action('card-lock-toggle', () => this.toggleCardLock(idx));
+        this.choiceBanishEls[idx] = action('card-banish-toggle', () => this.banishCard(idx));
+        slot.appendChild(actions);
       }
-      container.appendChild(card);
+      container.appendChild(slot);
       this.choiceCardEls.push(card);
     });
   }
@@ -4591,6 +4831,7 @@ export class Game {
     const card = doc.createElement('div');
     card.className = `${view.className} card-detail-card`;
     card.innerHTML = view.html;
+    addCardGlow(card, view.className, doc);
     const actions = doc.createElement('div');
     actions.className = 'card-detail-actions';
     const pick = doc.createElement('button');
@@ -4670,16 +4911,18 @@ export class Game {
       this.handLock = null;
       this.breakthrough = { weaponId: id, level };
       markBreakthroughOffered(p, id, level);
-      this.currentChoices = ['transform', 'boost'].map((kind) => describeBreakthrough(p, id, level, kind));
+      // 3 options from the weapon's pool (docs/BREAKTHROUGH_POOLS.md).
+      this.currentChoices = drawBreakthroughOptions(id, level, p.breakthroughs?.[id]).map((opt) => describeBreakthrough(p, id, level, opt));
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
       const name = WEAPON_BY_ID[id].name;
-      // The slot 6 weapon gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
+      // The weapon filling BREAKTHROUGH_SLOT (the last, slot 5) gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
       const early = weaponLevel(p, id) < level;
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
-        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press <span>[1]</span> <span>[2]</span>, Click, or D-Pad + <span>A</span> to Choose`);
+        `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Choose`);
       this.renderChoiceCards(this.currentChoices);
-      if (this.radioOn) this.radio.dock(document.getElementById('upgrade-choices')); // big, in the free column
+      // Big, in a 4th column beside the 3 pool cards.
+      if (this.radioOn && this.radio.dock(document.getElementById('upgrade-choices'))) document.getElementById('upgrade-choices').classList?.add('cards-4');
       this.pixie?.offer(id, name); // Dr. Pixie's EUREKA on the radio (never blocks the pick)
       const modal = document.getElementById('upgrade-modal');
       modal.classList.remove('hidden');
@@ -4718,6 +4961,7 @@ export class Game {
     const p = this.player;
     this.sound?.playUiConfirm?.();
     this.runStats?.picked(upg);
+    const readyBefore = readyEvolutions(p);
 
     // A locked card passed over is guaranteed in the next level-up hand; taking it uses up the lock.
     if (this.handPhase === 'hand' && this.handLock) {
@@ -4730,7 +4974,7 @@ export class Game {
       return;
     }
     if (upg.isBreakthrough) {
-      applyBreakthrough(p, upg.weaponId, upg.level, upg.kind);
+      applyBreakthrough(p, upg.weaponId, upg.level, upg.option);
       this.pixie?.picked(upg);
       this.particles.spawnFloatText(p.x, p.y - 24, `⚛ ${upg.name.toUpperCase()}!`, upg.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 220, 280, 4, 0.45);
@@ -4740,6 +4984,7 @@ export class Game {
     }
     if (upg.isWeaponPick) {
       acquireWeapon(p, upg.weaponId);
+      this.announceEvolutions(readyBefore);
       const weapon = WEAPON_BY_ID[upg.weaponId];
       this.particles.spawnFloatText(p.x, p.y - 24, `${weapon.name.toUpperCase()} EQUIPPED!`, RARITY.weapon.color, 16);
       this.particles.spawnShockwave(p.x, p.y, 180, 186, 4, 0.4);
@@ -4750,6 +4995,7 @@ export class Game {
     }
 
     const jump = this.applyUpgrade(upg);
+    this.announceEvolutions(readyBefore);
     const jumpText = jump > 1 ? ` (+${jump} LEVELS!)` : ' UPGRADED!';
     const color = RARITY[rarityFor(upg, jump)].color;
     this.particles.spawnFloatText(p.x, p.y - 24, `${upg.name}${jumpText}`, color, 15);
@@ -4784,9 +5030,9 @@ export class Game {
       const level = weaponLevel(p, id);
       const lineList = weaponUpgradeLines(p, id);
       const lvText = `LV ${level}${bonusText(bonusLevels(p, w.levelId))}<span class="upg-max"> / ${WEAPON_MAX_LEVEL}</span>`;
-      // Its Breakthroughs (transform names, or Across the Board), then its stat cards and evolutions.
+      // Its Breakthroughs (transform or flat names), then its stat cards and evolutions.
       const bt = Object.entries(p.breakthroughs?.[id] || {})
-        .map(([m, kind]) => `<span class="loadout-line bt">⚛ ${kind === 'transform' ? TRANSFORMS[id][m].name : BOOST_NAME}</span>`).join('');
+        .map(([m, v]) => `<span class="loadout-line bt">⚛ ${btOption(id, +m, v)?.name ?? ''}</span>`).join('');
       const lines = bt + lineList
         // Element cards drop their "Autocannon: " prefix here: the slot already names the weapon.
         .map((l) => `<span class="loadout-line${l.isSynergy ? ' evo' : ''}">${l.name.replace('SYNERGY: ', '').replace(/^[^:]+: /, '')} ${l.isSynergy ? '★' : `×${l.level}`}</span>`).join('');
@@ -5125,7 +5371,7 @@ export class Game {
   // the 3x3 cells around it.
   mergeLooseGeoms() {
     const loose = [];
-    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.magnetized) loose.push(g);
+    for (const g of this.geoms) if (!g.isCore && !g.isGold && !g.isBomb && !g.magnetized) loose.push(g);
     let excess = loose.length - MAX_LOOSE_GEOMS;
     if (excess <= 0) return;
     const r = GEOM_MERGE_RADIUS, cells = new Map();
@@ -5419,8 +5665,9 @@ export class Game {
 
     // 3. Primary Weapon Firing
     const shouldFire = !jumping && (this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)));
+    const hotRate = this.barrelHeat || shouldFire ? BTX.hotBarrelRate(this, dt, weaponBuild(p, 'blaster')) : 1; // Hot Barrel cools between hits
     if (shouldFire && ownsWeapon(p, 'blaster')) {
-      this.fireAccumulator += dt * blasterFireRate(p);
+      this.fireAccumulator += dt * blasterFireRate(p) * hotRate;
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
@@ -5439,7 +5686,7 @@ export class Game {
     this.cryoSprayer?.update(dt, this, shouldFire);
     this.acidSprayer?.update(dt, this, shouldFire);
     this.railLance?.update(dt, this, shouldFire); // Rail Lance: charge, then a piercing line (js/rail-lance.js)
-    this.clawHarpoon?.update(dt, this, shouldFire); // js/claw-harpoon.js
+    this.drillDriver?.update(dt, this, shouldFire); // js/drill-driver.js
 
     // 4. Autonomous Weapons
     if (p.weapons.missiles > 0) {
@@ -5492,6 +5739,7 @@ export class Game {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
       const m = this.missiles[i];
       m.life -= dt;
+      if (m.chainSafe > 0) m.chainSafe -= dt; // a fresh Hunter-Killer clears its parent's blast first
       // Home on the locked target; if it dies first, fly on to where it was and burst there (no
       // retargeting, so a salvo spends itself on the targets it launched at).
       if (m.target && !m.target.dead) {
@@ -5539,6 +5787,7 @@ export class Game {
           else if (el === 'shock') this.particles.spawnShockwave(m.x, m.y, blast * 0.7, 62, 2, 0.25);
         }
         this.damageEnemiesInRadius(m.x, m.y, blast, m.damage, m.hue, source, KNOCKBACK.missile);
+        BTX.missileBlast(this, m, blast);
         if (m.cluster) {
           const c = m.cluster;
           this.weaponFx.hop(this, m.x, m.y, c.count, blast * 0.75, blast * c.spread, Math.max(36, blast * c.radiusFrac), m.damage * c.share, c.delay, 40, source);
@@ -5551,7 +5800,7 @@ export class Game {
         // Sympathetic detonation: other missiles caught in this blast go off where they are.
         for (let j = 0; j < this.missiles.length; j++) {
           const o = this.missiles[j];
-          if (o !== m && !o.chain && (o.x - m.x) ** 2 + (o.y - m.y) ** 2 <= blast * blast) o.chain = true;
+          if (o !== m && !o.chain && !(o.chainSafe > 0) && (o.x - m.x) ** 2 + (o.y - m.y) ** 2 <= blast * blast) o.chain = true;
         }
         this.missiles.splice(i, 1);
       }
@@ -5573,7 +5822,8 @@ export class Game {
     this.enemyManager.relocateSpawn ||= (sp) => this.spawnPoint(sp.config.radius);
     this.enemyManager.update(dt, p, this.bullets, this.grid, this.particles, this.worldWidth, this.worldHeight);
     updateBossWarps(this, dt);
-    if (applyBossHazards(this, playBossCue)) return; // boss blasts, lines and rings that hit the ship; boss sound cues
+    tickBossEscapes(this, dt); // every boss escapes after 3 minutes, bar the final one (js/boss-escape.js)
+    playBossCues(this); // the major bosses' queued sound cues (with their shake and hit-stop)
     // Doomed hulls (a serpent body unzipping behind its dead head) pop through the normal kill path.
     // A shed tail (`noReward`) just crumbles away: no score, no drops.
     const doomed = this.enemyManager.doomed;
@@ -5629,8 +5879,7 @@ export class Game {
       }
       // Contact uses the same hull-hugging outline the shield draws.
       // A Blinker that just landed (arriveT) can't hit: only its lunge can (js/archetypes.js BLINKER).
-      // Nor can a Claw Harpoon catch while it's held or just flung (noContactUntil, js/claw-harpoon.js).
-      if (!(e.arriveT > 0) && !(e.noContactUntil > this.elapsedTime) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
+      if (!(e.arriveT > 0) && shieldTouches(p, TUNING, e.x, e.y, e.radius)) {
         if (p.invuln <= 0) {
           this.damagePlayer(this.contactDamage(e), undefined, enemyKind(e));
 
@@ -5659,12 +5908,12 @@ export class Game {
     this.mergeLooseGeoms();
     for (let i = this.geoms.length - 1; i >= 0; i--) {
       const g = this.geoms[i];
-      g.rotation += g.isCore ? 0.12 : g.isGold ? 0.05 : 0.08;
+      g.rotation += g.isCore ? 0.12 : g.isGold || g.isBomb ? 0.05 : 0.08;
 
       const dx = p.x - g.x;
       const dy = p.y - g.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const attractR = g.isCore || g.isGold ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
+      const attractR = g.isCore || g.isGold || g.isBomb ? p.stats.magnetRadius * 1.35 : p.stats.magnetRadius;
 
       if (dist < attractR || g.magnetized) {
         g.magnetized = true;
@@ -5702,6 +5951,16 @@ export class Game {
           this.geoms.splice(i, 1);
           continue;
         }
+        if (g.isBomb) {
+          // A spare Supernova: a bright gold bloom, a chime on top of the core pickup, and the HUD count ticks up.
+          this.sound.playGeomPickup(true);
+          this.sound.playGoldPickup?.();
+          burst(this, 'core', g.x, g.y, { hue: 45, scale: 1.3 });
+          p.bombs = Math.min(BOMB_DROP.max, p.bombs + 1);
+          this.particles.spawnFloatText(p.x, p.y - 22, '+1 ✸ SUPERNOVA', '#ffcc00', 15);
+          this.geoms.splice(i, 1);
+          continue;
+        }
         this.sound.playGeomPickup(g.isCore);
         burst(this, g.isCore ? 'core' : 'pickup', g.x, g.y, g.isCore ? undefined : { hue: g.hue ?? 150 });
 
@@ -5730,22 +5989,22 @@ export class Game {
 
   updateHUD() {
     const p = this.player;
-    document.getElementById('score-display').textContent = this.score.toLocaleString();
-    document.getElementById('multiplier-display').textContent = `x${this.multiplier.toFixed(1)}`;
-    document.getElementById('luck-hud-display').textContent = `🍀 ${Math.round((p.stats.luck || 1) * 100)}% LUCK`;
-    document.getElementById('cores-hud-display').textContent = `❖ ${this.sessionCores} CORES (${this.progression.data.cores} BANKED)`;
+    setText(document.getElementById('score-display'), this.score.toLocaleString());
+    setText(document.getElementById('multiplier-display'), `x${this.multiplier.toFixed(1)}`);
+    setText(document.getElementById('luck-hud-display'), `🍀 ${Math.round((p.stats.luck || 1) * 100)}% LUCK`);
+    setText(document.getElementById('cores-hud-display'), `❖ ${this.sessionCores} CORES (${this.progression.data.cores} BANKED)`);
     const goldHud = document.getElementById('gold-hud-display');
-    if (goldHud) goldHud.textContent = `${GOLD_ICON} ${this.gold ?? 0} GOLD`;
-    document.getElementById('wave-display').textContent = `WAVE ${this.wave}`;
+    setText(goldHud, `${GOLD_ICON} ${this.gold ?? 0} GOLD`);
+    setText(document.getElementById('wave-display'), `WAVE ${this.wave}`);
 
     const mins = Math.floor(this.elapsedTime / 60);
     const secs = Math.floor(this.elapsedTime % 60);
-    document.getElementById('timer-display').textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    setText(document.getElementById('timer-display'), `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
 
     const xpPct = Math.min(100, (p.xp / p.xpToNext) * 100);
-    document.getElementById('xp-bar-fill').style.width = `${xpPct}%`;
+    setStyle(document.getElementById('xp-bar-fill'), 'width', `${xpPct}%`);
     const levelEl = document.getElementById('level-display');
-    levelEl.textContent = `LVL ${p.level}`;
+    setText(levelEl, `LVL ${p.level}`);
     // A new level pops the HUD readout (skipped with REDUCE EFFECTS).
     if (this.hudLevelShown !== p.level) {
       if (this.hudLevelShown !== undefined && !isReduceEffects()) {
@@ -5756,22 +6015,22 @@ export class Game {
     }
 
     const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-    document.getElementById('hp-bar-fill').style.width = `${hpPct}%`;
+    setStyle(document.getElementById('hp-bar-fill'), 'width', `${hpPct}%`);
     // The ghost trails the fill (CSS transition delay), so a hit leaves a fading chunk behind.
     const ghost = document.getElementById('hp-bar-ghost');
-    if (ghost) ghost.style.width = `${hpPct}%`;
+    setStyle(ghost, 'width', `${hpPct}%`);
     const shieldLevel = hpPct < 35 ? 'low' : hpPct < 70 ? 'mid' : 'high'; // colours the bar (CSS)
     const shieldGroup = document.getElementById('shield-group');
     if (shieldGroup?.getAttribute?.('data-level') !== shieldLevel) shieldGroup?.setAttribute?.('data-level', shieldLevel);
-    document.getElementById('hp-text').textContent = `${Math.ceil(p.hp)}/${p.maxHp}`;
+    setText(document.getElementById('hp-text'), `${Math.ceil(p.hp)}/${p.maxHp}`);
     this.updateLowShieldVignette();
 
     const dashReadyPct = p.dashCooldown > 0 ? Math.max(0, (1 - p.dashCooldown / (p.dashCooldownDuration || TUNING.dashCooldownBase)) * 100) : 100;
     const dashEl = document.getElementById('dash-indicator');
-    dashEl?.style?.setProperty?.('--ready', (dashReadyPct / 100).toFixed(3));
-    dashEl?.classList?.[dashReadyPct >= 100 ? 'add' : 'remove']('ready');
-    document.getElementById('bombs-count').textContent = p.bombs;
-    document.getElementById('nova-indicator')?.classList?.[p.bombs > 0 ? 'remove' : 'add']('empty');
+    if (dashEl?.style) setStyle(dashEl, '--ready', (dashReadyPct / 100).toFixed(3));
+    setClass(dashEl, 'ready', dashReadyPct >= 100);
+    setText(document.getElementById('bombs-count'), String(p.bombs));
+    setClass(document.getElementById('nova-indicator'), 'empty', !(p.bombs > 0));
     // The bottom dock centres itself in the space left of the radar (bottom-right) on narrow windows.
     const radarReserve = this.radarVisible && !this.touchMode
       ? Math.round((radarSize(this.width, this.height) + 18) * (this.viewScale || 1)) : 0;
@@ -5836,7 +6095,7 @@ export class Game {
       if (text) text.textContent = `${toast.text} · [G]`;
     }
     setHidden(el, !toast);
-    if (toast) el.classList[this.guideToastTimer < 0.4 ? 'add' : 'remove']('guide-toast-out');
+    if (toast) setClass(el, 'guide-toast-out', this.guideToastTimer < 0.4);
   }
 
   // "· 2 NEW" on every Field Guide button while unread entries wait.
@@ -5853,6 +6112,7 @@ export class Game {
     this.fieldGuide ||= new FieldGuideUI({
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
+      getPlayer: () => (this.state === 'PAUSED' ? this.player : null),
       onClose: () => this.onGuideClosed()
     });
     // Opening with unread entries jumps straight to the first one.
@@ -6171,7 +6431,7 @@ export class Game {
     };
   }
 
-  // Keyboard: [1-6] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
+  // Keyboard: [1-8] launch with that weapon, ←/→ (A/D) move the highlight, Enter/Space launch it, Esc back.
   handleStartPickKey(e, onControl) {
     const code = e.code;
     if (e.repeat) return;
@@ -6499,7 +6759,7 @@ export class Game {
     const b = weaponBuild(p, 'orbitals');
     if (this.bladeNovaHide > 0) return; // Nova Ring: the blades just burst and are reforming
     const orbCount = W.orbitalBlades(b);
-    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1));
+    const size = 15 * W.orbitalBladeRadius(b) / W.orbitalBladeRadius(levelBuild('orbitals', 1)) * BTX.frenzySize(this, b);
     const vfx = TUNING.vfxIntensity ?? 1;
     for (const ring of this.orbitalRings(b)) {
       const orbRadius = ring.radius;
@@ -6802,7 +7062,7 @@ export class Game {
     for (let i = 0; i < this.geoms.length; i++) {
       const g = this.geoms[i];
       if (g.x < this.camX - 40 || g.x > this.camX + this.width + 40 || g.y < this.camY - 40 || g.y > this.camY + this.height + 40) continue;
-      const alpha = 0.92;
+      const alpha = GEOM_ALPHA;
       ctx.save();
       ctx.translate(g.x, g.y);
       ctx.rotate(g.rotation);
@@ -6831,21 +7091,35 @@ export class Game {
         ctx.rotate(Math.PI / 4);
         ctx.strokeStyle = `hsla(290, 100%, 75%, ${alpha})`;
         ctx.strokeRect(-pulseR * 0.55, -pulseR * 0.55, pulseR * 1.1, pulseR * 1.1);
+      } else if (g.isBomb) {
+        // Supernova bomb: an eight-point gold star with a pulsing halo (reads apart from coins and cores).
+        const r = 11 + Math.sin(performance.now() * 0.009 + i) * 1.4;
+        ctx.strokeStyle = `hsla(45, 100%, 62%, ${alpha * 0.5})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = BOMB_GLOW.fill;
+        if (!pickupGlows.draw(ctx, 'bomb', r, rs, BOMB_GLOW)) {
+          ctx.shadowColor = BOMB_GLOW.color;
+          ctx.shadowBlur = BOMB_GLOW.blur;
+        }
+        ctx.beginPath();
+        bombPath(ctx, r);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else if (g.isGold) {
         // Gold coin: a solid, glowing hexagon with a dark diamond stamped in (XP geoms are hollow outlines).
         const r = 8 + Math.sin(performance.now() * 0.008 + i) * 0.8;
-        ctx.fillStyle = `hsla(46, 100%, 52%, ${alpha})`;
+        ctx.fillStyle = COIN_GLOW.fill;
         ctx.strokeStyle = `rgba(255, 246, 200, ${alpha})`;
         ctx.lineWidth = 1.6;
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        for (let s = 0; s < 6; s++) {
-          const a = (s * Math.PI) / 3;
-          if (s === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-          else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        if (!pickupGlows.draw(ctx, 'coin', r, rs, COIN_GLOW)) {
+          ctx.shadowColor = COIN_GLOW.color;
+          ctx.shadowBlur = COIN_GLOW.blur;
         }
-        ctx.closePath();
+        ctx.beginPath();
+        coinPath(ctx, r);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.stroke();
@@ -6886,6 +7160,10 @@ export class Game {
         this.drawShard(ctx, b);
         continue;
       }
+      if (b.kind === 'shrapnel') {
+        BTX.drawShrapnel(ctx, b);
+        continue;
+      }
       const tailX = b.x - b.vx * 1.4;
       const tailY = b.y - b.vy * 1.4;
 
@@ -6924,7 +7202,7 @@ export class Game {
     this.acidSprayer?.draw(ctx, this);
     this.railLance?.draw(ctx, this);
     this.glaive?.draw(ctx, this);
-    if (this.state !== 'GAMEOVER') this.clawHarpoon?.draw(ctx, this);
+    if (this.state !== 'GAMEOVER') this.drillDriver?.draw(ctx, this);
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
     this.quakeMortar?.drawAir(ctx, this);
@@ -7093,11 +7371,42 @@ export class Game {
     ctx.restore();
   }
 
+  // Paused behind a modal (pause menu, level-up / Breakthrough hand, cache) the world stands still: once
+  // the last sparks, ripples and numbers have played out, it is drawn once, settled (no motion trails),
+  // and that frame is kept until the modal closes (the ship's shield ring stops turning). CSS then
+  // blurs the still canvas once (body.world-frozen) instead of the modal's backdrop blur, which Chromium
+  // redoes over the whole screen every frame the cards animate. The frame is redrawn when something it
+  // shows changes (size, HUD / radar / damage numbers, REDUCE EFFECTS, the loadout).
+  holdFrozenFrame() {
+    const frozen = FROZEN_STATES.has(this.state) && !this.cutscene?.active;
+    setClass(globalThis.document?.body, 'world-frozen', frozen);
+    if (!frozen) {
+      this.frozenKey = null;
+      return false;
+    }
+    // Particles, grid ripples, damage numbers and screen flashes play out behind the modal first.
+    const settling = !this.particles.idle() || !this.grid.settled() || (this.damageNumbers?.count ?? 0) > 0 ||
+      this.shake > 0.2 || this.chromaFlash > 0.01 || this.bossFlash > 0.01;
+    if (settling) {
+      this.frozenKey = null;
+      return false;
+    }
+    const p = this.player;
+    const key = `${this.state}|${this.canvas.width}x${this.canvas.height}|${this.hudHidden}|${this.radarVisible}|${this.damageNumbers?.enabled}|${isReduceEffects()}|${p?.loadout?.length}|${p?.level}`;
+    if (key === this.frozenKey) return true;
+    this.frozenKey = key;
+    const frameSeconds = this.frameSeconds;
+    this.frameSeconds = 1; // draw() then clears fully: the settled frame
+    this.draw();
+    this.frameSeconds = frameSeconds;
+    return true;
+  }
+
   loop(now) {
     this.frameSeconds = this.lastFrameAt === undefined ? 1 / 60 : Math.min(0.1, (now - this.lastFrameAt) / 1000);
     this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
-    this.draw();
+    if (!this.holdFrozenFrame()) this.draw();
     this.touch?.setVisible(this.touchMode && !this.gpActive && this.state === 'PLAYING');
     if (this.state !== this.lastLoopState) {
       // A touch-menu window never outlives its screen.

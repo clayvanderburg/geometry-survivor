@@ -20,7 +20,7 @@ export const SUB_SOURCES = Object.freeze({
   // Status DoT ticks (FIRE burn, CORROSIVE acid, SHOCK while touching), credited to the weapon whose
   // hits applied the stacks (status-effects.js): burn_<weapon>, corrode_<weapon>, shock_<weapon>.
   ...Object.fromEntries(['blaster', 'rockets', 'missiles', 'lightning', 'grenades', 'gas', 'flamethrower', 'shockfield', 'cryospray', 'acidspray', 'nanites']
-    .flatMap((id) => ['burn', 'corrode', 'shock'].map((dot) => [`${dot}_${id}`, id]))),
+    .flatMap((id) => ['burn', 'corrode', 'shock', 'frost'].map((dot) => [`${dot}_${id}`, id]))),
   helix: 'blaster',       // Pulsar Helix bolts (Autocannon evolution)
   storm: 'missiles',      // Storm Protocol chain lightning, fired by missile detonations
   collapse: 'singularity',// Vortex Singularity collapse pulse
@@ -38,10 +38,13 @@ export const SUB_SOURCES = Object.freeze({
   glaive_recall: 'glaive',   // Boomerang Recall return-trip slices (Glaive Discs Breakthrough)
   nanite_fission: 'nanites', // Nanite Swarm: Fission Bloom daughter swarms
   nanite_plague: 'nanites',   // Nanite Swarm: Nanite Plague swarms
-  harpooncrush: 'harpoon',  // Claw Harpoon: a reeled-in catch crushed in the other claw
-  harpoonslam: 'harpoon',   // Claw Harpoon: Seismic Slam (LV 6 Breakthrough)
-  harpoonspin: 'harpoon',   // Claw Harpoon: Drill Spin (LV 12 Breakthrough)
-  harpoonchain: 'harpoon',   // Claw Harpoon: Chain Harpoon leaps (LV 18 Breakthrough)
+  harpooncrush: 'harpoon',  // retired (v0.45 Claw Harpoon crush); old run stats still name it
+  harpoonslam: 'harpoon',   // retired (v0.45 Claw Harpoon Seismic Slam); old run stats still name it
+  harpoonreel: 'harpoon',   // Drill Driver: hits on the way back
+  harpoonspin: 'harpoon',   // Drill Driver: Drill Spin
+  harpoonchain: 'harpoon',  // Drill Driver: Ricochet Bits caroms
+  harpoonblast: 'harpoon',  // Drill Driver: Detonator Bit blasts
+  harpoontunnel: 'harpoon', // Drill Driver: Tunnel Bore ticks
   quake_skip: 'quake',       // Graviton Mortar: Rebound Pulse waves
   quake_fault: 'quake',      // Graviton Mortar: Spacetime Fractures snapping shut
   quake_epicenter: 'quake'   // Graviton Mortar: Graviton Surge waves
@@ -51,12 +54,16 @@ export const SUB_SOURCES = Object.freeze({
 export const OTHER_GROUPS = Object.freeze({
   shrapnel: 'shrapnel',   // Volatile Shatter (passive)
   nova: 'nova',           // Phase Nova dash burst
-  tectonic: 'tectonic',   // Tectonic Claw Bore drill blasts
+  tectonic: 'tectonic',   // Tectonic Drill Bore drill blasts
   supernova: 'supernova', // bomb
   blackhole: 'hazard',    // a dying Vortex's burst hitting other enemies
   ram: 'ram',             // enemies that popped on the shield
   other: 'other'
 });
+
+// Groups that are not a loadout weapon's damage: weapon shares are computed without them (a Supernova wipes a
+// screen at once and would dilute every weapon's share; js/stats-aggregate.js lists them separately).
+export const NON_WEAPON_GROUPS = Object.freeze(new Set(Object.values(OTHER_GROUPS)));
 
 // stat id -> group id. `weapons` is loadout.js WEAPONS (id + tagSources).
 export function buildSourceGroups(weapons = []) {
@@ -97,6 +104,10 @@ export class RunStats {
     this.weaponPicks = new Map(); // weapon id -> same row, for the NEW WEAPON pick
     this.totalDmg = 0;
     this.totalKills = 0;
+    this.weaponDmg = 0;   // totals without NON_WEAPON_GROUPS (Supernova, ram, ...)
+    this.weaponKills = 0;
+    this.bombs = 0;       // Supernova bombs used, and the enemies they killed
+    this.bombKills = 0;
     this.baseDamage = 1;
     this.levelTimes = [];
     this.lastLevel = 1;
@@ -126,6 +137,7 @@ export class RunStats {
     const rec = this.groups.get(id) || this.group(id);
     rec.dmg += amount;
     this.totalDmg += amount;
+    if (!NON_WEAPON_GROUPS.has(id)) this.weaponDmg += amount;
     const cur = rec.cur;
     if (cur) {
       cur.dmg += amount;
@@ -157,6 +169,7 @@ export class RunStats {
     rec.kills++;
     if (rec.cur) rec.cur.kills++;
     this.totalKills++;
+    if (!NON_WEAPON_GROUPS.has(id)) this.weaponKills++;
     const row = this.enemyRow(enemyKind(e));
     row[1]++;
     if (Number.isFinite(e?.spawnedAt) && t >= e.spawnedAt) {
@@ -230,8 +243,21 @@ export class RunStats {
     if (row) row[slot]++;
   }
 
+  // A Supernova bomb went off and killed `kills` enemies.
+  // A boss that ran out its clock and escaped (js/boss-escape.js), by kind.
+  bossEscaped(kind) {
+    this.bossEscapes = this.bossEscapes || {};
+    this.bossEscapes[kind] = (this.bossEscapes[kind] || 0) + 1;
+  }
+
+  bomb(kills = 0) {
+    this.bombs++;
+    this.bombKills += Math.max(0, kills | 0);
+  }
+
   reroll() { this.rerolls++; }
   banish() { this.banishes = (this.banishes || 0) + 1; }
+  skip() { this.skips = (this.skips || 0) + 1; }
   lock() { this.locks++; }
 
   // --- Levels --------------------------------------------------------------------------------------
@@ -268,11 +294,13 @@ export class RunStats {
     if (lv > 0) {
       let bucket = rec.levels.get(lv);
       if (!bucket) {
-        bucket = { secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0 };
+        bucket = { secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, wAllDmg: 0, wAllKills: 0 };
         rec.levels.set(lv, bucket);
       }
       bucket.dmg0 = this.totalDmg;
       bucket.kills0 = this.totalKills;
+      bucket.wdmg0 = this.weaponDmg;
+      bucket.wkills0 = this.weaponKills;
       rec.cur = bucket;
     } else rec.cur = null;
   }
@@ -285,8 +313,12 @@ export class RunStats {
     rec.owned += dt;
     cur.allDmg += this.totalDmg - cur.dmg0;
     cur.allKills += this.totalKills - cur.kills0;
+    cur.wAllDmg += this.weaponDmg - cur.wdmg0;
+    cur.wAllKills += this.weaponKills - cur.wkills0;
     cur.dmg0 = this.totalDmg;
     cur.kills0 = this.totalKills;
+    cur.wdmg0 = this.weaponDmg;
+    cur.wkills0 = this.weaponKills;
     rec.since = t;
   }
 
@@ -308,8 +340,9 @@ export class RunStats {
         for (const [lv, b] of [...rec.levels].sort((a, b) => a[0] - b[0])) {
           if (!(b.secs > 0)) continue;
           const target = this.dpsTarget && out.curve ? r2(this.dpsTarget(lv)) : 0;
-          // [seconds, damage, damage / base damage, all damage, kills, all kills, DPS_TARGET(lv)]
-          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target];
+          // [seconds, damage, damage / base damage, all damage, kills, all kills, DPS_TARGET(lv),
+          //  all weapon damage, all weapon kills] (the last two leave out NON_WEAPON_GROUPS; older runs lack them)
+          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target, r0(b.wAllDmg), b.wAllKills];
         }
       }
       weapons[rec.id] = out;
@@ -327,15 +360,17 @@ export class RunStats {
       died: !!died,
       cause: died ? this.cause || 'unknown' : null,
       levelTimes: [...this.levelTimes],
-      gold: { earned: r0(gold.earned || 0), spent: r0(gold.spent || 0), rerolls: this.rerolls, locks: this.locks, banishes: this.banishes || 0 },
+      gold: { earned: r0(gold.earned || 0), spent: r0(gold.spent || 0), rerolls: this.rerolls, locks: this.locks, banishes: this.banishes || 0, skips: this.skips || 0 },
       loadout: (loadout || []).map(({ id, lv }) => ({ id, lv })),
       weapons,
       sources: Object.fromEntries([...this.sources].map(([k, v]) => [k, r0(v)])),
       // [spawned, killed, spawn->death seconds summed, deaths timed, damage to player, hits on player]
       enemies: Object.fromEntries([...this.enemies].map(([k, v]) => [k, [v[0], v[1], r1(v[2]), v[3], r0(v[4]), v[5]]])),
       cards: pairs(this.cards),
-      weaponPicks: pairs(this.weaponPicks)
+      weaponPicks: pairs(this.weaponPicks),
+      bombs: [this.bombs, this.bombKills] // [Supernova bombs used, enemies they killed]
     };
+    if (this.bossEscapes) this.finished.bossEscapes = { ...this.bossEscapes }; // { boss kind: escapes }
     if (armory) {
       this.finished.armory = Object.fromEntries(Object.entries(armory.ranks || {}).filter(([, r]) => r > 0));
       this.finished.armorySpent = Math.max(0, Math.round(armory.spent || 0));

@@ -209,7 +209,7 @@ export const DEFAULT_TUNING = {
   // instead of the old LV 20 / LV 40 steps (+150 / +500 per level).
   xpCurveAccel: 3.6,
   xpCurveAccelFrom: 15,
-  weaponSlots: 6,
+  weaponSlots: 5,             // Clay (v0.46): 5, the card pool is already diluted at 5 (was 6)
   newWeaponChanceBy1: 0.8,
   newWeaponChanceBy2: 0.7,
   newWeaponChanceBy3: 0.6,
@@ -223,10 +223,16 @@ export const DEFAULT_TUNING = {
   // Slot rewards (js/slot-rewards.js): +slotDamageBonus damage to every weapon at 3 and again at 5 weapons.
   slotDamageBonus: 0.05,
   weaponLevelWeight: 3,
+  // Share of a level-up hand's weight held by weapon cards (stat + element), whatever the loadout
+  // (upgrades.js handWeights). Supply caches keep the raw weights.
+  handWeaponShare: 0.55,
+  globalCardWeight: 1,      // each GLOBAL card (Tempo, Cooldown, Persistence, Velocity, Area): like Overdrive or a crit card
   weaponLineWeight: 1.5,
+  overdriveWeightTaper: 0.1, // Reactor Overdrive's hand weight drops this much per weapon carried past 3 (0.8 at a full 5)
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
-  tagCardWeight: 0.7,
+  tagCardWeight: 0.45,       // tag cards: strong in a one-family build, so uncommon (rarityFloor 2) and lighter
   statusCardWeight: 0.7,    // each global STATUS card
+  replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,
 
   // 13. Difficulty Ramp (per-wave growth of enemy HP, spawn pressure, contact/orb damage and kill XP;
@@ -291,20 +297,21 @@ export const DEFAULT_TUNING = {
   goldRerollGrowth: 2,
   goldLockCost: 5,
   goldBanishCost: 30,
-  goldWeaponRerollCost: 40
+  goldWeaponRerollCost: 40,
+  goldSkipReward: 10
 };
 
 export const TUNING_SCHEMA = [
   {
-    group: '🦀 Crab Ship & Drill-Claws',
+    group: '⛏ Ship & Drills',
     items: [
-      { key: 'shipRadius', label: 'Crab Ship Hull Size', type: 'range', min: 8, max: 34, step: 1, unit: 'px' },
+      { key: 'shipRadius', label: 'Ship Hull Size', type: 'range', min: 8, max: 34, step: 1, unit: 'px' },
       { key: 'moveSpeed', label: 'Base Move Speed', type: 'range', min: 2.0, max: 14.0, step: 0.2, unit: '' },
-      { key: 'drillScale', label: 'Drill-Claw Size Scale', type: 'range', min: 0.5, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'drillScale', label: 'Drill Size Scale', type: 'range', min: 0.5, max: 3.0, step: 0.05, unit: 'x' },
       { key: 'miningSpeed', label: 'Base Drill Mining DPS', type: 'range', min: 25, max: 600, step: 5, unit: '/s' },
-      { key: 'miningRange', label: 'Drill-Claw Reach', type: 'range', min: 15, max: 140, step: 2, unit: 'px' },
-      { key: 'dualClawBonus', label: 'Twin-Claw Torque Mult', type: 'range', min: 1.0, max: 3.0, step: 0.05, unit: 'x' },
-      { key: 'carapaceColor', label: 'Crab Carapace Glow', type: 'color' },
+      { key: 'miningRange', label: 'Drill Reach', type: 'range', min: 15, max: 140, step: 2, unit: 'px' },
+      { key: 'dualClawBonus', label: 'Twin-Drill Torque Mult', type: 'range', min: 1.0, max: 3.0, step: 0.05, unit: 'x' },
+      { key: 'carapaceColor', label: 'Carapace Glow', type: 'color' },
       { key: 'innerArmorColor', label: 'Inner Shell Facet Color', type: 'color' },
       { key: 'drillIdleColor', label: 'Drill Bit Idle Color', type: 'color' },
       { key: 'drillActiveColor', label: 'Drill Bit Active Color', type: 'color' },
@@ -526,9 +533,13 @@ export const TUNING_SCHEMA = [
       { key: 'weaponFloorStep', label: 'Weapon Floor: +1 Weapon Required Every N Levels', type: 'range', min: 1, max: 30, step: 1, unit: '' },
       { key: 'slotDamageBonus', label: 'Damage Bonus at 3 and 5 Weapons (each)', type: 'range', min: 0, max: 0.5, step: 0.01, unit: 'prob' },
       { key: 'weaponLevelWeight', label: 'Owned Weapon Level-Up Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'globalCardWeight', label: 'Global Card Weight (Tempo, Cooldown, Persistence, Velocity, Area)', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
+      { key: 'handWeaponShare', label: 'Weapon Cards Share of Level-Up Hands', type: 'range', min: 0, max: 0.95, step: 0.05, unit: 'prob' },
       { key: 'weaponLineWeight', label: 'Weapon-Specific Upgrade Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'overdriveWeightTaper', label: 'Overdrive Weight Taper per Weapon past 3', type: 'range', min: 0, max: 0.2, step: 0.01, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'replicatorWeight', label: 'Replicator Array Weight', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
       { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }
     ]
@@ -586,7 +597,8 @@ export const TUNING_SCHEMA = [
       { key: 'goldRerollGrowth', label: 'Reroll Cost Growth (x per reroll)', type: 'range', min: 1, max: 4, step: 0.25, unit: 'x' },
       { key: 'goldLockCost', label: 'Card Lock Cost', type: 'range', min: 0, max: 100, step: 1, unit: '' },
       { key: 'goldBanishCost', label: 'Card Banish Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
-      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' }
+      { key: 'goldWeaponRerollCost', label: 'First NEW WEAPON Pick Reroll Cost', type: 'range', min: 0, max: 300, step: 1, unit: '' },
+      { key: 'goldSkipReward', label: 'Gold for Skipping a Level-up', type: 'range', min: 0, max: 100, step: 1, unit: '' }
     ]
   }
 ];

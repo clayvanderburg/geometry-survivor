@@ -7,8 +7,9 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostDpsOf, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
+import { tfRealized } from './bt-calibration.js';
 
 // Weapon balance rule: at LV 1 every weapon has the same POTENTIAL DPS (DPS_TARGET(1)). After that each
 // stat reads only its own rank. POWER ranks add damage output (Damage: x DAMAGE_GROWTH hit damage per
@@ -22,12 +23,18 @@ import { loadoutDamageMult } from './slot-rewards.js';
 // constants): below 1 for bomblets and splits that catch fewer enemies, above 1 for strikes, shells and
 // pulls that catch a whole pack.
 // Breakthroughs: a transform multiplies potential by BT_TRANSFORM_DPS (its hit damage is rescaled so the
-// new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and BT_BOOST_RANKS to every UTILITY stat.
+// new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and boostRanksOf(weapon) to every UTILITY stat.
 // DPS_TARGET is the LV 1 reference (and the old level curve the balance tools still report against).
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+// Overtuned Core's free POWER ranks count at what they add on this build (its hit damage is in hitMult).
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export function overtunedRankGain(b) {
+  const o = b.ot && overtunedRanks(b.id);
+  if (!o || !POTENTIAL_DPS[b.id]) return 1;
+  return POTENTIAL_DPS[b.id](b) / POTENTIAL_DPS[b.id]({ ...b, r: { ...b.r, [o.stat]: b.r[o.stat] - b.ot * o.ranks } });
+}
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
@@ -41,16 +48,27 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7, Sentry
-// Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 3.6, Sentry
+// Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). Escort Drones
+// also take the Autocannon's 0.8 card steps (v0.45; 2.7 on full steps before), so they track it to LV 18
+// (73-85% of it at LV 1-18 in the card bench, where full steps had them at 122-134% by LV 12-18). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
 // pierce, so less of the curve is lost to overkill. Glaive Discs also take the Autocannon's 0.8 card steps, so
 // they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8, raillance: 1.2, shockfield: 1.2 }); // the Drill Driver's out-and-back throws start heavy and climb steeper: x1.1 holds it near the Autocannon from LV 6 on
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
+// RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
+// its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
+// Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
+// build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
+export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
+// The Sentry Turret has two rate cards, so Loosen Bolts (charge reload) never meets the diminishing return
+// Tighten Springs (fire rate) puts on the other: each reload rank realized ~1.5x a Bigger Cogs (damage) rank on
+// the realistic benches (tools/balance/hand-bench.mjs). Its step is trimmed to match (v0.46).
+export const TURRET_RELOAD_TRIM = 0.65;
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
 // Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
@@ -69,7 +87,7 @@ export const WEAPON_CLASS = Object.freeze({
   shockfield: 'defensive', orbitals: 'defensive',
   raillance: 'aimed', // slow, huge aimed hits that pierce the whole line: held to the Autocannon in the card bench
   nanites: 'area',
-  harpoon: 'aimed', // Claw Harpoon: its mining and yank are utility, not DPS
+  harpoon: 'aimed', // Drill Driver: its mining is utility, not DPS
   quake: 'area'
 });
 export const CLASS_TARGET = Object.freeze({
@@ -80,14 +98,19 @@ export const CLASS_TARGET = Object.freeze({
 });
 const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
-export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1);
-// Hit damage multiplier of a build: its Damage ranks and ACROSS THE BOARD boosts (nothing else).
-export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb);
+export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1) * (RATE_STEP_TRIM[id] ?? 1);
+// Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
-// transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make.
-const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, transforms: 0 });
-const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) : 1);
+// transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make; then
+// divided by the transforms' card-bench realized value (bt-calibration.js), which POTENTIAL_DPS counts back in.
+const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new Set(), transforms: 0 });
+const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) / tfRealized(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
+// GLOBAL CARDS multipliers a build carries (weapon-levels.js GLOBAL_CARDS; 1 for bare builds, so LV 1 solves never move).
+const tempo = (b) => b?.g?.tempo ?? 1;
+const cdr = (b) => b?.g?.cooldown ?? 1;
+const persist = (b) => b?.g?.persistence ?? 1;
 // LV 1 hit damage of a weapon, solved once from its rank-0 build so LV 1 sits on DPS_TARGET(1).
 const lv1Cache = new Map();
 const lv1 = (key, id, solve) => {
@@ -100,6 +123,14 @@ const ORBITAL_REF_CONTACT = 2 * (14 + 18); // at LV 1 blade size (Blade Size add
 // Share of a singularity's potential that comes from the collapse pulse (the rest is core grind).
 const SINGULARITY_COLLAPSE_SHARE = 0.45;
 // Sentry turrets alive at once can never exceed this (deployables.js pool size).
+// Escort Drones flying at once (deployables.js pool size): a front pair and a back row of 3.
+export const DRONE_MAX = 8;
+// Drones at LV 1: the flight lead and one wingman, the front pair (Clay, v0.45: a lone drone made a hard start).
+export const DRONE_START = 2;
+// Drones in the FRONT row for a formation of n (the rest fly in the BACK row). One balanced fill order for
+// every drone, from Wingmen cards and the LV 6 Escort Squadron alike: 1 front centre, then the front pair,
+// the back row up to 3, the front centre (6), then the back row's outer sides (7, 8): 3 in front, 5 behind.
+export const droneFrontFor = (n) => (n <= 2 ? n : n <= 5 ? 2 : 3);
 export const TURRET_MAX_ACTIVE = 12; // 10 s lifetime / 1.43 s fastest reload (7 out) + a full bank of 3, with room
 
 export const WEAPON_SCALING = {
@@ -108,7 +139,7 @@ export const WEAPON_SCALING = {
   // order; Hyper-Capacitor adds RATE_STEP fire rate per rank (linear); Phase Piercer +1 pierce per rank.
   multishotBolts: 2,
   blasterRateStep: rateStep('blaster'),
-  blasterRateMult: (b) => 1 + W.blasterRateStep * (b.r.rate || 0),
+  blasterRateMult: (b) => (1 + W.blasterRateStep * (b.r.rate || 0)) * tempo(b),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
@@ -124,14 +155,32 @@ export const WEAPON_SCALING = {
   arcRoundJumps: 2,
   arcRoundShare: 0.3,
   arcRoundRange: 150,
-  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
+  // Pool transforms (EXTRA_TRANSFORMS): Tracer Slugs (every slugEvery-th shot is a slug worth slugMult bolts,
+  // slugPierce more pierce: utility; valued at slugValue, since a slug overkills small targets), Hot Barrel
+  // (landed bolts heat the barrel toward +hotRateMax fire rate: a volley of hits adds hotPerHit, a bolt that
+  // misses vents hotMissVent of its share, and hotGrace s without a hit cools it over hotCool s; valued at
+  // hotValue of full heat, since heat must be earned and the extra bolts overkill). Both values from the card bench.
+  slugEvery: 4,
+  slugMult: 2.5,
+  slugPierce: 2,
+  slugRadiusMult: 1.8,
+  slugValue: 0.6,
+  hotRateMax: 0.6,
+  hotPerHit: 0.07,
+  hotMissVent: 0.03,
+  hotGrace: 0.4,
+  hotCool: 1.5,
+  hotValue: 0.4,
+  slugUnits: (b) => (b.tf?.has('slug') ? (W.slugEvery - 1 + W.slugMult * W.slugValue) / W.slugEvery : 1),
+  hotUnits: (b) => (b.tf?.has('hotbarrel') ? 1 + W.hotRateMax * W.hotValue : 1),
+  blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)) * W.slugUnits(b) * W.hotUnits(b),
   blasterDamageMult: (b) => hitMult(b) * tfScale(b, W.blasterUnits),
 
   // --- Rocket Pods (stats: damage, count, reload, radius) -----------------------------------------
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload), // 0.65 s before the weapons pass, 1 s before v0.39.8
+  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / cdr(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 11, // 8.5 before v0.39.8
@@ -149,13 +198,30 @@ export const WEAPON_SCALING = {
   mirvRange: 320, // mini-rockets home on the nearest enemies this far ahead of the split
   mirvHoming: 0.12, // rad per tick
   mirvHitShare: 0.85, // three small payloads cover no more ground than one rocket's blast: each valued at this share
-  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
+  // Pool transforms: Shrapnel Shells (every blast throws shellShards shards at shellShare of the hit,
+  // valued at shellHitShare: they fan out, so few land), Rolling Thunder (a rocket drops a charge every
+  // thunderEvery s of flight, up to thunderMax, each thunderShare of the hit in thunderRadiusFrac of the
+  // blast; valued at thunderHitShare, from the card bench: most land behind the pack).
+  shellShards: 6,
+  shellShare: 0.25,
+  shellHitShare: 0.35,
+  shellSpeed: 9,
+  shellLife: 0.3,
+  thunderEvery: 0.09,
+  thunderMax: 4,
+  thunderShare: 0.25,
+  thunderDelay: 0.14,
+  thunderRadiusFrac: 0.6,
+  thunderHitShare: 0.2,
+  rocketUnits: (b) => (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)
+    + (b.tf?.has('shrapnel') ? W.shellShards * W.shellShare * W.shellHitShare : 0)
+    + (b.tf?.has('thunder') ? W.thunderMax * W.thunderShare * W.thunderHitShare : 0)) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1),
   // Damage of one rocket hit (one mini-rocket with MIRV).
   wingRocketDamageMult: (b) => lv1Trim('rockets') * lv1('rockets', 'rockets', (b0) => DPS_TARGET(1) * W.wingRocketCooldown(b0) / (W.wingRocketCount(b0) * W.rocketUnits(b0))) * hitMult(b) * tfScale(b, W.rocketUnits),
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload), // 1.44 s before the weapons pass
+  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / cdr(b), // 1.44 s before the weapons pass
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
@@ -177,14 +243,30 @@ export const WEAPON_SCALING = {
   nukeUnits: 1.88,
   nukeRadiusMult: 2.2,
   nukeHitShare: 2, // the giant blast catches about twice the enemies of a missile blast: valued at this share
-  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1),
+  // Pool transforms: Hunter-Killer (every blast launches one hunter at hunterShare, valued at hunterHitShare:
+  // it misses when nobody is beyond the blast), Echo Salvo (echoDelay s after each salvo a normal salvo at
+  // echoShare follows; echo missiles never echo again).
+  hunterShare: 0.5,
+  hunterHitShare: 0.8,
+  hunterRange: 420,
+  hunterBlastFrac: 0.6,
+  echoShare: 0.5,
+  echoDelay: 0.45,
+  echoHue: 280,
+  missileUnits: (b) => (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)) * (1 + (b.tf?.has('hunter') ? W.hunterShare * W.hunterHitShare : 0))
+    * ((b.t12 ? (W.nukeEvery - 1 + W.nukeUnits * W.nukeHitShare) / W.nukeEvery : 1) + (b.tf?.has('echo') ? W.echoShare : 0)),
   missileDamageMult: (b) => lv1Trim('missiles') * lv1('missiles', 'missiles', (b0) => DPS_TARGET(1) * W.missileCooldown(b0) * fireRateTrim('missiles') / (W.missileSalvo(b0) * W.missileUnits(b0))) * hitMult(b) * tfScale(b, W.missileUnits),
 
   // --- Tesla Arc Emitter (stats: damage, chain, recharge, reach) ----------------------------------
   // Storm Protocol detonations chain at a fixed level (no stat ranks, no Breakthroughs).
   lightningJumps: (b) => 5 + 2 * b.r.chain,
-  lightningCooldown: (b) => 1.55 / rateMult(b.r.recharge),
-  lightningRange: (b) => 420 + 35 * b.r.reach, // +40% (was 300 + 25/rank)
+  // A discharge every 0.775 s (1.55 s before v0.46): twice as often, each jump half as hard. The chains were
+  // bound by targets (a jump already killed most of what it landed on), so faster, lighter discharges waste
+  // less on overkill and crackle more like lightning (card bench: 0.43-0.54x the Autocannon at LV 6-12 under
+  // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
+  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / cdr(b),
+  stormArcScale: 2,
+  lightningRange: (b) => 420 + 35 * (b.r.reach || 0), // +40% (was 300 + 25/rank); Reach card retired in v0.46 (dead pick)
   lightningChains: (b) => (b.t4 ? 2 : 1),
   // Potential counts the first jump of a chain as a full hit and every later jump at lightningJumpShare:
   // like a blast's splash, the extra jumps land on whatever pack is near, so a chain is valued close to
@@ -203,7 +285,23 @@ export const WEAPON_SCALING = {
   strikeRadius: 55,
   strikeFalloff: 0.8, // hits hard at the struck enemy, fading to 20% at the rim
   strikeHitShare: 2, // a strike on a pack catches its neighbours too (a lone chain cannot): valued at this share
-  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0)),
+  // Pool transforms (main.js via bt-extras.js): Arc Lattice (each chain's jump lines stay live for latticeZaps
+  // zaps latticeEvery s apart, each hitting what touches a line for latticeShare of a jump, valued at
+  // latticeHitShare), Conductor (an enemy a chain hits stays charged conductTime s; if it dies charged it arcs
+  // into its conductArcs nearest neighbours within conductRange for conductShare of a jump each, valued at
+  // conductHitShare: not every charged enemy dies in time). Both in jump units of one chain.
+  latticeZaps: 3,
+  latticeEvery: 0.15,
+  latticeShare: 0.25,
+  latticeWidth: 10,
+  latticeHitShare: 0.5,
+  conductTime: 1.2,
+  conductArcs: 1, // bt-bench (blend): two arcs per charged kill read 1.82x at LV 12
+  conductShare: 0.5,
+  conductRange: 200,
+  conductHitShare: 0.5,
+  lightningExtra: (b) => (b.tf?.has('lattice') ? W.latticeZaps * W.latticeShare * W.latticeHitShare : 0) + (b.tf?.has('conductor') ? W.conductArcs * W.conductShare * W.conductHitShare : 0),
+  lightningUnits: (b) => W.lightningChains(b) * W.lightningJumpUnits(b) * (1 + (b.t8 ? W.orbShare : 0) + (b.t12 ? W.strikeShare * W.strikeHitShare : 0) + W.lightningExtra(b)),
   lightningDamageMult: (b) => lv1('lightning', 'lightning', (b0) => DPS_TARGET(1) * W.lightningCooldown(b0) / W.lightningUnits(b0)) * hitMult(b) * tfScale(b, W.lightningUnits),
   stormChainLevel: 2,
 
@@ -212,8 +310,8 @@ export const WEAPON_SCALING = {
   // pull fades hard toward the rim (gravity.js singularityPullScale) and the collapse falls to 25% at
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
   singularityPullRadius: (b) => 175 + 25 * b.r.pull + (b.t8 ? W.aftershockPull : 0),
-  singularityLife: (b) => 2.6 + 0.3 * b.r.duration,
-  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown),
+  singularityLife: (b) => (2.6 + 0.3 * b.r.duration) * persist(b),
+  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / cdr(b),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
@@ -222,6 +320,8 @@ export const WEAPON_SCALING = {
   // collapsing like a small core).
   singularityCount: (b) => (b.t4 ? 2 : 1),
   twinPullScale: 1,
+  twinFan: 0.75, // with no enemy behind you the twins fan this far (rad) either side of the aim, ~86 degrees apart
+  twinMinSeparation: 160, // px: live cores closer than this are eased apart so a pair never merges into one
   twinUnitShare: 0.5, // the second core flies the other way and often finds fewer enemies: valued at half
   aftershockShare: 0.22,
   aftershockDelay: 0.6,
@@ -233,10 +333,30 @@ export const WEAPON_SCALING = {
   cascadeLife: 1.1,
   cascadeRadiusFrac: 0.45,
   cascadePullScale: 0.6,
+  // Pool transforms (main.js via bt-extras.js): Accretion Disk (every accretionEvery s a live core flings a debris
+  // bolt at a random enemy in its pull; all its bolts are accretionShare of a cast, valued at accretionHitShare),
+  // White Hole (the collapse bounces back as an outward blast of whiteRadiusMult x the collapse radius for
+  // whiteShare of a cast, valued at whiteHitShare: it lands on what the collapse just gathered).
+  accretionEvery: 0.18, // bt-bench: more, smaller bolts spread over the pull (damage barely moved it)
+  accretionShare: 0.3,
+  accretionHitShare: 0.8,
+  accretionSpeed: 10,
+  accretionReach: 1.7, // bolts go for enemies out to this x the pull radius first (the core grinds the ones inside)
+  whiteShare: 0.3,
+  whiteDelay: 0.22,
+  whiteRadiusMult: 1.6,
+  whiteHitShare: 0.6, // bt-bench: the collapse already killed much of what it gathered
+  singularityExtraUnits: (b) => 1 + (b.tf?.has('accretion') ? W.accretionShare * W.accretionHitShare : 0) + (b.tf?.has('whitehole') ? W.whiteShare * W.whiteHitShare : 0),
   singularityUnits: (b) => (b.t4 ? 1 + W.twinUnitShare : 1) * (1 + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0)),
   // Damage of one core per cast (grind over its LV 1 lifetime + collapse), in base damage: the LV 1 value
   // times the build's hit multiplier. Grind is per tick, so a Lifetime card grinds longer at the same rate.
-  singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityUnits),
+  // Transforms are rescaled against the core as it really grinds (Lifetime ranks lengthen the grind but not
+  // the aftershock or the minis), so each one adds exactly BT_TRANSFORM_DPS at any Lifetime.
+  singularityTfUnits: (b) => {
+    const core = (1 - SINGULARITY_COLLAPSE_SHARE) * W.singularityLife(b) / lv1('singularityLife', 'singularity', W.singularityLife) + SINGULARITY_COLLAPSE_SHARE;
+    return W.singularityExtraUnits(b) * (b.t4 ? 1 + W.twinUnitShare : 1) * (core + (b.t8 ? W.aftershockShare : 0) + (b.t12 ? W.cascadeShare * W.cascadeHitShare : 0));
+  },
+  singularityCastDamage: (b) => lv1('singularity', 'singularity', (b0) => DPS_TARGET(1) * W.singularityCooldown(b0) / W.singularityUnits(b0)) * hitMult(b) * tfScale(b, W.singularityTfUnits),
   singularityDamageMult: (b) => W.singularityCastDamage(b) * (1 - SINGULARITY_COLLAPSE_SHARE) / (lv1('singularityLife', 'singularity', W.singularityLife) * 60),
   singularityCollapseDamageMult: (b) => W.singularityCastDamage(b) * SINGULARITY_COLLAPSE_SHARE,
   aftershockDamageMult: (b) => W.singularityCastDamage(b) * W.aftershockShare,
@@ -266,7 +386,20 @@ export const WEAPON_SCALING = {
   novaShare: 0.22,
   novaRadius: 70,
   orbitalPassesContactTicksPerSec: (b) => W.orbitalBlades(b) * ORBITAL_REF_CONTACT / (2 * Math.PI * W.orbitalRadius(b)) * 60 * (b.t4 ? 1 + 1 / W.counterRadiusMult : 1),
-  orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)),
+  // Pool transforms (main.js updateOrbitals via bt-extras.js): Blade Frenzy (every blade hit adds frenzyGain
+  // heat, which bleeds off at frenzyDecay /s; blades hit 1 + frenzyMax x heat as hard, valued at frenzyValue of
+  // full heat), Vortex Ring (enemies within vortexBand of the ring are dragged onto it at vortexPull px/s:
+  // control, valued at vortexHitShare for the extra contact).
+  frenzyGain: 0.03,
+  frenzyDecay: 0.6,
+  frenzyMax: 0.6,
+  frenzyValue: 0.3, // bt-bench: blades rarely hold full heat between packs
+  frenzySize: 0.5, // blades grow up to this much at full heat (utility: more of the pack in reach)
+  vortexBand: 90,
+  vortexPull: 70,
+  vortexHitShare: 1.9, // bt-bench (blend): the vortex keeps a whole pack grinding on the ring
+  orbitalExtraUnits: (b) => (b.tf?.has('frenzy') ? 1 + W.frenzyMax * W.frenzyValue : 1) * (b.tf?.has('vortex') ? W.vortexHitShare : 1),
+  orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)) * W.orbitalExtraUnits(b),
   // A wider ring passes an enemy less often, so its blades hit harder per pass to match: Reach adds no DPS.
   orbitalDamageMult: (b) => lv1('orbitals', 'orbitals', (b0) => DPS_TARGET(1) / W.orbitalUnits(b0)) * hitMult(b) * tfScale(b, W.orbitalUnits)
     * W.orbitalRadius(b) / W.orbitalRadius(levelBuild('orbitals', 1)),
@@ -283,10 +416,11 @@ export const WEAPON_SCALING = {
   shrapnelShards: (lv) => 1 + 3 * lv, // 4 at LV 1, +3 per level (25 at LV 8)
   shrapnelDamageMult: 0.3,
 
-  // Phase Nova Thrusters
+  // Phase Nova Thrusters (the dash shockwave). The dash cooldown is the Cooldown Matrix card's since v0.46
+  // (it was -0.14 s per Thrusters level): `mult` is that card's recharge multiplier (globalMult 'cooldown').
   novaRadius: (lv) => 140 + lv * 35,
   novaDamage: (lv) => 35 * lv,
-  dashCooldown: (lv, base) => Math.max(0.2, base - lv * 0.14),
+  dashCooldown: (mult, base) => Math.max(0.2, base / Math.max(1, mult || 1)),
   // Blink Drive: the dash becomes a teleport of blinkDistance(lv) px along the move direction (the aim
   // when parked), landing short of any rock in the way.
   blinkDistance: (lv) => 220 + 60 * (Math.max(1, lv) - 1),
@@ -303,9 +437,9 @@ export const WEAPON_SCALING = {
   // --- Proximity Mines (stats: damage, capacity, rate, radius, fuse) ------------------------------
   // Dropped behind the ship on a timer while a slot is free; they arm after TUNING.mineArmTime, burst
   // when an enemy enters the trigger ring, and self-detonate at the end of the fuse.
-  mineCooldown: (b) => 2 / rateMult(b.r.rate),
+  mineCooldown: (b) => 2 / rateMult(b.r.rate) / tempo(b),
   mineMaxActive: (b) => (3 + b.r.capacity) * (b.t12 ? W.triadCount : 1),
-  mineLifetime: (b) => 10.5 + 2 * (b?.r?.fuse || 0),
+  mineLifetime: (b) => (10.5 + 2 * (b?.r?.fuse || 0)) * persist(b),
   mineTriggerRadius: () => 48,
   mineBlastRadius: (b) => 120 * (1 + 0.12 * b.r.radius), // wide, but well inside the old 2x (180)
   // Transforms: Cluster Mines (3 bomblets at 25% each, valued at mineClusterHitShare), Seeker Mines
@@ -321,7 +455,20 @@ export const WEAPON_SCALING = {
   triadSpacing: 36,
   triadRange: 400, // a triad is tossed toward the nearest enemy this close to the ship (else dropped in the wake)...
   triadToss: 150, // ...landing at most this far out: a crowd that holds back still ends up within a Seeker Mine's reach
-  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)),
+  // Pool transforms (js/deployables.js via bt-extras.js): Shock Mines (blasts SHOCK at rank shockMineRank:
+  // control, valued at shockMineHitShare for the stunned pack the next mine catches), Napalm Mines (a pool of
+  // napalmMineRadiusFrac of the blast for napalmMineLife s, napalmMineShare of the blast in all, valued at
+  // napalmMineHitShare).
+  shockMineRank: 2,
+  shockMineRadius: 1.25, // the blast crackles this much wider (utility)
+  shockMineHitShare: 1, // bt-bench: the stun mostly holds enemies a mine has already blown
+  napalmMineShare: 0.4,
+  napalmMineLife: 2,
+  napalmMineTick: 0.25,
+  napalmMineRadiusFrac: 0.7,
+  napalmMineHitShare: 1.6, // bt-bench (blend): the pool sits where the pack trails through
+  mineExtraUnits: (b) => (b.tf?.has('shock') ? W.shockMineHitShare : 1) * (1 + (b.tf?.has('napalm') ? W.napalmMineShare * W.napalmMineHitShare : 0)),
+  mineUnits: (b) => (b.t12 ? W.triadCount : 1) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) * W.mineExtraUnits(b),
   mineDamageMult: (b) => lv1('mines', 'mines', (b0) => DPS_TARGET(1) * W.mineCooldown(b0) / W.mineUnits(b0)) * hitMult(b) * tfScale(b, W.mineUnits),
 
   // --- Sentry Turret (stats: damage, rate, reload, pierce) ---------------------------------------
@@ -333,13 +480,13 @@ export const WEAPON_SCALING = {
   // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
-  turretCharges: (b) => 2 + (b.t4 ? 1 : 0),
-  turretReload: (b) => 6 / rateMult(b.r.reload),
-  turretDuration: () => 10,
+  turretCharges: (b) => 2 + (b.r?.charges || 0) + (b.t4 ? 1 : 0), // r.charges: REPLICATOR ARRAY ranks (no card)
+  turretReload: (b) => 6 / (1 + RATE_STEP * TURRET_RELOAD_TRIM * (b.r.reload || 0)) / cdr(b),
+  turretDuration: (b) => 10 * persist(b),
   turretStillTime: 0.5,
   turretDropStill: 0.25,
   turretRange: () => 476, // +40% (was 340)
-  turretFireRate: (b) => 6.1 * rateMult(b.r.rate) * (b.t12 ? W.overloadRate : 1),
+  turretFireRate: (b) => 6.1 * rateMult(b.r.rate) * tempo(b) * (b.t12 ? W.overloadRate : 1),
   turretPierce: (b) => 2 + (b?.r?.pierce || 0), // enemies one bolt can hit (each one behind takes a little less)
   // Turrets out on average (the potential counts them; never above the pool).
   turretAverageActive: (b) => Math.min(TURRET_MAX_ACTIVE, W.turretDuration(b) / W.turretReload(b)),
@@ -352,24 +499,69 @@ export const WEAPON_SCALING = {
   turretFollowRadius: 95,
   overloadRate: 2,
   overloadSpread: 0.07, // rad: LMG Overload sprays a little
-  turretShotUnits: (b) => (b.t12 ? W.overloadRate : 1),
+  // Pool transforms (js/deployables.js): Parting Gift (an expiring turret blows for giftBolts of its bolts in
+  // giftRadius, valued at giftHitShare: a blast on whatever crowded it), Overwatch Link (turrets within
+  // linkRange are joined by a beam that hits every enemy on it for linkShare of a bolt every linkTick s,
+  // valued at linkHitShare enemies per tick: there's only a beam while two turrets are out near each other).
+  giftBolts: 14,
+  giftRadius: 120,
+  giftHitShare: 0.4, // bt-bench: turrets expire wherever they were planted, often after the pack moved on
+  linkRange: 340,
+  linkTick: 0.25,
+  linkShare: 0.5,
+  linkWidth: 10,
+  linkHitShare: 0.15, // bt-bench: a beam only crosses a few enemies a tick
+  turretExtraUnits: (b) => (1 + (b.tf?.has('gift') ? W.giftBolts * W.giftHitShare / (W.turretFireRate(b) * W.turretDuration(b)) : 0))
+    * (1 + (b.tf?.has('link') ? W.linkShare * W.linkHitShare / (W.linkTick * W.turretFireRate(b)) : 0)),
+  turretShotUnits: (b) => (b.t12 ? W.overloadRate : 1) * W.turretExtraUnits(b),
   turretUnits: (b) => W.turretAverageActive(b) * W.turretFireRate(b),
   turretDamageMult: (b) => lv1Trim('turret') * lv1('turret', 'turret', (b0) => DPS_TARGET(1) / W.turretUnits(b0)) * hitMult(b) * tfScale(b, W.turretShotUnits),
 
   // --- Escort Drones (stats: damage, rate, wingmen, range) ----------------------------------------
-  droneCount: (b) => Math.min(3, 1 + b.r.wingmen) + (b.t4 ? 1 : 0),
-  droneFireRate: (b) => 7.6 * rateMult(b.r.rate),
-  droneRange: (b) => 784 + 35 * b.r.range, // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
+  // Formation: up to 3 in front of the nose and 5 behind the hull, DRONE_MAX in all, filled in one balanced
+  // order (droneFrontFor): LV 1 flies the front pair (DRONE_START), Wingmen ranks fill the back row to 5, Escort Squadron (LV 6)
+  // adds 3 more (front centre + the back row's sides). Drones past DRONE_MAX are never wasted: droneSquad
+  // counts them and their guns ride on the others.
+  droneSquad: (b) => DRONE_START + b.r.wingmen + (b.t4 ? W.squadronRow : 0),
+  droneCount: (b) => Math.min(DRONE_MAX, W.droneSquad(b)),
+  droneFront: (b) => droneFrontFor(W.droneCount(b)),
+  squadronRow: 3,
+  // The first drone is the flight LEAD; every drone after it is a lighter WINGMAN whose bolts hit for
+  // droneWingHitShare of the lead's. A formation picks a target per drone, so it wastes far less on overkill
+  // than one heavy gun: at full value, Wingmen ranks ran ~130% of the Autocannon's Prism Split rank for rank
+  // in the card bench (~90% at 0.6). Adding a wingman changes no other drone, so each card still changes
+  // only its own stat. Surplus drones past DRONE_MAX add their guns to the wingmen in the formation.
+  droneWingHitShare: 0.6,
+  droneValue: (b) => 1 + W.droneWingHitShare * (W.droneSquad(b) - 1),
+  droneWingDamageMult: (b) => (W.droneCount(b) > 1 ? W.droneDamageMult(b) * W.droneWingHitShare * (W.droneSquad(b) - 1) / (W.droneCount(b) - 1) : 0),
+  droneFireRate: (b) => 7.6 * (1 + rateStep('drones') * (b.r.rate || 0)) * tempo(b), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
+  droneRange: (b) => 784 + 35 * (b.r.range || 0), // Range card retired in v0.46 (dead pick); // base doubled in v0.38.1 (was 392; 280 + 25/rank before that)
   droneBoltSpeed: 15,
-  // Transforms: Extra Wingman (+1 drone past the cap), Homing Bolts, Micro-Missile Pods (each drone
+  // Transforms: Escort Squadron (the back row of 3), Homing Bolts, Micro-Missile Pods (each drone
   // launches a homing micro-missile every podEvery s worth 22% of its bolt damage).
   homingTurn: 0.16,
   podEvery: 2.5,
   podShare: 0.22,
   podBlast: 60,
-  droneUnits: (b) => W.droneCount(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)),
+  // Pool transforms (js/deployables.js): Overdrive Sync (every overdriveEvery s the formation fires overdriveMult
+  // x as fast for overdriveTime s), Kamikaze Wing (every kamikazeEvery s the rearmost drone dives on the densest
+  // pack within kamikazeRange and blows for kamikazeShare of the formation's output over that time, valued at
+  // kamikazeHitShare: a pack blast, less the drone's guns while it's gone).
+  overdriveEvery: 5,
+  overdriveTime: 1.5,
+  overdriveMult: 3,
+  overdriveHue: 46,
+  kamikazeEvery: 5, // bt-bench: the blast count, not its damage, sets what it realizes
+  kamikazeShare: 0.3,
+  kamikazeHitShare: 1,
+  kamikazeRange: 420,
+  kamikazeRadius: 80,
+  kamikazeSpeed: 16,
+  droneExtraUnits: (b) => (b.tf?.has('overdrive') ? 1 + (W.overdriveMult - 1) * W.overdriveTime / W.overdriveEvery : 1)
+    * (1 + (b.tf?.has('kamikaze') ? W.kamikazeShare * W.kamikazeHitShare : 0)),
+  droneUnits: (b) => W.droneValue(b) * W.droneFireRate(b) * (1 + (b.t12 ? W.podShare : 0)) * W.droneExtraUnits(b),
   droneDamageMult: (b) => lv1Trim('drones') * lv1('drones', 'drones', (b0) => DPS_TARGET(1) / W.droneUnits(b0)) * hitMult(b) * tfScale(b, W.droneUnits),
-  podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b),
+  podDamageMult: (b) => W.podShare * W.droneFireRate(b) * W.podEvery * W.droneDamageMult(b), // the lead's; a wingman's pods scale with its bolts
 
   // --- Plasma Grenades (stats: damage, count, rate, radius, range) --------------------------------
   // Autonomous: every throw interval the ship lobs `count` grenades at the nearest enemies in throw
@@ -377,7 +569,7 @@ export const WEAPON_SCALING = {
   // blinking light, then bursts. Its element (and hue) is the one its element card locked in
   // (grenades.js grenadeElement): FIRE burns, FROST chills, CORROSIVE corrodes, SHOCK stuns.
   grenadeCount: (b) => 2 + b.r.count,
-  grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate),
+  grenadeCooldown: (b) => 2.2 / rateMult(b.r.rate) / tempo(b),
   grenadeBlastRadius: (b) => 95 * (1 + 0.12 * b.r.radius),
   grenadeRange: (b) => 330 + 40 * (b?.r?.range || 0),
   grenadeFlight: 0.5,
@@ -402,7 +594,20 @@ export const WEAPON_SCALING = {
   gravityRamp: 2, // the pull builds up as the fuse burns down (none on landing, x3 at the blast; grenades.js gravityRamp)
   grenadeClusterHitShare: 0.2, // bomblets land past the blast and catch fewer enemies: valued at this share
   gravityHitShare: 1.3, // the pull packs about a third more enemies into every blast: valued at this share
-  grenadeUnits: (b) => (1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0)) * (b.t12 ? W.gravityHitShare : 1),
+  // Pool transforms (js/grenades.js via bt-extras.js): Sticky Plasma (a grenade landing within stickyReach of an
+  // enemy rides it and hits it for stickyShare more on the blast, valued at stickyHitShare: not every grenade
+  // lands beside one), Plasma Geyser (every blast erupts geyserBursts more times, geyserGap s apart, each
+  // geyserShare of the blast in geyserRadiusFrac of it, valued at geyserHitShare).
+  stickyReach: 62,
+  stickyShare: 0.6,
+  stickyHitShare: 0.3, // bt-bench: few grenades land within reach of an enemy
+  geyserBursts: 2,
+  geyserGap: 0.35,
+  geyserShare: 0.35,
+  geyserRadiusFrac: 0.9, // bt-bench: wide vents catch the pack the blast scattered (damage alone barely moved it)
+  geyserHitShare: 0.35, // bt-bench: the blast already thinned the pack the vent erupts on
+  grenadeExtraUnits: (b) => (b.tf?.has('sticky') ? W.stickyShare * W.stickyHitShare : 0) + (b.tf?.has('geyser') ? W.geyserBursts * W.geyserShare * W.geyserHitShare : 0),
+  grenadeUnits: (b) => (1 + (b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare : 0) + (b.t8 ? W.cloudShare : 0) + W.grenadeExtraUnits(b)) * (b.t12 ? W.gravityHitShare : 1),
   grenadeDamageMult: (b) => lv1('grenades', 'grenades', (b0) => DPS_TARGET(1) * W.grenadeCooldown(b0) / (W.grenadeCount(b0) * W.grenadeUnits(b0))) * hitMult(b) * tfScale(b, W.grenadeUnits),
   // SYNERGY: EMP Grenades (Plasma Grenades + Tesla Arc): each blast arcs into empArcs enemies within
   // empRange x the blast radius for empShare of the blast damage each. Off the DPS curve, like Storm Protocol.
@@ -419,8 +624,8 @@ export const WEAPON_SCALING = {
   // Potential counts one tick per tick interval on one target; a trail usually holds several enemies,
   // so each tick is valued at gasHitShare (the per-tick damage is that much lower).
   gasRadius: (b) => 46 * (1 + 0.36 * b.r.radius), // +12% / rank before v0.38.1
-  gasLife: (b) => 2.6 + 1.2 * (b?.r?.linger || 0), // +0.4 s / rank before v0.38.1
-  gasTick: (b) => 0.3 / rateMult(b.r.rate),
+  gasLife: (b) => (2.6 + 1.2 * (b?.r?.linger || 0)) * persist(b), // +0.4 s / rank before v0.38.1
+  gasTick: (b) => 0.3 / rateMult(b.r.rate) / tempo(b),
   gasPuffSpacing: 0.7,
   // Every dash also vents one giant round cloud where the ship was: gasDashRadiusMult x the cloud radius,
   // lingering gasDashLifeMult x as long. Overlapping clouds never stack on one enemy, so it adds reach
@@ -448,7 +653,19 @@ export const WEAPON_SCALING = {
   shroudRadiusMult: 2,
   shroudShare: 0.5,
   shroudHitShare: 1.4, // the shroud holds whatever is closing in on the hull: valued at this share
-  gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0),
+  // Pool transforms (js/gas-trail.js via bt-extras.js): Toxic Tendrils (every gas tick up to tendrilMax clouds each
+  // lash the nearest enemy outside them within tendrilRange for tendrilShare of a tick, valued at tendrilHitShare),
+  // Spore Burst (a fading cloud pops for sporeMult ticks in sporeRadiusMult of it; valued as sporeUnits ticks'
+  // worth per tick: clouds fade about as often as they vent).
+  tendrilMax: 3, // bt-bench (blend, #220 no-dash kite): 5 realized 1.40-1.48x Across the Board
+  tendrilShare: 1,
+  tendrilRange: 280,
+  tendrilHitShare: 0.15, // bt-bench: few enemies stand near the trail (gas reach, #214)
+  sporeMult: 4,
+  sporeRadiusMult: 2.5,
+  sporeUnits: 0.2, // bt-bench: few pops land on the pack (gas reach, #214)
+  gasExtraUnits: (b) => (b.tf?.has('tendrils') ? W.tendrilMax * W.tendrilShare * W.tendrilHitShare : 0) + (b.tf?.has('spores') ? W.sporeUnits : 0),
+  gasUnits: (b) => W.gasHitShare + (b.t8 ? W.pocketShare * W.pocketHitShare : 0) + (b.t12 ? W.shroudShare * W.shroudHitShare : 0) + W.gasExtraUnits(b),
   gasDamageMult: (b) => lv1('gas', 'gas', (b0) => DPS_TARGET(1) * W.gasTick(b0) / W.gasUnits(b0)) * hitMult(b) * tfScale(b, W.gasUnits),
   pocketDamageMult: (b) => W.pocketShare * W.gasDamageMult(b) * W.pocketEvery / W.gasTick(b),
   shroudDamageMult: (b) => W.shroudShare * W.gasDamageMult(b),
@@ -461,13 +678,33 @@ export const WEAPON_SCALING = {
   // a rock shadows the slice of the cone behind it while the rest burns on (flamethrower.js).
   // Potential counts a scorch on flameHitShare targets: the cone always catches a pack and its burn is
   // free (other weapons pay an element card for theirs), so each scorch hits that much softer.
-  flameTickRate: (b) => 8 * rateMult(b.r.rate),
+  flameTickRate: (b) => 8 * rateMult(b.r.rate) * tempo(b),
   flameRange: (b) => 280 + 40 * (b?.r?.range || 0), // 195 + 20 per rank before v0.39.1, 254 base before v0.39.3
   flameConeHalf: (b) => 0.275 + 0.04 * (b?.r?.cone || 0), // radians either side of the nozzle (~32 deg wide at LV 1; 0.55 before v0.42.1, 0.3 before it spun); +0.09 per rank before v0.39.3
   flameBurnRank,
   // The nozzle never aims: it spins round the ship at this many radians per second (one turn every
-  // ~5 s at LV 1), +35% per Spin Rotor rank.
-  flameTurnRate: (b) => 1.2 * (1 + 0.35 * (b?.r?.turn || 0)),
+  // ~5 s at LV 1), +35% per Spin Rotor rank. A swarm trails the ship on one side, so a slow cone spends
+  // most of its turn on empty space: spin, not damage, is what a sprayer's realized DPS rides on (reference
+  // bench). The Flamethrower spins flameTurnTrim faster (its fire burns out between passes; the Cryo and
+  // Acid Sprayers' lingering frost and acid carry them), and every sprayer transform builds in flameTfTurnRanks
+  // Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD (bt-calibration.js BT_SPRAYER_BAND).
+  flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
+  flameTfTurnRanks: 3,
+  // The Spin Rotor card was retired in v0.46 (a dead pick on its own), but spin is still the sprayers' lever: the
+  // transforms build their ranks in, and ACROSS THE BOARD's free utility ranks still reach it (b.atb x boostRanksOf).
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.atb || 0) * boostRanksOf(b?.id) + W.flameTfTurnRanks * (b?.transforms || 0),
+  flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
+  // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
+  // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
+  // whirlEvery s the nozzle adds one full turn over whirlTime s), Seeker (the
+  // nozzle swings toward the densest pack within its range at seekTurnMult x its spin speed instead of spinning;
+  // it spins on when nobody is in reach).
+  whirlEvery: 2.5,
+  whirlTime: 0.6,
+  // The nozzle swings at this share of its own spin speed (bt-bench, blend: 3.2 rad/s parked the cone on the pack,
+  // Cryo/Acid 1.45-1.52x). The Flamethrower spins flameTurnTrim faster, so its share is lower.
+  seekTurnMult: Object.freeze({ flamethrower: 0.6, cryospray: 0.7, acidspray: 0.7 }),
+  seekEvery: 0.25,
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time
   // Extra Nozzle cards (POWER, like Prism Split): flameNozzles(b) identical streams spaced evenly round
@@ -499,7 +736,7 @@ export const WEAPON_SCALING = {
   flamePuddleHitShare: 1.5,
   flameRingEvery: 2.5,
   flameRingRadiusMult: 1.3,
-  flameRingShare: 0.25,
+  flameRingShare: 0.03,
   flameRingHitShare: 2,
   flameRingKnock: 2.4,
   flameUnits: (b) => W.flameNozzleMult(b) * (W.flameHitShare + (b.t4 ? W.flameBurstShare * W.flameBurstHitShare : 0))
@@ -520,7 +757,7 @@ export const WEAPON_SCALING = {
   // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
   // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
   fieldRadius: (b) => 125 + 24 * (b?.r?.radius || 0), // +12 per rank before v0.39.7
-  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge),
+  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / cdr(b),
   fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
   fieldHitShare: 1,
   fieldKnock: 1.2, // a light outward shove on every discharge
@@ -542,8 +779,21 @@ export const WEAPON_SCALING = {
   overchargeRadiusMult: 1.6,
   overchargePack: 8,
   overchargeHitShare: 1.25, // it only fires on a pack of 8+ in a wider ring: valued a little above a discharge
+  // Pool transforms (js/shock-field.js via bt-extras.js): Pulse Wave (pulseDelay s after a discharge a wave hits
+  // every enemy between the field's edge and pulseReach px past it for pulseShare, valued at pulseHitShare: reach the
+  // field lacks), Capacitor Bank (capDelay s after a discharge a second one fires at capShare on what is inside capRadiusMult x the field,
+  // valued at capHitShare: the first one emptied most of the ring).
+  pulseShare: 0.5,
+  pulseDelay: 0.14,
+  pulseReach: 70, // px the wave rolls past the field's edge (a fixed band: a radius multiple outgrew the pack at LV 18)
+  pulseHitShare: 2.4, // bt-bench: the shell past the field holds most of the pack the field never reaches
+  capShare: 0.5,
+  capRadiusMult: 1.1, // the banked charge arcs a little wider than the field (reach: the field is damage-insensitive, #214)
+  capDelay: 0.3,
+  capHitShare: 0.35, // bt-bench: the first discharge emptied most of the ring
+  fieldExtraUnits: (b) => (b.tf?.has('pulse') ? W.pulseShare * W.pulseHitShare : 0) + (b.tf?.has('capacitor') ? W.capShare * W.capHitShare : 0),
   fieldUnits: (b) => W.fieldHitShare + (b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare : 0)
-    + (b.t12 ? W.fieldHitShare * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0),
+    + (b.t12 ? W.fieldHitShare * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0) + W.fieldExtraUnits(b),
   // Damage of one discharge to each enemy in the field.
   fieldDamageMult: (b) => lv1('shockfield', 'shockfield', (b0) => DPS_TARGET(1) * W.fieldCooldown(b0) / W.fieldUnits(b0)) * hitMult(b) * tfScale(b, W.fieldUnits),
 
@@ -554,12 +804,17 @@ export const WEAPON_SCALING = {
   // Bank (+RATE_STEP shots/s per rank), Split Rails (+1 lance per rank, fanned railSpread apart), Flux Lens
   // (a wider hit line; utility) and Penetrator Core (less lost per enemy pierced; utility). Potential counts
   // every lance on one target, like an Autocannon bolt.
-  railCycle: (b) => 1 / rateMult(b.r.rate),       // s per shot at LV 1: 0.8 s charge + 0.2 s vent
+  railCycle: (b) => 1 / rateMult(b.r.rate) / tempo(b),       // s per shot at LV 1: 0.8 s charge + 0.2 s vent
   railChargeShare: 0.8,
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
+  // Split Rails: each extra lance is worth railLanceShare of a lance; every lance carries railLanceMult / lances of a
+  // hit. 1 = full lances: a 2nd lance doubles the weapon (+50-117% vs a Slug Mass rank), so the card is a RARE find
+  // (weapon-levels.js RARE_CARD) rather than a weaker one (v0.46: 0.5 for a moment, then rarity per Clay).
+  railLanceShare: 1,
+  railLanceMult: (b) => 1 + W.railLanceShare * (W.railLances(b) - 1),
   railSpread: 0.12,                               // rad between Split Rails lances
-  railWidth: (b) => 6 * (1 + 0.3 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull)
+  railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
   railKeep: (b) => Math.min(1, 0.8 + 0.04 * (b.r.pierce || 0)), // share carried past each enemy pierced
   railKnock: 1.6,
   // Transforms: Magnetic Rail (while charging, enemies within magnetRange of the aim line are dragged onto it
@@ -574,16 +829,27 @@ export const WEAPON_SCALING = {
   magnetHitShare: 1.3,
   wakeLife: 1.2,
   wakeTick: 0.2,
-  wakeShare: 0.5,
+  wakeShare: 0.2,
   wakeHitShare: 1.25,
   overloadEvery: 3,
   overloadMult: 2,
   overloadWidth: 3,
   overloadHitShare: 1,
   railOverloadAvg: (b) => (b.t12 ? (W.overloadEvery - 1 + W.overloadMult * W.overloadHitShare) / W.overloadEvery : 1),
-  railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b),
+  // Pool transforms (EXTRA_TRANSFORMS, js/rail-lance.js): Static Charge (each of the first staticMax enemies a
+  // lance pierces arcs staticShare of the hit it took into the nearest enemy off the line within staticRange;
+  // valued at staticArcs arcs per lance), Reflector Rail (the lance bounces off the screen edge once and sweeps
+  // back at reflectShare, valued at reflectHitShare: the way back crosses fewer of the pack).
+  staticShare: 0.3,
+  staticRange: 160,
+  staticMax: 2, // bt-bench: arcs finish off weak enemies, so damage barely moves them; fewer arcs instead
+  staticArcs: 1,
+  reflectShare: 0.6,
+  reflectHitShare: 0.6,
+  railExtraUnits: (b) => (1 + (b.tf?.has('static') ? W.staticShare * W.staticArcs : 0)) * (1 + (b.tf?.has('reflect') ? W.reflectShare * W.reflectHitShare : 0)),
+  railUnits: (b) => (b.t4 ? W.magnetHitShare : 1) * (1 + (b.t8 ? W.wakeShare * W.wakeHitShare : 0)) * W.railOverloadAvg(b) * W.railExtraUnits(b),
   // Damage of one lance hit on the first enemy in its line (an Overload Shot hits overloadMult x this).
-  railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLances(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
+  railDamageMult: (b) => lv1Trim('raillance') * lv1('raillance', 'raillance', (b0) => DPS_TARGET(1) * W.railCycle(b0) / (W.railLanceMult(b0) * W.railUnits(b0))) * hitMult(b) * tfScale(b, W.railUnits),
   // One Ion Wake tick on one enemy.
   railWakeDamageMult: (b) => W.railDamageMult(b) * W.wakeShare / (W.wakeLife / W.wakeTick),
 
@@ -599,7 +865,7 @@ export const WEAPON_SCALING = {
   // (LV1_TRIM) is set from the card bench like the Drones' and Turret's.
   glaiveCount: (b) => 2 + (b.r.count || 0),
   glaiveBounces: (b) => 4 + (b.r.chain || 0),
-  glaiveCooldown: (b) => 1.2 / (1 + rateStep('glaive') * (b.r.rate || 0)), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
+  glaiveCooldown: (b) => 1.2 / (1 + rateStep('glaive') * (b.r.rate || 0)) / tempo(b), // card steps trimmed like the Autocannon's (CARD_STEP_TRIM)
   glaiveSpeed: (b) => 560 * (1 + 0.12 * (b?.r?.speed || 0)), // px/s at launch
   glaiveSpeedLoss: 0.07,        // share of its speed a disc sheds per bounce
   glaiveMinSpeedShare: 0.4,     // ... and it fades once under this share of its launch speed
@@ -622,11 +888,22 @@ export const WEAPON_SCALING = {
   recallHitShare: 0.5,
   recallSpeed: 1.25,            // x launch speed on the way home
   // Hits one disc lands, in units of one plain hit.
+  // Pool transforms (js/glaive.js via bt-extras.js): Shatter Edge (a disc that fades bursts into shatterShards
+  // shards at shatterShare of a hit, valued at shatterHitShare), Arc Discs (every ricochet arcs arcDiscShare of
+  // the hit back into the enemy it left, valued at arcDiscHitShare: that one may already be dead).
+  shatterShards: 5,
+  shatterShare: 0.35,
+  shatterHitShare: 0.6, // bt-bench: the shards burst where the disc's last ricochet left it, in the pack
+  arcDiscShare: 0.3,
+  arcDiscRange: 320,
+  arcDiscHitShare: 0.35, // bt-bench: the enemy left behind is often already dead
   glaiveDiscUnits: (b) => {
     const n = W.glaiveBounces(b);
     let units = 1;
     for (let k = 1; k <= n; k++) units += (b.t4 ? 2 * W.fissionShare : 1) * (b.t8 ? W.momentumGrowth ** k : 1);
     if (b.t12) units += W.recallHits * W.recallShare * W.recallHitShare * (b.t4 ? 2 : 1);
+    if (b.tf?.has('arcdisc')) units += n * W.arcDiscShare * W.arcDiscHitShare * (b.t4 ? 2 : 1);
+    if (b.tf?.has('shatter')) units += W.shatterShards * W.shatterShare * W.shatterHitShare * (b.t4 ? 2 : 1);
     return units;
   },
   glaiveUnits: (b) => W.glaiveCount(b) * W.glaiveDiscUnits(b) / W.glaiveCooldown(b),
@@ -643,9 +920,9 @@ export const WEAPON_SCALING = {
   // targets per tick: a swarm only eats what it reaches, so more and longer-lived swarms are POWER
   // (Fabricator, Endurance) and only swarm size is UTILITY.
   naniteRadius: (b) => 66 * (1 + 0.12 * (b?.r?.radius || 0)),
-  naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)),
-  naniteTick: (b) => 0.25 / rateMult(b.r.rate),
-  naniteCooldown: (b) => 3 / rateMult(b.r.cooldown),
+  naniteLife: (b) => 4 * (1 + 0.2 * (b?.r?.duration || 0)) * persist(b),
+  naniteTick: (b) => 0.25 / rateMult(b.r.rate) / tempo(b),
+  naniteCooldown: (b) => 3 / rateMult(b.r.cooldown) / cdr(b),
   naniteUptime: (b) => W.naniteLife(b) / W.naniteCooldown(b),
   naniteRange: 460,
   naniteSpeed: 420,   // canister flight, px/s
@@ -679,52 +956,82 @@ export const WEAPON_SCALING = {
   plagueEvery: 0.2,
   plagueMax: 5,
   plagueHitShare: 0.8,
-  naniteUnits: (b) => W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0),
+  // Pool transforms (js/nanites.js via bt-extras.js): Nano Needles (every needleEvery s each swarm fires a needle
+  // worth needleMult bites at the nearest enemy outside it within needleRange, valued at needleHitShare), Ravenous
+  // Swarm (a swarm's bite grows from 1x to 1 + ravenousMax over its life and it swells up to ravenousGrow, valued
+  // at ravenousValue of the average).
+  needleEvery: 0.35,
+  needleMult: 1.5,
+  needleRange: 240,
+  needleHitShare: 0.25, // bt-bench: needles finish off what the swarm already chewed
+  ravenousMax: 1,
+  ravenousGrow: 0.6,
+  ravenousValue: 0.3, // bt-bench: swarms rarely live out their full life on a pack
+  naniteExtraUnits: (b) => (b.tf?.has('needles') ? W.needleMult * W.needleHitShare * W.naniteTick(b) / W.needleEvery : 0),
+  naniteRavenous: (b) => (b.tf?.has('ravenous') ? 1 + W.ravenousMax * 0.5 * W.ravenousValue : 1),
+  naniteUnits: (b) => (W.naniteHitShare + (b.t4 ? W.fissionHitShare : 0) + (b.t12 ? W.plagueHitShare : 0) + W.naniteExtraUnits(b)) * W.naniteRavenous(b),
   // Damage of one bite to each enemy inside a swarm (daughters and plague swarms bite the same).
   naniteDamageMult: (b) => lv1('nanites', 'nanites', (b0) => DPS_TARGET(1) * W.naniteTick(b0) / (W.naniteUnits(b0) * W.naniteUptime(b0))) * hitMult(b) * tfScale(b, W.naniteUnits),
 
-  // --- Claw Harpoon (stats: damage, rate, range, grapple, drill) -----------------------------------
-  // Fires one drill claw on a tether along the turret aim while firing (js/claw-harpoon.js). The claw
-  // flies out to harpoonRange, piercing every enemy on its line once (each one behind takes
-  // TUNING.pierceFalloff of the last, like Autocannon bolts) and drilling through rock: it breaks rock
-  // worth harpoonDrill rock HP per throw (x the ship's drill speed) and bites to a stop in the first rock
-  // it can't break (bedrock always stops it). The first small enemy it hits (hull radius up to
-  // harpoonHookSize, never a boss or lieutenant) is hooked and reeled back into your other claw, which
-  // crushes it for harpoonCrushShare of a hit. One throw per harpoonCooldown: out, reel back, ready.
-  // Potential counts the throw hit plus the crush on one target.
-  harpoonCooldown: (b) => 0.45 / (1 + rateStep('harpoon') * (b.r.rate || 0)),
-  harpoonRange: (b) => 330 + 40 * (b?.r?.range || 0),
-  harpoonHookSize: (b) => 17 + 5 * (b?.r?.grapple || 0),
+  // --- Drill Driver, id harpoon (stats: damage, rate, range, pierce, drill) -------------------------
+  // Launches the ship's own front drills on a cable along the turret aim while firing (js/drill-driver.js):
+  // one drill per harpoonCooldown, the two arms taking turns. A drill flies out to harpoonRange over
+  // harpoonOutShare of a cycle, then reels back over harpoonBackShare (so each arm is home again before
+  // its next turn), boring every enemy on its line once on the way out and once on the way back (reelShare
+  // of a hit). Each enemy behind takes harpoonPierceKeep of the hit before it, kill or not. On the way out it
+  // drills rock: it breaks rock worth harpoonDrill rock HP per throw (x the ship's drill speed) and bites to a
+  // stop in the first rock it can't break (bedrock always stops it). Nothing is ever gripped or pulled: every
+  // hit's knockback points away from the ship. Potential counts the way out plus the way back (valued at
+  // reelHitShare: the line has moved on by then) on one target.
+  harpoonCooldown: (b) => 0.4 / (1 + rateStep('harpoon') * (b.r.rate || 0)) / tempo(b),
+  harpoonRange: (b) => 560 + 40 * (b?.r?.range || 0),
+  harpoonOutShare: 0.8,
+  harpoonBackShare: 0.8,
+  reelShare: 1,
+  reelHitShare: 0.7,
+  harpoonPierceKeep: (b) => Math.min(1, 0.75 + 0.05 * (b?.r?.pierce || 0)), // share kept past each enemy bored (a kill too: free kills made Damage cards compound)
   harpoonDrill: (b) => 130 * (1 + 0.6 * (b?.r?.drill || 0)),
-  harpoonTipRadius: 9,
-  harpoonPierceKeep: 0.7, // damage kept past each enemy that survives the hit; a kill costs the claw no momentum
-  harpoonCrushShare: 0.5,
-  // Share of a throw's cycle spent flying out and reeling back (the rest is the claw back in its socket).
-  // A faster winch (Rate cards) flies and reels faster; the reach (Range cards) never changes the cycle.
-  harpoonOutShare: 0.36,
-  harpoonBackShare: 0.36,
-  // Transforms: Seismic Slam (every reel-in snaps your claws shut in a slamRadius blast at the nose worth
-  // slamShare of a hit, valued at slamHitShare), Drill Spin (the claw spins in place at the end of each
-  // throw for spinShare of the cycle, grinding everything round its tip spinTicks times for spinShare of
-  // a hit in total, valued at spinHitShare; it drills rock there too), Chain Harpoon (from the end of
-  // each throw the claw leaps on to up to chainLeaps more enemies within chainRange of the tip, piercing
-  // each for chainShare of a hit, valued at chainHitShare, hooking one if it has no catch yet).
-  slamShare: 0.45,
-  slamRadius: 85,
-  slamHitShare: 1.2, // the claws snap shut on whatever is pressing on your nose: a small pack
+  harpoonTipRadius: 14,
+  // Transforms: Twin Drills (every launch fires both drills, fanned twinSpread rad apart, each flying out
+  // over twinOutShare and back over twinBackShare of the cycle so both are home for the next launch; the
+  // second drill valued at twinHitShare: on one target it lands about that often), Drill Spin (the drill spins
+  // where it stops for spinTime s, grinding everything within spinRadius spinTicks times for spinShare of a hit
+  // in total, valued at spinHitShare; it drills rock there too), Ricochet Bits (from the end of its throw the
+  // drill bounces to up to chainLeaps more enemies within chainRange of its tip, chainTime s each, for
+  // chainShare of a hit each, valued at chainHitShare, before it reels in). Spins and Detonator lodges shorten
+  // as the winch speeds up past its LV 1 cycle, and the time spent there comes off the reel, so an arm is home
+  // for its next turn anyway (js/drill-driver.js).
+  twinSpread: 0.16,
+  twinOutShare: 0.45,
+  twinBackShare: 0.45,
+  twinHitShare: 0.6,
   spinShare: 0.6,
   spinTicks: 6,
-  spinTime: 0.2, // share of the cycle the claw spins (taken from its idle time in the socket)
-  spinRadius: 58,
-  spinHitShare: 1.1,
+  spinTime: 0.3,
+  spinRadius: 70,
+  spinHitShare: 0.5,
   chainLeaps: 3,
   chainShare: 0.4,
   chainRange: 220,
-  chainTime: 0.04, // share of the cycle each leap takes
-  chainHitShare: 0.75, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
-  harpoonUnits: (b) => 1 + W.harpoonCrushShare + (b.t4 ? W.slamShare * W.slamHitShare : 0)
-    + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0),
-  // Damage of one throw hit on the first enemy on its line.
+  chainTime: 0.05,
+  chainHitShare: 0.6, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
+  // Pool transforms (js/drill-driver.js): Detonator Bit (a drill screws into the first enemy that survives it,
+  // or where it stopped, blows detDelay s later in a detRadius blast for detShare of a hit, valued at
+  // detHitShare, then reels in), Tunnel Bore (the line a throw bored keeps cutting for tunnelLife s, ticking every enemy within
+  // tunnelWidth of it every tunnelTick s for tunnelShare of a hit in all, valued at tunnelHitShare).
+  detDelay: 0.35,
+  detRadius: 90,
+  detShare: 0.9,
+  detHitShare: 0.5,
+  tunnelLife: 1,
+  tunnelTick: 0.2,
+  tunnelShare: 0.4,
+  tunnelWidth: 14,
+  tunnelHitShare: 1.2,
+  harpoonUnits: (b) => (1 + W.reelShare * W.reelHitShare) * (1 + (b.t4 ? W.twinHitShare : 0))
+    + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0)
+    + (b.tf?.has('detonate') ? W.detShare * W.detHitShare : 0) + (b.tf?.has('tunnel') ? W.tunnelShare * W.tunnelHitShare : 0),
+  // Damage of one drill on the first enemy on its line, on the way out.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
   // --- Graviton Mortar, id quake (stats: damage, count, rate, radius, bore) -------------------------
@@ -737,11 +1044,11 @@ export const WEAPON_SCALING = {
   // boost never turns mining on. Spacetime Fractures shatter rock on their own (faultRockDamage, plus any
   // Tidal Shear). Rocks broken either way count as mined. A wave is valued at one hit per target.
   quakeShells: (b) => 2 + b.r.count,
-  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate),
+  quakeCooldown: (b) => 2.6 / rateMult(b.r.rate) / tempo(b),
   quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
   // x the ship's mining speed / 75: 0 without Tidal Shear; a plain rock (~85 HP) takes 4 waves at 1 rank, 1 at 6.
   quakeRockDamage: (b) => {
-    const r = Math.max(0, (b?.r?.bore || 0) - (b?.atb || 0));
+    const r = Math.max(0, (b?.r?.bore || 0) - (b?.atb || 0) * boostRanksOf(b?.id));
     return r > 0 ? 25 * (1 + 0.5 * (r - 1)) : 0;
   },
   faultRockDamage: 45, // a fracture snapping shut shears any rock it crosses (x mining speed / 75), Tidal Shear adds to it
@@ -749,7 +1056,7 @@ export const WEAPON_SCALING = {
   quakeFlight: 0.85,
   quakeRingTime: 0.5,
   quakeEdgeFalloff: 0.3,
-  quakeKnock: 3.2,
+  quakeKnock: 6, // 3.2 before v0.46: the base wave's shove was too small to see (Clay)
   // Transforms: Rebound Pulse (a burst charge rebounds to the next pack skipBounces times, each rebound a
   // wave skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Spacetime Fractures
   // (every main burst tears faultCount seams faultLengthMult x the wave radius long that snap shut
@@ -774,8 +1081,20 @@ export const WEAPON_SCALING = {
   epicenterRadiusMult: 2,
   epicenterKnockMult: 2.2,
   epicenterHitShare: 1.7, // a ship-sized ring lands on the whole crowd closing in: card bench (realized ~ the boost)
-  quakeUnits: (b) => 1 + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
-    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0),
+  // Pool transforms (js/quake-mortar.js via bt-extras.js): Crush Field (a main landing leaves a pool of
+  // crushRadiusFrac of the ring for crushLife s, ticking crushShare of the ring in all, valued at crushHitShare),
+  // Gravity Lens (a charge in flight drags enemies within lensRadiusMult rings of its landing toward it at
+  // lensPull px/s: control, its ring valued at lensHitShare of a plain one for the extra enemies it gathers).
+  crushShare: 0.4,
+  crushRadiusFrac: 0.6,
+  crushLife: 1.5,
+  crushTick: 0.25,
+  crushHitShare: 0.25, // bt-bench: the wave shoves the pack out of its own field
+  lensRadiusMult: 1.5,
+  lensPull: 90,
+  lensHitShare: 1.2,
+  quakeUnits: (b) => ((b.tf?.has('lens') ? W.lensHitShare : 1) + (b.t4 ? W.skipBounces * W.skipShare * W.skipHitShare : 0) + (b.t8 ? W.faultCount * W.faultShare * W.faultHitShare : 0)
+    + (b.t12 ? W.epicenterShare * W.epicenterHitShare / W.epicenterEvery : 0) + (b.tf?.has('crush') ? W.crushShare * W.crushHitShare : 0)),
   // Damage of one quake ring (main impact) to each enemy it passes.
   quakeDamageMult: (b) => lv1Trim('quake') * lv1('quake', 'quake', (b0) => DPS_TARGET(1) * W.quakeCooldown(b0) / (W.quakeShells(b0) * W.quakeUnits(b0))) * hitMult(b) * tfScale(b, W.quakeUnits),
 
@@ -787,16 +1106,25 @@ export const WEAPON_SCALING = {
   // Siege Battery: every turret bolt that hits bursts like a small mine.
   siegeShellRadius: 52,
   siegeShellDamageMult: 0.7,
-  // Critical hits: chance is additive per card level, damage is the crit multiplier.
+  // Critical hits: chance is additive per card level, damage is the crit multiplier. v0.46: +20% chance and +0.5x
+  // per rank (were +5% / +0.25x: a rank realized ~2-5% against Reactor Overdrive's ~10%, tools/balance/hand-bench.mjs).
   // Supercritical multiplies the crit *bonus* (multiplier - 1) against status-afflicted targets.
-  critChanceStep: 0.05,
-  critDamageStep: 0.25,
+  critChanceStep: 0.2,
+  critDamageStep: 0.5,
   supercritChance: 0.1,
   supercritBonusMult: 1.5,
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
-  tagDamageStep: { kinetic: 0.2, explosive: 0.3, electric: 0.3 },
-  areaStep: 0.15,
+  // Per tag-card rank, added. v0.45: 0.2 / 0.3 / 0.3, which realized 1.5-2.3x Reactor Overdrive whenever every
+  // carried weapon had the tag (hand-bench.mjs). v0.46 keeps them strong but rarer (Clay: balance with rarity):
+  // 0.2 / 0.25 / 0.25, always at least UNCOMMON (rarityFloor 2) and drawn at TUNING.tagCardWeight 0.45 (was 0.7).
+  tagDamageStep: { kinetic: 0.2, explosive: 0.25, electric: 0.25 },
+  // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
+  // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
+  // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
+  // global card rule (one rank under one weapon card and under Overdrive). At +10% it sits under both with 2, 4
+  // and 6 weapons, and about level with them on an all-area build (sprayers and clouds), where area is reach.
+  areaStep: 0.1,
 
   // Elements (weapon-levels.js ELEMENT_CARDS): `lv` below is the rank of a weapon's element card (1-5).
   // STACKS (Deep Rock Galactic: Survivor style): every hit of an element weapon adds stacks of its status,
@@ -834,6 +1162,12 @@ export const WEAPON_SCALING = {
   freezeResistLieutenant: 1.5,
   freezeResistBoss: 3,
   frozenDamageTaken: 0.25,
+  // Chilled (not yet frozen) hulls take up to this much more damage, in step with their cold. FROST only slowed
+  // before v0.46, and a slowed pack reaches the guns later: FROST element cards realized -8% to -27% damage.
+  chilledDamageTaken: 0.2,
+  // FROSTBITE: cold stacks tick for this x base damage per stack (corrode's acid is 0.0035), so a FROST weapon
+  // never loses damage to its own slow (v0.46; it slowed packs out of reach and realized -8% to -27%).
+  frostDotPerStack: 0.006,
 
   // CORRODE (CORROSIVE): a light DoT, and every stack makes the target take corrodeVulnPerStack more
   // damage from every source (DoTs included), up to corrodeCap(lv).
@@ -942,40 +1276,36 @@ export const blasterPierce = (p, b = weaponBuild(p, 'blaster')) => p.stats.pierc
 // Breakthrough multipliers) at every level and stat mix; the balance tool reports it alongside real runs.
 // Autocannon is expressed against its own LV 1 (x DPS_TARGET(1)), so it sits on the same curve.
 export const POTENTIAL_DPS = {
-  blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b)
-    * (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)),
-  rockets: (b) => W.wingRocketCount(b) * (b.t12 ? W.mirvSplit * W.mirvHitShare : 1) * W.wingRocketDamageMult(b)
-    * (1 + W.wingRocketBlastShare + (b.t4 ? W.tandemShare : 0) + (b.t8 ? W.napalmShare : 0)) / W.wingRocketCooldown(b),
-  missiles: (b) => {
-    const salvo = W.missileSalvo(b) * W.missileDamageMult(b) * (1 + (b.t4 ? W.clusterBomblets * W.clusterShare * W.clusterHitShare : 0)); // bomblets valued at their hit share
-    const avg = b.t12 ? ((W.nukeEvery - 1) * salvo + W.nukeUnits * W.nukeHitShare * salvo) / W.nukeEvery : salvo; // the nuke at its hit share
-    return avg / W.missileCooldown(b);
-  },
+  // Transform attacks at their hit shares (blasterUnits / rocketUnits / missileUnits).
+  blaster: (b) => DPS_TARGET(1) * (1 + b.r.prism) * W.blasterRateMult(b) * W.blasterDamageMult(b) * W.blasterUnits(b),
+  rockets: (b) => W.wingRocketCount(b) * W.wingRocketDamageMult(b) * W.rocketUnits(b) / W.wingRocketCooldown(b),
+  missiles: (b) => W.missileSalvo(b) * W.missileDamageMult(b) * W.missileUnits(b) / W.missileCooldown(b),
   lightning: (b) => {
     const chains = W.lightningChains(b) * W.lightningJumpUnits(b) * W.lightningDamageMult(b); // later jumps at lightningJumpShare
     const strikes = b.t12 ? W.strikeShare * W.strikeHitShare * chains : 0;
     const orb = b.t8 ? W.orbShare * chains : 0;
-    return (chains + strikes + orb) / W.lightningCooldown(b);
+    return (chains + strikes + orb + W.lightningExtra(b) * chains) / W.lightningCooldown(b);
   },
   singularity: (b) => {
     const core = W.singularityDamageMult(b) * W.singularityLife(b) * 60 + W.singularityCollapseDamageMult(b);
     const after = b.t8 ? W.aftershockDamageMult(b) : 0;
     const minis = b.t12 ? W.cascadeMinis * (W.cascadeDamageMult(b) * W.cascadeLife * 60 + W.cascadeCollapseDamageMult(b)) * W.cascadeHitShare : 0;
-    return (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
+    return W.singularityExtraUnits(b) * (b.t4 ? 1 + W.twinUnitShare : 1) * (core + after + minis) / W.singularityCooldown(b); // the twin often holds other enemies
   },
-  orbitals: (b) => W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
+  orbitals: (b) => (W.orbitalPassesContactTicksPerSec(b) * W.orbitalDamageMult(b)
     + (b.t8 ? W.orbitalBlades(b) / W.flingEvery * W.flingDamageMult(b) : 0)
-    + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0),
-  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) / W.mineCooldown(b),
-  turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b),
-  drones: (b) => W.droneCount(b) * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)),
+    + (b.t12 ? W.orbitalBlades(b) / W.novaEvery * W.orbitalNovaDamageMult(b) : 0)) * W.orbitalExtraUnits(b),
+  mines: (b) => (b.t12 ? W.triadCount : 1) * W.mineDamageMult(b) * (1 + (b.t4 ? W.mineClusterBomblets * W.mineClusterShare * W.mineClusterHitShare : 0)) * W.mineExtraUnits(b) / W.mineCooldown(b),
+  turret: (b) => W.turretAverageActive(b) * W.turretFireRate(b) * W.turretDamageMult(b) * W.turretExtraUnits(b),
+  drones: (b) => (W.droneDamageMult(b) + (W.droneCount(b) - 1) * W.droneWingDamageMult(b)) / W.droneDamageMult(b)
+    * (W.droneFireRate(b) * W.droneDamageMult(b) + (b.t12 ? W.podDamageMult(b) / W.podEvery : 0)) * W.droneExtraUnits(b),
   grenades: (b) => {
     const blast = W.grenadeDamageMult(b);
     const bomblets = b.t4 ? W.grenadeClusterBomblets * W.grenadeClusterShare * W.grenadeClusterHitShare * blast : 0; // most hop onto other enemies
     const cloud = b.t8 ? W.cloudShare * blast : 0; // every cloud tick on one target
-    return W.grenadeCount(b) * (blast + bomblets + cloud) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
+    return W.grenadeCount(b) * (blast + bomblets + cloud + W.grenadeExtraUnits(b) * blast) * (b.t12 ? W.gravityHitShare : 1) / W.grenadeCooldown(b);
   },
-  gas: (b) => (W.gasDamageMult(b) * W.gasHitShare + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
+  gas: (b) => (W.gasDamageMult(b) * (W.gasHitShare + W.gasExtraUnits(b)) + (b.t12 ? W.shroudDamageMult(b) * W.shroudHitShare : 0)) / W.gasTick(b)
     + (b.t8 ? W.pocketDamageMult(b) * W.pocketHitShare / W.pocketEvery : 0),
   flamethrower: (b) => {
     const stream = W.flameStreamDps(b) * W.flameHitShare * W.flameNozzleMult(b); // every nozzle
@@ -993,15 +1323,20 @@ export const POTENTIAL_DPS = {
     const discharge = W.fieldHitShare * d;
     const lash = b.t4 ? W.lashArcs * W.lashShare * W.lashHitShare * d : 0; // arcs at their hit share
     const clap = b.t12 ? discharge * W.overchargeShare * W.overchargeHitShare / W.overchargeStore : 0; // one per overchargeStore discharges
-    return (discharge + lash + clap) / W.fieldCooldown(b);
+    return (discharge + lash + clap + W.fieldExtraUnits(b) * d) / W.fieldCooldown(b);
   },
-  raillance: (b) => W.railLances(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
+  raillance: (b) => W.railLanceMult(b) * W.railDamageMult(b) * W.railUnits(b) / W.railCycle(b),
   glaive: (b) => W.glaiveUnits(b) * W.glaiveDamageMult(b),
   nanites: (b) => W.naniteDamageMult(b) * W.naniteUnits(b) * W.naniteUptime(b) / W.naniteTick(b),
   harpoon: (b) => W.harpoonUnits(b) * W.harpoonDamageMult(b) / W.harpoonCooldown(b),
   // One volley: every charge's wave, rebounds and fractures, plus its share of the Graviton Surge.
   quake: (b) => W.quakeShells(b) * W.quakeDamageMult(b) * W.quakeUnits(b) / W.quakeCooldown(b)
 };
+// Transforms' card-bench realized value (bt-calibration.js) counted back in: their hits are 1 / value as hard,
+// so potential still adds exactly BT_TRANSFORM_DPS per transform. The sprayer twins read the Flamethrower's.
+for (const [id, raw] of Object.entries(POTENTIAL_DPS)) {
+  if (id !== 'cryospray' && id !== 'acidspray') POTENTIAL_DPS[id] = (b) => raw(b) * tfRealized(b);
+}
 
 // Weapon tags: what each damage source *is*. Tag cards boost every source carrying their tag, and
 // upgrade cards show them as chips. Keys are the weapons below, not damage-number sources.
@@ -1061,6 +1396,11 @@ export function tagDamageMult(p, weapon) {
 }
 
 export const areaMult = (p) => p.stats.areaMult ?? 1;
+// VELOCITY COILS (global card): every flying shot (VELOCITY_WEAPONS) moves this much faster. Shots with a
+// fixed lifetime live that much shorter, so their reach stays the same: they just land sooner.
+export const projectileSpeedMult = (p) => globalMult(p, 'velocity');
+// Phase Dash cooldown in seconds: the base, the Cooldown Matrix card and the Void Armory's multiplier.
+export const dashCooldownFor = (p, base = TUNING.dashCooldownBase ?? 1.5) => W.dashCooldown(globalMult(p, 'cooldown'), base) * (p.dashCooldownMult ?? 1);
 
 // Damage source -> the slot weapon whose build sets its numbers.
 export const SOURCE_WEAPON = {
@@ -1173,8 +1513,8 @@ export const stacksForHit = (p, lv, dmg) => (dmg > 0 ? (dmg / Math.max(1e-9, bas
 // on average (1 / decay: the first tick lands before any decay).
 export const statusDecay = (p) => W.statusDecay * Math.max(0.5, 1 - W.durationStep * rk(p, 'statusDuration'));
 // DoT per stack per tick, x base damage applied by the caller (status-effects.js multiplies by baseDamage).
-const DOT_PER_STACK = { fire: () => W.burnPerStack, corrode: () => W.corrodeDotPerStack, shock: () => W.shockDotPerStack };
-const DOT_TUNING = { fire: 'burnDamageMult', corrode: 'corrodeMult', shock: null };
+const DOT_PER_STACK = { fire: () => W.burnPerStack, corrode: () => W.corrodeDotPerStack, shock: () => W.shockDotPerStack, frost: () => W.frostDotPerStack };
+const DOT_TUNING = { fire: 'burnDamageMult', corrode: 'corrodeMult', shock: null, frost: null };
 export const dotPerStack = (p, element) => (DOT_PER_STACK[element] ? baseDamage(p) * DOT_PER_STACK[element]()
   * (DOT_TUNING[element] ? TUNING[DOT_TUNING[element]] ?? 1 : 1) * elementDamageMult(p, element) : 0);
 // Share of a hit's damage that comes back later as its element's DoT (burn, acid, or shock while touching).

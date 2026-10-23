@@ -36,11 +36,14 @@ test('a +5 card that leaps past LV 6 and LV 12 queues both Breakthroughs, lowest
   g.closeUpgradeModal();
   assert.equal(g.handPhase, 'breakthrough');
   assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 6 });
-  g.selectUpgrade(1); // ACROSS THE BOARD
+  assert.equal(g.currentChoices.length, 3, 'three options from the pool');
+  g.selectUpgrade(g.currentChoices.findIndex((c) => c.option === 'boost' || c.option === 'overtuned'));
+  const first = p.breakthroughs.blaster[6];
   assert.equal(g.handPhase, 'breakthrough', 'the LV 12 Breakthrough follows at once');
   assert.deepEqual(g.breakthrough, { weaponId: 'blaster', level: 12 });
-  g.selectUpgrade(0);
-  assert.deepEqual(p.breakthroughs.blaster, { 6: 'boost', 12: 'transform' });
+  const tfCard = g.currentChoices.find((c) => c.kind === 'transform');
+  g.selectUpgrade(g.currentChoices.indexOf(tfCard));
+  assert.deepEqual(p.breakthroughs.blaster, { 6: first, 12: tfCard.option });
   assert.equal(g.state, 'PLAYING');
   assert.deepEqual(pendingBreakthroughs(p, 'blaster'), []);
 });
@@ -56,7 +59,7 @@ test('Breakthrough cards name their weapon, show the DPS gain, and are one-shot'
   assert.match(t.summary, /Vortex Singularity/);
   assert.match(t.headline, /\+22% DPS/);
   assert.match(b.summary, /Vortex Singularity/);
-  assert.ok(Math.abs(b.dpsGain - 0.18) < 1e-6, 'Across the Board: +18% damage, plus utility ranks');
+  assert.ok(Math.abs(b.dpsGain - 0.08) < 1e-6, 'Across the Board: +8% damage, plus utility ranks');
   assert.equal(applyBreakthrough(p, 'singularity', 6, 'transform'), true);
   assert.equal(applyBreakthrough(p, 'singularity', 6, 'boost'), false, 'one choice per milestone');
   discardWeapon(p, 'singularity');
@@ -70,7 +73,7 @@ test('every transform names its weapon in the summary', () => {
     cryospray: 'Cryo Sprayer', acidspray: 'Acid Sprayer',
     shockfield: 'Electric Shield Field', raillance: 'Rail Lance',
     glaive: 'Glaive Disc',
-    nanites: 'Nanite Swarm', harpoon: 'Claw Harpoon',
+    nanites: 'Nanite Swarm', harpoon: 'Drill Driver',
     quake: 'Graviton Mortar' };
   for (const id of Object.keys(TRANSFORMS)) assert.ok(NAMES[id], `${id} needs a name to check`);
   for (const [id, byLevel] of Object.entries(TRANSFORMS)) {
@@ -174,4 +177,43 @@ test('Hawking Cascade minis drift onto their own nearby enemies, and spread out 
   g.spawnCascade(sg);
   assert.equal(g.singularities.length, W.cascadeMinis);
   assert.ok(g.singularities.every((s) => Math.hypot(s.vx, s.vy) > 0), 'with nobody near they still burst out');
+});
+
+// Regression (v0.46.0 playtest): with nobody behind the ship the twin stacked on the first core, so the
+// pair flew as one. They must fly apart whatever the enemy layout, and never merge.
+test('Twin Singularities fly apart and stay two distinct cores for their whole life', async () => {
+  const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+  const { makeBuild } = await import('../js/weapon-levels.js');
+  for (const at of [[[300, 0], [340, 40], [320, -50]], [[300, 0], [-300, 20]], [[250, 0]]]) {
+    const { g, p } = await transformFight('singularity', 6, at);
+    p.breakthroughs = { singularity: { 6: 'twin' } };
+    const b = makeBuild('singularity', 6, {}, { 6: 'twin' });
+    g.singularities = [];
+    g.fireSingularity(b);
+    assert.equal(g.singularities.length, 2);
+    const [s1, s2] = g.singularities;
+    const turn = Math.abs(Math.atan2(Math.sin(Math.atan2(s1.vy, s1.vx) - Math.atan2(s2.vy, s2.vx)), Math.cos(Math.atan2(s1.vy, s1.vx) - Math.atan2(s2.vy, s2.vx))));
+    assert.ok(turn > 1.2, `${JSON.stringify(at)}: launched ${turn.toFixed(2)} rad apart`);
+    let ticks = 0;
+    while (g.singularities.includes(s1) && g.singularities.includes(s2)) {
+      g.updateSingularities(1 / 60);
+      ticks++;
+      const d = Math.hypot(s1.x - s2.x, s1.y - s2.y);
+      if (ticks >= 15) assert.ok(d >= W.twinMinSeparation * 0.85, `${JSON.stringify(at)}: ${d.toFixed(0)} px apart at tick ${ticks}`);
+    }
+    assert.ok(ticks > 100, 'both lived out their life');
+  }
+});
+
+test('singularity cores never pull each other: a still pair keeps its spacing', async () => {
+  const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+  const { g, p } = await transformFight('singularity', 6, []);
+  const core = (x) => ({ x, y: p.y, vx: 0, vy: 0, radius: 22, pullRadius: 300, damage: 1, collapseRadius: 255, collapseDamage: 1, aftershock: 0, cascade: null, life: 2, maxLife: 2, spin: 0, hue: 290 });
+  g.singularities = [core(p.x - 100), core(p.x + 100)];
+  for (let t = 0; t < 60; t++) g.updateSingularities(1 / 60);
+  const [a, c] = g.singularities;
+  assert.ok(Math.abs(Math.hypot(a.x - c.x, a.y - c.y) - 200) < 1e-9, 'no pull between cores');
+  g.singularities = [core(p.x - 20), core(p.x + 20)];
+  for (let t = 0; t < 60; t++) g.updateSingularities(1 / 60);
+  assert.ok(Math.hypot(g.singularities[0].x - g.singularities[1].x, 0) >= W.twinMinSeparation * 0.95, 'two cores dropped together are eased apart');
 });

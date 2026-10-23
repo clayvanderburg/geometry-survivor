@@ -59,7 +59,7 @@ export const WEAPONS = [
   {
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
     color: '#b6ff4a',
-    summary: 'Gunship drones fly in formation behind the hull and fire at nearby targets.'
+    summary: 'Gunship drones fly in formation, a pair off your nose and a row behind the hull, and fire at nearby targets.'
   },
   {
     id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
@@ -74,7 +74,7 @@ export const WEAPONS = [
   {
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
-    summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+    summary: 'A nozzle spins round the ship spraying a short cone of fire. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close. Always FIRE.'
   },
   {
     id: 'cryospray', name: 'Cryo Sprayer', hudName: 'Cryo Sprayer', levelId: 'cryospray', levelKey: 'cryospray', category: 'PRIMARY', tagSources: ['cryo'],
@@ -107,9 +107,9 @@ export const WEAPONS = [
     summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
   },
   {
-    id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
+    id: 'harpoon', name: 'Drill Driver', hudName: 'Drill Driver', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
     color: '#ffcc00',
-    summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
+    summary: 'Launches your front drills on a cable where you aim. Each one bores through everything on its line on the way out and again as it reels back, and drills through rock (mining it as it goes).'
   },
   {
     id: 'quake', name: 'Graviton Mortar', hudName: 'Graviton Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
@@ -142,7 +142,7 @@ export const STARTING_WEAPONS = ['blaster'];
 
 // The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
 // is remembered on this device and pre-selected next time.
-export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive'];
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive', 'drones', 'turret'];
 export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
 export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
 export function readStartWeapon(storage) {
@@ -160,7 +160,7 @@ export function weaponTags(id) {
   return tags;
 }
 
-export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 6));
+export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 5));
 
 // Owned weapons in slot order. Players built before loadouts existed (old test fixtures) own the blaster
 // plus every weapon with a level, so their behaviour is unchanged.

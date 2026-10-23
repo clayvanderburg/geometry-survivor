@@ -60,10 +60,11 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   for (const id of ['damage', 'maxHp', 'critChance', 'moveSpeed']) assert.equal(r[id].run, '—', `${id}: no cards yet`);
 
   install(p, 'overdrive', 2);   // x1.12 damage per level
-  install(p, 'thrusters');      // a Phase Nova level (dash -0.14 s)
+  install(p, 'thrusters');      // a Phase Nova level: the shockwave only (v0.46)
+  install(p, 'cooldown_matrix'); // +10% recharge, the dash included
   install(p, 'move_speed');     // +10% speed
   install(p, 'shield_capacitor'); // +20 shield
-  install(p, 'crit_chance', 2); // +5% each
+  install(p, 'crit_chance', 2); // +20% each
   install(p, 'tag_explosive');
   install(p, 'firerate', 3);    // Autocannon Hyper-Capacitor: lives on the weapon build, not the base stat
   r = rowsById(p);
@@ -72,10 +73,10 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.moveSpeed.run, '+10%');
   assert.equal(r.maxHp.run, '+20');
   assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 10 + 20)));
-  assert.equal(r.critChance.run, '+10%');
-  assert.equal(r.critChance.total, '17%');
-  assert.equal(r.tag_explosive.run, '+30%');
-  assert.equal(r.dash.run, '−0.13 s', "a Phase Nova level (-0.14 s) after the armory's -10% dash cooldown");
+  assert.equal(r.critChance.run, '+40%');
+  assert.equal(r.critChance.total, '47%');
+  assert.equal(r.tag_explosive.run, '+25%');
+  assert.equal(r.dash.run, '−0.12 s', "a Cooldown Matrix rank (1.5 s / 1.1) after the armory's -10% dash cooldown");
   assert.equal(r.dash.up.run, true);
   assert.match(r.fireRate.run, /^\+\d+%$/, 'fire-rate cards count in THIS RUN');
   assert.equal(r.fireRate.up.run, true);

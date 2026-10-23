@@ -418,8 +418,8 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.lineTo(4, 8.5);
       ctx.stroke();
 
-      // Claw Harpoon: the port drill is out on its tether (js/claw-harpoon.js), so only the empty jaws show.
-      if (arm === 0 && p.harpoonOut) {
+      // Drill Driver: this arm's drill is launched on its cable (js/drill-driver.js), so only the empty jaws show.
+      if (p.drillOut?.[arm]) {
         ctx.restore();
         continue;
       }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Weapon loadout: starting weapon (Autocannon), 6 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
+// Weapon loadout: starting weapon (Autocannon), 5 slots, loadout-gated card pool, NEW WEAPON cards (chance + pity),
 // weapon picks, discards, Rocket Pods as a leveled weapon, and the stepped XP curve. The balance
 // harness stubs the browser and builds a real Game, so resetRun and the level-up flow are the game's own.
 const h = await import('../tools/balance/harness.mjs');
@@ -42,14 +42,14 @@ function lcg(seed = 7) {
 
 const fill = (p, ids) => ids.forEach((id) => assert.ok(acquireWeapon(p, id), `equip ${id}`));
 
-test('a run starts with Autocannon only in 1 of 6 slots; Rocket Pods join through NEW WEAPON', () => {
+test('a run starts with Autocannon only in 1 of 5 slots; Rocket Pods join through NEW WEAPON', () => {
   const p = freshGame().player;
   assert.deepEqual(p.loadout, ['blaster']);
   assert.ok(!(p.upgradeLevels.rockets > 0));
   assert.ok(!(p.weapons.rockets > 0));
   assert.equal(weaponSlots(), DEFAULT_TUNING.weaponSlots);
-  assert.equal(DEFAULT_TUNING.weaponSlots, 6);
-  assert.equal(freeSlots(p), 5);
+  assert.equal(DEFAULT_TUNING.weaponSlots, 5);
+  assert.equal(freeSlots(p), 4);
   assert.ok(rollWeaponPicks(p, 99).some((c) => c.weaponId === 'rockets'), 'rockets are in the NEW WEAPON pool');
   assert.equal(p.xpToNext, xpToNextLevel(1));
   assert.ok(p.base, 'run-start snapshot for discards');
@@ -69,7 +69,7 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   // come only from NEW WEAPON cards). It is always SHOCK, so it has no element cards.
   acquireWeapon(p, 'lightning');
   const ids = eligibleUpgrades(p).map((u) => u.id);
-  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'lightning_reach', 'tag_electric']) assert.ok(ids.includes(id), id);
+  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'tag_electric']) assert.ok(ids.includes(id), id);
   assert.ok(!ids.some((id) => /^lightning_(fire|frost|corrode|shock)$/.test(id)), 'no Tesla Arc element cards');
   assert.ok(!ids.includes('lightning'), 'equip line is never offered');
   assert.ok(!ids.includes('evo_tempest'), 'Storm Protocol still needs missiles');
@@ -91,14 +91,15 @@ test('equipped weapon level-ups are weighted so a typical hand is mostly about y
   assert.equal(upgradeKind(UPGRADE_BY_ID.blaster_fire), 'element');
   assert.equal(upgradeKind(UPGRADE_BY_ID.status_potency), 'status');
   assert.equal(upgradeKind(UPGRADE_BY_ID.overdrive), 'general');
-  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'tag');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_area), 'general', 'Field Amplifier is the global AREA card (v0.46)');
+  assert.equal(upgradeKind(UPGRADE_BY_ID.tag_kinetic), 'tag');
   assert.equal(upgradeKind(UPGRADE_BY_ID.evo_pulsar), 'evolution');
 });
 
 const NO_NEW_WEAPON = { newWeaponChanceBy1: 0, newWeaponChanceBy2: 0, newWeaponChanceBy3: 0, newWeaponChanceBy4: 0, newWeaponChanceBy5: 0 };
 const ALWAYS_NEW_WEAPON = { newWeaponChanceBy1: 1, newWeaponChanceBy2: 1, newWeaponChanceBy3: 1, newWeaponChanceBy4: 1, newWeaponChanceBy5: 1 };
 
-test('NEW WEAPON chance depends on weapons owned: 80/70/60/40/30%, none with no free slot', () => {
+test('NEW WEAPON chance depends on weapons owned: 80/70/60/40%, none with all 5 slots full', () => {
   assert.deepEqual([1, 2, 3, 4, 5].map((n) => DEFAULT_TUNING[`newWeaponChanceBy${n}`]), [0.8, 0.7, 0.6, 0.4, 0.3]);
   assert.deepEqual([1, 2, 3, 4, 5].map(newWeaponChanceFor), [0.8, 0.7, 0.6, 0.4, 0.3]);
   withTuning({ newWeaponChanceBy3: 0.15 }, () => assert.equal(newWeaponChanceFor(3), 0.15, 'read live from TUNING'));
@@ -108,7 +109,7 @@ test('NEW WEAPON chance depends on weapons owned: 80/70/60/40/30%, none with no 
   }
   assert.ok(!('newWeaponChance' in DEFAULT_TUNING), 'the flat chance is gone');
   // Sampled rate per owned count (pity off), and 0 with every slot full.
-  const loadouts = [[], ['rockets'], ['rockets', 'missiles'], ['rockets', 'missiles', 'lightning'], ['rockets', 'missiles', 'lightning', 'orbitals']];
+  const loadouts = [[], ['rockets'], ['rockets', 'missiles'], ['rockets', 'missiles', 'lightning']];
   loadouts.forEach((extra, i) => {
     const p = freshGame().player;
     fill(p, extra);
@@ -120,7 +121,7 @@ test('NEW WEAPON chance depends on weapons owned: 80/70/60/40/30%, none with no 
     assert.ok(Math.abs(offered / 2000 - want) < 0.04, `${i + 1} owned: ${offered / 20}% vs ${want * 100}%`);
   });
   const full = freshGame().player;
-  fill(full, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
+  fill(full, ['rockets', 'missiles', 'lightning', 'orbitals']);
   withTuning(ALWAYS_NEW_WEAPON, () => { for (let k = 0; k < 50; k++) assert.ok(!rollLevelUpHand(full, 3).some((c) => c.isNewWeapon)); });
 });
 
@@ -157,10 +158,10 @@ test('with one weapon NEW WEAPON is guaranteed on the 2nd hand in a row; with tw
   });
 });
 
-test('six weapons fill the loadout: no more NEW WEAPON cards and no seventh weapon', () => {
+test('five weapons fill the loadout: no more NEW WEAPON cards and no sixth weapon', () => {
   const p = freshGame().player;
-  fill(p, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
-  assert.equal(ownedWeapons(p).length, 6);
+  fill(p, ['rockets', 'missiles', 'lightning', 'orbitals']);
+  assert.equal(ownedWeapons(p).length, 5);
   assert.equal(freeSlots(p), 0);
   assert.equal(canOfferNewWeapon(p), false);
   assert.equal(acquireWeapon(p, 'drones'), false);
@@ -212,7 +213,7 @@ test('weapon pick cards preview exact LV 1 stats, tags and summary without touch
     assert.match(html.html, /EQUIP/);
   }
   const nw = describeNewWeapon(freshGame().player);
-  assert.match(nw.levelHtml, /SLOT 2 OF 6/, 'the slot it fills (the slot bonus is the rest of the card)');
+  assert.match(nw.levelHtml, /SLOT 2 OF 5/, 'the slot it fills (the slot bonus is the rest of the card)');
   assert.match(renderUpgradeCard(nw, '[2]').className, /new-weapon-card/);
   assert.equal(rollWeaponPicks(freshGame().player, 3).length, 3);
 });
@@ -237,7 +238,7 @@ test('discarding a weapon removes its level, its own upgrades and evolutions, an
   assert.equal(p.upgradeLevels.rockets_frost, 2, 'other weapons keep their elements');
   assert.equal(p.upgradeLevels.tag_electric, 2, 'tag cards are general and stay');
   assert.equal(p.upgradeLevels.overdrive, 2);
-  assert.equal(freeSlots(p), 3);
+  assert.equal(freeSlots(p), 2);
   assert.equal(canOfferNewWeapon(p), true);
 
   discardWeapon(p, 'lightning');
@@ -389,7 +390,7 @@ test('the XP curve is a line that bends smoothly upward, driven by TUNING', () =
 test('when everything is maxed and the loadout is full, level-ups fall back to a full shield repair', () => {
   const g = freshGame();
   const p = g.player;
-  fill(p, ['rockets', 'missiles', 'lightning', 'orbitals', 'mines']);
+  fill(p, ['rockets', 'missiles', 'lightning', 'mines']);
   for (const u of UPGRADE_POOL) p.upgradeLevels[u.id] = u.maxLevel;
   // Every weapon is LV 18, so OVERCHARGE cards still come; with those banished nothing is left.
   assert.ok(rollLevelUpHand(p, 3).length > 0, 'OVERCHARGE cards are still offered');
@@ -459,7 +460,9 @@ test('Volatile Shatter is a passive: no slot, no NEW WEAPON pick, offered in nor
   // It shows up in ordinary hands, and rolls its rarity jumps like other lines.
   let offered = 0;
   withRandom(() => { for (let i = 0; i < 300; i++) if (rollLevelUpHand(p, 3).some((c) => c.id === 'shrapnel')) offered++; }, lcg(21));
-  assert.ok(offered > 20, `Shatter in ${offered} of 300 hands`);
+  // ~5% of 1-weapon hands: weapon cards hold handWeaponShare of a hand (upgrades.js handWeights), up from ~37%
+  // of a 1-weapon hand on raw weights, so each general card turns up a little less at run start.
+  assert.ok(offered > 10, `Shatter in ${offered} of 300 hands`);
   const others = UPGRADE_POOL.filter((u) => u.id !== 'shrapnel');
   const rare = withRandom(() => rollUpgrades({ ...p, upgradeLevels: Object.fromEntries(others.map((u) => [u.id, u.maxLevel])), banished: Object.fromEntries(others.map((u) => [u.id, true])) }, 1), () => 0.02);
   assert.equal(rare[0].id, 'shrapnel');

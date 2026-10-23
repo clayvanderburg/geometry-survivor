@@ -11,8 +11,14 @@
 // peers at that level:
 //   index = vsTarget / median(vsTarget of the curve weapons with enough data at that level)
 // index > 1 + OUTLIER_BAND -> "needs nerf", index < 1 - OUTLIER_BAND -> "needs buff".
+//
+// Shares: a weapon's dmgShare / killShare (overall and per level) are of WEAPON damage and kills only, without
+// the non-weapon groups (run-stats.js NON_WEAPON_GROUPS: Supernova, ram, ...), which are listed with their share
+// of all damage. A Supernova wipes a screen at once (~15% of all damage), so leaving it in diluted every
+// weapon's share, and weak builds bomb more. allDmgShare / allKillShare keep the share of everything.
 
 import { armoryTier, ARMORY_TIERS } from './stats-rules.js';
+import { NON_WEAPON_GROUPS } from './run-stats.js';
 
 export const SUMMARY_SCHEMA = 'vexolith-stats-summary/1';
 export const OUTLIER_BAND = 0.2;
@@ -74,7 +80,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
 
   // --- Weapons and other damage groups -----------------------------------------------------------
   const groups = new Map();
-  let allDamage = 0, allKills = 0;
+  let allDamage = 0, allKills = 0, weaponDamage = 0, weaponKills = 0;
   for (const r of list) {
     for (const [id, w] of Object.entries(r.weapons || {})) {
       const g = groups.get(id) || { id, runs: 0, dmg: 0, kills: 0, owned: 0, isWeapon: false, curve: false, levels: new Map(), acquiredAt: [] };
@@ -84,6 +90,10 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       g.kills += w.kills || 0;
       allDamage += w.dmg || 0;
       allKills += w.kills || 0;
+      if (!NON_WEAPON_GROUPS.has(id)) {
+        weaponDamage += w.dmg || 0;
+        weaponKills += w.kills || 0;
+      }
       if (w.lv && typeof w.lv === 'object') {
         g.isWeapon = true;
         g.curve ||= w.curve === 1;
@@ -91,7 +101,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
         if (Number.isFinite(w.from)) g.acquiredAt.push(w.from);
         for (const [lv, row] of Object.entries(w.lv)) {
           const L = Number(lv);
-          const b = g.levels.get(L) || { level: L, runs: 0, secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, target: 0 };
+          const b = g.levels.get(L) || { level: L, runs: 0, secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, wAllDmg: 0, wAllKills: 0, target: 0 };
           g.levels.set(L, b);
           b.runs++;
           b.secs += row[0] || 0;
@@ -100,6 +110,9 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
           b.allDmg += row[3] || 0;
           b.kills += row[4] || 0;
           b.allKills += row[5] || 0;
+          // Weapon-only totals (row[7], row[8]); runs from before they were recorded fall back to all damage.
+          b.wAllDmg += row.length >= 9 ? row[7] || 0 : row[3] || 0;
+          b.wAllKills += row.length >= 9 ? row[8] || 0 : row[5] || 0;
           if (row[6] > 0) b.target = row[6];
         }
       }
@@ -114,7 +127,8 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       const vsTarget = b.target > 0 && normDps !== null ? normDps / b.target : null;
       const row = {
         level: b.level, runs: b.runs, seconds: round(b.secs, 1), dps: round(ratio(b.dmg, b.secs)), normDps: round(normDps, 3),
-        target: b.target || null, vsTarget: round(vsTarget, 3), dmgShare: round(ratio(b.dmg, b.allDmg), 4), killShare: round(ratio(b.kills, b.allKills), 4),
+        target: b.target || null, vsTarget: round(vsTarget, 3), dmgShare: round(ratio(b.dmg, b.wAllDmg), 4), killShare: round(ratio(b.kills, b.wAllKills), 4),
+        allDmgShare: round(ratio(b.dmg, b.allDmg), 4), allKillShare: round(ratio(b.kills, b.allKills), 4),
         enough: enough(b), index: null, flag: null
       };
       if (g.curve && row.enough && vsTarget !== null) {
@@ -123,9 +137,13 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       }
       return row;
     });
+    const weaponGroup = !NON_WEAPON_GROUPS.has(g.id);
     return {
       id: g.id, isWeapon: g.isWeapon, curve: g.curve, runs: g.runs, runShare: round(ratio(g.runs, n), 4),
-      damage: Math.round(g.dmg), kills: g.kills, dmgShare: round(ratio(g.dmg, allDamage), 4), killShare: round(ratio(g.kills, allKills), 4),
+      damage: Math.round(g.dmg), kills: g.kills,
+      // Weapons: share of weapon damage / kills; the non-weapon groups (Supernova, ram, ...): share of everything.
+      dmgShare: round(ratio(g.dmg, weaponGroup ? weaponDamage : allDamage), 4), killShare: round(ratio(g.kills, weaponGroup ? weaponKills : allKills), 4),
+      allDmgShare: round(ratio(g.dmg, allDamage), 4), allKillShare: round(ratio(g.kills, allKills), 4),
       ownedSeconds: g.isWeapon ? round(g.owned, 1) : null, dps: g.isWeapon ? round(ratio(g.dmg, g.owned)) : null,
       medianAcquiredAt: g.isWeapon ? round(median(g.acquiredAt), 1) : null,
       levels: lvRows, vsTarget: null, index: null, flag: null
@@ -223,6 +241,27 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
   });
   const mean = (f) => (n ? round(sum(list.map(f)) / n, 2) : null);
 
+  // --- Supernova bombs (runs from before bombs were recorded are left out) ----------------------
+  const bombRuns = list.filter((r) => Array.isArray(r.bombs));
+  const bombsUsed = bombRuns.map((r) => r.bombs[0] || 0);
+  const bombKills = sum(bombRuns.map((r) => r.bombs[1] || 0));
+  // --- Boss escapes: how often each boss got away, against hulls of that kind spawned (split pieces count) ---
+  const bossEscapes = {};
+  for (const r of list) {
+    for (const [kind, n] of Object.entries(r.bossEscapes || {})) {
+      const row = bossEscapes[kind] || (bossEscapes[kind] = { escaped: 0, spawned: 0 });
+      row.escaped += n;
+    }
+  }
+  for (const kind of Object.keys(bossEscapes)) bossEscapes[kind].spawned = sum(list.map((r) => (Array.isArray(r.enemies?.[kind]) ? r.enemies[kind][0] : 0)));
+
+  const bombs = {
+    runs: bombRuns.length,
+    perRun: { median: median(bombsUsed), mean: bombRuns.length ? round(sum(bombsUsed) / bombRuns.length, 2) : null },
+    killsPerBomb: round(ratio(bombKills, sum(bombsUsed)), 1),
+    weaponDamageShare: round(ratio(weaponDamage, allDamage), 4)
+  };
+
   return {
     schema: SUMMARY_SCHEMA,
     version,
@@ -244,8 +283,10 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       score: { median: median(list.map((r) => r.score)) },
       pace
     },
-    gold: { earned: mean((r) => r.gold?.earned || 0), spent: mean((r) => r.gold?.spent || 0), rerolls: mean((r) => r.gold?.rerolls || 0), locks: mean((r) => r.gold?.locks || 0), banishes: mean((r) => r.gold?.banishes || 0) },
+    gold: { earned: mean((r) => r.gold?.earned || 0), spent: mean((r) => r.gold?.spent || 0), rerolls: mean((r) => r.gold?.rerolls || 0), locks: mean((r) => r.gold?.locks || 0), banishes: mean((r) => r.gold?.banishes || 0), skips: mean((r) => r.gold?.skips || 0) },
     weapons,
+    bombs,
+    bossEscapes,
     sources,
     enemies,
     deaths,

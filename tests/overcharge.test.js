@@ -67,9 +67,11 @@ test('overcharge: crit chance stops at 100%', () => {
   const p = freshPlayer();
   maxWeapons(p, ['blaster']);
   maxOut(p, 'crit_chance');
-  assert.ok(eligibleUpgrades(p).some((u) => u.id === 'crit_chance'));
-  p.stats.critChance = 1;
+  // Five +20% ranks on the base 5% already reach 100%: no overcharge past it.
+  assert.ok(p.stats.critChance >= 1);
   assert.ok(!eligibleUpgrades(p).some((u) => u.id === 'crit_chance'));
+  p.stats.critChance = 0.6; // e.g. a discard-free run that took fewer ranks: below 100% it overcharges
+  assert.ok(eligibleUpgrades(p).some((u) => u.id === 'crit_chance'));
 });
 
 test('overcharge: hands keep dealing cards when everything else is maxed; cards and a discard keep the levels', () => {
