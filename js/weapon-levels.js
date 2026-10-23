@@ -26,18 +26,39 @@ export const BT_BOOST_DPS = 1.08;
 // spin, raw damage for the ones that live on hits.
 // POWER stats get none: +1 Prism Split, fire rate and damage at once would multiply far past a transform.
 export const BT_BOOST_RANKS = 1;
-// OVERTUNED CORE: damage only (DRG: Survivor's clean overclocks), a bigger number than a transform's potential
-// (transforms are calibrated on realized damage, js/bt-calibration.js) to pay for doing nothing new.
-// BT_OVERTUNED_DPS is the default; OVERTUNED_DPS[weapon] = [LV 6, LV 12, LV 18] is each weapon's own value, set on
-// the blend bench so Overtuned Core realizes about BT_OVERTUNED_BAND x Across the Board at every milestone (Clay,
-// v0.46: neither flat is a trap). Weapons whose output barely follows damage (cones, fields, auras) need a much
-// bigger number; the card shows it. Between milestones the value follows the weapon level, like TF_REALIZED.
+// OVERTUNED CORE: the POWER flat (DRG: Survivor's clean overclocks): more damage output, no utility and nothing
+// new, a bigger number than a transform's potential (transforms are calibrated on realized damage,
+// js/bt-calibration.js) to pay for doing nothing new. BT_OVERTUNED_DPS is the default: x1.3 damage per hit.
+// OVERTUNED[weapon] is each weapon's own version, set on the blend bench (`node tools/balance/bt-bench.mjs`) so
+// Overtuned Core realizes about BT_OVERTUNED_BAND x Across the Board at every milestone (Clay, v0.46: neither flat
+// is a trap): `dmg` = [LV 6, LV 12, LV 18] damage per hit (between milestones it follows the weapon level, like
+// TF_REALIZED), and on weapons whose swarm output barely follows hit damage (cones, clouds, fields, mines: the
+// pack dies to the hits it already takes, so only more attacks or more coverage count) `ranks` free ranks of one
+// POWER stat. Each pick adds them, the card names both, and potential DPS counts both (weapon-scaling.js).
 export const BT_OVERTUNED_DPS = 1.3;
 export const BT_OVERTUNED_BAND = Object.freeze([1, 1.15]);
-export const OVERTUNED_DPS = {};
+export const OVERTUNED = Object.freeze({
+  blaster: { stat: 'rate', ranks: 1, dmg: [1.2, 1, 1] },
+  missiles: { dmg: [1.4, 1.45, 1.4] },
+  singularity: { stat: 'cooldown', ranks: 1, dmg: [1.1, 1, 1.1] },
+  orbitals: { stat: 'count', ranks: 1, dmg: [1.2, 1.2, 1.2] },
+  mines: { stat: 'rate', ranks: 2, dmg: [1, 1, 1] },
+  turret: { dmg: [1.5, 1.45, 1.3] },
+  grenades: { stat: 'rate', ranks: 1, dmg: [1.15, 1.15, 1.6] },
+  gas: { stat: 'rate', ranks: 3, dmg: [1.2, 1.2, 1.2] },
+  flamethrower: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
+  cryospray: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
+  acidspray: { stat: 'nozzles', ranks: 1, dmg: [1, 1, 1] },
+  shockfield: { stat: 'recharge', ranks: 2, dmg: [1, 1, 1] },
+  raillance: { stat: 'rate', ranks: 1, dmg: [1, 1, 1] },
+  nanites: { stat: 'rate', ranks: 3, dmg: [1, 1, 1] },
+  harpoon: { dmg: [1.5, 1.35, 1.3] },
+  quake: { stat: 'count', ranks: 1, dmg: [1, 1, 1] }
+});
 const OT_LEVELS = [6, 12, 18];
+// Overtuned Core's damage per hit on this weapon at this level.
 export function overtunedAt(id, lv) {
-  const v = OVERTUNED_DPS[id];
+  const v = OVERTUNED[id]?.dmg;
   if (!v) return BT_OVERTUNED_DPS;
   if (lv <= OT_LEVELS[0]) return v[0];
   if (lv >= OT_LEVELS[2]) return v[2];
@@ -572,7 +593,22 @@ export const BT_FLATS = Object.freeze({
 });
 // `id` / `lv`: the weapon and its level (the card shows that weapon's own number).
 export const overtunedPct = (id, lv) => Math.round((overtunedAt(id, lv) - 1) * 100);
-export const overtunedSummary = (weaponName, id, lv) => `${weaponName}: +${overtunedPct(id, lv)}% damage on every hit. No new tricks, no extras: just a hotter core.`;
+// The free POWER ranks of one Overtuned Core pick on this weapon, with the card they come from (null if none).
+export function overtunedRanks(id) {
+  const o = OVERTUNED[id];
+  const card = o?.ranks && (STAT_CARDS[id] || []).find((c) => c.stat === o.stat);
+  return card ? { stat: o.stat, ranks: o.ranks, card } : null;
+}
+const overtunedParts = (id, lv) => {
+  const pr = overtunedRanks(id);
+  const pct = overtunedPct(id, lv);
+  return [pr && `+${pr.ranks} ${pr.card.name} rank${pr.ranks > 1 ? 's' : ''}`, (pct || !pr) && `${pct >= 0 ? '+' : ''}${pct}% damage`].filter(Boolean);
+};
+export const overtunedHeadline = (id, lv) => overtunedParts(id, lv).join(', ').toUpperCase();
+export const overtunedSummary = (weaponName, id, lv) => {
+  const [a, b] = overtunedParts(id, lv);
+  return `${weaponName}: ${b ? `${a} and ${b}` : a}${overtunedRanks(id) ? ' (free, on top of your cards)' : ' on every hit'}. No new tricks, no utility: just a hotter core.`;
+};
 // Draw weights of a transform: at its home milestone, and at any other one.
 export const BT_HOME_WEIGHT = 3;
 export const BT_AWAY_WEIGHT = 1;
@@ -761,6 +797,8 @@ export function makeBuild(id, lv, ranks = {}, bt = {}, replicator = 0, g = null)
   }
   const r = {};
   for (const c of STAT_CARDS[id] || []) r[c.stat] = (ranks[c.stat] || 0) + (POWER_STATS.has(c.stat) ? 0 : atb * BT_BOOST_RANKS);
+  const otr = ot && overtunedRanks(id);
+  if (otr) r[otr.stat] += ot * otr.ranks;
   const cs = COUNT_STATS[id];
   if (cs && replicator > 0) r[cs.stat] = (r[cs.stat] || 0) + replicatorBonus(id, ranks[cs.stat], replicator);
   // t4 / t8 / t12: the weapon's first, second and third transform (home LV 6 / 12 / 18) is installed,

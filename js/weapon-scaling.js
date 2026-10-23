@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, overtunedAt, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -28,7 +28,13 @@ import { tfRealized } from './bt-calibration.js';
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+// Overtuned Core's free POWER ranks count at what they add on this build (its hit damage is in hitMult).
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export function overtunedRankGain(b) {
+  const o = b.ot && overtunedRanks(b.id);
+  if (!o || !POTENTIAL_DPS[b.id]) return 1;
+  return POTENTIAL_DPS[b.id](b) / POTENTIAL_DPS[b.id]({ ...b, r: { ...b.r, [o.stat]: b.r[o.stat] - b.ot * o.ranks } });
+}
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
