@@ -48,8 +48,9 @@ export function summaryArmory(value) {
 
 export const runKey = (version, date, id) => `${RUNS_PREFIX}${version}/${date.toISOString().slice(0, 10)}/${id}.json`;
 export const summaryKey = (version, armory = null) => `${SUMMARY_PREFIX}${version}${armory ? `~${armory}` : ''}.json`;
-// Bump when the cached summary's shape changes, so stale caches are recomputed (2: armory tiers).
-export const SUMMARY_CACHE_VERSION = 2;
+// Bump when the cached summary's shape changes, so stale caches are recomputed (2: armory tiers; 3: the same-time
+// index, levelIndex and vsAutocannon).
+export const SUMMARY_CACHE_VERSION = 3;
 export const runsPrefix = (version) => (version === ALL ? RUNS_PREFIX : `${RUNS_PREFIX}${version}/`);
 
 // ?version= for the summary: a known game version or 'all' (the default). Returns { version } or { error }.

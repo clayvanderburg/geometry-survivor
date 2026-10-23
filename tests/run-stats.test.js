@@ -66,9 +66,9 @@ test('DPS per weapon level: seconds, damage, base-damage units and the share whi
   assert.equal(w.owned, 30);
   assert.equal(w.from, 0);
   assert.deepEqual(w.tl, [[0, 1], [10, 2]]);
-  // [secs, dmg, dmg / base, all damage, kills, all kills, DPS_TARGET, all weapon damage, all weapon kills]
-  assert.deepEqual(w.lv[1], [10, 300, 30, 400, 1, 1, Math.round(DPS_TARGET(1) * 100) / 100, 400, 1]);
-  assert.deepEqual(w.lv[2], [20, 400, 20, 400, 0, 0, Math.round(DPS_TARGET(2) * 100) / 100, 400, 0]);
+  // [secs, dmg, dmg / base, all damage, kills, all kills, DPS_TARGET, all weapon damage, all weapon kills, mean run time held]
+  assert.deepEqual(w.lv[1], [10, 300, 30, 400, 1, 1, Math.round(DPS_TARGET(1) * 100) / 100, 400, 1, 5]);
+  assert.deepEqual(w.lv[2], [20, 400, 20, 400, 0, 0, Math.round(DPS_TARGET(2) * 100) / 100, 400, 0, 20]);
   assert.equal(s.weapons.blaster.lv, undefined, 'damage without a level is a plain group');
 });
 
