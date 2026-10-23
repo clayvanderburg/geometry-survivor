@@ -16,14 +16,18 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
-      { type: 'new', text: 'Breakthroughs: pick a transform, Overtuned Core (raw power) or Across the Board (+1-2 utility ranks; not on Drones or Glaive). Cards state the effect once, potential DPS below.' },
-      { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
+      { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
+      { type: 'balance', text: 'Breakthrough cards state what you get once; potential DPS is a stat below. Escort Drones and Glaive Discs offer Overtuned Core and two transforms (no Across the Board).' },
+      { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
+      { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires the ship\'s drills out on a cable and reels them back, boring through everything both ways. Nothing is pulled in any more.' },
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
       { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
+      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails keep full power but are RARE finds, framed in a glowing border. Tag cards give +20/25/25% and show the passive they boost.' },
+      { type: 'balance', text: 'Crits are reworked, FROST now bites (frostbite damage, chilled enemies take more), Tesla Arc fires twice as often and the Flamethrower spins faster.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
-      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails keep full power but are RARE finds, framed in a glowing border. Crits are reworked, FROST bites, and Tesla Arc fires twice as often.' },
-      { type: 'new', text: 'Bosses escape after 3 minutes, so kill them in time for an Alien Tech Cache. Lancers telegraph clearly: the aim line locks and flashes, then sweeps only to the marked side.' }
+      { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' },
+      { type: 'balance', text: 'Lancers telegraph clearly: a bright aim line locks and flashes white before firing, then sweeps only to the marked side. At most 2 fire at once.' }
     ]
   },
   {
