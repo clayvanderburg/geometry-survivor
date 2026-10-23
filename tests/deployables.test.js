@@ -24,7 +24,7 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, RATE_STEP } = await import('../js/weapon-scaling.js');
 const { levelBuild, weaponBuild, makeBuild } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
@@ -275,7 +275,7 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   assert.deepEqual(punch.rows[0], { id: 'turretPierce', label: 'Turret bolt pierce', before: '2', after: '3' });
   const bolts = describeUpgrade(p, byId('turret_redeploy'));
   assert.deepEqual(bolts.rows.map((r) => r.id), ['turretReload']);
-  assert.deepEqual(bolts.rows[0], { id: 'turretReload', label: 'Turret charge reload', before: '6.00s', after: '4.29s' });
+  assert.deepEqual(bolts.rows[0], { id: 'turretReload', label: 'Turret charge reload', before: '6.00s', after: '4.55s' });
   applyUpgradeLevels(p, byId('drones'));
   assert.equal(describeUpgrade(p, byId('drones_wingmen')).headline, '+1 ESCORT DRONE');
   for (const id of ['mines', 'turret', 'drones', 'evo_siege']) {
@@ -405,7 +405,7 @@ test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held char
   assert.equal(moving.deployables.turretCount, 2);
   tick(moving, 4.1);
   assert.equal(moving.deployables.turretCount, 1, 'the first expired after 10 s');
-  assert.ok(Math.abs(W.turretReload(makeBuild('turret', 3, { reload: 2 })) - 6 / 1.8) < 1e-9);
+  assert.ok(Math.abs(W.turretReload(makeBuild('turret', 3, { reload: 2 })) - 6 / (1 + 2 * RATE_STEP)) < 1e-9);
 });
 
 test('Sentry Turret: Extra Capacity adds a charge, Add Punch pierces, the HUD chip shows the bank', () => {

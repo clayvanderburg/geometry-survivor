@@ -259,10 +259,10 @@ test('reload and fire-rate cards change only their own stat', () => {
   const p = makePlayer();
   p.upgradeLevels.missiles = 1; p.weapons.missiles = 1;
   const m = describeUpgrade(p, byId('missiles_reload'));
-  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.11s', after: '0.79s' }]);
+  assert.deepEqual(m.rows, [{ id: 'missileCooldown', label: 'Salvo cooldown', before: '1.11s', after: '0.84s' }]);
   p.upgradeLevels.turret = 1; p.weapons.turret = 1;
   const t = describeUpgrade(p, byId('turret_rate'));
-  assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.54/s' }]);
+  assert.deepEqual(t.rows, [{ id: 'turretFireRate', label: 'Turret fire rate', before: '6.10/s', after: '8.05/s' }]);
 });
 
 test('the HUD lists each weapon once (slot chip, real level) and nothing else; upgrades go to the pause menu and level-up strip', async () => {

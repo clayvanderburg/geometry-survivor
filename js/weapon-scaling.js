@@ -31,25 +31,31 @@ export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.at
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
-export const DAMAGE_GROWTH = 1.42; // Damage card: x1.42 damage per hit per rank (compounding; 1.5 before v0.29, 1.45 before v0.31)
-export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% attacks per second per rank
+// One step for every weapon: the Autocannon's (x0.8 of the old 1.42 / 40% since v0.36.1, from live player
+// data). Most other weapons took the full 1.42 / 40% until the card-step audit, so each one outgrew the
+// Autocannon past LV 9 (Drones 63% -> 135% of it from LV 1 to 18 against targets that never die). With
+// one step every curve runs parallel to the Autocannon's, and LV1_TRIM alone sets where a weapon sits.
+export const DAMAGE_GROWTH = 1.336; // Damage card: x1.336 damage per hit per rank (compounding; 1.42 before the card-step audit, 1.5 before v0.29, 1.45 before v0.31)
+export const RATE_STEP = 0.32;    // fire rate / reload / cooldown cards: +32% attacks per second per rank (40% before the card-step audit)
 // Deliberate departures from the shared curve (README *Weapon levels*). CARD_STEP_TRIM scales a weapon's
-// Damage-card bonus and fire-rate step per rank (Autocannon 0.8: x1.336 damage and +32% fire rate per
-// rank, from live player data in v0.36.1). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
+// Damage-card bonus and fire-rate step per rank (empty: the shared step is the Autocannon's 0.8 trim of
+// v0.36.1, which Glaive Discs and the Claw Harpoon also took). LV1_TRIM scales its LV 1 hit damage, and so its whole curve:
 // offensive weapons are tuned up to the Autocannon's real output (card benches, Clay's runs), since the
 // potential model over-rates splash and burst hits that overkill or miss. Rocket Pods 1.5 (under target in
 // player data at every level); Swarm Missiles 0.7 (Clay: 0.5 from v0.36.1 cut too deep, real runs had them
 // far under the Autocannon). FIRE_RATE_TRIM fires a weapon that much faster at the same hit damage, so it
 // multiplies DPS at every level: Swarm Missiles x1.3. Together missiles sit at 0.91 of the curve, ~1.82x
-// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 2.7, Sentry
-// Turret 2.8 and Glaive Discs 3.5 bring the automatic class to its WEAPON_CLASS target (below). The turret was 4.2 before its
+// their v0.42 DPS, about level with the Autocannon at LV 1-6 in player data. Escort Drones 3.6, Sentry
+// Turret 3.6 and Glaive Discs 3.5 hold the automatic class at its WEAPON_CLASS target (below) at every level
+// (drones 2.7 and turret 2.8 on the old card steps, which sat at 63-68% at LV 1 and 135-137% at LV 18
+// against targets that never die). Rail Lance stays at 2 on the shared steps (~107% of
+// the Autocannon against targets that never die; real data already reads it high). The turret was 4.2 before its
 // DRG: Survivor rework (v0.43.4): fewer turrets out (10 s / 6 s reload = 1.67) carry heavier bolts that
-// pierce, so less of the curve is lost to overkill. Glaive Discs also take the Autocannon's 0.8 card steps, so
-// they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
+// pierce, so less of the curve is lost to overkill. Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8 }); // the Claw Harpoon (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 2.7, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
+export const CARD_STEP_TRIM = Object.freeze({});
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 3.6, raillance: 2, glaive: 3.5, harpoon: 2.9, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
