@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Hand composition (upgrades.js handWeights): weapon cards hold TUNING.handWeaponShare of a level-up hand's
-// weight whatever the loadout, so global and utility cards keep turning up with 6 weapons and weapon cards
+// weight whatever the loadout, so global and utility cards keep turning up with a full loadout and weapon cards
 // keep their majority with 1. Supply caches keep the raw weights.
 const h = await import('../tools/balance/harness.mjs');
 const { handWeights, isWeaponCard, eligibleUpgrades, cardWeight, acquireWeapon } = await import('../js/upgrades.js');
@@ -22,8 +22,8 @@ const weaponShare = (p, pool, weights) => {
   return w / all;
 };
 
-test('weapon cards hold handWeaponShare of a level-up hand\'s weight with 1 to 6 weapons', () => {
-  const extra = ['rockets', 'missiles', 'lightning', 'glaive', 'quake'];
+test('weapon cards hold handWeaponShare of a level-up hand\'s weight with 1 to 5 weapons (a full loadout)', () => {
+  const extra = ['rockets', 'missiles', 'lightning', 'glaive'];
   for (let n = 0; n <= extra.length; n++) {
     const p = player(extra.slice(0, n));
     const pool = eligibleUpgrades(p);
@@ -33,7 +33,7 @@ test('weapon cards hold handWeaponShare of a level-up hand\'s weight with 1 to 6
 });
 
 test('the rescale only moves weapon cards as a group: ratios inside each group are unchanged', () => {
-  const p = player(['rockets', 'missiles', 'lightning', 'glaive', 'quake']);
+  const p = player(['rockets', 'missiles', 'lightning', 'glaive']);
   const pool = eligibleUpgrades(p);
   const raw = pool.map((u) => cardWeight(u, p.stats.luck || 1, p));
   const w = handWeights(p, pool);
@@ -56,7 +56,7 @@ test('supply caches keep the raw weights', () => {
 });
 
 test('real hands: weapon cards are 50-70% of offers and most 4-card hands hold a non-weapon card, at any loadout', () => {
-  for (const n of [1, 3, 6]) {
+  for (const n of [1, 3, 5]) {
     const r = handComposition(n, { players: 40, hands: 20, seed: 'test' });
     assert.ok(r.weapon > 0.5 && r.weapon < 0.7, `${n} weapons: weapon cards ${(r.weapon * 100).toFixed(0)}% of offers`);
     assert.ok(r.global > 0.15, `${n} weapons: global cards ${(r.global * 100).toFixed(0)}% of offers`);
@@ -65,7 +65,7 @@ test('real hands: weapon cards are 50-70% of offers and most 4-card hands hold a
 });
 
 test('the global cards turn up about as often as Reactor Overdrive; Replicator Array stays rare', () => {
-  const r = handComposition(6, { players: 60, hands: 25, seed: 'parity' });
+  const r = handComposition(5, { players: 60, hands: 25, seed: 'parity' });
   const od = r.perCard.overdrive;
   assert.ok(od > 0.04, `Overdrive in ${(od * 100).toFixed(1)}% of hands`);
   for (const id of ['tempo_core', 'cooldown_matrix', 'velocity_coils', 'tag_area']) {

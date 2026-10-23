@@ -21,7 +21,7 @@ export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 // Lines are plain text with **bold** and [[gold|green|purple:colored]] spans. A line may be an object
 // with a variant per input: keyboard (mouse + keys), touch (phone / tablet) and pad (controller).
 export function tutorialSlides(tuning = TUNING) {
-  const slots = tuning.weaponSlots ?? 6;
+  const slots = tuning.weaponSlots ?? 5;
   const floorStep = tuning.weaponFloorStep ?? 6;
   const ltWave = tuning.lieutenantFirstWave ?? 2;
   return [

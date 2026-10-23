@@ -6,7 +6,7 @@
 //   weapons   every stat card (and the first element card) of each weapon, alone, at LV 1 (`early`) and on
 //             a mid-run build (Damage x3, its rate card x2, its count card x1): does a Rate, Count or UTILITY
 //             card out-damage the Damage card?
-//   globals   one rank of each global / tag / crit card on a 2 / 4 / 6 weapon mid-run build against one
+//   globals   one rank of each global / tag / crit card on a 2 / 4 / 5 weapon mid-run build against one
 //             weapon card (each weapon's best single card, averaged) and Reactor Overdrive.
 //   early     the Armory-free opening: each starting weapon alone at LV 1, its cards against Overdrive, crit
 //             and the global cards that can share its first hands.
@@ -30,8 +30,8 @@ const install = (p, id, levelJump = 1) => U.applyUpgradeLevels(p, { ...U.UPGRADE
 export const LOADOUTS = {
   2: ['blaster', 'rockets'],
   4: ['blaster', 'rockets', 'grenades', 'singularity'],
-  6: ['blaster', 'rockets', 'grenades', 'singularity', 'drones', 'turret'],
-  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas', 'glaive']
+  5: ['blaster', 'rockets', 'grenades', 'singularity', 'drones'], // a full loadout (5 slots since v0.46)
+  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas']
 };
 // Non-weapon cards that add damage and can share a hand with weapon cards (ship utility is left out: it adds none).
 export const GLOBAL_IDS = ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area',

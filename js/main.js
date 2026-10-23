@@ -3273,6 +3273,7 @@ export class Game {
           const hx = x0 + (b.x - x0) * hit.t;
           const hy = y0 + (b.y - y0) * hit.t;
           this.particles.spawnDirectionalSparks(hx, hy, Math.atan2(-b.vy, -b.vx), 0.9, 2, b.hue, 4);
+          if (b.kind === 'rocket') this.rocketRockBurst(b, hx, hy);
           if (b.ricochet > 0) this.ricochetOffRock(b, hit.rock, hx, hy);
           break;
         }
@@ -3602,8 +3603,11 @@ export class Game {
       // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
       const fwd = -p.radius * 0.5 - tier * 7;
       const out = p.radius * 1.7 + tier * 4;
-      const wx = p.x + hx * fwd - hy * side * out;
-      const wy = p.y + hy * fwd + hx * side * out;
+      let wx = p.x + hx * fwd - hy * side * out;
+      let wy = p.y + hy * fwd + hx * side * out;
+      // A pod buried in the rock face being mined would launch its rocket inside the rock, where it died
+      // on its first tick, unseen, under the launch sound. That pod fires from the hull centre instead.
+      if (this.rockOnSegment(p.x, p.y, wx, wy, 4.5)) { wx = p.x; wy = p.y; }
       const a = Math.atan2(cy - wy, cx - wx) + side * tier * 0.07;
       const fx = Math.cos(a), fy = Math.sin(a);
       this.bullets.push(BTX.shapeRocket(b, {
@@ -3630,6 +3634,29 @@ export class Game {
     }
     if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
     else this.sound.playLaser(0.55);
+  }
+
+  // Whether a live asteroid crosses the segment (x0, y0) -> (x1, y1), widened by `pad`.
+  rockOnSegment(x0, y0, x1, y1, pad = 0) {
+    const manager = this.asteroidManager;
+    if (!manager?.asteroids?.length) return false;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const cells = Math.ceil((len / 2 + (manager.maxRockRadius ?? 120) + pad) / manager.cellSize);
+    for (const rock of manager.getNearbyAsteroids((x0 + x1) / 2, (y0 + y1) / 2, cells)) {
+      if (rock.hp > 0 && this.segmentHitTime(x0, y0, x1, y1, rock.x, rock.y, rock.radius + pad) !== null) return true;
+    }
+    return false;
+  }
+
+  // A Rocket Pod rocket striking cover: rocks still stop it cold (no damage gets through), but it bursts
+  // on the rock face with a flash, a small ring and a pop instead of vanishing in two sparks.
+  rocketRockBurst(b, x, y) {
+    const r = (b.blastRadius || 50) * 0.55;
+    this.particles.spawnFlash?.(x, y, r * 0.5, 24, 0.12);
+    this.particles.spawnShockwave(x, y, r, 18, 2, 0.24);
+    this.particles.spawnExplosionSparks(x, y, 5, 30, 2, 8, 1.2);
+    this.grid.applyImpulse(x, y, 8, r * 2, 18, 0);
+    this.sound.playMissileImpact?.(0.45);
   }
 
   // `echo`: an Echo Salvo repeat (half strength, no nuke, never echoes again).
@@ -4879,7 +4906,7 @@ export class Game {
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
       const name = WEAPON_BY_ID[id].name;
-      // The slot 6 weapon gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
+      // The weapon filling BREAKTHROUGH_SLOT (the last, slot 5) gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
       const early = weaponLevel(p, id) < level;
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Choose`);

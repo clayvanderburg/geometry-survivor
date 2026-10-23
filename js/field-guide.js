@@ -20,16 +20,19 @@ import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, BOSS_EVERY, MAJOR_BOSS_EVERY, CAMPAIGN_WAVES, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
-import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
+import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD, newWeaponChanceFor } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
 import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS, BT_BOOST_DPS, BT_BOOST_RANKS, WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
-import { handSizeFor, slotDamageBonus } from './slot-rewards.js';
+import { handSizeFor, slotDamageBonus, BREAKTHROUGH_SLOT } from './slot-rewards.js';
 import { weaponFloor, weaponFloorStep } from './weapon-floor.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
+
+// 1 .. weaponSlots - 1: the weapon counts that still leave a slot free (NEW WEAPON odds, weapon floor steps).
+const freeSlotCounts = () => Array.from({ length: weaponSlots() - 1 }, (_, i) => i + 1);
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -188,8 +191,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'lancer', name: 'LANCER', group: 'archetype', unlockWave: unlockWaveOf('lancer'),
-    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a dashed line at you for ${secs(LANCE.aimTime)}. The line locks (turns red) for the last ${secs(LANCE.lockAt)}, then it fires a ${LANCE.length} px beam that sweeps ${Math.round(LANCE.sweep * 180 / Math.PI)}° to one side over ${secs(LANCE.fireTime)}. Debuts with the Eclipse Twins.`,
-    tip: 'When the line turns red, step sideways off it, against the sweep if you can guess it. Punish it while it is planted.'
+    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a line through you for ${secs(LANCE.aimTime)}, with a shaded wedge showing the side it will sweep to. The line locks (turns solid red) for the last ${secs(LANCE.lockAt)} and flashes white just before it fires a ${LANCE.length} px beam along the line, sweeping ${Math.round(LANCE.sweep * 180 / Math.PI)}° into the wedge over ${secs(LANCE.fireTime)}. At most ${LANCE.maxActive} fire at once. Debuts with the Eclipse Twins.`,
+    tip: 'When the line turns red, step sideways off it AWAY from the shaded wedge: the beam swings into the wedge, never the other way. Punish it while it is planted.'
   },
   {
     id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),
@@ -429,9 +432,9 @@ export const MECHANIC_ENTRIES = [
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
       `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the ship's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
-      `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
-      `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${[1, 2, 3, 4, 5].map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
-      `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
+      `While a slot is free, a NEW WEAPON card turns up in ${freeSlotCounts().map((n) => pct(newWeaponChanceFor(n))).join(' / ')} of level-up hands when you carry ${freeSlotCounts().join(' / ')} weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
+      `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${freeSlotCounts().map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
+      `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your ${BREAKTHROUGH_SLOT}th (the last slot) also arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',
       'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
       ...PASSIVES.map((x) => `${x.name} is a PASSIVE, not a weapon: it takes no slot and is never a NEW WEAPON pick. It turns up in ordinary level-up hands like any general upgrade (with the usual +2…+5 rarity jumps), and owning it unlocks ${passiveTagCards(x.id)}. ${x.summary}`)

@@ -1599,13 +1599,20 @@ body:not(.reduce-effects) .new-weapon-card > .card-glow { display: block; }
   gap: 4px;
   margin: 2px 0 6px;
 }
-.upg-reach-label {
-  font-size: 9px;
+/* A global card's scope ("ALL WEAPONS", "EVERY KINETIC WEAPON"): it covers weapons picked up later too,
+   so it leads; the pills after it are the weapons it boosts right now. */
+.upg-reach-scope {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #dfe8f5;
+  color: #0b1020;
+  font-size: 9.5px;
   font-weight: 900;
-  letter-spacing: 1.5px;
-  color: var(--text-dim);
+  letter-spacing: 1px;
+  line-height: 1.45;
+  white-space: nowrap;
 }
-.upg-weapons .wpn-pill + .upg-reach-label { margin-left: 6px; }
+.upg-weapons .wpn-pill + .upg-reach-scope { margin-left: 6px; }
 .upg-stat-label .wpn-pill { margin-right: 5px; font-size: 9.5px; padding: 0 6px; }
 /* Replicator: one "pill +N UNIT" part per weapon. */
 .upg-headline-pills { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 17px; }
@@ -4862,6 +4869,7 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe-head { font-s
 body.touch-mode .upgrade-option:not(.card-detail-card) .recipe-chip { padding: 0 5px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-weapons { margin: 0 0 4px; gap: 3px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .wpn-pill { font-size: 9.5px; padding: 0 6px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-reach-scope { font-size: 8.5px; padding: 0 5px; letter-spacing: 0.5px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline-pills { font-size: 12px; gap: 3px 6px; }
 body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
 body.touch-mode .slot-tip-title { font-size: 20px; }

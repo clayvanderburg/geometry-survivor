@@ -3002,6 +3002,22 @@ export class SoundEngine {
     this.tone(2200 * k, 0.3, 0.09, 0.025, 'square', 2600 * k);
   }
 
+  // A Lancer winds up: a buzzing charge that rises in pitch over the whole aim, a hard click when the
+  // line locks, and a sharp high double-blip for the last flash before it fires. Rate-limited so a
+  // staggered pair still reads as two distinct charges, never a wall of buzz.
+  playLanceCharge(dur = 1.35, lockAt = 0.5, flashAt = 0.25) {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastLanceCharge || 0) < 250) return;
+    this.lastLanceCharge = now;
+    const k = 0.95 + Math.random() * 0.1;
+    this.tone(150 * k, 0, dur, 0.03, 'sawtooth', 640 * k);
+    this.tone(300 * k, 0.05, dur - 0.05, 0.018, 'square', 1280 * k);
+    this.tone(1900 * k, dur - lockAt, 0.05, 0.045, 'square', 1500 * k);
+    this.tone(2600 * k, dur - flashAt, 0.06, 0.04, 'square');
+    this.tone(2600 * k, dur - flashAt + 0.11, 0.06, 0.04, 'square');
+  }
+
   // The blink itself: a quick downward zip, so the arrival lands with a snap.
   playBlinkWarp() {
     if (!this.enabled || !this.ctx) return;

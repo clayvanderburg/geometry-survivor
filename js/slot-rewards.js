@@ -4,17 +4,17 @@
 //   slot 2     3-card hands
 //   slot 3     +5% damage to every weapon (TUNING.slotDamageBonus)
 //   slot 4     4-card hands
-//   slot 5     another +5% (+10% total)
-//   slot 6     that weapon starts with its LV 6 Breakthrough (once per run)
+//   slot 5     the last slot (v0.46: 5 slots, was 6): another +5% (+10% total), and that weapon starts with its
+//              LV 6 Breakthrough (once per run; it was slot 6's reward)
 //
-// Hand size and the damage bonus follow the weapons equipped right now (a discard loses them); the slot 6
+// Hand size and the damage bonus follow the weapons equipped right now (a discard loses them); the slot 5
 // Breakthrough replaces that weapon's LV 6 one and is given once per run (upgrades.js acquireWeapon).
 // Imports only config.js, so weapon-scaling.js can read the damage bonus without an import cycle.
 import { TUNING } from './config.js';
 
 export const HAND_SIZES = [2, 3, 3, 4]; // by weapons equipped (1, 2, 3, 4+)
 export const DAMAGE_SLOTS = [3, 5];
-export const BREAKTHROUGH_SLOT = 6;
+export const BREAKTHROUGH_SLOT = 5;
 
 export const handSizeFor = (owned) => HAND_SIZES[Math.max(1, Math.min(HAND_SIZES.length, Math.floor(owned) || 1)) - 1];
 export const slotDamageBonus = (tuning = TUNING) => Math.max(0, tuning.slotDamageBonus ?? 0.05);
@@ -36,6 +36,11 @@ export function slotReward(slot) {
     return { kind: 'hand', short: `+${more} CARD CHOICE${more > 1 ? 'S' : ''}`, text: `Level-ups offer ${hand} cards instead of ${handSizeFor(slot - 1)}.` };
   }
   const k = DAMAGE_SLOTS.indexOf(slot);
+  if (k >= 0 && slot === BREAKTHROUGH_SLOT) {
+    // The last slot is the capstone: its damage step and the free Breakthrough together.
+    const each = slotDamageBonus();
+    return { kind: 'breakthrough', short: `${pct(each)} DAMAGE · FREE BREAKTHROUGH`, text: `To every weapon (${pct(each * (k + 1))} total), and the new weapon starts with its LV 6 Breakthrough.` };
+  }
   if (k >= 0) {
     const each = slotDamageBonus();
     return { kind: 'damage', short: `${pct(each)} DAMAGE`, text: `To every weapon${k > 0 ? ` (${pct(each * (k + 1))} total)` : ''}.` };
@@ -49,7 +54,7 @@ export function slotReward(slot) {
 // The one-time tip shown the first time a NEW WEAPON card turns up (main.js openSlotTip): one line and
 // the bonus of every slot that has one.
 export const SLOT_TIP_SEEN_KEY = 'vexolith_slot_tip_seen';
-export function slotTip(slots = 6) {
+export function slotTip(slots = 5) {
   const rewards = [];
   for (let s = 2; s <= slots; s++) {
     const r = slotReward(s);
