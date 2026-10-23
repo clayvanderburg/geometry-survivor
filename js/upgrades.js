@@ -175,6 +175,9 @@ export const TECTONIC_DRILL_SCALE = 1.15;
 // Pulsar Helix also speeds up the Autocannon (stats.fireRate, read by blasterFireRate).
 export const PULSAR_FIRE_RATE = 1.15;
 
+// Overkill Resonator (crit damage) is offered once crit chance reaches this (see its req).
+export const CRIT_DAMAGE_MIN_CHANCE = 0.15;
+
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
@@ -365,7 +368,8 @@ export const UPGRADE_POOL = [
     name: 'Deadeye Targeting Lattice',
     category: 'CRITICAL',
     tags: ['crit'],
-    maxLevel: 6,
+    maxLevel: 5, // 5% base + 5 x 20% reaches 100%
+    req: (player) => (player.stats.critChance ?? 0) < 1, // never offered at 100% (Armory or Supercritical can get there first)
     overchargeReq: (player) => (player.stats.critChance ?? 0) < 1, // nothing past 100%
     headline: 'critChance',
     summary: 'Every weapon finds weak points more often. Crits hit harder and flash gold.',
@@ -380,7 +384,10 @@ export const UPGRADE_POOL = [
     tags: ['crit'],
     maxLevel: 6,
     headline: 'critDamage',
-    summary: 'Critical hits from every weapon land with a heavier multiplier.',
+    // A crit damage rank is worth crit chance x its step: at the base 5% chance it added ~2% (a dead pick next to
+    // Reactor Overdrive), so it waits until the ship crits often enough for it to pay (v0.46).
+    req: (player) => (player.stats.critChance ?? 0) >= CRIT_DAMAGE_MIN_CHANCE,
+    summary: 'Critical hits from every weapon land with a heavier multiplier. Offered once you crit often.',
     apply(player) {
       player.stats.critDamage = (player.stats.critDamage ?? (TUNING.baseCritDamage ?? 1.5)) + W.critDamageStep;
     }

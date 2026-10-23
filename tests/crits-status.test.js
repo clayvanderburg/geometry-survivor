@@ -106,12 +106,15 @@ test('players without crit stats never crit, and burn ticks never crit', () => {
 test('crit cards and the Supercritical synergy preview the exact multipliers hitEnemy uses', () => {
   reset();
   const p = makePlayer();
-  assert.equal(describeUpgrade(p, byId('crit_chance')).headline, '+5% CRIT CHANCE');
-  assert.equal(describeUpgrade(p, byId('crit_damage')).headline, '+25% CRIT DAMAGE');
+  assert.equal(describeUpgrade(p, byId('crit_chance')).headline, `+${Math.round(W.critChanceStep * 100)}% CRIT CHANCE`);
+  assert.equal(describeUpgrade(p, byId('crit_damage')).headline, `+${Math.round(W.critDamageStep * 100)}% CRIT DAMAGE`);
+  // Overkill Resonator waits until the ship crits often (CRIT_DAMAGE_MIN_CHANCE): at the base 5% a rank added ~2%.
+  assert.equal(byId('crit_damage').req(p), false, 'not offered at the base crit chance');
   applyUpgradeLevels(p, { ...byId('crit_chance'), levelJump: 2 });
+  assert.equal(byId('crit_damage').req(p), true, 'offered once crit chance is invested');
   applyUpgradeLevels(p, byId('crit_damage'));
-  assert.equal(p.stats.critChance.toFixed(2), '0.15');
-  assert.equal(p.stats.critDamage, 1.75);
+  assert.equal(p.stats.critChance.toFixed(2), (0.05 + 2 * W.critChanceStep).toFixed(2));
+  assert.equal(p.stats.critDamage, 1.5 + W.critDamageStep);
 
   // Supercritical needs crit chance LV 2 and a weapon with an element.
   const syn = byId('evo_supercrit');
@@ -120,7 +123,7 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   assert.equal(syn.req(p), true);
   const card = describeUpgrade(p, syn);
   assert.equal(card.rarity, 'evolution');
-  assert.equal(card.headline, `AFFLICTED CRITS // ${(1 + 0.75 * W.supercritBonusMult).toFixed(2)}x`);
+  assert.equal(card.headline, `AFFLICTED CRITS // ${(1 + (0.5 + W.critDamageStep) * W.supercritBonusMult).toFixed(2)}x`);
   applyUpgradeLevels(p, syn);
 
   // Against an afflicted target the crit bonus is multiplied; elsewhere it is the plain crit.
@@ -133,7 +136,7 @@ test('crit cards and the Supercritical synergy preview the exact multipliers hit
   withRandom(0, () => g.hitEnemy(burning, 10, 'orbital'));
   assert.equal(hpBefore - burning.hp, 10 * critMultiplier(p, true));
   withRandom(0, () => g.hitEnemy(clean, 10, 'orbital'));
-  assert.equal(1e6 - clean.hp, 10 * 1.75);
+  assert.equal(1e6 - clean.hp, 10 * (1.5 + W.critDamageStep));
 });
 
 test('BURN: stacks follow the hit, tick every half second, lose a fifth each tick, and deal the previewed share of the hit', () => {

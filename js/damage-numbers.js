@@ -31,6 +31,7 @@ export const DAMAGE_SOURCE_COLORS = {
   burn: '#ff5a2e',        // FIRE burn ticks (damage over time)
   corrode: '#9dff4a',     // CORROSIVE acid ticks (damage over time)
   shock: '#f4ff52',       // SHOCK ticks while touching another enemy (damage over time)
+  frost: '#8fe8ff',       // FROST frostbite ticks while cold builds (damage over time)
   rocket: '#ffb347',      // Rocket Pods
   other: '#e8eef8'        // Shrapnel, dash nova, tectonic bore, black-hole bursts
 };

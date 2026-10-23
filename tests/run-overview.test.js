@@ -64,7 +64,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   install(p, 'cooldown_matrix'); // +10% recharge, the dash included
   install(p, 'move_speed');     // +10% speed
   install(p, 'shield_capacitor'); // +20 shield
-  install(p, 'crit_chance', 2); // +5% each
+  install(p, 'crit_chance', 2); // +20% each
   install(p, 'tag_explosive');
   install(p, 'firerate', 3);    // Autocannon Hyper-Capacitor: lives on the weapon build, not the base stat
   r = rowsById(p);
@@ -73,8 +73,8 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.moveSpeed.run, '+10%');
   assert.equal(r.maxHp.run, '+20');
   assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 10 + 20)));
-  assert.equal(r.critChance.run, '+10%');
-  assert.equal(r.critChance.total, '17%');
+  assert.equal(r.critChance.run, '+40%');
+  assert.equal(r.critChance.total, '47%');
   assert.equal(r.tag_explosive.run, '+20%');
   assert.equal(r.dash.run, '−0.12 s', "a Cooldown Matrix rank (1.5 s / 1.1) after the armory's -10% dash cooldown");
   assert.equal(r.dash.up.run, true);

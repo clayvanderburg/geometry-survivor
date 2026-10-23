@@ -31,10 +31,10 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
 });
 
 test('balance trims are deliberate and few: Autocannon card steps x0.8, Drill Driver x1.1, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Drill Driver x1.45, Graviton Mortar x0.33', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8 });
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8, raillance: 1.2, shockfield: 1.2 }, 'Rail Lance and Shock Field Damage ranks x1.2: they read dead next to Split Rails / Radius (hand-bench.mjs, v0.46)');
   assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
-  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks x1.3 (its late game on the realistic benches)');
+  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks x1.3 (its late game on the realistic benches)');
   assert.ok(near(rateStep('lightning'), RATE_STEP * 0.6));
   assert.equal(TURRET_RELOAD_TRIM, 0.65, 'Sentry Turret Loosen Bolts ranks x0.65: it out-realized Bigger Cogs ~1.5x (tools/balance/hand-bench.mjs)');
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
