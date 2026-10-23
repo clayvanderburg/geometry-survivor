@@ -669,7 +669,8 @@ export const BT_AWAY_WEIGHT = 1;
 // less often there, where a number change would make it bland. 'weapon|transform|milestone' -> draw-weight factor.
 // Minefield Triad and Gravity Well cover three times the ground / pack the crowd at LV 12 (1.4-1.6x Across the Board,
 // at the BT_REALIZED_RANGE cap); Spore Trail at LV 6 out-realizes the other gas trails 1.3-1.7x on both benches.
-export const BT_DRAW_TRIM = Object.freeze({ 'mines|triad|12': 0.4, 'grenades|gravity|12': 0.4, 'gas|spores|6': 0.4 });
+// Counter-Rotating Ring at LV 12: its second ring is coverage, not damage (1.45x Across the Board with v0.46's bigger blades).
+export const BT_DRAW_TRIM = Object.freeze({ 'mines|triad|12': 0.4, 'grenades|gravity|12': 0.4, 'gas|spores|6': 0.4, 'orbitals|counter|12': 0.4 });
 // Chance the middle card is a transform (it is a flat otherwise).
 export const BT_MIDDLE_TRANSFORM_CHANCE = 0.5;
 

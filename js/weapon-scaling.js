@@ -58,13 +58,15 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
 export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8, raillance: 1.2, shockfield: 1.2 }); // the Drill Driver's out-and-back throws start heavy and climb steeper: x1.1 holds it near the Autocannon from LV 6 on
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
+export const LV1_TRIM = Object.freeze({ orbitals: 1.5, missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
-// RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
+// RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Corrosive Gas Trail 0.6 (v0.46):
+// every tick hits the whole pack in the cloud, so Reactivity ranks out-realized every other card once a build turned
+// to them (1.87x the Autocannon at LV 18 on the blend bench, 1.47x kiting; 1.47x / 1.19x with the Plume Size trim). Tesla Arc 0.6 (v0.46):
 // its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
 // Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
 // build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
-export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
+export const RATE_STEP_TRIM = Object.freeze({ gas: 0.6, lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1, raillance: 1 / 1.2, shockfield: 1 / 1.2 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
 // The Sentry Turret has two rate cards, so Loosen Bolts (charge reload) never meets the diminishing return
 // Tighten Springs (fire rate) puts on the other: each reload rank realized ~1.5x a Bigger Cogs (damage) rank on
 // the realistic benches (tools/balance/hand-bench.mjs). Its step is trimmed to match (v0.46).
@@ -374,7 +376,12 @@ export const WEAPON_SCALING = {
   // its blades never move further per tick than ORBITAL_REF_CONTACT (they cannot skip past a swarmer).
   orbitalRadius: (b) => 155 + 10 * b.r.radius,
   orbitalSpin: (b) => 6.3 * (1 + 0.075 * b.r.spin),
-  orbitalBladeRadius: (b) => 18 * (1 + 0.15 * (b?.r?.size || 0)),
+  // Blades 28 px (18 before v0.46): melee has to connect to feel good, and on the realistic benches the ring sat at
+  // 0.3-0.5x the Autocannon (0.14-0.26x kiting), the lowest of any weapon; with LV1_TRIM 1.5, 0.42-0.92x (0.2-0.39x).
+  orbitalBladeRadius: (b) => 28 * (1 + 0.15 * (b?.r?.size || 0)),
+  // A blade that bites an enemy it hasn't touched for orbitalConnectGap s lands a heavier spark burst and flash
+  // (main.js updateOrbitals); the grind after it stays light, so a full ring never turns to noise.
+  orbitalConnectGap: 0.35,
   // Transforms: Counter-Rotating Ring (a second ring at counterRadiusMult x radius, spinning the other
   // way), Blade Fling (each blade flings a saw disc every flingEvery s), Nova Ring (each blade bursts
   // every novaEvery s). Fling and nova are each worth 22% of the rings' contact damage.
@@ -403,7 +410,7 @@ export const WEAPON_SCALING = {
   orbitalExtraUnits: (b) => (b.tf?.has('frenzy') ? 1 + W.frenzyMax * W.frenzyValue : 1) * (b.tf?.has('vortex') ? W.vortexHitShare : 1),
   orbitalUnits: (b) => W.orbitalPassesContactTicksPerSec(b) * (1 + (b.t8 ? W.flingShare : 0) + (b.t12 ? W.novaShare : 0)) * W.orbitalExtraUnits(b),
   // A wider ring passes an enemy less often, so its blades hit harder per pass to match: Reach adds no DPS.
-  orbitalDamageMult: (b) => lv1('orbitals', 'orbitals', (b0) => DPS_TARGET(1) / W.orbitalUnits(b0)) * hitMult(b) * tfScale(b, W.orbitalUnits)
+  orbitalDamageMult: (b) => lv1Trim('orbitals') * lv1('orbitals', 'orbitals', (b0) => DPS_TARGET(1) / W.orbitalUnits(b0)) * hitMult(b) * tfScale(b, W.orbitalUnits)
     * W.orbitalRadius(b) / W.orbitalRadius(levelBuild('orbitals', 1)),
   flingDamageMult: (b) => W.flingShare * W.orbitalPassesContactTicksPerSec(b) * W.flingEvery / W.orbitalBlades(b) * W.orbitalDamageMult(b),
   orbitalNovaDamageMult: (b) => W.novaShare * W.orbitalPassesContactTicksPerSec(b) * W.novaEvery / W.orbitalBlades(b) * W.orbitalDamageMult(b),
@@ -625,9 +632,9 @@ export const WEAPON_SCALING = {
   // A cloud swells in over gasGrow s and shrinks away over the last gasFade share of its life.
   // Potential counts one tick per tick interval on one target; a trail usually holds several enemies,
   // so each tick is valued at gasHitShare (the per-tick damage is that much lower).
-  gasRadius: (b) => 46 * (1 + 0.36 * b.r.radius), // +12% / rank before v0.38.1
+  gasRadius: (b) => 46 * (1 + 0.3 * b.r.radius), // +36% / rank before v0.46 (Gas read 1.5-1.9x the Autocannon at LV 18), +12% before v0.38.1
   gasLife: (b) => (2.6 + 1.2 * (b?.r?.linger || 0)) * persist(b), // +0.4 s / rank before v0.38.1
-  gasTick: (b) => 0.3 / rateMult(b.r.rate) / tempo(b),
+  gasTick: (b) => 0.3 / (1 + rateStep('gas') * (b.r.rate || 0)) / tempo(b),
   gasPuffSpacing: 0.7,
   // Every dash also vents one giant round cloud where the ship was: gasDashRadiusMult x the cloud radius,
   // lingering gasDashLifeMult x as long. Overlapping clouds never stack on one enemy, so it adds reach

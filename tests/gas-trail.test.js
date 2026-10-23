@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // x BT_TRANSFORM_DPS, the fixed CORROSIVE element (STATUS card gating, Corrosive Amplifier), the trail
 // itself (venting, one tick per enemy, corrosion, fading), each Breakthrough, and cheap drawing.
 const h = await import('../tools/balance/harness.mjs');
-const { WEAPON_SCALING: W, corrodeCap, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage, gasCloudRadius } = await import('../js/weapon-scaling.js');
+const { WEAPON_SCALING: W, corrodeCap, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, rateStep, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, sourceElement, weaponDamage, gasCloudRadius } = await import('../js/weapon-scaling.js');
 const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, FIXED_ELEMENTS, makeBuild, levelBuild, weaponBuild, weaponElement, BT_TRANSFORM_DPS, BREAKTHROUGH_LEVELS } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, discardWeapon, eligibleUpgrades, ownedElements } = await import('../js/upgrades.js');
 const { WEAPONS, WEAPON_BY_ID, weaponTags, weaponLevel } = await import('../js/loadout.js');
@@ -56,11 +56,11 @@ test('every gas formula reads only its own rank; LV 1 numbers', () => {
   assert.equal(W.gasTick(base), 0.3);
 });
 
-test('LV 1 gas sits on DPS_TARGET(1); damage and rate ranks scale like every weapon; size and linger are utility', () => {
+test('LV 1 gas sits on DPS_TARGET(1); damage ranks scale like every weapon, rate ranks at its RATE_STEP_TRIM (rateStep); size and linger are utility', () => {
   assert.ok(near(dps(levelBuild('gas', 1)), DPS_TARGET(1)));
   for (let r = 1; r <= 8; r++) {
     assert.ok(near(dps(makeBuild('gas', 1 + r, { damage: r })), DPS_TARGET(1) * DAMAGE_GROWTH ** r), `damage x${r}`);
-    assert.ok(near(dps(makeBuild('gas', 1 + r, { rate: r })), DPS_TARGET(1) * (1 + RATE_STEP * r)), `rate x${r}`);
+    assert.ok(near(dps(makeBuild('gas', 1 + r, { rate: r })), DPS_TARGET(1) * (1 + rateStep('gas') * r)), `rate x${r}`);
   }
   for (const stat of ['radius', 'linger']) assert.ok(near(dps(makeBuild('gas', 5, { [stat]: 4 })), DPS_TARGET(1)), `${stat} is utility`);
   // A tick is valued at gasHitShare (a trail usually holds several enemies), so one tick hits for less.
@@ -140,7 +140,7 @@ test('gas cards preview their own stat; the pick and Breakthrough cards name the
   const p = g.player;
   assert.equal(describeWeaponPick(p, 'gas').headline, 'CORROSIVE GAS TRAIL');
   acquireWeapon(p, 'gas');
-  assert.equal(describeUpgrade(p, { ...UPGRADE_BY_ID.gas_rate, levelJump: 1 }).headline, `+${Math.round(RATE_STEP * 100)}% GAS TICK RATE`);
+  assert.equal(describeUpgrade(p, { ...UPGRADE_BY_ID.gas_rate, levelJump: 1 }).headline, `+${Math.round(rateStep('gas') * 100)}% GAS TICK RATE`);
   assert.equal(describeUpgrade(p, { ...UPGRADE_BY_ID.gas_damage, levelJump: 1 }).headline, `+${Math.round((DAMAGE_GROWTH - 1) * 100)}% GAS DAMAGE`);
   assert.deepEqual(describeUpgrade(p, { ...UPGRADE_BY_ID.gas_linger, levelJump: 1 }).rows.map((r) => r.id), ['gasLife']);
   const size = describeUpgrade(p, { ...UPGRADE_BY_ID.gas_radius, levelJump: 1 });
