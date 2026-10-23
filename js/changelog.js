@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
-      { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
+      { type: 'new', text: 'Breakthroughs: pick a transform, Overtuned Core (raw power) or Across the Board (+1-2 utility ranks; not on Drones or Glaive). Cards state the effect once, potential DPS below.' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
       { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
