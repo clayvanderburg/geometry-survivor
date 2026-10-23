@@ -55,7 +55,7 @@ under a transform, so the transforms stay the exciting pick (Director, Oct 22):
 **Realized calibration (card bench).** The model holds every transform at ×1.22, but what one *realizes* depends on
 how its attacks land, so before calibration the options ranged from 0.4× to 1.95× Across the Board. `js/bt-calibration.js`
 `TF_REALIZED` scales each transform's damage per milestone so it realizes **1.05–1.30× Across the Board** (control
-transforms 0.95–1.30×, sprayers 0.95–1.30×; every sprayer transform builds in 3 Spin Rotor ranks), measured with `node tools/balance/bt-bench.mjs --seeds 6` (the blend bench: a chasing swarm of 25, as dense
+transforms 0.95–1.30×, sprayers too since Spin Rotor's retirement; every sprayer transform builds in 1 Spin Rotor rank), measured with `node tools/balance/bt-bench.mjs --seeds 6` (the blend bench: a chasing swarm of 25, as dense
 round the ship as in real runs, chasing both a bot-like tight loop and a human-like wide kite; targets at the wave a
 weapon reaches that level: 6 / 20 / 30). Potential DPS counts the value back in, so the ×1.22 rows above
 still hold. Values stay within 0.6–1.7 (a transform's boss damage never moves more than that); cases damage can't
