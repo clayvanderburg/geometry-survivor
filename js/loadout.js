@@ -160,7 +160,7 @@ export function weaponTags(id) {
   return tags;
 }
 
-export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 6));
+export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 5));
 
 // Owned weapons in slot order. Players built before loadouts existed (old test fixtures) own the blaster
 // plus every weapon with a level, so their behaviour is unchanged.

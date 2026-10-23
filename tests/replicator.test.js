@@ -200,10 +200,10 @@ function loadoutDps(ids, lv, countRanks, ranks) {
 const LOADOUTS = {
   2: ['blaster', 'rockets'],
   4: ['blaster', 'rockets', 'drones', 'glaive'],
-  6: ['blaster', 'rockets', 'drones', 'glaive', 'grenades', 'flamethrower']
+  5: ['blaster', 'rockets', 'drones', 'glaive', 'grenades']
 };
 
-test('Replicator Array: total potential DPS gain with 2, 4 and 6 weapons stays within its rare-card budget', () => {
+test('Replicator Array: total potential DPS gain with 2, 4 and 5 weapons stays within its rare-card budget', () => {
   for (const [n, ids] of Object.entries(LOADOUTS)) {
     const worst = loadoutDps(ids, 6, 0, 0);
     const typical = loadoutDps(ids, 12, 2, 0);

@@ -4889,7 +4889,7 @@ export class Game {
       this.runStats?.offered(this.currentChoices);
       this.renderHandControls();
       const name = WEAPON_BY_ID[id].name;
-      // The slot 6 weapon gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
+      // The weapon filling BREAKTHROUGH_SLOT (the last, slot 5) gets its LV 6 Breakthrough before it reaches LV 6 (slot-rewards.js).
       const early = weaponLevel(p, id) < level;
       this.setUpgradeHeader(early ? `⚛ ${name.toUpperCase()} // SLOT ${ownedWeapons(p).indexOf(id) + 1} BONUS BREAKTHROUGH` : `⚛ ${name.toUpperCase()} REACHED LV ${level} // R&D BREAKTHROUGH`, 'BREAKTHROUGH',
         `${rdLine(this.rdLineIndex = (this.rdLineIndex || 0) + 1, name)}<br>Press ${this.currentChoices.map((_, i) => `<span>[${i + 1}]</span>`).join(' ')}, Click, or D-Pad + <span>A</span> to Choose`);
