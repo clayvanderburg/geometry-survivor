@@ -1056,7 +1056,7 @@ export const WEAPON_SCALING = {
   quakeFlight: 0.85,
   quakeRingTime: 0.5,
   quakeEdgeFalloff: 0.3,
-  quakeKnock: 3.2,
+  quakeKnock: 6, // 3.2 before v0.46: the base wave's shove was too small to see (Clay)
   // Transforms: Rebound Pulse (a burst charge rebounds to the next pack skipBounces times, each rebound a
   // wave skipRadiusFrac the size for skipShare of the damage, valued at skipHitShare), Spacetime Fractures
   // (every main burst tears faultCount seams faultLengthMult x the wave radius long that snap shut
