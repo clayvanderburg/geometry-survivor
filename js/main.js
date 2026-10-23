@@ -193,8 +193,20 @@ export function bossEpithet(wave) {
 }
 
 // Choice cards deal in one after another (css: card-deal); rare and better ones get a shimmer sweep.
+// Pulsing cards get their glow on a layer of its own (css: .card-glow), first so the card's ribbons and
+// shimmer stay above it.
+const GLOW_CARDS = /\b(rarity-floored|breakthrough-card|new-weapon-card)\b/;
+function addCardGlow(card, className, doc = globalThis.document) {
+  if (!GLOW_CARDS.test(className) || !doc?.createElement || !card.insertBefore) return;
+  const glow = doc.createElement('span');
+  glow.className = 'card-glow';
+  glow.setAttribute?.('aria-hidden', 'true');
+  card.insertBefore(glow, card.firstChild ?? null);
+}
+
 function dealInCard(card, idx, className, doc = globalThis.document) {
   card.style?.setProperty?.('--deal-i', idx);
+  addCardGlow(card, className, doc);
   if (/rarity-(common|uncommon)\b/.test(className) || !doc?.createElement) return;
   const shimmer = doc.createElement('span');
   shimmer.className = 'card-shimmer';
@@ -221,6 +233,8 @@ const bombPath = (ctx, r) => {
   }
   ctx.closePath();
 };
+// Game states where the world is paused behind a modal (Game.holdFrozenFrame).
+const FROZEN_STATES = new Set(['PAUSED', 'UPGRADE', 'CHEST']);
 const GEOM_ALPHA = 0.92;
 const COIN_GLOW = Object.freeze({ blur: 12, color: '#ffcc00', fill: `hsla(46, 100%, 52%, ${GEOM_ALPHA})`, path: coinPath });
 const BOMB_GLOW = Object.freeze({ blur: 16, color: '#ffcc00', fill: `hsla(48, 100%, 60%, ${GEOM_ALPHA})`, path: bombPath });
@@ -612,6 +626,7 @@ export class Game {
   // this.width / this.height are the view in world px (bigger than the window on small screens, see
   // viewScale); draw() scales them onto the canvas by renderScale.
   resize() {
+    this.frozenKey = null; // resizing clears the canvas
     const vw = window.innerWidth, vh = window.innerHeight;
     // Touch screens draw sharper (up to 1.5 device px per CSS px): phones are dense, but pay for every pixel.
     const dpr = isTouchDevice() ? Math.min(1.5, window.devicePixelRatio || 1) : 1;
@@ -2023,6 +2038,7 @@ export class Game {
       const view = renderUpgradeCard(d, `FREE #${idx + 1}`, true);
       card.className = `${view.className} installed`;
       card.innerHTML = view.html;
+      addCardGlow(card, view.className);
       gridEl.appendChild(card);
     });
 
@@ -4815,6 +4831,7 @@ export class Game {
     const card = doc.createElement('div');
     card.className = `${view.className} card-detail-card`;
     card.innerHTML = view.html;
+    addCardGlow(card, view.className, doc);
     const actions = doc.createElement('div');
     actions.className = 'card-detail-actions';
     const pick = doc.createElement('button');
@@ -7354,11 +7371,42 @@ export class Game {
     ctx.restore();
   }
 
+  // Paused behind a modal (pause menu, level-up / Breakthrough hand, cache) the world stands still: once
+  // the last sparks, ripples and numbers have played out, it is drawn once, settled (no motion trails),
+  // and that frame is kept until the modal closes (the ship's shield ring stops turning). CSS then
+  // blurs the still canvas once (body.world-frozen) instead of the modal's backdrop blur, which Chromium
+  // redoes over the whole screen every frame the cards animate. The frame is redrawn when something it
+  // shows changes (size, HUD / radar / damage numbers, REDUCE EFFECTS, the loadout).
+  holdFrozenFrame() {
+    const frozen = FROZEN_STATES.has(this.state) && !this.cutscene?.active;
+    setClass(globalThis.document?.body, 'world-frozen', frozen);
+    if (!frozen) {
+      this.frozenKey = null;
+      return false;
+    }
+    // Particles, grid ripples, damage numbers and screen flashes play out behind the modal first.
+    const settling = !this.particles.idle() || !this.grid.settled() || (this.damageNumbers?.count ?? 0) > 0 ||
+      this.shake > 0.2 || this.chromaFlash > 0.01 || this.bossFlash > 0.01;
+    if (settling) {
+      this.frozenKey = null;
+      return false;
+    }
+    const p = this.player;
+    const key = `${this.state}|${this.canvas.width}x${this.canvas.height}|${this.hudHidden}|${this.radarVisible}|${this.damageNumbers?.enabled}|${isReduceEffects()}|${p?.loadout?.length}|${p?.level}`;
+    if (key === this.frozenKey) return true;
+    this.frozenKey = key;
+    const frameSeconds = this.frameSeconds;
+    this.frameSeconds = 1; // draw() then clears fully: the settled frame
+    this.draw();
+    this.frameSeconds = frameSeconds;
+    return true;
+  }
+
   loop(now) {
     this.frameSeconds = this.lastFrameAt === undefined ? 1 / 60 : Math.min(0.1, (now - this.lastFrameAt) / 1000);
     this.lastFrameAt = now;
     this.frameClock.advance(now, (dt) => this.update(dt));
-    this.draw();
+    if (!this.holdFrozenFrame()) this.draw();
     this.touch?.setVisible(this.touchMode && !this.gpActive && this.state === 'PLAYING');
     if (this.state !== this.lastLoopState) {
       // A touch-menu window never outlives its screen.

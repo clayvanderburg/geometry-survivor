@@ -50,6 +50,13 @@ export class ParticleSystem {
     this.density = 1;
   }
 
+  // Nothing left alive to draw (Game.holdFrozenFrame waits for this before it keeps a still frame).
+  idle() {
+    return !this.sparks.length && !this.shards.length && !this.shockwaves.length && !this.lightnings.length &&
+      !this.floatTexts.length && !this.afterimages.length && !this.infall.length && !this.trails.length &&
+      !this.impactCount && !this.critCount && !this.flashCount;
+  }
+
   // Brightness/width multiplier and lifetime multiplier for weapon effects (user knobs).
   get intensity() { return this.tuning?.vfxIntensity ?? 1; }
   get linger() { return this.tuning?.vfxLinger ?? 1; }
