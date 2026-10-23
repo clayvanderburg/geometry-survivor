@@ -346,7 +346,7 @@ test('infall streams spiral toward their well and vanish when it dies', () => {
   assert.equal(particles.infall.length, 0);
 });
 
-test('Twin Singularities: the second core takes the far side, or stacks on the first when nobody is there', () => {
+test('Twin Singularities: the second core takes the far side, or the pair fans out around the aim when nobody is there', () => {
   const heading = (sg) => Math.atan2(sg.vy, sg.vx);
   const launch = (enemies) => {
     const { game, manager } = arena();
@@ -360,6 +360,7 @@ test('Twin Singularities: the second core takes the far side, or stacks on the f
   const [a, b] = launch([[300, 0], [-400, 30]]);
   assert.ok(Math.abs(heading(a)) < 0.01, 'the first heads for the nearest enemy');
   assert.ok(Math.abs(Math.abs(heading(b)) - Math.PI) < 0.1, 'the second takes the enemy behind the ship');
+  // Regression: these used to stack on one heading and fly as a single core.
   const [c, d] = launch([[300, 0], [320, 60]]);
-  assert.ok(Math.abs(heading(c) - heading(d)) < 1e-9, 'a one-sided pack gets both cores stacked, not half-overlapping');
+  assert.ok(Math.abs(heading(c) + W.twinFan) < 1e-9 && Math.abs(heading(d) - W.twinFan) < 1e-9, 'a one-sided pack gets the pair fanned either side of the aim');
 });
