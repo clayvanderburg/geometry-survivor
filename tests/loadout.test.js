@@ -69,7 +69,7 @@ test('hands only offer level-ups and weapon-specific upgrades for equipped weapo
   // come only from NEW WEAPON cards). It is always SHOCK, so it has no element cards.
   acquireWeapon(p, 'lightning');
   const ids = eligibleUpgrades(p).map((u) => u.id);
-  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'lightning_reach', 'tag_electric']) assert.ok(ids.includes(id), id);
+  for (const id of ['lightning_damage', 'lightning_chain', 'lightning_recharge', 'tag_electric']) assert.ok(ids.includes(id), id);
   assert.ok(!ids.some((id) => /^lightning_(fire|frost|corrode|shock)$/.test(id)), 'no Tesla Arc element cards');
   assert.ok(!ids.includes('lightning'), 'equip line is never offered');
   assert.ok(!ids.includes('evo_tempest'), 'Storm Protocol still needs missiles');

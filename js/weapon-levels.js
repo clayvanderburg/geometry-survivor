@@ -104,14 +104,12 @@ export const STAT_CARDS = {
     card('lightning', 'lightning_damage', 'damage', 'Tesla Arc Voltage', 'lightningDamage', 'Tesla Arc: higher voltage. Only damage per jump.'),
     card('lightning', 'lightning_chain', 'chain', 'Tesla Arc Chain Length', 'lightningJumps', 'Tesla Arc: each discharge jumps to more enemies. Only chain length.', cap(6)),
     card('lightning', 'lightning_recharge', 'recharge', 'Tesla Arc Recharge', 'lightningCooldown', 'Tesla Arc: discharges more often.', cap(8)),
-    card('lightning', 'lightning_reach', 'reach', 'Tesla Arc Reach', 'lightningReach', 'Tesla Arc: each jump reaches further. Only reach.')
   ],
   singularity: [
     card('singularity', 'singularity_pull', 'pull', 'Vortex Pull Radius', 'singularityPull', 'Vortex Singularity: a wider pull, and a wider collapse with it (the pull still fades hard toward the rim). Only pull and collapse size.'),
     card('singularity', 'singularity_damage', 'damage', 'Vortex Implosion Damage', 'singularityCollapse', 'Vortex Singularity: harder core grind and collapse. Only damage.'),
     card('singularity', 'singularity_duration', 'duration', 'Vortex Lifetime', 'singularityLife', 'Vortex Singularity: each singularity lasts longer before it collapses. Only lifetime.'),
     card('singularity', 'singularity_cooldown', 'cooldown', 'Vortex Cooldown', 'singularityCooldown', 'Vortex Singularity: launches more often. Only cooldown.', cap(8)),
-    card('singularity', 'singularity_core', 'core', 'Vortex Core Size', 'singularityCore', 'Vortex Singularity: a bigger core grinds a wider area. Only core size.', cap(6))
   ],
   orbitals: [
     card('orbitals', 'orbitals_damage', 'damage', 'Orbit Blade Edge', 'orbitalDamage', 'Orbit Blades: sharper edges. Only blade damage.'),
@@ -125,7 +123,6 @@ export const STAT_CARDS = {
     card('mines', 'mines_capacity', 'capacity', 'Proximity Mine Capacity', 'mineMaxActive', 'Proximity Mines: one more mine can be armed at once (a whole triangle more with Minefield Triad).', cap(8)),
     card('mines', 'mines_rate', 'rate', 'Proximity Mine Drop Rate', 'mineCooldown', 'Proximity Mines: drops mines more often. Only drop rate.', cap(8)),
     card('mines', 'mines_radius', 'radius', 'Proximity Mine Blast Size', 'mineBlastRadius', 'Proximity Mines: wider blasts. Only blast size.'),
-    card('mines', 'mines_fuse', 'fuse', 'Proximity Mine Fuse', 'mineLifetime', 'Proximity Mines: armed mines wait longer before self-detonating. Only lifetime.', cap(6))
   ],
   turret: [
     // Deep Rock Galactic: Survivor's LMG upgrades (Bigger Cogs, Tighten Springs, Loosen Bolts, Add Punch).
@@ -140,7 +137,6 @@ export const STAT_CARDS = {
     card('drones', 'drones_damage', 'damage', 'Escort Drone Guns', 'droneDamage', 'Escort Drones: heavier guns. Only bolt damage.'),
     card('drones', 'drones_rate', 'rate', 'Escort Drone Fire Rate', 'droneFireRate', 'Escort Drones: each drone shoots faster.', cap(8)),
     card('drones', 'drones_wingmen', 'wingmen', 'Escort Drone Wingmen', 'droneCount', 'Escort Drones: one more drone joins the back row behind the hull.', { maxLevel: 3 }),
-    card('drones', 'drones_range', 'range', 'Escort Drone Range', 'droneRange', 'Escort Drones: drones engage targets further out. Only range.')
   ],
   grenades: [
     card('grenades', 'grenades_damage', 'damage', 'Plasma Grenade Charge', 'grenadeDamage', 'Plasma Grenades: hotter plasma cores. Only blast damage.'),
@@ -160,7 +156,6 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_rate', 'rate', 'Flamethrower Fuel Pump', 'flameTickRate', 'Flamethrower: pumps more fuel, so the flames scorch more often. Only scorch rate.', cap(8)),
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
-    card('flamethrower', 'flamethrower_turn', 'turn', 'Flamethrower Spin Rotor', 'flameTurn', 'Flamethrower: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
     card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', sharedCap(4)),
     card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', cap(3))
   ],
@@ -169,7 +164,6 @@ export const STAT_CARDS = {
     card('cryospray', 'cryospray_rate', 'rate', 'Cryo Sprayer Coolant Pump', 'cryoTickRate', 'Cryo Sprayer: pumps more coolant, so the spray hits more often. Only spray rate.', cap(8)),
     card('cryospray', 'cryospray_range', 'range', 'Cryo Sprayer Nozzle Pressure', 'cryoRange', 'Cryo Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('cryospray', 'cryospray_cone', 'cone', 'Cryo Sprayer Wide Nozzle', 'cryoCone', 'Cryo Sprayer: a wider cone of frost. Only cone width.', cap(8)),
-    card('cryospray', 'cryospray_turn', 'turn', 'Cryo Sprayer Spin Rotor', 'cryoTurn', 'Cryo Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
     card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', sharedCap(4)),
     card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', cap(3))
   ],
@@ -178,7 +172,6 @@ export const STAT_CARDS = {
     card('acidspray', 'acidspray_rate', 'rate', 'Acid Sprayer Pump', 'acidTickRate', 'Acid Sprayer: pumps more acid, so the spray hits more often. Only spray rate.', cap(8)),
     card('acidspray', 'acidspray_range', 'range', 'Acid Sprayer Nozzle Pressure', 'acidRange', 'Acid Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('acidspray', 'acidspray_cone', 'cone', 'Acid Sprayer Wide Nozzle', 'acidCone', 'Acid Sprayer: a wider cone of acid. Only cone width.', cap(8)),
-    card('acidspray', 'acidspray_turn', 'turn', 'Acid Sprayer Spin Rotor', 'acidTurn', 'Acid Sprayer: the nozzle spins round the ship faster. Only spin speed.', cap(6)),
     card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', sharedCap(4)),
     card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', cap(3))
   ],
@@ -200,7 +193,6 @@ export const STAT_CARDS = {
     card('glaive', 'glaive_count', 'count', 'Glaive Disc Count', 'glaiveCount', 'Glaive Discs: one more disc per throw.', cap(4)),
     card('glaive', 'glaive_chain', 'chain', 'Glaive Ricochet', 'glaiveBounces', 'Glaive Discs: each disc ricochets to one more enemy. Only ricochets.', cap(6)),
     card('glaive', 'glaive_rate', 'rate', 'Glaive Launcher', 'glaiveCooldown', 'Glaive Discs: throws more often. Only throw rate.', cap(8)),
-    card('glaive', 'glaive_speed', 'speed', 'Glaive Spin', 'glaiveSpeed', 'Glaive Discs: faster discs. Only disc speed.', cap(6))
   ],
   nanites: [
     card('nanites', 'nanites_damage', 'damage', 'Nanite Swarm Acid Enzymes', 'naniteDamage', 'Nanite Swarm: a hungrier strain. Only damage per bite.'),
@@ -230,6 +222,14 @@ export const STAT_CARD_LIST = Object.values(STAT_CARDS).flat();
 // (runs are not saved mid-run, and a weapon's ranks are looked up only for its current cards).
 export const RETIRED_STAT_CARDS = Object.freeze({
   turret_count: 'Sentry Turret Count (retired)',
+  drones_range: 'Escort Drone Range (retired)',
+  lightning_reach: 'Tesla Arc Reach (retired)',
+  glaive_speed: 'Glaive Spin (retired)',
+  mines_fuse: 'Proximity Mine Fuse (retired)',
+  flamethrower_turn: 'Flamethrower Spin Rotor (retired)',
+  cryospray_turn: 'Cryo Sprayer Spin Rotor (retired)',
+  acidspray_turn: 'Acid Sprayer Spin Rotor (retired)',
+  singularity_core: 'Vortex Core Size (retired)',
   turret_lifetime: 'Sentry Turret Lifetime (retired)',
   harpoon_grapple: 'Grapple Hooks (retired)'
 });

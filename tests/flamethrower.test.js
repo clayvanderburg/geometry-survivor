@@ -62,7 +62,7 @@ const enemy = (p, dx, dy, r = 10) => ({ type: 'swarmer', x: p.x + dx, y: p.y + d
 const run = (r, seconds, firing = true) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, firing); };
 const hitSet = (r) => new Set(r.hits.map((x) => x.e));
 
-test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and seven single-stat cards', () => {
+test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN tags and six single-stat cards', () => {
   const w = WEAPON_BY_ID.flamethrower;
   assert.equal(w.name, 'Flamethrower');
   assert.equal(w.category, 'PRIMARY');
@@ -74,8 +74,8 @@ test('the Flamethrower is a PRIMARY slot weapon with source flame, AREA + BURN t
   const groups = buildSourceGroups(WEAPONS);
   assert.equal(groups.flame, 'flamethrower');
   assert.equal(groups.burn_flamethrower, 'flamethrower', 'its burn ticks are credited to it');
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'turn', 'burn', 'nozzles']);
-  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, false, true]);
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => c.stat), ['damage', 'rate', 'range', 'cone', 'burn', 'nozzles']); // Spin Rotor retired in v0.46 (a dead pick)
+  assert.deepEqual(STAT_CARDS.flamethrower.map((c) => POWER_STATS.has(c.stat)), [true, true, false, false, false, true]);
   for (const c of STAT_CARDS.flamethrower) assert.match(c.summary, /^Flamethrower:/);
   assert.equal(ELEMENT_CARDS.flamethrower, undefined, 'no element cards: FIRE is built in');
   assert.deepEqual(BREAKTHROUGH_LEVELS.map((m) => TRANSFORMS.flamethrower[m].name), ['Fireballs', 'Napalm Puddles', 'Inferno Ring']);
@@ -351,7 +351,7 @@ test('drawing costs a fixed handful of fills however many flames are in the air'
   assert.ok(fills <= 5 && strokes === 0, `${fills} fills, ${strokes} strokes`);
 });
 
-test('the nozzle ignores the aim and spins slowly round the ship, faster with Spin Rotor', () => {
+test('the nozzle ignores the aim and spins slowly round the ship', () => {
   const spun = (cards) => {
     const p = flamePlayer({ cards });
     const r = rig(p, [], [], { spin: true });
@@ -366,8 +366,6 @@ test('the nozzle ignores the aim and spins slowly round the ship, faster with Sp
   assert.equal(lv1, 1.2 * W.flameTurnTrim.flamethrower, 'the Flamethrower spins faster than its twins');
   assert.equal(W.flameTurnRate(levelBuild('cryospray', 1)), 1.2);
   assert.ok(Math.abs(spun([]) - lv1 * 0.5) < 0.03, 'turns at a steady rate whatever the aim');
-  assert.ok(Math.abs(spun([['flamethrower_turn', 6]]) - W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) * 0.5) < 0.05, 'Spin Rotor spins it faster');
-  assert.ok(W.flameTurnRate(makeBuild('flamethrower', 7, { turn: 6 })) > lv1 * 2.5);
   const p = flamePlayer();
   const r = rig(p, [], [], { spin: true });
   run(r, 0.5, false);

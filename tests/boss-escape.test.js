@@ -70,6 +70,11 @@ test('an escape drops nothing: no cache, no defeat card, no score; its escorts g
   assert.ok(g.enemyManager.enemies.some((e) => e.wingLeader === c), 'it has its V');
   const chests = g.chests.length;
   const cores = g.sessionCores;
+  // Random Void Cores (escorts the guns kill, veins) would make this flaky (~1 run in 10): sweep up any core
+  // already loose and cap the random drops. A boss's own payout ignores the per-wave cap, so this still
+  // catches a boss that pays out on escape.
+  for (let i = g.geoms.length - 1; i >= 0; i--) if (g.geoms[i].isCore) g.geoms.splice(i, 1);
+  g.coresDroppedThisWave = Infinity;
   c.escapeT = 0.5; // half a second left
   tick(g, 45);
   assert.equal(live(g, 'wing_commander').length, 0, 'it escaped');

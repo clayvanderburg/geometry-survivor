@@ -3225,8 +3225,9 @@ export class Game {
         }
         const e = hit.enemy;
         if (e.dead) continue;
-        // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last.
-        const pierceMult = Math.pow(TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
+        // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last
+        // (a bolt may carry its own pierceKeep: Autocannon bolts keep W.blasterPierceKeep).
+        const pierceMult = Math.pow(b.pierceKeep ?? TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
         b.hitEnemies.add(e);
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
@@ -3474,6 +3475,7 @@ export class Game {
         vy: Math.sin(a) * speed,
         damage,
         pierce,
+        pierceKeep: W.blasterPierceKeep,
         hue: b.t12 ? 176 : (TUNING.bulletColorHue ?? 186),
         radius: (TUNING.bulletRadius ?? 4.2) * (flak ? 1.15 : 1),
         life: 1.25 / vel,
@@ -3495,6 +3497,7 @@ export class Game {
           vy: Math.sin(ha) * (speed * 0.85),
           damage: weaponDamage(p, 'helix', b),
           pierce,
+          pierceKeep: W.blasterPierceKeep,
           hue: 305, // evolution magenta: reads apart from cyan Autocannon shots and gold XP geoms
           stat: 'helix',
           radius: 6.5,
