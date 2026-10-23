@@ -13,8 +13,9 @@ Each weapon's pool holds two kinds of option:
 - **Flats** (shared by every weapon, no new mechanic; DRG's "clean/balanced" overclocks):
   - **Across the Board**: ×1.08 damage and +2 ranks in every UTILITY stat (+1 on the sprayers, Gas, Mines, Nanites,
     Shock Field, Orbit Blades and the Drill Driver: `BOOST_RANKS`). Weapons with no utility card left get a named
-    perk instead (Tesla Arc: +105 px chain reach, `BOOST_PERKS`) or more damage (Escort Drones, Glaive Discs: ×1.15,
-    `BOOST_DPS`), so it is never a weaker Overtuned Core. ×1.18 and +1 rank until v0.46, when it beat Overtuned Core on 57 of 60 bench milestones.
+    perk instead (Tesla Arc: +105 px chain reach, `BOOST_PERKS`); one with neither (Escort Drones, Glaive Discs)
+    never offers Across the Board (`boostOffered`), since it would only be a smaller Overtuned Core: its hand is
+    Overtuned Core plus two transforms. ×1.18 and +1 rank until v0.46, when it beat Overtuned Core on 57 of 60 bench milestones.
   - **Overtuned Core**: more damage output, no utility: ×1.30 damage by default. Each weapon has its own version
     (`OVERTUNED` in `js/weapon-levels.js`), calibrated to realize 1.0–1.15× Across the Board: more damage where hits
     matter, free POWER ranks (+1 nozzle, +2 drop rate...) where the swarm already dies to the hits it takes.
@@ -80,6 +81,10 @@ fix are listed in `BT_BENCH_EXEMPT` with a reason. **A new transform needs a `TF
 
 - Three Breakthrough cards; Dr. Pixie docks in the fourth column (hands already go up to 4 cards). On
   narrow screens she docks above the cards, smaller.
+- Card text (Clay, v0.46): the headline says only the real effect ("+30% DAMAGE", "+1 NOZZLE", the transform's
+  name). Potential DPS is a row below it, labelled with what it assumes, per weapon (`DPS_BASIS` in
+  `js/upgrade-cards.js`: "Potential DPS (if every shot hits)", "(pack in the cloud)", "(all drones firing)"), so it never
+  reads as a second bonus.
 - Keys `[1]` `[2]` `[3]`. A transform card shows its clip (`assets/weapons/<weapon>-<home>.webp`, or
   `<weapon>-<id>.webp` for new ones). Flat cards keep the BOOST look.
 - Pixie: her pick lines key on the option id, so a line written for a transform plays wherever it's taken.

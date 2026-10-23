@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, applyBreakthrough } = await import('../js/upgrades.js');
 const {
-  STAT_CARDS, TRANSFORMS, BREAKTHROUGH_LEVELS, BT_FLATS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, BT_HAND_SIZE, boostDpsOf, BOOST_PERKS, BOOST_DPS, boostSummary, overtunedAt, overtunedRanks, OVERTUNED, POWER_STATS, weaponBuild,
+  STAT_CARDS, TRANSFORMS, BREAKTHROUGH_LEVELS, BT_FLATS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, BT_HAND_SIZE, BOOST_PERKS, boostOffered, boostSummary, overtunedAt, overtunedRanks, OVERTUNED, POWER_STATS, weaponBuild,
   drawBreakthroughOptions, transformPool, makeBuild, btOption, EXTRA_TRANSFORMS, BT_DRAW_TRIM
 } = await import('../js/weapon-levels.js');
 const { describeBreakthrough } = await import('../js/upgrade-cards.js');
@@ -58,7 +58,7 @@ test('LV 6 varies: every transform shows up at every milestone, its home milesto
       const seen = {};
       for (let i = 0; i < 600; i++) for (const o of drawBreakthroughOptions(id, m, {}, rng)) seen[o] = (seen[o] || 0) + 1;
       for (const t of transformPool(id)) assert.ok(seen[t.id] > 0, `${id} LV ${m}: ${t.id} never drawn`);
-      for (const f of Object.keys(BT_FLATS)) assert.ok(seen[f] > 0, `${id} LV ${m}: ${f} never drawn`);
+      for (const f of Object.keys(BT_FLATS)) if (f !== 'boost' || boostOffered(id)) assert.ok(seen[f] > 0, `${id} LV ${m}: ${f} never drawn`);
       const home = TRANSFORMS[id][m].id;
       for (const t of transformPool(id)) if (t.home !== m) assert.ok(seen[home] > seen[t.id], `${id} LV ${m}: ${home} should beat ${t.id}`);
     }
@@ -96,7 +96,7 @@ function playerWith(id, lv) {
   return p;
 }
 
-test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core its weapon\'s own damage and POWER ranks, Across the Board x1.08 (or its weapon\'s BOOST_DPS)', () => {
+test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core its weapon\'s own damage and POWER ranks, Across the Board x1.08', () => {
   for (const id of WEAPONS) {
     for (const m of BREAKTHROUGH_LEVELS) {
       const p = playerWith(id, m);
@@ -104,7 +104,7 @@ test('every option is worth its pinned potential DPS at every milestone: transfo
       const b = weaponBuild(p, id);
       const otr = overtunedRanks(id);
       const rankGain = otr ? POTENTIAL_DPS[id]({ ...b, r: { ...b.r, [otr.stat]: b.r[otr.stat] + otr.ranks } }) / POTENTIAL_DPS[id](b) : 1;
-      const want = (o) => (o === 'boost' ? boostDpsOf(id) : o === 'overtuned' ? overtunedAt(id, m) * rankGain : BT_TRANSFORM_DPS) - 1;
+      const want = (o) => (o === 'boost' ? BT_BOOST_DPS : o === 'overtuned' ? overtunedAt(id, m) * rankGain : BT_TRANSFORM_DPS) - 1;
       for (const o of [...transformPool(id).map((t) => t.id), ...Object.keys(BT_FLATS)]) {
         const d = describeBreakthrough(p, id, m, o);
         assert.ok(Math.abs(d.dpsGain - want(o)) < 0.01, `${id} LV ${m} ${o}: +${(d.dpsGain * 100).toFixed(1)}%`);
@@ -235,20 +235,25 @@ test('Overtuned Core at most doubles single-target DPS, even on a build with no 
   }
 });
 
-test('Across the Board is never empty: a weapon with no UTILITY card gets a named utility perk or more damage', async () => {
+test('Across the Board is never a smaller Overtuned Core: a weapon with no UTILITY stat gets a named perk or never offers it', async () => {
   const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
+  const rng = seeded(23);
   for (const id of WEAPONS) {
     const utility = STAT_CARDS[id].some((c) => !POWER_STATS.has(c.stat));
-    if (!utility) assert.ok(BOOST_PERKS[id] || BOOST_DPS[id] > BT_BOOST_DPS, `${id}: Across the Board would be a weaker Overtuned Core`);
+    assert.equal(boostOffered(id), utility || !!BOOST_PERKS[id], id);
+    if (boostOffered(id)) continue;
+    for (const m of BREAKTHROUGH_LEVELS) {
+      for (let i = 0; i < 300; i++) {
+        const hand = drawBreakthroughOptions(id, m, {}, rng);
+        assert.ok(!hand.includes('boost'), `${id} LV ${m}: ${hand}`);
+        assert.equal(hand.length, BT_HAND_SIZE);
+        assert.equal(hand.filter(isFlat).length, 1, `${id} LV ${m}: Overtuned Core plus two transforms`);
+      }
+    }
   }
+  assert.deepEqual(WEAPONS.filter((id) => !boostOffered(id)).sort(), ['drones', 'glaive']);
   // Tesla Arc: the perk's hidden reach ranks add exactly the pixels the card names.
   const perk = BOOST_PERKS.lightning;
-  const plain = makeBuild('lightning', 6, {}, {});
-  const atb = makeBuild('lightning', 6, {}, { 6: 'boost' });
-  assert.equal(W.lightningRange(atb) - W.lightningRange(plain), perk.px);
+  assert.equal(W.lightningRange(makeBuild('lightning', 6, {}, { 6: 'boost' })) - W.lightningRange(makeBuild('lightning', 6, {}, {})), perk.px);
   assert.ok(boostSummary('Tesla Arc', 'lightning').includes(`+${perk.px} px ${perk.label}`));
-  for (const [id, d] of Object.entries(BOOST_DPS)) {
-    assert.ok(d > BT_BOOST_DPS && d < BT_OVERTUNED_DPS, `${id}: still under Overtuned Core's damage`);
-    assert.ok(boostSummary('X', id).includes(`+${Math.round((d - 1) * 100)}% damage`), id);
-  }
 });

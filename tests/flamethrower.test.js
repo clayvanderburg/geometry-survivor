@@ -162,7 +162,7 @@ test('cards preview their own stat; the pick and Breakthrough cards name the Fla
   const t = describeBreakthrough(p, 'flamethrower', 6, 'transform');
   assert.equal(t.name, 'Fireballs');
   assert.equal(t.category, 'FLAMETHROWER');
-  assert.match(t.headline, /\+22% DPS/);
+  assert.ok(Math.abs(t.dpsGain - 0.22) < 0.01 && t.rows[0].id === 'potentialDps' && !/DPS/.test(t.headline));
 });
 
 test('the cone: hits what is in front within reach and width, harder up close, always on while equipped, and roars', () => {

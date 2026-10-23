@@ -643,6 +643,17 @@ export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
 // 'transform' (the milestone's home transform), or a flat ('boost' ACROSS THE BOARD, 'overtuned' OVERTUNED
 // CORE). `kind` is 'transform' or the flat id; `option` the id stored on the pick. Rows are the exact
 // before -> after stats with the choice installed on a copy of the player, led by the weapon's potential DPS.
+// What a Breakthrough card's potential-DPS row assumes, per weapon (Clay, v0.46: the headline says only the real
+// effect, and the DPS row must never read as a second bonus). Short enough for a phone-width card.
+export const DPS_BASIS = Object.freeze({
+  blaster: 'if every shot hits', rockets: 'if every rocket hits', missiles: 'if every missile hits',
+  lightning: 'if every jump lands', singularity: 'pack in the well', orbitals: 'blades always in contact',
+  mines: 'every mine triggered', turret: 'turrets always firing', drones: 'all drones firing',
+  grenades: 'if every blast lands', gas: 'pack in the cloud', flamethrower: 'pack in the spray',
+  cryospray: 'pack in the spray', acidspray: 'pack in the spray', shockfield: 'pack in the field',
+  raillance: 'if every lance hits', glaive: 'if every bounce hits', nanites: 'swarm always biting',
+  harpoon: 'if every drill hits', quake: 'if every wave lands'
+});
 const FLAT_TEXT = {
   boost: { summary: boostSummary, headline: boostHeadline },
   overtuned: { summary: overtunedSummary, headline: overtunedHeadline }
@@ -657,7 +668,7 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
   const dpsBefore = weaponPotentialDps(player, weaponId);
   const dpsAfter = weaponPotentialDps(copy, weaponId);
   const gain = dpsBefore ? dpsAfter / dpsBefore - 1 : 0;
-  const rows = [{ id: 'potentialDps', label: `${weapon.hudName} potential DPS`, before: dec1(dpsBefore || 0), after: dec1(dpsAfter || 0) }, ...changed];
+  const rows = [{ id: 'potentialDps', label: `Potential DPS (${DPS_BASIS[weaponId] || 'if every hit lands'})`, before: dec1(dpsBefore || 0), after: dec1(dpsAfter || 0) }, ...changed];
   const transform = opt?.kind === 'transform' ? opt.transform : null;
   const flat = FLAT_TEXT[opt?.kind] || FLAT_TEXT.boost;
   const rarity = transform ? 'transform' : 'boost';
@@ -679,8 +690,8 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
     color: RARITY[rarity].color,
     jump: 1,
     headline: transform
-      ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
-      : `${flat.headline(weaponId, weaponLevel(player, weaponId))} // +${Math.round(gain * 100)}% DPS`,
+      ? `⚛ ${transform.name.toUpperCase()}`
+      : flat.headline(weaponId, weaponLevel(player, weaponId)),
     weapons: [weaponId],
     rows: rows.slice(0, maxRows).map(rowView),
     hiddenRows: Math.max(0, rows.length - maxRows),

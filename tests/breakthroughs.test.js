@@ -57,7 +57,7 @@ test('Breakthrough cards name their weapon, show the DPS gain, and are one-shot'
   assert.equal(t.name, 'Twin Singularities');
   assert.equal(t.category, 'VORTEX SINGULARITY');
   assert.match(t.summary, /Vortex Singularity/);
-  assert.match(t.headline, /\+22% DPS/);
+  assert.ok(Math.abs(t.dpsGain - 0.22) < 0.01 && t.rows[0].id === 'potentialDps' && !/DPS/.test(t.headline));
   assert.match(b.summary, /Vortex Singularity/);
   assert.ok(Math.abs(b.dpsGain - 0.08) < 1e-6, 'Across the Board: +8% damage, plus utility ranks');
   assert.equal(applyBreakthrough(p, 'singularity', 6, 'transform'), true);

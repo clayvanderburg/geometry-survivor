@@ -32,15 +32,14 @@ export const BT_BOOST_RANKS = 2;
 export const BOOST_RANKS = Object.freeze({ flamethrower: 1, cryospray: 1, acidspray: 1, gas: 1, mines: 1, nanites: 1, shockfield: 1, orbitals: 1, harpoon: 1 });
 export const boostRanksOf = (id) => BOOST_RANKS[id] ?? BT_BOOST_RANKS;
 // Weapons whose dead-pick UTILITY cards were all retired in v0.46 (Tesla Arc, Escort Drones, Glaive Discs) would
-// get nothing from ACROSS THE BOARD's ranks, so it would be a weaker Overtuned Core (Director, v0.46: never a trap).
-// BOOST_PERKS: hidden ranks of a retired stat, named on the card (`px`: what they add, tests check it against the
-// formula). Where no utility stat moves the bench (drone range and disc speed changed nothing at 6 ranks), BOOST_DPS
-// gives Across the Board more damage instead. Both tuned on the blend bench to ~1.0x Overtuned Core.
+// get nothing from ACROSS THE BOARD's ranks, so it would be a smaller Overtuned Core, a dominated pick (Clay).
+// BOOST_PERKS: hidden ranks of a retired stat that still matter, named on the card (`px`: what they add, tests
+// check it against the formula). A weapon with no utility stat and no perk never offers Across the Board
+// (boostOffered): its hand draws another transform instead. Drone range and disc speed moved nothing on the bench.
 export const BOOST_PERKS = Object.freeze({
   lightning: { stat: 'reach', ranks: 3, label: 'chain reach', px: 105 }
 });
-export const BOOST_DPS = Object.freeze({ drones: 1.15, glaive: 1.15 });
-export const boostDpsOf = (id) => BOOST_DPS[id] ?? BT_BOOST_DPS;
+export const boostOffered = (id) => !!BOOST_PERKS[id] || (STAT_CARDS[id] || []).some((c) => !POWER_STATS.has(c.stat));
 // OVERTUNED CORE: the POWER flat (DRG: Survivor's clean overclocks): more damage output, no utility and nothing
 // new, a bigger number than a transform's potential (transforms are calibrated on realized damage,
 // js/bt-calibration.js) to pay for doing nothing new. BT_OVERTUNED_DPS is the default: x1.3 damage per hit.
@@ -590,18 +589,16 @@ export function globalReaches(kind, id) {
 }
 
 export const BOOST_NAME = 'Across the Board';
-const boostPct = (id) => Math.round((boostDpsOf(id) - 1) * 100);
-const hasUtility = (id) => (STAT_CARDS[id] || []).some((c) => !POWER_STATS.has(c.stat));
+const boostPct = () => Math.round((BT_BOOST_DPS - 1) * 100);
 export const boostSummary = (weaponName, id) => {
   const perk = BOOST_PERKS[id];
   if (perk) return `${weaponName}: +${boostPct(id)}% damage and +${perk.px} px ${perk.label}. No new tricks, just more of the same.`;
-  if (id && !hasUtility(id)) return `${weaponName}: +${boostPct(id)}% damage (it has no utility stats to rank up). No new tricks, just more of the same.`;
   return `${weaponName}: +${boostPct(id)}% damage and +${boostRanksOf(id)} rank${boostRanksOf(id) > 1 ? 's' : ''} in every UTILITY stat (size, reach, range, pierce, status rank...). No new tricks, just more of the same.`;
 };
 export const boostHeadline = (id) => {
   const perk = BOOST_PERKS[id];
   if (perk) return `+${boostPct(id)}% DAMAGE + ${perk.px} PX ${perk.label.toUpperCase()}`;
-  return id && !hasUtility(id) ? `+${boostPct(id)}% DAMAGE` : `+${boostPct(id)}% DAMAGE + UTILITY`;
+  return `+${boostPct(id)}% DAMAGE + UTILITY`;
 };
 
 // In-world R&D lines for the Breakthrough header ({weapon} is the weapon's name).
@@ -811,7 +808,7 @@ export const BT_HAND_SIZE = 3;
 export function drawBreakthroughOptions(id, m, bt = {}, rng = Math.random) {
   const taken = takenTransforms(id, bt);
   const tfs = transformPool(id).filter((t) => transformEligible(t, m, taken)).map((t) => ({ id: t.id, w: (t.home === m ? BT_HOME_WEIGHT : BT_AWAY_WEIGHT) * (BT_DRAW_TRIM[`${id}|${t.id}|${m}`] ?? 1) }));
-  const flats = Object.keys(BT_FLATS).map((f) => ({ id: f, w: 1 }));
+  const flats = Object.keys(BT_FLATS).filter((f) => f !== 'boost' || boostOffered(id)).map((f) => ({ id: f, w: 1 }));
   const hand = [];
   const first = weightedTake(tfs, rng);
   if (first) hand.push(first.id);
