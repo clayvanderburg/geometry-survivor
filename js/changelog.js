@@ -19,10 +19,10 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 pick 1 of 3 from its pool: a transform, Overtuned Core (+30% damage) or Across the Board (now +8% damage + utility).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
       { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires the ship\'s drills out on a cable and reels them back, boring through everything both ways. Nothing is pulled in any more.' },
-      { type: 'new', text: 'New global cards: Tempo Core, Cooldown Matrix, Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%); KINETIC +15%, EXPLOSIVE and ELECTRIC +20% (were 20/30%).' },
+      { type: 'new', text: 'New global cards: Tempo Core, Cooldown Matrix, Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%); tag cards give +20/25/25% and are always UNCOMMON.' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
-      { type: 'balance', text: 'Tesla Arc fires twice as often; the Flamethrower spins ~50% faster. Phase Piercer, Extra Nozzle and Split Rails are toned down, crits are reworked, and FROST now bites.' },
+      { type: 'balance', text: 'Phase Piercer and Extra Nozzle keep full power but are RARE finds. Split Rails is toned down, crits reworked, FROST bites, and Tesla Arc fires twice as often.' },
       { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' }
     ]
   },
