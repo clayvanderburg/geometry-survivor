@@ -95,7 +95,7 @@ function playerWith(id, lv) {
   return p;
 }
 
-test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core x1.20, Across the Board x1.18', () => {
+test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core x1.30, Across the Board x1.08', () => {
   const want = (o) => (o === 'boost' ? BT_BOOST_DPS : o === 'overtuned' ? BT_OVERTUNED_DPS : BT_TRANSFORM_DPS) - 1;
   for (const id of WEAPONS) {
     for (const m of BREAKTHROUGH_LEVELS) {
@@ -108,7 +108,8 @@ test('every option is worth its pinned potential DPS at every milestone: transfo
       }
     }
   }
-  assert.ok(BT_BOOST_DPS < BT_OVERTUNED_DPS && BT_OVERTUNED_DPS < BT_TRANSFORM_DPS, 'flats sit a little under a transform (DRG: Survivor), Across the Board lowest for its utility ranks');
+  assert.ok(BT_OVERTUNED_DPS - BT_BOOST_DPS >= 0.2, 'the two flats are a real trade-off: Across the Board is mostly utility, Overtuned Core is raw damage');
+  assert.ok(BT_BOOST_DPS < BT_TRANSFORM_DPS && BT_TRANSFORM_DPS < BT_OVERTUNED_DPS);
 });
 
 test('applyBreakthrough takes any pool option once; a transform can\'t be installed twice', () => {

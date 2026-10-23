@@ -11,8 +11,8 @@ Each weapon's pool holds two kinds of option:
 - **Transforms** (a new way the weapon works). The 60 we have, plus new ones from the content PRs. Each has a
   *home* milestone (today's `TRANSFORMS[id][6|12|18]`); new ones declare theirs.
 - **Flats** (shared by every weapon, no new mechanic; DRG's "clean/balanced" overclocks):
-  - **Across the Board**: ×1.18 damage and +1 rank in every UTILITY stat (unchanged).
-  - **Overtuned Core**: ×1.20 damage, nothing else. Pure numbers, a little under a transform.
+  - **Across the Board**: ×1.08 damage and +1 rank in every UTILITY stat (×1.18 until v0.46: it beat Overtuned Core on 57 of 60 bench milestones).
+  - **Overtuned Core**: ×1.30 damage, nothing else. Pure numbers: the damage pick against Across the Board's utility.
   - Later (content PRs): weapon-specific flats, such as *Damage + Rate* or *Size + Damage*, where a weapon's own
     stats make them meaningful.
 
@@ -44,8 +44,8 @@ under a transform, so the transforms stay the exciting pick (Director, Oct 22):
 | Option | Potential DPS | Plus |
 |---|---|---|
 | any transform | ×1.22 (`BT_TRANSFORM_DPS`) | a new mechanic |
-| Overtuned Core | ×1.20 (`BT_OVERTUNED_DPS`) | nothing |
-| Across the Board | ×1.18 (`BT_BOOST_DPS`) | +1 every UTILITY rank |
+| Overtuned Core | ×1.30 (`BT_OVERTUNED_DPS`) | nothing |
+| Across the Board | ×1.08 (`BT_BOOST_DPS`) | +1 every UTILITY rank |
 
 `tests/breakthroughs.test.js` pins every option's `dpsGain` to its row.
 

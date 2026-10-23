@@ -18,13 +18,17 @@ export const WEAPON_MAX_LEVEL = 18;
 export const BREAKTHROUGH_LEVELS = [6, 12, 18];
 // Potential-DPS multiplier of one Breakthrough choice (tests/breakthroughs.test.js pins both).
 export const BT_TRANSFORM_DPS = 1.22;
-export const BT_BOOST_DPS = 1.18;
-// ACROSS THE BOARD: free ranks added to every UTILITY stat of the weapon (not counted toward its level).
+export const BT_BOOST_DPS = 1.08;
+// ACROSS THE BOARD is the UTILITY flat: a small damage bump plus free ranks in every UTILITY stat of the weapon
+// (not counted toward its level). OVERTUNED CORE is the DAMAGE flat. They are kept far apart (Clay, v0.46: at
+// x1.18 + utility vs x1.20 Across the Board was always the pick; on the card bench it out-realized Overtuned on 57
+// of 60 weapon milestones), so the hand is a real trade-off: utility for weapons that live on reach, size and
+// spin, raw damage for the ones that live on hits.
 // POWER stats get none: +1 Prism Split, fire rate and damage at once would multiply far past a transform.
 export const BT_BOOST_RANKS = 1;
-// OVERTUNED CORE: damage only, a little under a transform (DRG: Survivor's clean overclocks), so the
-// transforms stay the exciting pick.
-export const BT_OVERTUNED_DPS = 1.2;
+// OVERTUNED CORE: damage only (DRG: Survivor's clean overclocks), a bigger number than a transform's potential
+// (transforms are calibrated on realized damage, js/bt-calibration.js) to pay for doing nothing new.
+export const BT_OVERTUNED_DPS = 1.3;
 
 // Single-stat cards per weapon. `stat` is the rank key read by weapon-scaling.js; `headline` the
 // STAT_ROWS id shown enlarged on the card; maxLevel is the most ranks one card can take (the weapon

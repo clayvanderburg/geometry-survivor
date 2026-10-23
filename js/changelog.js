@@ -16,7 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
-      { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 pick 1 of 3 from its pool (new: Overtuned Core, +20% damage). Every transform does about the same real damage.' },
+      { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 pick 1 of 3 from its pool: a transform, Overtuned Core (+30% damage) or Across the Board (now +8% damage + utility).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
       { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires spinning drill bits that pierce enemies and bore through rock as your mining. Nothing is pulled in any more.' },
       { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
