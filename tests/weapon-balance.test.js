@@ -30,11 +30,11 @@ test('all weapons deliver the same potential DPS at LV 1 (times their LV1_TRIM a
   for (const id of IDS) assert.ok(near(lv1(id), lv1Target(id)), `${id}: ${lv1(id).toFixed(3)} vs ${lv1Target(id)}`);
 });
 
-test('balance trims are deliberate and few: Autocannon and Drill Driver card steps x0.8, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Drill Driver x1.85, Graviton Mortar x0.33', () => {
-  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 });
-  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.85, quake: 0.33 });
+test('balance trims are deliberate and few: Autocannon card steps x0.8, Drill Driver x1.1, Swarm Missiles x0.7 damage and x1.3 fire rate, Rocket Pods x1.5, Escort Drones x3.6 and Glaive Discs x3.5 with Autocannon card steps, Sentry Turret x2.8, Rail Lance x2, Drill Driver x1.45, Graviton Mortar x0.33', () => {
+  assert.deepEqual({ ...CARD_STEP_TRIM }, { blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8 });
+  assert.deepEqual({ ...LV1_TRIM }, { missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
   assert.deepEqual({ ...FIRE_RATE_TRIM }, { missiles: 1.3 });
-  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 1.3 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks x1.3 (its late game on the realistic benches)');
+  assert.deepEqual({ ...RATE_STEP_TRIM }, { lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1 }, 'Tesla Arc Recharge ranks x0.6 (its chains are bound by targets, not damage); Drill Driver Spin-Up ranks x1.3 (its late game on the realistic benches)');
   assert.ok(near(rateStep('lightning'), RATE_STEP * 0.6));
   assert.ok(near(damageGrowth('blaster'), 1 + (DAMAGE_GROWTH - 1) * 0.8));
   assert.ok(near(rateStep('blaster'), RATE_STEP * 0.8));

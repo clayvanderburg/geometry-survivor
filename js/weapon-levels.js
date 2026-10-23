@@ -174,10 +174,10 @@ export const STAT_CARDS = {
   ],
   harpoon: [
     card('harpoon', 'harpoon_damage', 'damage', 'Drill Driver Tungsten Bit', 'harpoonDamage', 'Drill Driver: a harder drill bit. Only damage per hit.'),
-    card('harpoon', 'harpoon_rate', 'rate', 'Drill Driver Spin-Up Motor', 'harpoonRate', 'Drill Driver: the next bit spins up faster, so you fire more of them. Only fire rate.', cap(8)),
-    card('harpoon', 'harpoon_range', 'range', 'Drill Driver Long Barrel', 'harpoonRange', 'Drill Driver: bits fly further before they are spent. Only reach.', cap(8)),
-    card('harpoon', 'harpoon_pierce', 'pierce', 'Drill Driver Hardened Threads', 'harpoonPierce', 'Drill Driver: bits lose less bite boring through each enemy. Only damage past the first enemy.', sharedCap(5)),
-    card('harpoon', 'harpoon_drill', 'drill', 'Drill Driver Rock Bore', 'harpoonDrill', 'Drill Driver: each bit bores through more rock before it bites to a stop. Only mining.', cap(8))
+    card('harpoon', 'harpoon_rate', 'rate', 'Drill Driver Winch Motor', 'harpoonRate', 'Drill Driver: a faster winch launches and reels in the drills more often. Only throw rate.', cap(8)),
+    card('harpoon', 'harpoon_range', 'range', 'Drill Driver Long Cable', 'harpoonRange', 'Drill Driver: a longer cable, so the drills fly further. Only reach.', cap(8)),
+    card('harpoon', 'harpoon_pierce', 'pierce', 'Drill Driver Hardened Threads', 'harpoonPierce', 'Drill Driver: the drills lose less bite boring through each enemy. Only damage past the first enemy.', sharedCap(5)),
+    card('harpoon', 'harpoon_drill', 'drill', 'Drill Driver Rock Bore', 'harpoonDrill', 'Drill Driver: each throw bores through more rock before the drill bites to a stop. Only mining.', cap(8))
   ],
   quake: [
     card('quake', 'quake_damage', 'damage', 'Graviton Mortar Dense Core', 'quakeDamage', 'Graviton Mortar: denser charges. Only gravity wave damage.'),
@@ -424,9 +424,9 @@ export const TRANSFORMS = {
     18: tf('plague', 'Nanite Plague', 'Enemies a Nanite Swarm bites carry the plague: when one dies to anything, a small swarm bursts from the wreck and keeps eating.')
   },
   harpoon: {
-    6: tf('twin', 'Twin Drills', 'The Drill Driver fires two bits at once, fanned slightly apart, so it bores twice the line.'),
-    12: tf('spin', 'Drill Spin', 'Where a Drill Driver bit stops, it spins in place, grinding every enemy and rock round its tip before it crumbles.'),
-    18: tf('chain', 'Ricochet Bits', 'A spent Drill Driver bit caroms on to up to 3 more enemies near its tip, boring into each one.')
+    6: tf('twin', 'Twin Drills', 'The Drill Driver launches both drills at once, fanned slightly apart, so it bores twice the line.'),
+    12: tf('spin', 'Drill Spin', 'Where a Drill Driver drill stops, it spins in place, grinding every enemy and rock round its tip before it reels in.'),
+    18: tf('chain', 'Ricochet Bits', 'At the end of every throw the Drill Driver drill ricochets between up to 3 more enemies near its tip before it reels in.')
   },
   quake: {
     6: tf('skip', 'Rebound Pulse', 'Graviton Mortar charges rebound after they burst: each one springs to the next pack twice, pulsing again in smaller gravity waves.'),
@@ -597,8 +597,8 @@ export const EXTRA_TRANSFORMS = {
     { id: 'arcdisc', home: 12, name: 'Arc Discs', summary: 'Every Glaive Disc ricochet arcs lightning back into the enemy it just left.' }
   ],
   harpoon: [
-    { id: 'detonate', home: 6, name: 'Detonator Bit', summary: 'A Drill Driver bit screws into the first enemy that survives it, stays there, and blows a moment later, wrecking everything around it.' },
-    { id: 'tunnel', home: 12, name: 'Tunnel Bore', summary: 'Every Drill Driver bit leaves a churning bore behind it that keeps cutting any enemy crossing it for a second.' }
+    { id: 'detonate', home: 6, name: 'Detonator Bit', summary: 'A Drill Driver drill screws into the first enemy that survives it and blows a charge there a moment later, wrecking everything around it, before it reels in.' },
+    { id: 'tunnel', home: 12, name: 'Tunnel Bore', summary: 'Every Drill Driver throw leaves a churning bore along its line that keeps cutting any enemy crossing it for a second.' }
   ],
   quake: [
     { id: 'crush', home: 6, name: 'Crush Field', summary: 'Every Graviton Mortar burst leaves a crushing gravity field that keeps grinding whatever stands in it.' },

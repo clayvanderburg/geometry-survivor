@@ -508,7 +508,7 @@ export const MECHANIC_ENTRIES = [
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
       `Only your front drills mine. Weapons and bombs never break rock (except the ${WEAPON_BY_ID.harpoon.name}, and a ${WEAPON_BY_ID.quake.name} with Tidal Shear or Spacetime Fractures), so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.`,
-      `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it fires spinning drill bits that bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
+      `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it launches your front drills on a cable, and they bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
       'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your drills, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),

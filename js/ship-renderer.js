@@ -418,6 +418,12 @@ export function drawCrabShip(ctx, p, tuning, drilling = false, now = performance
       ctx.lineTo(4, 8.5);
       ctx.stroke();
 
+      // Drill Driver: this arm's drill is launched on its cable (js/drill-driver.js), so only the empty jaws show.
+      if (p.drillOut?.[arm]) {
+        ctx.restore();
+        continue;
+      }
+
       // Conical Rotary Drill Bit Outline (Base at x=0, sharp drill point at x=16)
       const drillLen = 16.5;
       const drillHalfW = 6.2;
