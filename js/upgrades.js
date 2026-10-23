@@ -207,6 +207,9 @@ export const UPGRADE_POOL = [
     id: 'overdrive',
     name: 'Reactor Overdrive',
     category: 'POWER',
+    // Global: with many weapons one Overdrive rank out-realizes each weapon's best card (+10% vs +7% at 6 weapons,
+    // hand-bench.mjs), so it turns up a little less as the loadout grows (weightFor; 1 up to 3 weapons, 0.7 at 6).
+    weightFor: (player) => Math.max(0.5, 1 - (TUNING.overdriveWeightTaper ?? 0.1) * Math.max(0, ownedWeapons(player).length - 3)),
     maxLevel: 5,
     headline: 'allDamage',
     summary: 'Overclocks the reactor: every weapon hits harder.',
@@ -653,7 +656,7 @@ export function cardWeight(u, luck = 1, player = null) {
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
     case 'tag': return TUNING.tagCardWeight ?? 0.7;
     case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
-    default: return u.weight ?? 1;
+    default: return u.weightFor && player ? u.weightFor(player) : u.weight ?? 1;
   }
 }
 

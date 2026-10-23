@@ -152,7 +152,7 @@ export const STAT_CARDS = {
   raillance: [
     card('raillance', 'raillance_damage', 'damage', 'Rail Lance Slug Mass', 'railDamage', 'Rail Lance: a heavier slug. Only damage per lance.'),
     card('raillance', 'raillance_rate', 'rate', 'Rail Lance Capacitor Bank', 'railCycle', 'Rail Lance: charges faster, so it fires more often. Only charge time.', cap(6)),
-    card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', cap(3)),
+    card('raillance', 'raillance_count', 'count', 'Rail Lance Split Rails', 'railLances', 'Rail Lance: one more lance per shot, fanned out beside the first.', rare(3)),
     card('raillance', 'raillance_width', 'width', 'Rail Lance Flux Lens', 'railWidth', 'Rail Lance: a wider line that clips more enemies. Only its width.', cap(6)),
     card('raillance', 'raillance_pierce', 'pierce', 'Rail Lance Penetrator Core', 'railKeep', 'Rail Lance: loses less damage for every enemy it pierces. Only the pierce falloff.', sharedCap(5))
   ],
