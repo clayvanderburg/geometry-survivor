@@ -11,7 +11,7 @@
 // their own schedule (rollLevelUpHand) and are the same before and after any weighting change.
 import { createHeadlessGame, seededRandom } from './balance/harness.mjs';
 import { rollUpgrades, acquireWeapon, applyUpgradeLevels, upgradeKind } from '../js/upgrades.js';
-import { unownedWeapons } from '../js/loadout.js';
+import { unownedWeapons, weaponSlots } from '../js/loadout.js';
 import { handSizeFor } from '../js/slot-rewards.js';
 import { cardScope } from '../js/upgrade-cards.js';
 
@@ -41,7 +41,8 @@ export function handComposition(weapons, { players: n = players, hands = handsPe
       const p = g.player;
       while (p.loadout.length < weapons) {
         const pool = unownedWeapons(p);
-        acquireWeapon(p, pool[Math.floor(Math.random() * pool.length)]);
+        // A row past the weapon slots can never fill: stop instead of looping forever.
+        if (!acquireWeapon(p, pool[Math.floor(Math.random() * pool.length)])) throw new Error(`can't carry ${weapons} weapons (${weaponSlots()} slots)`);
       }
       for (let k = 0; k < 3 * weapons; k++) {
         const hand = rollUpgrades(p, 3);
@@ -80,7 +81,7 @@ if (import.meta.url === `file://${process.argv[1]}` && !process.argv.includes('-
   const pct = (v) => `${Math.round(v * 100)}%`.padStart(5);
   const rows = [];
   console.log('weapons | hand | weapon | global | utility | evo | hands with a non-weapon card | hands with a global card');
-  for (let w = 1; w <= 6; w++) {
+  for (let w = 1; w <= weaponSlots(); w++) {
     const r = handComposition(w);
     console.log(`${String(w).padStart(7)} | ${String(r.handSize).padStart(4)} | ${pct(r.weapon)}  | ${pct(r.global)}  | ${pct(r.utility)}   | ${pct(r.evolution)} | ${pct(r.handsWithOther).padStart(28)} | ${pct(r.handsWithGlobal).padStart(24)}`);
     rows.push(r);

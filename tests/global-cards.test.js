@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 // GLOBAL CARDS (v0.46, Vampire Survivors-style passives): Tempo Core, Cooldown Matrix, Persistence Field and
 // Velocity Coils reach every equipped weapon with the stat, at about half a weapon card's step, priced on the
-// potential-DPS model against one weapon card with 2 / 4 / 6 weapons. Also the v0.46 splits: Geom Attractor
+// potential-DPS model against one weapon card with 2 / 4 / 5 weapons. Also the v0.46 splits: Geom Attractor
 // (radius) / Growth Lattice (XP) / a rare Supernova bomb drop, and Phase Nova Thrusters (nova only; the dash
 // cooldown is Cooldown Matrix's).
 globalThis.window = { addEventListener() {} };
@@ -48,8 +48,8 @@ const dps = (p) => p.loadout.reduce((a, w) => a + POTENTIAL_DPS[w](weaponBuild(p
 const LOADOUTS = {
   2: ['blaster', 'rockets'],
   4: ['blaster', 'rockets', 'grenades', 'singularity'],
-  6: ['blaster', 'rockets', 'grenades', 'singularity', 'drones', 'turret'],
-  '6 (sprayers & clouds)': ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas', 'glaive']
+  5: ['blaster', 'rockets', 'grenades', 'singularity', 'drones'],
+  '5 (sprayers & clouds)': ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas']
 };
 const POWER_GLOBALS = ['tempo', 'cooldown', 'persistence'];
 
@@ -108,7 +108,7 @@ test('bare builds carry no globals: LV 1 solves, class targets and the weapon-ba
   assert.deepEqual(makeBuild('rockets', 3).g, { tempo: 1, cooldown: 1, persistence: 1 });
 });
 
-test('pricing: one rank of a POWER global is worth a pick but less than one weapon card, with 2, 4 or 6 weapons', () => {
+test('pricing: one rank of a POWER global is worth a pick but less than one weapon card, with 2, 4 or 5 weapons (a full loadout since v0.46)', () => {
   for (const [n, weapons] of Object.entries(LOADOUTS)) {
     const base = dps(midRun(weapons));
     // One weapon card: the best of its Damage / rate / count card, averaged over the weapons (whole-build gain).

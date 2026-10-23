@@ -1,5 +1,5 @@
 // Global card bench: the realized value of one rank of each global card (Tempo Core, Cooldown Matrix,
-// Persistence Field, Velocity Coils, Field Amplifier, Replicator Array) on a whole mid-run build of 2 / 4 / 6
+// Persistence Field, Velocity Coils, Field Amplifier, Replicator Array) on a whole mid-run build of 2 / 4 / 5
 // weapons, against one Reactor Overdrive rank and one weapon card rank (each weapon's best single card,
 // averaged over the build). Benches as tools/balance/bt-bench.mjs: `real` (bot-like: a 260 px loop, dashing)
 // and `kite` (human-like: a 1200 px loop, no auto-dash), 25 chasing targets each; `blend` is their mean.
@@ -7,7 +7,7 @@
 // Rule: one rank of a global card stays under one weapon card and under Overdrive. Replicator Array is the one
 // deliberate exception (a rare jackpot: +15-27% per rank, 2-4x a weapon card; tests/global-cards.test.js).
 //
-//   node tools/balance/card-bench.mjs --loadout 2|4|6|sprayers [--seeds 4] [--wave 10] [--json out.json]
+//   node tools/balance/card-bench.mjs --loadout 2|4|5|sprayers [--seeds 4] [--wave 10] [--json out.json]
 const h = await import('./harness.mjs');
 if (process.env.AREA_STEP) h.WEAPON_SCALING.areaStep = Number(process.env.AREA_STEP);
 const U = await import('../../js/upgrades.js');
@@ -17,8 +17,8 @@ const { WEAPON_BY_ID } = await import('../../js/loadout.js');
 export const LOADOUTS = {
   2: ['blaster', 'rockets'],
   4: ['blaster', 'rockets', 'grenades', 'singularity'],
-  6: ['blaster', 'rockets', 'grenades', 'singularity', 'drones', 'turret'],
-  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas', 'glaive']
+  5: ['blaster', 'rockets', 'grenades', 'singularity', 'drones'], // a full loadout (5 slots since v0.46)
+  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas']
 };
 export const GLOBALS = { tempo: 'tempo_core', cooldown: 'cooldown_matrix', persistence: 'persistence_field', velocity: 'velocity_coils', area: 'tag_area', replicator: 'replicator_array' };
 const BENCHES = { real: { orbitRadius: 260, dash: true }, kite: { orbitRadius: 1200, dash: false } };

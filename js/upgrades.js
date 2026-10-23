@@ -208,7 +208,7 @@ export const UPGRADE_POOL = [
     name: 'Reactor Overdrive',
     category: 'POWER',
     // Global: with many weapons one Overdrive rank out-realizes each weapon's best card (+10% vs +7% at 6 weapons,
-    // hand-bench.mjs), so it turns up a little less as the loadout grows (weightFor; 1 up to 3 weapons, 0.7 at 6).
+    // hand-bench.mjs), so it turns up a little less as the loadout grows (weightFor; 1 up to 3 weapons, 0.8 at a full 5).
     weightFor: (player) => Math.max(0.5, 1 - (TUNING.overdriveWeightTaper ?? 0.1) * Math.max(0, ownedWeapons(player).length - 3)),
     maxLevel: 5,
     headline: 'allDamage',
@@ -1029,7 +1029,7 @@ export function discardWeapon(player, id) {
     }
   }
   if (!player.base && weapon.levelKey) player.weapons[weapon.levelKey] = 0;
-  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds). The slot 6
+  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds). The slot 5
   // Breakthrough is once per run, so it goes too.
   if (player.breakthroughs) delete player.breakthroughs[id];
   if (player.breakthroughsOffered) delete player.breakthroughsOffered[id];
@@ -1042,7 +1042,7 @@ export function discardWeapon(player, id) {
 // Milestones a weapon has reached but not yet chosen a Breakthrough for, lowest first.
 // A milestone already offered this run is never offered again (until the weapon is discarded), even if
 // its choice somehow failed to record: a weapon gets each Breakthrough exactly once. The weapon that
-// filled slot 6 has reached its first milestone from LV 1 (acquireWeapon).
+// filled slot 5 (the last) has reached its first milestone from LV 1 (acquireWeapon).
 export function pendingBreakthroughs(player, id) {
   const lv = weaponLevel(player, id);
   const taken = player.breakthroughs?.[id] || {};
