@@ -70,3 +70,61 @@ test('a rocket stopped by cover bursts on the rock face, and no damage gets thro
   assert.equal(bursts, frames.length, 'each one bursts on the rock');
   assert.equal(g.enemyManager.enemies[0].hp, 1e9, 'the rock is cover');
 });
+
+// Regression (v0.46.0 playtest, open space): with the swarm on the hull, rockets burst on their first tick
+// at the pod, before they were ever drawn, so a volley was a sound with nothing to see. The warhead now arms
+// a few frames after launch, so every rocket flies clear of the pod first.
+test('in a swarm hugging the ship every rocket is on screen for a few frames before it bursts', () => {
+  const g = h.createHeadlessGame();
+  g.resetRun();
+  g.state = 'PLAYING';
+  const p = g.player;
+  p.invuln = 1e9;
+  p.hp = p.maxHp = 1e9;
+  acquireWeapon(p, 'rockets');
+  p.loadout = ['rockets'];
+  g.enemyManager.clear();
+  g.spawnCooldown = 1e9;
+  g.waveTimer = -1e9;
+  g.asteroidManager.asteroids = [];
+  g.asteroidManager.rebuildSpatialHash();
+  g.openUpgradeModal = () => {}; // no level-up pauses mid-test
+  for (let k = 0; k < 40; k++) {
+    const a = (k / 40) * Math.PI * 2, d = 30 + (k % 4) * 20; // a ring right on the hull and the pods
+    g.enemyManager.queueSpawn('swarmer', p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, 1, { instant: true });
+  }
+  for (const e of g.enemyManager.enemies) e.hp = e.maxHp = 1e9;
+  g.autoAim = true;
+  g.autoFire = true;
+  g.sound = new Proxy({}, { get: () => () => {} });
+  const born = new Map();
+  const fire = g.fireWingRockets.bind(g);
+  let volleys = 0;
+  g.fireWingRockets = (...a) => {
+    volleys++;
+    const n = g.bullets.length;
+    fire(...a);
+    for (const b of g.bullets.slice(n)) born.set(b, 0);
+  };
+  for (let i = 0; i < 180; i++) {
+    p.x = 2000; p.y = 2000;
+    g.update(1 / 60);
+    for (const b of g.bullets) if (born.has(b)) born.set(b, born.get(b) + 1);
+  }
+  assert.ok(volleys >= 4, `${volleys} volleys`);
+  const frames = [...born.values()];
+  assert.equal(frames.length, volleys * 2);
+  assert.ok(frames.every((n) => n >= 3), `every rocket drawn for 3+ frames (${frames.join(',')})`);
+  assert.ok(g.enemyManager.enemies.some((e) => e.hp < 1e9), 'and they still hit the pack');
+});
+
+test('rockets and missiles are drawn over ground effects, enemies and spray cones', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
+  const draw = src.slice(src.indexOf('\n  draw() {'));
+  const at = (needle) => { const i = draw.indexOf(needle); assert.ok(i > 0, needle); return i; };
+  const rockets = at('this.drawWingRocket(ctx, this.bullets[i])');
+  const missiles = at('this.drawMissile(ctx, this.missiles[i])');
+  for (const under of ['gasTrail?.drawGround', 'nanites?.drawGround', 'shockField?.draw', 'enemyManager.draw(ctx', 'flamethrower?.draw', 'acidSprayer?.draw']) {
+    assert.ok(at(under) < rockets && at(under) < missiles, `${under} is drawn under rockets and missiles`);
+  }
+});
