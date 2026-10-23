@@ -40,6 +40,7 @@ export const SUB_SOURCES = Object.freeze({
   nanite_plague: 'nanites',   // Nanite Swarm: Nanite Plague swarms
   harpooncrush: 'harpoon',  // retired (v0.45 Claw Harpoon crush); old run stats still name it
   harpoonslam: 'harpoon',   // retired (v0.45 Claw Harpoon Seismic Slam); old run stats still name it
+  harpoonreel: 'harpoon',   // Drill Driver: hits on the way back
   harpoonspin: 'harpoon',   // Drill Driver: Drill Spin
   harpoonchain: 'harpoon',  // Drill Driver: Ricochet Bits caroms
   harpoonblast: 'harpoon',  // Drill Driver: Detonator Bit blasts

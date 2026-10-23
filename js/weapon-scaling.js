@@ -51,14 +51,14 @@ export const RATE_STEP = 0.4;     // fire rate / reload / cooldown cards: +40% a
 // they track it at every level (kept on target to LV 18 against level-matched HP, not only at LV 3 / 6). Graviton Mortar (id quake) 0.33: its waves
 // roll over whole packs (~3.5 enemies per ring in sim runs, 12-19 in the dense card bench), so on the
 // shared curve it out-damaged the Autocannon ~2.5x in the pack bench; 0.33 holds it about even in total.
-export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 0.8, drones: 0.8 }); // the Drill Driver (aimed, like the Autocannon) climbs on its curve
-export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.85, quake: 0.33 });
+export const CARD_STEP_TRIM = Object.freeze({ blaster: 0.8, glaive: 0.8, harpoon: 1.1, drones: 0.8 }); // the Drill Driver's out-and-back throws start heavy and climb steeper: x1.1 holds it near the Autocannon from LV 6 on
+export const LV1_TRIM = Object.freeze({ missiles: 0.7, rockets: 1.5, drones: 3.6, turret: 2.8, raillance: 2, glaive: 3.5, harpoon: 1.45, quake: 0.33 });
 export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 // RATE_STEP_TRIM scales only a weapon's fire-rate card step (on top of CARD_STEP_TRIM). Tesla Arc 0.6 (v0.46):
 // its chains are bound by targets, not damage (a jump already kills most of the pack it lands on), so each
 // Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
 // build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
-export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 1.3 }); // Drill Driver Spin-Up ranks x1.3: on the realistic benches its late game (rate ranks past LV 11) sat at ~0.5x the Autocannon
+export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
 // Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
@@ -952,25 +952,36 @@ export const WEAPON_SCALING = {
   naniteDamageMult: (b) => lv1('nanites', 'nanites', (b0) => DPS_TARGET(1) * W.naniteTick(b0) / (W.naniteUnits(b0) * W.naniteUptime(b0))) * hitMult(b) * tfScale(b, W.naniteUnits),
 
   // --- Drill Driver, id harpoon (stats: damage, rate, range, pierce, drill) -------------------------
-  // Fires a spinning drill bit along the turret aim while firing (js/drill-driver.js), one per
-  // harpoonCooldown. The bit flies at harpoonSpeed out to harpoonRange, boring through every enemy on its
-  // line once (each one behind takes harpoonPierceKeep of the hit before it, kill or not) and
-  // through rock: it breaks rock worth harpoonDrill rock HP per bit (x the ship's drill speed) and bites to
-  // a stop in the first rock it can't break (bedrock always stops it). Nothing is pulled: every hit's
-  // knockback points away from the ship. Potential counts one bit on one target, like an Autocannon bolt.
-  harpoonCooldown: (b) => 0.22 / (1 + rateStep('harpoon') * (b.r.rate || 0)) / tempo(b),
+  // Launches the ship's own front drills on a cable along the turret aim while firing (js/drill-driver.js):
+  // one drill per harpoonCooldown, the two arms taking turns. A drill flies out to harpoonRange over
+  // harpoonOutShare of a cycle, then reels back over harpoonBackShare (so each arm is home again before
+  // its next turn), boring every enemy on its line once on the way out and once on the way back (reelShare
+  // of a hit). Each enemy behind takes harpoonPierceKeep of the hit before it, kill or not. On the way out it
+  // drills rock: it breaks rock worth harpoonDrill rock HP per throw (x the ship's drill speed) and bites to a
+  // stop in the first rock it can't break (bedrock always stops it). Nothing is ever gripped or pulled: every
+  // hit's knockback points away from the ship. Potential counts the way out plus the way back (valued at
+  // reelHitShare: the line has moved on by then) on one target.
+  harpoonCooldown: (b) => 0.4 / (1 + rateStep('harpoon') * (b.r.rate || 0)) / tempo(b),
   harpoonRange: (b) => 560 + 40 * (b?.r?.range || 0),
-  harpoonSpeed: 1500, // px/s: a bit crosses its reach in about a third of a second
+  harpoonOutShare: 0.8,
+  harpoonBackShare: 0.8,
+  reelShare: 1,
+  reelHitShare: 0.7,
   harpoonPierceKeep: (b) => Math.min(1, 0.75 + 0.05 * (b?.r?.pierce || 0)), // share kept past each enemy bored (a kill too: free kills made Damage cards compound)
   harpoonDrill: (b) => 130 * (1 + 0.6 * (b?.r?.drill || 0)),
   harpoonTipRadius: 14,
-  // Transforms: Twin Drills (every launch fires two bits twinSpread rad apart, the second valued at
-  // twinHitShare: on one target it lands about that often), Drill Spin (a bit spins where it stops for
-  // spinTime s, grinding everything within spinRadius spinTicks times for spinShare of a hit in total,
-  // valued at spinHitShare; it drills rock there too), Ricochet Bits (a spent bit caroms on to up to
-  // chainLeaps more enemies within chainRange of its tip, chainTime s each, for chainShare of a hit each,
-  // valued at chainHitShare).
+  // Transforms: Twin Drills (every launch fires both drills, fanned twinSpread rad apart, each flying out
+  // over twinOutShare and back over twinBackShare of the cycle so both are home for the next launch; the
+  // second drill valued at twinHitShare: on one target it lands about that often), Drill Spin (the drill spins
+  // where it stops for spinTime s, grinding everything within spinRadius spinTicks times for spinShare of a hit
+  // in total, valued at spinHitShare; it drills rock there too), Ricochet Bits (from the end of its throw the
+  // drill bounces to up to chainLeaps more enemies within chainRange of its tip, chainTime s each, for
+  // chainShare of a hit each, valued at chainHitShare, before it reels in). Spins and Detonator lodges shorten
+  // as the winch speeds up past its LV 1 cycle, and the time spent there comes off the reel, so an arm is home
+  // for its next turn anyway (js/drill-driver.js).
   twinSpread: 0.16,
+  twinOutShare: 0.45,
+  twinBackShare: 0.45,
   twinHitShare: 0.6,
   spinShare: 0.6,
   spinTicks: 6,
@@ -982,23 +993,23 @@ export const WEAPON_SCALING = {
   chainRange: 220,
   chainTime: 0.05,
   chainHitShare: 0.6, // a leap lands on whoever is near the tip, not always a fresh target: valued at this share
-  // Pool transforms (js/drill-driver.js): Detonator Bit (a bit screws into the first enemy that survives it, or
-  // where it stopped, and blows detDelay s later in a detRadius blast for detShare of a hit, valued at
-  // detHitShare), Tunnel Bore (the line a bit bored keeps cutting for tunnelLife s, ticking every enemy within
+  // Pool transforms (js/drill-driver.js): Detonator Bit (a drill screws into the first enemy that survives it,
+  // or where it stopped, blows detDelay s later in a detRadius blast for detShare of a hit, valued at
+  // detHitShare, then reels in), Tunnel Bore (the line a throw bored keeps cutting for tunnelLife s, ticking every enemy within
   // tunnelWidth of it every tunnelTick s for tunnelShare of a hit in all, valued at tunnelHitShare).
   detDelay: 0.35,
-  detRadius: 70,
-  detShare: 0.6,
-  detHitShare: 1.05,
+  detRadius: 90,
+  detShare: 0.9,
+  detHitShare: 0.5,
   tunnelLife: 1,
   tunnelTick: 0.2,
   tunnelShare: 0.4,
   tunnelWidth: 14,
   tunnelHitShare: 1.2,
-  harpoonUnits: (b) => 1 + (b.t4 ? W.twinHitShare : 0)
+  harpoonUnits: (b) => (1 + W.reelShare * W.reelHitShare) * (1 + (b.t4 ? W.twinHitShare : 0))
     + (b.t8 ? W.spinShare * W.spinHitShare : 0) + (b.t12 ? W.chainLeaps * W.chainShare * W.chainHitShare : 0)
     + (b.tf?.has('detonate') ? W.detShare * W.detHitShare : 0) + (b.tf?.has('tunnel') ? W.tunnelShare * W.tunnelHitShare : 0),
-  // Damage of one bit on the first enemy on its line.
+  // Damage of one drill on the first enemy on its line, on the way out.
   harpoonDamageMult: (b) => lv1Trim('harpoon') * lv1('harpoon', 'harpoon', (b0) => DPS_TARGET(1) * W.harpoonCooldown(b0) / W.harpoonUnits(b0)) * hitMult(b) * tfScale(b, W.harpoonUnits),
 
   // --- Graviton Mortar, id quake (stats: damage, count, rate, radius, bore) -------------------------
