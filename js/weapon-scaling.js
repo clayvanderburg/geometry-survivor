@@ -108,6 +108,8 @@ const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new S
 const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) / tfRealized(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
 // GLOBAL CARDS multipliers a build carries (weapon-levels.js GLOBAL_CARDS; 1 for bare builds, so LV 1 solves never move).
+// GLOBAL CARDS (weapon-levels.js GLOBAL_CARDS): Tempo Core scales each weapon's attack timer (its TEMPO_STAT),
+// Cooldown Matrix only the charge timers of weapons that deploy (CHARGE_STAT: Sentry Turret charges, Nanite canisters).
 const tempo = (b) => b?.g?.tempo ?? 1;
 const cdr = (b) => b?.g?.cooldown ?? 1;
 const persist = (b) => b?.g?.persistence ?? 1;
@@ -180,7 +182,7 @@ export const WEAPON_SCALING = {
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / cdr(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
+  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / tempo(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 11, // 8.5 before v0.39.8
@@ -221,7 +223,7 @@ export const WEAPON_SCALING = {
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / cdr(b), // 1.44 s before the weapons pass
+  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / tempo(b), // 1.44 s before the weapons pass
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
@@ -264,7 +266,7 @@ export const WEAPON_SCALING = {
   // bound by targets (a jump already killed most of what it landed on), so faster, lighter discharges waste
   // less on overkill and crackle more like lightning (card bench: 0.43-0.54x the Autocannon at LV 6-12 under
   // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
-  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / cdr(b),
+  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / tempo(b),
   stormArcScale: 2,
   lightningRange: (b) => 420 + 35 * (b.r.reach || 0), // +40% (was 300 + 25/rank); Reach card retired in v0.46 (dead pick)
   lightningChains: (b) => (b.t4 ? 2 : 1),
@@ -311,7 +313,7 @@ export const WEAPON_SCALING = {
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
   singularityPullRadius: (b) => 175 + 25 * b.r.pull + (b.t8 ? W.aftershockPull : 0),
   singularityLife: (b) => (2.6 + 0.3 * b.r.duration) * persist(b),
-  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / cdr(b),
+  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / tempo(b),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
@@ -757,7 +759,7 @@ export const WEAPON_SCALING = {
   // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
   // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
   fieldRadius: (b) => 125 + 24 * (b?.r?.radius || 0), // +12 per rank before v0.39.7
-  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / cdr(b),
+  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / tempo(b),
   fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
   fieldHitShare: 1,
   fieldKnock: 1.2, // a light outward shove on every discharge
