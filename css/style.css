@@ -1212,7 +1212,8 @@ html, body {
    on the frame: a rarity border with a slow glow and a light sweeping round it, plus the ◆ ribbon. */
 .upgrade-option.rarity-floored {
   --rarity-bg: rgba(30, 36, 52, 0.94);
-  animation: floor-glow 2.4s ease-in-out infinite;
+  animation: card-deal 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.07s) backwards,
+    floor-glow 2.4s ease-in-out 0.5s infinite;
 }
 .upgrade-option.rarity-floored .upg-name { color: #e8eef8; }
 .upgrade-option.rarity-floored::before {
@@ -3835,24 +3836,54 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 
 .hand-lock-note.dropped { color: #ff77b7; }
 
-/* Per-card LOCK toggle and LOCKED state: additions around the card, the card design is unchanged. */
-.card-lock-toggle {
-  align-self: flex-end;
-  margin-top: 10px;
-  padding: 3px 10px;
-  font-size: 11px;
+/* A choice card's slot: the card, then (level-up hands) its own LOCK / BANISH strip under it. The strip
+   sits outside the card, past a gap that belongs to neither, so a near-miss on a button never picks the
+   card. Buttons are ~2.5x the old pills (Clay: misclicks picked the card instead of banishing it). */
+.card-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.card-slot > .upgrade-option { flex: 1; }
+.card-actions {
+  display: flex;
+  gap: 10px;
+  animation: card-actions-in 0.3s ease-out calc(0.25s + var(--deal-i, 0) * 0.07s) backwards;
+}
+@keyframes card-actions-in { from { opacity: 0; translate: 0 -8px; } }
+.card-action {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 13px;
   font-weight: 900;
-  letter-spacing: 0.5px;
-  color: var(--gold);
-  border: 1px solid rgba(255, 204, 0, 0.6);
-  border-radius: 99px;
-  background: rgba(0, 0, 0, 0.35);
+  letter-spacing: 0.8px;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+.card-action:hover { transform: translateY(-1px); }
+.card-action:active { transform: scale(0.96); }
+.card-action .act-cost { opacity: 0.85; font-weight: 800; }
+.card-action.hidden { display: none; }
+
+/* LOCK (gold) and the card's LOCKED state: additions around the card, the card design is unchanged. */
+.card-lock-toggle {
+  color: var(--gold);
+  border: 2px solid rgba(255, 204, 0, 0.65);
+  background: rgba(255, 204, 0, 0.08);
 }
 
-.card-lock-toggle:hover { background: rgba(255, 204, 0, 0.2); }
-.card-lock-toggle.on { background: var(--gold); color: #05060f; }
+.card-lock-toggle:hover { background: rgba(255, 204, 0, 0.22); box-shadow: 0 0 14px rgba(255, 204, 0, 0.35); }
+.card-lock-toggle.on { background: var(--gold); color: #05060f; box-shadow: 0 0 16px rgba(255, 204, 0, 0.55); }
 .card-lock-toggle.unaffordable { opacity: 0.4; cursor: not-allowed; }
 
 .upgrade-option.card-locked {
@@ -4039,24 +4070,15 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 .consent-check input.gp-focus,
 .consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
-/* BANISH toggle (level-up cards): opposite corner to the LOCK toggle; red, and lit when armed. */
+/* BANISH (level-up cards): beside LOCK in the card's action strip; red, and lit + pulsing when armed. */
 .card-banish-toggle {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 70, 100, 0.65);
+  border: 2px solid rgba(255, 70, 100, 0.7);
   background: rgba(255, 70, 100, 0.1);
   color: #ff8fa3;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  z-index: 2;
 }
-.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.25); }
-.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; }
+.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.26); box-shadow: 0 0 14px rgba(255, 70, 100, 0.4); }
+.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; animation: banish-armed 0.6s ease-in-out infinite alternate; }
+@keyframes banish-armed { from { box-shadow: 0 0 6px rgba(255, 70, 100, 0.5); } to { box-shadow: 0 0 22px rgba(255, 70, 100, 0.95); } }
 .card-banish-toggle.unaffordable { opacity: 0.45; }
 .card-banish-toggle.hidden { display: none; }
 
@@ -4842,8 +4864,11 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline-pills { fon
 body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
 body.touch-mode .slot-tip-title { font-size: 20px; }
 body.touch-mode .slot-tip-line { font-size: 12.5px; margin-bottom: 10px; }
-body.touch-mode .card-lock-toggle,
-body.touch-mode .card-banish-toggle { font-size: 10px; padding: 3px 8px; margin-top: 6px; }
+/* Phone: the strip stays big enough to hit with a thumb (36px tall), words drop to icon + cost. */
+body.touch-mode .card-slot { gap: 6px; }
+body.touch-mode .card-actions { gap: 6px; }
+body.touch-mode .card-action { min-height: 36px; padding: 4px 6px; font-size: 12px; letter-spacing: 0.3px; gap: 4px; }
+body.touch-mode .card-action .act-word { display: none; }
 body.touch-mode .card-more-btn {
   display: block;
   margin-top: 6px;
