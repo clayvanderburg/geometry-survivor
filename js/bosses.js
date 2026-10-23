@@ -13,7 +13,7 @@ import { flashScale } from './juice.js'; // REDUCE EFFECTS dims boss glow flashe
 import { SERPENT, spawnSerpent, spawnBody, coilPath, windToward, liveOf, turnToward, traceSerpentHead } from './serpents.js';
 import { spawnWing, flyRuns, wingmenOf, slotOffset } from './squadrons.js';
 import { launchDrones, traceCell } from './hostiles.js';
-import { lanceCycle, drawLanceAim, drawBeam, beamFrom } from './lancers.js';
+import { lanceCycle, drawBeam, beamFrom } from './lancers.js';
 // The major bosses (waves 10/20/30/40/50) live in js/bosses-major.js.
 import { MAJOR_BOSSES, OURO, HIVE, ARCH, COND, PRISM, PRISM_PHASE_NAMES } from './bosses-major.js';
 export { OURO, HIVE, ARCH, COND, PRISM, PRISM_PHASE_NAMES };
@@ -1199,8 +1199,7 @@ const eclipseTwins = {
   overlay(ctx, e, r) {
     drawBossFlair(ctx, e, r);
     if (e.beam) drawBeam(ctx, e.beam, e.lanceState === 'fire' ? e.hue : 320);
-    drawLanceAim(ctx, e);
-    const root = e.root || e;
+    const root = e.root || e; // the aim line rides above everything (EnemyManager.drawTopTelegraphs)
     if (e.twinRole === 'sol' && root.eclipseT > 0) {
       // The eclipse: a dark-ringed corona swelling round the pair as the nova charges.
       const k = Math.max(0, Math.min(1, 1 - (root.eclipseT - TWINS.novaHold) / TWINS.novaWarn));
