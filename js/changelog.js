@@ -19,7 +19,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Breakthroughs are now a draw: at weapon LV 6, 12 and 18 pick 1 of 3 from its pool: a transform, Overtuned Core (+30% damage) or Across the Board (now +8% damage + utility).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
       { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires the ship\'s drills out on a cable and reels them back, boring through everything both ways. Nothing is pulled in any more.' },
-      { type: 'new', text: 'New global cards boost every weapon: Tempo Core, Cooldown Matrix, Persistence Field and Velocity Coils. Field Amplifier is the global Area card (+10% per rank, was +15%).' },
+      { type: 'new', text: 'New global cards: Tempo Core, Cooldown Matrix, Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%); KINETIC +15%, EXPLOSIVE and ELECTRIC +20% (were 20/30%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup radius only, Phase Nova Thrusters just the shockwave, and bombs drop from lieutenants. Hands never offer dead ranks.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
       { type: 'balance', text: 'Tesla Arc discharges twice as often, each a little lighter. The Flamethrower spins about 50% faster, and sprayer Breakthroughs speed the nozzle up too.' },
