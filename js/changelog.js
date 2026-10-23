@@ -20,7 +20,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
       { type: 'balance', text: 'Breakthrough cards state what you get once; potential DPS is a stat below. Escort Drones and Glaive Discs offer Overtuned Core and two transforms (no Across the Board).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
-      { type: 'new', text: 'The GLOBAL leaderboard shows the full top 100 (scroll by wheel, touch or controller; tap YOU #n to jump to your run), and a run that meets a busy board retries on its own.' },
+      { type: 'new', text: 'The GLOBAL leaderboard shows the full top 100 (tap YOU #n to jump to your run). Busy boards retry on their own, and a run that can\'t upload waits and sends itself later.' },
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
       { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
