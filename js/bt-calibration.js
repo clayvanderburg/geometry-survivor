@@ -38,7 +38,7 @@ export const TF_REALIZED = {
   missiles: { cluster: [1, 1, 0.67], rain: [0.7, 0.77, 0.78], nuke: [0.64, 0.73, 0.68], hunter: [1, 1, 0.79], echo: [0.92, 1, 0.6] },
   lightning: { fork: [1, 1.7, 1], orb: [1, 1.1, 1], strike: [1, 1, 1], lattice: [1, 1.1, 1], conductor: [1.1, 1.7, 1.1] },
   singularity: { twin: [1.7, 1, 1], aftershock: [0.75, 0.6, 0.88], cascade: [0.6, 0.6, 0.75], accretion: [0.66, 0.6, 0.65], whitehole: [0.95, 0.6, 1.15] },
-  orbitals: { counter: [1, 1, 1.2], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6], frenzy: [0.65, 0.7, 0.85], vortex: [1.25, 1.7, 1.3] },
+  orbitals: { counter: [1, 1, 1.3], fling: [0.6, 0.75, 0.64], nova: [0.6, 0.6, 0.6], frenzy: [0.65, 0.7, 0.85], vortex: [1.25, 1.7, 1.3] },
   mines: { cluster: [1, 1, 0.6], seeker: [1, 1, 0.66], triad: [1.67, 1.61, 1.53], shock: [0.85, 0.8, 0.6], napalm: [1, 1.7, 0.6] },
   turret: { capacity: [0.6, 0.6, 0.78], mobile: [0.9, 1, 1], overload: [0.66, 0.66, 0.79], gift: [0.6, 0.6, 0.75], link: [0.6, 0.62, 0.78] },
   drones: { wingman: [1.01, 1.02, 1.02], homing: [1.15, 1.35, 1], pods: [1, 1, 0.82], overdrive: [1, 0.88, 0.92], kamikaze: [0.95, 0.75, 0.75] },

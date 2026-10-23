@@ -4231,6 +4231,7 @@ export class Game {
   updateOrbitals(dt, b) {
     const p = this.player;
     this.orbitalAngle += dt * W.orbitalSpin(b);
+    this.orbitalClock = (this.orbitalClock || 0) + dt;
     const count = W.orbitalBlades(b);
     const damage = weaponDamage(p, 'orbital', b) * BTX.frenzyMult(this, dt, b);
     const bladeR = W.orbitalBladeRadius(b) * BTX.frenzySize(this, b);
@@ -4252,8 +4253,15 @@ export class Game {
           const reach = e.radius + bladeR;
           if (dx * dx + dy * dy < reach * reach) {
             // No knockback: blades grind whatever they touch, so pushing targets off would cut their DPS.
-            this.particles.spawnExplosionSparks(ox, oy, 3, sparkHue, 2, 7, 1.6);
-            if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, sparkHue, 0.1);
+            if (!(this.orbitalClock - (e.bladeAt ?? -Infinity) < W.orbitalConnectGap)) {
+              // First bite: a heavier burst at the contact point, so the blade visibly connects.
+              this.particles.spawnExplosionSparks((ox + e.x) / 2, (oy + e.y) / 2, 9, sparkHue, 4, 12, 2.2);
+              this.particles.spawnFlash?.((ox + e.x) / 2, (oy + e.y) / 2, 26, sparkHue, 0.12);
+            } else {
+              this.particles.spawnExplosionSparks(ox, oy, 3, sparkHue, 2, 7, 1.6);
+              if (Math.random() < 0.3) this.particles.spawnFlash?.(ox, oy, 14, sparkHue, 0.1);
+            }
+            e.bladeAt = this.orbitalClock;
             this.sound.playBladeHit?.();
             this.hitEnemy(e, damage, 'orbital', 0, 0, 0.6);
             BTX.frenzyHit(this, b);
