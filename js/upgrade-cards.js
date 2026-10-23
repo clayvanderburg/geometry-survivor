@@ -12,10 +12,10 @@ import {
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage, dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
-import { WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
+import { WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES, shipSourcesWith } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
-import { weaponPill, weaponPills, rowWeapon } from './weapon-pills.js';
+import { weaponPill, weaponPills, sourcePill, rowWeapon } from './weapon-pills.js';
 import { clipHTML, transformClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, overtunedHeadline, boostHeadline, boostSummary, overtunedSummary, btOption,
@@ -452,15 +452,16 @@ const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'DASH + EVERY DEPLOY WEAP
 const globalScopeLabel = (kind, ids, owned) => (kind === 'tempo' && ids.length < owned.length ? 'EVERY TIMED WEAPON' : GLOBAL_SCOPE[kind]);
 const ALL_WEAPON_CARDS = new Set(['overdrive', 'crit_chance', 'crit_damage']);
 const STATUS_ELEMENT = { fire_damage: 'fire', frost_damage: 'frost', corrode_damage: 'corrode', shock_damage: 'shock', shock_conductor: 'shock' };
+// `sources`: the non-weapon sources it boosts too (SHIP_SOURCES), shown as dashed pills after the weapons.
 function cardReach(after, upg) {
   const owned = ownedWeapons(after);
   if (upg.globalCard) {
     const ids = globalReach(after, upg.globalCard);
-    return { label: globalScopeLabel(upg.globalCard, ids, owned), ids };
+    return { label: globalScopeLabel(upg.globalCard, ids, owned), ids, sources: upg.globalCard === 'area' ? shipSourcesWith(after, 'area') : [] };
   }
   if (upg.category === 'SPECIALIST' && upg.tags?.length) {
     const tag = upg.tags[0];
-    return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)) };
+    return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)), sources: shipSourcesWith(after, tag) };
   }
   if (ALL_WEAPON_CARDS.has(upg.id)) return { label: 'ALL WEAPONS', ids: owned };
   if (upg.statusCard) {
@@ -471,6 +472,15 @@ function cardReach(after, upg) {
     };
   }
   return null;
+}
+
+// A tag or area card in the hand for a non-weapon source alone says what it boosts there, and that weapons
+// picked up later count too ("Boosts your Volatile Shatter shards (and any KINETIC weapon you pick up later).").
+function sourceOnlySummary(upg, reach) {
+  if (!reach || reach.ids.length || !reach.sources?.length) return '';
+  const what = reach.sources.map((s) => `${s.name} ${s.what}`).join(' and ');
+  const family = upg.globalCard === 'area' ? 'AREA' : (TAG_INFO[upg.tags?.[0]]?.label || '');
+  return `Boosts your ${what} (and any ${family} weapon you pick up later).`;
 }
 
 const rowView = ({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a });
@@ -510,6 +520,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
   const replicated = upg.id === REPLICATOR_ID ? replicatorParts(player, copy) : null;
+  const reach = cardReach(copy, upg);
 
   return {
     id: upg.id,
@@ -520,13 +531,13 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     // Its tier comes from the floor, not the roll: the card keeps a normal body and wears the tier on its frame.
     rarityFloored: upg.rarityFloor > jump,
     weapons: cardWeapons(player, upg, sc),
-    reach: cardReach(copy, upg),
+    reach,
     headlineHtml: replicated?.length ? replicated.map((x) => `<span class="upg-headline-part">${weaponPill(x.weapon)} ${x.text}</span>`).join('') : '',
     name: upg.name,
     category: upg.category,
     scope: cardScope(upg),
     tags: (upg.tags || []).filter((t) => TAG_INFO[t]),
-    summary: upg.summary || '',
+    summary: sourceOnlySummary(upg, reach) || upg.summary || '',
     isSynergy: !!upg.isSynergy,
     rarity,
     rarityLabel: RARITY[rarity].label,
@@ -728,7 +739,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
           <div class="upg-stat"><span class="upg-stat-label">${pill}${label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`;
   }).join('');
   // Scope chip first ("ALL WEAPONS": now and later), then the weapons it boosts today.
-  const reach = d.reach ? `<span class="upg-reach-scope" title="Also boosts matching weapons you pick up later">${d.reach.label}</span>${weaponPills(d.reach.ids)}` : '';
+  const reach = d.reach ? `<span class="upg-reach-scope" title="Also boosts matching weapons you pick up later">${d.reach.label}</span>${weaponPills(d.reach.ids)}${(d.reach.sources || []).map(sourcePill).join('')}` : '';
   const weaponLine = own.length || reach ? `<div class="upg-weapons">${weaponPills(own)}${reach}</div>` : '';
   const tags = d.tags && d.tags.length
     ? `<div class="upg-tags">${d.tags.map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('')}</div>`
