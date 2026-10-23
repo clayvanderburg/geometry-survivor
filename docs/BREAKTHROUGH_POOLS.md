@@ -12,7 +12,9 @@ Each weapon's pool holds two kinds of option:
   *home* milestone (today's `TRANSFORMS[id][6|12|18]`); new ones declare theirs.
 - **Flats** (shared by every weapon, no new mechanic; DRG's "clean/balanced" overclocks):
   - **Across the Board**: ×1.08 damage and +2 ranks in every UTILITY stat (+1 on the sprayers, Gas, Mines, Nanites,
-    Shock Field, Orbit Blades and the Drill Driver: `BOOST_RANKS`). ×1.18 and +1 rank until v0.46, when it beat Overtuned Core on 57 of 60 bench milestones.
+    Shock Field, Orbit Blades and the Drill Driver: `BOOST_RANKS`). Weapons with no utility card left get a named
+    perk instead (Tesla Arc: +105 px chain reach, `BOOST_PERKS`) or more damage (Escort Drones, Glaive Discs: ×1.15,
+    `BOOST_DPS`), so it is never a weaker Overtuned Core. ×1.18 and +1 rank until v0.46, when it beat Overtuned Core on 57 of 60 bench milestones.
   - **Overtuned Core**: more damage output, no utility: ×1.30 damage by default. Each weapon has its own version
     (`OVERTUNED` in `js/weapon-levels.js`), calibrated to realize 1.0–1.15× Across the Board: more damage where hits
     matter, free POWER ranks (+1 nozzle, +2 drop rate...) where the swarm already dies to the hits it takes.

@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostDpsOf, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -29,7 +29,7 @@ export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
 // Overtuned Core's free POWER ranks count at what they add on this build (its hit damage is in hitMult).
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 export function overtunedRankGain(b) {
   const o = b.ot && overtunedRanks(b.id);
   if (!o || !POTENTIAL_DPS[b.id]) return 1;
@@ -100,7 +100,7 @@ const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1) * (RATE_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
-export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
 // transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make; then
 // divided by the transforms' card-bench realized value (bt-calibration.js), which POTENTIAL_DPS counts back in.

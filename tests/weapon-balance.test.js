@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, DAMAGE_GROWTH, RATE_STEP, CARD_STEP_TRIM, RATE_STEP_TRIM, LV1_TRIM, FIRE_RATE_TRIM, WEAPON_CLASS, CLASS_TARGET, damageGrowth, rateStep, TURRET_RELOAD_TRIM } = await import('../js/weapon-scaling.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, discardWeapon } = await import('../js/upgrades.js');
-const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, boostRanksOf, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
+const { STAT_CARDS, POWER_STATS, makeBuild, levelBuild, BT_TRANSFORM_DPS, BT_BOOST_DPS, boostDpsOf, boostRanksOf, BREAKTHROUGH_LEVELS, WEAPON_MAX_LEVEL } = await import('../js/weapon-levels.js');
 
 // Weapons whose damage depends on something other than attacking: shards need kills, the dash nova
 // needs dashes. They stay outside the DPS curve.
@@ -115,7 +115,7 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS, ACROSS THE BO
       const boost = makeBuild(id, m, ranks, { [m]: 'boost' });
       assert.equal(boost.r.damage, 2, 'no free POWER ranks');
       for (const c of STAT_CARDS[id]) if (!POWER_STATS.has(c.stat)) assert.equal(boost.r[c.stat], boostRanksOf(id), `${id} ${c.stat} +${boostRanksOf(id)}`);
-      assert.ok(near(POTENTIAL_DPS[id](boost), plain * BT_BOOST_DPS), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
+      assert.ok(near(POTENTIAL_DPS[id](boost), plain * boostDpsOf(id)), `${id} LV ${m} boost: x${(POTENTIAL_DPS[id](boost) / plain).toFixed(3)}`);
     }
     const all = POTENTIAL_DPS[id](makeBuild(id, 12, {}, { 6: 'transform', 12: 'transform', 18: 'transform' }));
     assert.ok(near(all, lv1(id) * BT_TRANSFORM_DPS ** 3), `${id} three transforms`);
