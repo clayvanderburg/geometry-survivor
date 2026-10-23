@@ -325,7 +325,7 @@ export const STAT_ROWS = [
   { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p)) * (p.dashDistanceMult ?? 1)), fmt: int, headline: 'size', unit: 'DASH DISTANCE' },
   { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) * (p.dashDistanceMult ?? 1) : null), fmt: int, headline: 'size', unit: 'BLINK DISTANCE', newText: () => 'DASH BLINKS' },
   // GLOBAL CARDS: the card's own multiplier (each weapon's rows below show what it does there)
-  ...[['tempo', 'Attack rate, all weapons'], ['cooldown', 'Recharge speed, all weapons + dash'], ['persistence', 'Lifetime, lingering effects'], ['velocity', 'Shot speed, all weapons']]
+  ...[['tempo', 'Attack rate, every timed weapon'], ['cooldown', 'Recharge speed, dash + deploy charges'], ['persistence', 'Lifetime, lingering effects'], ['velocity', 'Shot speed, all weapons']]
     .map(([kind, label]) => ({ id: `global_${kind}`, label, get: (p) => globalMult(p, kind), fmt: (v) => `+${Math.round((v - 1) * 100)}%` })),
   // Velocity Coils: the shot speed of each flying weapon (px/s; grenades show their lob time)
   ...[['blaster', 'Autocannon bolt speed', (p) => p.stats.bulletSpeed], ['rockets', 'Rocket speed', () => W.wingRocketSpeed],
@@ -403,17 +403,17 @@ const BUNDLE_HEADLINES = {
   thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'DASH SHOCKWAVE' : 'BIGGER DASH SHOCKWAVE')
 };
 
-// GLOBAL CARDS headline: the step this card adds ("+10% ATTACK RATE"; Cooldown Matrix "+10% RECHARGE + DASH").
+// GLOBAL CARDS headline: the step this card adds ("+8% ATTACK RATE"; Cooldown Matrix "+10% DASH & CHARGES").
 // Which weapons it reaches is the card's scope chip and pills (cardReach), never a count: a count of the
 // weapons carried now would read as if weapons picked up later were left out.
-const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'RECHARGE', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
+const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'DASH & CHARGES', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
 export function globalHeadline(kind, before, after) {
   // The steps add up (rank 3 is +24%, not x1.08^3), so the headline names the points this card adds.
   const gain = kind === 'area'
     ? (after.stats.areaMult ?? 1) - (before.stats.areaMult ?? 1)
     : globalMult(after, kind) - globalMult(before, kind);
   if (!(gain > 0)) return '';
-  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}${kind === 'cooldown' ? ' + DASH' : ''}`;
+  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}`;
 }
 
 // REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
@@ -447,12 +447,17 @@ function cardWeapons(player, upg, sc) {
 // What a global, tag, crit or STATUS card reaches: a scope label that also covers weapons picked up later
 // ("ALL WEAPONS", "EVERY KINETIC WEAPON") and the equipped weapons it boosts now (pills, loadout order).
 // null for every other card.
-const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'ALL WEAPONS + DASH', persistence: 'EVERY LINGERING WEAPON', velocity: 'EVERY SHOT WEAPON', area: 'EVERY AREA WEAPON' };
+// "ALL WEAPONS" only when the card reaches every weapon carried (tests/card-scope.test.js).
+const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'DASH + EVERY DEPLOY WEAPON', persistence: 'EVERY LINGERING WEAPON', velocity: 'EVERY SHOT WEAPON', area: 'EVERY AREA WEAPON' };
+const globalScopeLabel = (kind, ids, owned) => (kind === 'tempo' && ids.length < owned.length ? 'EVERY TIMED WEAPON' : GLOBAL_SCOPE[kind]);
 const ALL_WEAPON_CARDS = new Set(['overdrive', 'crit_chance', 'crit_damage']);
 const STATUS_ELEMENT = { fire_damage: 'fire', frost_damage: 'frost', corrode_damage: 'corrode', shock_damage: 'shock', shock_conductor: 'shock' };
 function cardReach(after, upg) {
   const owned = ownedWeapons(after);
-  if (upg.globalCard) return { label: GLOBAL_SCOPE[upg.globalCard], ids: globalReach(after, upg.globalCard) };
+  if (upg.globalCard) {
+    const ids = globalReach(after, upg.globalCard);
+    return { label: globalScopeLabel(upg.globalCard, ids, owned), ids };
+  }
   if (upg.category === 'SPECIALIST' && upg.tags?.length) {
     const tag = upg.tags[0];
     return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)) };

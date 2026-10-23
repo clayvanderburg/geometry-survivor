@@ -61,7 +61,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
 
   install(p, 'overdrive', 2);   // x1.12 damage per level
   install(p, 'thrusters');      // a Phase Nova level: the shockwave only (v0.46)
-  install(p, 'cooldown_matrix'); // +10% recharge, the dash included
+  install(p, 'cooldown_matrix'); // +15% dash recharge
   install(p, 'move_speed');     // +10% speed
   install(p, 'shield_capacitor'); // +20 shield
   install(p, 'crit_chance', 2); // +20% each
@@ -76,7 +76,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.critChance.run, '+40%');
   assert.equal(r.critChance.total, '47%');
   assert.equal(r.tag_explosive.run, '+25%');
-  assert.equal(r.dash.run, '−0.12 s', "a Cooldown Matrix rank (1.5 s / 1.1) after the armory's -10% dash cooldown");
+  assert.equal(r.dash.run, '−0.18 s', "a Cooldown Matrix rank (1.5 s / 1.15) after the armory's -10% dash cooldown");
   assert.equal(r.dash.up.run, true);
   assert.match(r.fireRate.run, /^\+\d+%$/, 'fire-rate cards count in THIS RUN');
   assert.equal(r.fireRate.up.run, true);

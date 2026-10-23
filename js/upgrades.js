@@ -146,9 +146,9 @@ function globalCards() {
     req: reaches(kind), summary, apply() {}, ...extra
   });
   return [
-    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks faster, ones you pick up later too: fire, throw, drop and tick rates. Only attack rate.'),
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks more often, later pickups too: fire, reload, recharge, throw, tick. Not Orbit Blades.'),
     // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
-    card('cooldown', 'Cooldown Matrix', 'POWER', 'Every weapon (later pickups too) and your Phase Dash reload, recharge and cool down faster. Only cooldowns.', { req: undefined }),
+    card('cooldown', 'Cooldown Matrix', 'UTILITY', 'Your Phase Dash recharges faster, and so do Sentry Turret charges and Nanite Swarm canisters.', { req: undefined }),
     card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and mines last longer, later pickups too. Only lifetime.', { overcharge: false }),
     card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs, grenades. Only shot speed.', { overcharge: false })
   ];
