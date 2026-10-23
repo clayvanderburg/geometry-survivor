@@ -146,11 +146,11 @@ function globalCards() {
     req: reaches(kind), summary, apply() {}, ...extra
   });
   return [
-    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks faster: fire, throw, drop and tick rates. Only attack rate.'),
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks faster, ones you pick up later too: fire, throw, drop and tick rates. Only attack rate.'),
     // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
-    card('cooldown', 'Cooldown Matrix', 'POWER', 'Reloads, recharges and cooldowns run faster on every weapon, and on your Phase Dash. Only cooldowns.', { req: undefined }),
-    card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and armed mines last longer. Only lifetime.', { overcharge: false }),
-    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster: bolts, rockets, missiles, discs and grenades land sooner. Only shot speed.', { overcharge: false })
+    card('cooldown', 'Cooldown Matrix', 'POWER', 'Every weapon (later pickups too) and your Phase Dash reload, recharge and cool down faster. Only cooldowns.', { req: undefined }),
+    card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and mines last longer, later pickups too. Only lifetime.', { overcharge: false }),
+    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs, grenades. Only shot speed.', { overcharge: false })
   ];
 }
 
@@ -212,7 +212,7 @@ export const UPGRADE_POOL = [
     weightFor: (player) => Math.max(0.5, 1 - (TUNING.overdriveWeightTaper ?? 0.1) * Math.max(0, ownedWeapons(player).length - 3)),
     maxLevel: 5,
     headline: 'allDamage',
-    summary: 'Overclocks the reactor: every weapon hits harder.',
+    summary: 'Overclocks the reactor: every weapon hits harder, ones you pick up later too.',
     apply(player) {
       player.stats.damage *= 1.12;
     }
@@ -460,7 +460,7 @@ export const UPGRADE_POOL = [
       const w = player.weapons;
       return hasTag(player, 'area') || w.dashNova >= 1 || w.tectonicBore >= 1;
     },
-    summary: 'Every blast, cloud, cone, field and pull grows, on every weapon. Only area size.',
+    summary: 'Every blast, cloud, cone, field and pull grows, on every weapon you carry or pick up later. Only area size.',
     apply(player) {
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }

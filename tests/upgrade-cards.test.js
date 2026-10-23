@@ -337,7 +337,9 @@ test('cards that do several separate things name all of them in the headline, no
   applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
   assert.equal(headline('thrusters'), 'BIGGER DASH SHOCKWAVE');
   assert.equal(headline('move_speed'), '+10% MOVE SPEED', 'move speed is its own card');
-  assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
+  assert.match(headline('overdrive'), /^\+\d+% BASE DAMAGE$/, 'single-effect cards keep their stat headline');
+  // It still never reads as an Autocannon-only card: its scope chip says ALL WEAPONS.
+  assert.equal(describeUpgrade(p, UPGRADE_POOL.find((u) => u.id === 'overdrive')).reach.label, 'ALL WEAPONS');
 });
 
 test('Geom Attractor Field maxes at half its old pickup radius (6.1x base); Growth Lattice at 2x XP', () => {

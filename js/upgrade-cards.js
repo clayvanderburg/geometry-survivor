@@ -105,7 +105,7 @@ function elementRows(w) {
 // or a function(before, after). newText: headline when the row comes online (before is null).
 export const STAT_ROWS = [
   // Build-wide modifiers first, so crit, tag and Reactor Overdrive cards lead with their own row
-  { id: 'allDamage', label: 'Base damage (all weapons)', get: (p) => baseDamage(p), fmt: dec1, headline: 'pct', unit: 'DAMAGE · ALL WEAPONS' },
+  { id: 'allDamage', label: 'Base damage (all weapons)', get: (p) => baseDamage(p), fmt: dec1, headline: 'pct', unit: 'BASE DAMAGE' },
   { id: 'critChance', label: 'Crit chance', get: (p) => critChance(p), fmt: pct, headline: 'points', unit: 'CRIT CHANCE' },
   { id: 'critDamage', label: 'Crit damage', get: (p) => critDamage(p), fmt: mult, headline: 'points', unit: 'CRIT DAMAGE' },
   { id: 'critAverage', label: 'Avg bonus from crits', get: (p) => critChance(p) * (critDamage(p) - 1), fmt: (v) => `+${(v * 100).toFixed(1)}%` },
@@ -403,8 +403,9 @@ const BUNDLE_HEADLINES = {
   thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'DASH SHOCKWAVE' : 'BIGGER DASH SHOCKWAVE')
 };
 
-// GLOBAL CARDS headline: the step and how many equipped weapons it reaches ("+10% ATTACK RATE · 3 WEAPONS").
-// Cooldown Matrix also names the dash; Field Amplifier counts the weapons whose area grows.
+// GLOBAL CARDS headline: the step this card adds ("+10% ATTACK RATE"; Cooldown Matrix "+10% RECHARGE + DASH").
+// Which weapons it reaches is the card's scope chip and pills (cardReach), never a count: a count of the
+// weapons carried now would read as if weapons picked up later were left out.
 const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'RECHARGE', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
 export function globalHeadline(kind, before, after) {
   // The steps add up (rank 3 is +24%, not x1.08^3), so the headline names the points this card adds.
@@ -412,9 +413,7 @@ export function globalHeadline(kind, before, after) {
     ? (after.stats.areaMult ?? 1) - (before.stats.areaMult ?? 1)
     : globalMult(after, kind) - globalMult(before, kind);
   if (!(gain > 0)) return '';
-  const n = globalReach(after, kind).length;
-  const reach = [n ? `${n} WEAPON${n > 1 ? 'S' : ''}` : '', kind === 'cooldown' ? 'DASH' : ''].filter(Boolean).join(' + ');
-  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}${reach ? ` · ${reach}` : ''}`;
+  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}${kind === 'cooldown' ? ' + DASH' : ''}`;
 }
 
 // REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
@@ -445,11 +444,28 @@ function cardWeapons(player, upg, sc) {
   return (upg.owners || []).filter((id) => ownsWeapon(player, id));
 }
 
-// The equipped weapons a tag or global card boosts (after it is taken), in loadout order.
+// What a global, tag, crit or STATUS card reaches: a scope label that also covers weapons picked up later
+// ("ALL WEAPONS", "EVERY KINETIC WEAPON") and the equipped weapons it boosts now (pills, loadout order).
+// null for every other card.
+const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'ALL WEAPONS + DASH', persistence: 'EVERY LINGERING WEAPON', velocity: 'EVERY SHOT WEAPON', area: 'EVERY AREA WEAPON' };
+const ALL_WEAPON_CARDS = new Set(['overdrive', 'crit_chance', 'crit_damage']);
+const STATUS_ELEMENT = { fire_damage: 'fire', frost_damage: 'frost', corrode_damage: 'corrode', shock_damage: 'shock', shock_conductor: 'shock' };
 function cardReach(after, upg) {
-  if (upg.globalCard) return globalReach(after, upg.globalCard);
-  if (upg.category === 'SPECIALIST' && upg.tags?.length) return ownedWeapons(after).filter((id) => weaponTags(id).includes(upg.tags[0]));
-  return [];
+  const owned = ownedWeapons(after);
+  if (upg.globalCard) return { label: GLOBAL_SCOPE[upg.globalCard], ids: globalReach(after, upg.globalCard) };
+  if (upg.category === 'SPECIALIST' && upg.tags?.length) {
+    const tag = upg.tags[0];
+    return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)) };
+  }
+  if (ALL_WEAPON_CARDS.has(upg.id)) return { label: 'ALL WEAPONS', ids: owned };
+  if (upg.statusCard) {
+    const el = STATUS_ELEMENT[upg.id];
+    return {
+      label: el ? `EVERY ${ELEMENT_INFO[el].label} WEAPON` : 'EVERY ELEMENT WEAPON',
+      ids: owned.filter((id) => { const e = weaponElement(after, id); return e && (!el || e.element === el); })
+    };
+  }
+  return null;
 }
 
 const rowView = ({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a });
@@ -706,9 +722,9 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
     return `
           <div class="upg-stat"><span class="upg-stat-label">${pill}${label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`;
   }).join('');
-  const weaponLine = own.length || d.reach?.length
-    ? `<div class="upg-weapons">${weaponPills(own)}${d.reach?.length ? `<span class="upg-reach-label">BOOSTS</span>${weaponPills(d.reach)}` : ''}</div>`
-    : '';
+  // Scope chip first ("ALL WEAPONS": now and later), then the weapons it boosts today.
+  const reach = d.reach ? `<span class="upg-reach-scope" title="Also boosts matching weapons you pick up later">${d.reach.label}</span>${weaponPills(d.reach.ids)}` : '';
+  const weaponLine = own.length || reach ? `<div class="upg-weapons">${weaponPills(own)}${reach}</div>` : '';
   const tags = d.tags && d.tags.length
     ? `<div class="upg-tags">${d.tags.map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('')}</div>`
     : '';
