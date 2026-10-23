@@ -18,7 +18,7 @@ import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipe
 import { weaponPill, weaponPills, rowWeapon } from './weapon-pills.js';
 import { clipHTML, transformClip } from './weapon-media.js';
 import {
-  WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, BT_OVERTUNED_DPS, boostSummary, overtunedSummary, btOption,
+  WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, overtunedHeadline, boostSummary, overtunedSummary, btOption,
   weaponBuild, levelBuild, levelCardWeapon, weaponElement, POWER_STATS, STAT_CARD_BY_ID, ELEMENTS, ELEMENT_INFO, ELEMENT_WEAPONS, ELEMENT_WEAPON_LABEL,
   REPLICATOR_ID, COUNT_STATS, globalMult
 } from './weapon-levels.js';
@@ -613,7 +613,7 @@ export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
 // before -> after stats with the choice installed on a copy of the player, led by the weapon's potential DPS.
 const FLAT_TEXT = {
   boost: { summary: boostSummary, headline: () => `+${Math.round((BT_BOOST_DPS - 1) * 100)}% DAMAGE + UTILITY` },
-  overtuned: { summary: overtunedSummary, headline: () => `+${Math.round((BT_OVERTUNED_DPS - 1) * 100)}% DAMAGE` }
+  overtuned: { summary: overtunedSummary, headline: overtunedHeadline }
 };
 export function describeBreakthrough(player, weaponId, level, option, maxRows = MAX_ROWS) {
   const weapon = WEAPON_BY_ID[weaponId];
@@ -639,7 +639,7 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
     name: opt?.name || BOOST_NAME,
     category: WEAPON_BADGE[weaponId],
     tags: weaponTags(weaponId).filter((t) => TAG_INFO[t]),
-    summary: transform ? transform.summary : flat.summary(weapon.name),
+    summary: transform ? transform.summary : flat.summary(weapon.name, weaponId, weaponLevel(player, weaponId)),
     isSynergy: false,
     isBreakthrough: true,
     rarity,
@@ -648,7 +648,7 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
     jump: 1,
     headline: transform
       ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
-      : `${flat.headline()} // +${Math.round(gain * 100)}% DPS`,
+      : `${flat.headline(weaponId, weaponLevel(player, weaponId))} // +${Math.round(gain * 100)}% DPS`,
     weapons: [weaponId],
     rows: rows.slice(0, maxRows).map(rowView),
     hiddenRows: Math.max(0, rows.length - maxRows),

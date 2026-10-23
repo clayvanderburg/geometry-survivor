@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_BOOST_RANKS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -23,12 +23,18 @@ import { tfRealized } from './bt-calibration.js';
 // constants): below 1 for bomblets and splits that catch fewer enemies, above 1 for strikes, shells and
 // pulls that catch a whole pack.
 // Breakthroughs: a transform multiplies potential by BT_TRANSFORM_DPS (its hit damage is rescaled so the
-// new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and BT_BOOST_RANKS to every UTILITY stat.
+// new attacks add exactly that), ACROSS THE BOARD x BT_BOOST_DPS and boostRanksOf(weapon) to every UTILITY stat.
 // DPS_TARGET is the LV 1 reference (and the old level curve the balance tools still report against).
 export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+// Overtuned Core's free POWER ranks count at what they add on this build (its hit damage is in hitMult).
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export function overtunedRankGain(b) {
+  const o = b.ot && overtunedRanks(b.id);
+  if (!o || !POTENTIAL_DPS[b.id]) return 1;
+  return POTENTIAL_DPS[b.id](b) / POTENTIAL_DPS[b.id]({ ...b, r: { ...b.r, [o.stat]: b.r[o.stat] - b.ot * o.ranks } });
+}
 
 // Per-rank steps of the POWER stats shared by every weapon.
 // x1.5 compounding (tuned with tools/balance-sim.mjs so mixed builds keep pace with the enemy HP ramp).
@@ -94,7 +100,7 @@ const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1) * (RATE_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
-export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(BT_OVERTUNED_DPS, b.ot || 0);
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
 // transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make; then
 // divided by the transforms' card-bench realized value (bt-calibration.js), which POTENTIAL_DPS counts back in.
@@ -680,17 +686,17 @@ export const WEAPON_SCALING = {
   // ~5 s at LV 1), +35% per Spin Rotor rank. A swarm trails the ship on one side, so a slow cone spends
   // most of its turn on empty space: spin, not damage, is what a sprayer's realized DPS rides on (reference
   // bench). The Flamethrower spins flameTurnTrim faster (its fire burns out between passes; the Cryo and
-  // Acid Sprayers' lingering frost and acid carry them), and the LV 6 burst and the puddles transforms
-  // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
+  // Acid Sprayers' lingering frost and acid carry them), and every sprayer transform builds in flameTfTurnRanks
+  // Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD (bt-calibration.js BT_SPRAYER_BAND).
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
-  flameTfTurnRanks: 1,
+  flameTfTurnRanks: 3,
   // The Spin Rotor card was retired in v0.46 (a dead pick on its own), but spin is still the sprayers' lever: the
-  // transforms build their ranks in, and ACROSS THE BOARD's free utility ranks still reach it (b.atb x BT_BOOST_RANKS).
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.atb || 0) * BT_BOOST_RANKS + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
+  // transforms build their ranks in, and ACROSS THE BOARD's free utility ranks still reach it (b.atb x boostRanksOf).
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.atb || 0) * boostRanksOf(b?.id) + W.flameTfTurnRanks * (b?.transforms || 0),
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
   // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
-  // whirlEvery s the nozzle adds one full turn over whirlTime s, plus flameTfTurnRanks Spin Rotor rank), Seeker (the
+  // whirlEvery s the nozzle adds one full turn over whirlTime s), Seeker (the
   // nozzle swings toward the densest pack within its range at seekTurnMult x its spin speed instead of spinning;
   // it spins on when nobody is in reach).
   whirlEvery: 2.5,
@@ -1042,7 +1048,7 @@ export const WEAPON_SCALING = {
   quakeRadius: (b) => 120 * (1 + 0.12 * b.r.radius),
   // x the ship's mining speed / 75: 0 without Tidal Shear; a plain rock (~85 HP) takes 4 waves at 1 rank, 1 at 6.
   quakeRockDamage: (b) => {
-    const r = Math.max(0, (b?.r?.bore || 0) - (b?.atb || 0));
+    const r = Math.max(0, (b?.r?.bore || 0) - (b?.atb || 0) * boostRanksOf(b?.id));
     return r > 0 ? 25 * (1 + 0.5 * (r - 1)) : 0;
   },
   faultRockDamage: 45, // a fracture snapping shut shears any rock it crosses (x mining speed / 75), Tidal Shear adds to it
