@@ -191,8 +191,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'lancer', name: 'LANCER', group: 'archetype', unlockWave: unlockWaveOf('lancer'),
-    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a dashed line at you for ${secs(LANCE.aimTime)}. The line locks (turns red) for the last ${secs(LANCE.lockAt)}, then it fires a ${LANCE.length} px beam that sweeps ${Math.round(LANCE.sweep * 180 / Math.PI)}° to one side over ${secs(LANCE.fireTime)}. Debuts with the Eclipse Twins.`,
-    tip: 'When the line turns red, step sideways off it, against the sweep if you can guess it. Punish it while it is planted.'
+    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a line through you for ${secs(LANCE.aimTime)}, with a shaded wedge showing the side it will sweep to. The line locks (turns solid red) for the last ${secs(LANCE.lockAt)} and flashes white just before it fires a ${LANCE.length} px beam along the line, sweeping ${Math.round(LANCE.sweep * 180 / Math.PI)}° into the wedge over ${secs(LANCE.fireTime)}. At most ${LANCE.maxActive} fire at once. Debuts with the Eclipse Twins.`,
+    tip: 'When the line turns red, step sideways off it AWAY from the shaded wedge: the beam swings into the wedge, never the other way. Punish it while it is planted.'
   },
   {
     id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),

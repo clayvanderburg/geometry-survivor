@@ -18,7 +18,7 @@ import { SERPENT, windToward } from './serpents.js';
 import { KESTREL, updateKestrel, traceKestrel } from './squadrons.js';
 import { turnToward } from './serpents.js';
 import { GATE, updateGate, traceGate, drawGateBeam } from './gates.js';
-import { LANCE, lanceCycle, traceLancer, drawLanceAim, drawBeam } from './lancers.js';
+import { LANCE, lanceCycle, traceLancer, drawBeam } from './lancers.js';
 import { BORER, updateBorer, traceBorer, drawBoreLane } from './borers.js';
 import { HATCHERY, updateHatchery, updateHatchling, traceHatchery, traceHatchling, drawIncubation, drawDiveCue } from './hatcheries.js';
 import { hpRingAlpha } from './archetypes.js';
@@ -42,7 +42,7 @@ export const HOSTILE_INFO = {
   carrier: { label: 'CARRIER', unlockWave: unlockWaveOf('carrier'), intro: 'HANGS BACK AND LAUNCHES HOMING DRONES — CHASE IT DOWN OR OUTRUN THE DRONES' },
   gate: { label: 'LASER GATE', unlockWave: unlockWaveOf('gate'), intro: 'FLY THROUGH THE BEAM TO DETONATE IT · THE PYLONS HURT — LURE A CROWD CLOSE FIRST' },
   repulsor: { label: 'REPULSOR', unlockWave: unlockWaveOf('repulsor'), intro: 'ITS FIELD SHOVES BULLETS AWAY · USE AREA DAMAGE, ARCS, MISSILES OR A DASH NOVA' },
-  lancer: { label: 'LANCER', unlockWave: unlockWaveOf('lancer'), intro: 'AIMS A LINE, LOCKS (RED), THEN SWEEPS A BEAM — STEP OFF THE LINE, NOT ALONG IT' },
+  lancer: { label: 'LANCER', unlockWave: unlockWaveOf('lancer'), intro: 'AIMS A LINE, LOCKS (RED), THEN SWEEPS TO THE MARKED SIDE — STEP OFF THE OTHER WAY' },
   borer: { label: 'BORER', unlockWave: unlockWaveOf('borer'), intro: 'TUNNELS THROUGH ROCK · CHARGES DOWN A MARKED LANE · SPITS GRAVEL WHILE IT DIGS — DON\'T HIDE BEHIND ROCK' },
   hatchery: { label: 'HATCHERY', unlockWave: unlockWaveOf('hatchery'), intro: 'BREEDS DIVING HATCHLINGS UNTIL IT DIES · KILL THE HIVE AND ITS BROOD DIES WITH IT' },
   mitosis: { label: 'MITOSIS CELL', unlockWave: unlockWaveOf('mitosis'), intro: 'GROWS, THEN SPLITS IN TWO · KILL IT WHILE IT IS SMALL' },
@@ -386,8 +386,7 @@ export function drawHostileOverlay(ctx, e, r) {
     drawDiveCue(ctx, e, r);
     return;
   } else if (e.type === 'lancer') {
-    drawLanceAim(ctx, e);
-    if (e.beam) drawBeam(ctx, e.beam, e.hue);
+    if (e.beam) drawBeam(ctx, e.beam, e.hue); // the aim line rides above everything (EnemyManager.drawTopTelegraphs)
     return;
   }
   if (e.type === 'repulsor') {

@@ -17,8 +17,8 @@ export const CHANGELOG = Object.freeze([
     title: 'Breakthrough Pools',
     notes: [
       { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
-      { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
-      { type: 'new', text: 'The Claw Harpoon is now the Drill Driver: it fires the ship\'s drills out on a cable and reels them back, boring through everything both ways. Nothing is pulled in any more.' },
+      { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
+      { type: 'balance', text: 'Lancers telegraph clearly: a bright aim line locks and flashes white before firing, then sweeps only to the marked side. At most 2 fire at once.' },
       { type: 'new', text: 'New global cards: Tempo Core, Cooldown Matrix, Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%); tag cards give +20/25/25% and are always UNCOMMON.' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },

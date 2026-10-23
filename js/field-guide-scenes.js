@@ -12,6 +12,7 @@ import { rollLieutenant, LIEUTENANT_WARMUP } from './lieutenants.js';
 import { bossDef } from './bosses.js';
 import { SERPENT, spawnSerpent, turnToward } from './serpents.js';
 import { REPULSOR } from './hostiles.js';
+import { LANCE } from './lancers.js';
 import { spawnWing } from './squadrons.js';
 import { wellPullScale, playerPullShare } from './gravity.js';
 
@@ -459,9 +460,11 @@ const SCENES = {
     onSpawn(s, e) { if (e.type === 'lancer') e.lanceT = 0.6; },
     tick(s) {
       const l = s.find('lancer');
-      // Sidestep the locked line.
-      if (l && l.lanceState === 'aim' && l.lanceT < 0.3) s.player.y += (s.player.y < s.H * 0.5 ? -1 : 1) * 3;
-      else s.player.y += (s.H * 0.5 - s.player.y) * 0.02;
+      // Once the line locks, sidestep away from the marked sweep side.
+      if (l && l.lanceState === 'aim' && l.lanceT < LANCE.lockAt) {
+        s.player.x += Math.sin(l.lanceAngle) * l.lanceDir * 3;
+        s.player.y -= Math.cos(l.lanceAngle) * l.lanceDir * 3;
+      } else s.player.y += (s.H * 0.5 - s.player.y) * 0.02;
       if (!l || l.lanceState !== 'aim') s.autoFire(0.25);
       if (s.count('lancer') === 0 && s.every(1)) s.spawn('lancer', s.W * 0.15, s.H * 0.5);
     }

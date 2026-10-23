@@ -655,6 +655,105 @@ test('lancers plant, telegraph a locking line, then sweep a beam that burns the 
   assert.ok(LANCE.lockAt < LANCE.aimTime);
 });
 
+test('lancer telegraph: ~50% longer wind-up, the line never moves after lock, and the sweep only enters the marked side', async () => {
+  resetTuning();
+  const { LANCE } = await import('../js/lancers.js');
+  assert.ok(LANCE.aimTime >= 0.9 * 1.4 && LANCE.aimTime <= 0.9 * 1.6, 'aim +40–60% over the old 0.9 s');
+  assert.ok(LANCE.lockAt >= 0.4 && LANCE.flashAt > 0 && LANCE.flashAt < LANCE.lockAt);
+  const g = campaignGame({ wave: 47 });
+  const m = g.enemyManager;
+  const player = g.player;
+  m.queueSpawn('lancer', 1700, 2000, 1, { instant: true });
+  step(m, player, 2);
+  const l = m.enemies.find(e => e.type === 'lancer');
+  l.lanceT = 0;
+  step(m, player, 1);
+  assert.equal(l.lanceState, 'aim');
+  const dir = l.lanceDir;
+  assert.ok(dir === 1 || dir === -1, 'sweep side is chosen (and shown) from the start of the aim');
+  // The aim line runs from the hull through the ship: if the ship is on screen, so is the line.
+  const along = Math.cos(l.lanceAngle) * (player.x - l.x) + Math.sin(l.lanceAngle) * (player.y - l.y);
+  const across = -Math.sin(l.lanceAngle) * (player.x - l.x) + Math.cos(l.lanceAngle) * (player.y - l.y);
+  assert.ok(along > 0 && along < LANCE.length && Math.abs(across) < player.radius, 'line passes through the ship');
+  step(m, player, Math.ceil((LANCE.aimTime - LANCE.lockAt) * 60) + 1);
+  const locked = l.lanceAngle;
+  player.y += 150; // the ship moves after the lock
+  let first = null;
+  let last = null;
+  for (let i = 0; i < 60 * 3 && l.lanceState !== 'idle'; i++) {
+    step(m, player, 1);
+    assert.equal(l.lanceDir, dir, 'sweep side never changes');
+    if (l.lanceState === 'aim') assert.equal(l.lanceAngle, locked, 'no re-aim after the lock');
+    if (l.beam) {
+      const a = Math.atan2(l.beam.y2 - l.beam.y1, l.beam.x2 - l.beam.x1);
+      if (first === null) first = a;
+      last = a;
+    }
+  }
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  assert.ok(Math.abs(wrap(first - locked)) < 0.05, 'the beam starts on the locked line');
+  assert.ok(wrap(last - locked) * dir > LANCE.sweep * 0.9, 'and sweeps into the marked side');
+});
+
+test('a ship that steps off a locked lance line away from the wedge is never hit', async () => {
+  resetTuning();
+  const { LANCE } = await import('../js/lancers.js');
+  const g = campaignGame({ wave: 47 });
+  const m = g.enemyManager;
+  g.player.invuln = 0;
+  g.player.hp = g.player.maxHp = 1e6;
+  m.queueSpawn('lancer', g.player.x - 330, g.player.y, 1, { instant: true });
+  step(m, g.player, 2);
+  const l = m.enemies.find(e => e.type === 'lancer');
+  l.lanceT = 0;
+  const hp = g.player.hp;
+  let sawLock = false;
+  for (let i = 0; i < 60 * 4; i++) {
+    g.update(1 / 60);
+    if (l.lanceState === 'aim' && l.lanceT <= LANCE.lockAt) sawLock = true;
+    // Once locked, move at half base speed (2.5 px/tick) away from the wedge.
+    if (sawLock && l.lanceState !== 'idle') {
+      g.player.x += Math.sin(l.lanceAngle) * l.lanceDir * 2.5;
+      g.player.y -= Math.cos(l.lanceAngle) * l.lanceDir * 2.5;
+    }
+    if (sawLock && l.lanceState === 'idle') break;
+  }
+  assert.ok(sawLock);
+  assert.equal(g.player.hp, hp, 'dodged');
+});
+
+test('lancers stagger: never more than LANCE.maxActive aim or fire at once, starts spaced by LANCE.stagger', async () => {
+  resetTuning();
+  const { LANCE } = await import('../js/lancers.js');
+  const g = campaignGame({ wave: 47 });
+  const m = g.enemyManager;
+  const player = g.player;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    m.queueSpawn('lancer', 2000 + Math.cos(a) * 330, 2000 + Math.sin(a) * 330, 1, { instant: true });
+  }
+  step(m, player, 2);
+  const ls = m.enemies.filter(e => e.type === 'lancer');
+  assert.equal(ls.length, 6);
+  for (const l of ls) l.lanceT = 0; // all ready on the same tick
+  let peak = 0;
+  const starts = [];
+  const was = new Map();
+  for (let t = 0; t < 60 * 12; t++) {
+    step(m, player, 1);
+    let active = 0;
+    for (const l of ls) {
+      if (l.lanceState === 'aim' || l.lanceState === 'fire') active++;
+      if (l.lanceState === 'aim' && was.get(l) !== 'aim') starts.push(t);
+      was.set(l, l.lanceState);
+    }
+    peak = Math.max(peak, active);
+  }
+  assert.ok(peak <= LANCE.maxActive, `peak ${peak}`);
+  assert.ok(starts.length >= 6, 'every lancer still gets to fire');
+  for (let i = 1; i < starts.length; i++) assert.ok(starts[i] - starts[i - 1] >= Math.floor(LANCE.stagger * 60), `starts ${starts[i - 1]} → ${starts[i]}`);
+});
+
 test('Eclipse Twins: a tethered pair; kill one and the other enrages, and its twin revives unless it dies in time', async () => {
   resetTuning();
   const { TWINS } = await import('../js/bosses.js');
