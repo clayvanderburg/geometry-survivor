@@ -1207,6 +1207,48 @@ html, body {
 .rarity-evolution { --rarity: #ff4fd8; --rarity-soft: rgba(255, 79, 216, 0.4); --rarity-bg: rgba(48, 8, 40, 0.94); }
 .rarity-transform { --rarity: #38f2d0; --rarity-soft: rgba(56, 242, 208, 0.4); --rarity-bg: rgba(6, 40, 36, 0.94); }
 .rarity-boost { --rarity: #ffb347; --rarity-soft: rgba(255, 179, 71, 0.4); --rarity-bg: rgba(46, 30, 8, 0.94); }
+/* Rarity-floor cards (upgrades.js rarityFloor: Phase Piercer, Extra Nozzles, Split Rails, tag cards,
+   Replicator): pinned to a tier because they're strong. The body stays a normal card; the tier lives
+   on the frame: a rarity border with a slow glow and a light sweeping round it, plus the ◆ ribbon. */
+.upgrade-option.rarity-floored {
+  --rarity-bg: rgba(30, 36, 52, 0.94);
+  animation: floor-glow 2.4s ease-in-out infinite;
+}
+.upgrade-option.rarity-floored .upg-name { color: #e8eef8; }
+.upgrade-option.rarity-floored::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  border-radius: 12px;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.9) 50%, transparent 65%) 0 0 / 300% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: floor-sheen 3s linear infinite;
+  pointer-events: none;
+}
+@keyframes floor-glow {
+  0%, 100% { box-shadow: 0 0 10px var(--rarity-soft); }
+  50% { box-shadow: 0 0 26px var(--rarity-soft), 0 0 3px var(--rarity) inset; }
+}
+@keyframes floor-sheen {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
+}
+.upg-jump-ribbon.upg-floor-ribbon {
+  background: linear-gradient(90deg, var(--rarity), #fff 50%, var(--rarity)) 0 0 / 200% 100%;
+  animation: floor-ribbon 2.4s linear infinite;
+}
+@keyframes floor-ribbon {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .upgrade-option.rarity-floored, .upgrade-option.rarity-floored::before, .upg-jump-ribbon.upg-floor-ribbon { animation: none; }
+}
+
 /* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special. */
 .upgrade-option.breakthrough-card { animation: breakthrough-pulse 1.8s ease-in-out infinite; }
 @keyframes breakthrough-pulse {
@@ -1487,6 +1529,52 @@ html, body {
 .recipe-chip.miss { color: var(--text-dim); border-style: dashed; }
 .recipe-chip.plain { color: #ffd6f5; }
 .recipe-plus { color: var(--text-dim); font-weight: 900; }
+.recipe-chip .recipe-mark { font-weight: 900; }
+/* A long either/or ingredient wraps inside the card instead of running out of it. */
+.recipe-chip:not(.wpn-pill) { max-width: 100%; white-space: normal; }
+.recipe-chip.ok .recipe-mark { color: #5dff9a; }
+.recipe-chip.adds .recipe-mark { color: #ff8be6; }
+.recipe-chip.miss .recipe-mark { color: var(--text-dim); }
+/* A weapon ingredient is its weapon pill: weapon colour, with the state in its mark and edge. */
+.recipe-chip.wpn-pill { color: var(--wc); border-color: var(--wc); font-size: inherit; padding: 1px 7px; }
+.recipe-chip.wpn-pill.miss { opacity: 0.7; border-style: dashed; }
+.recipe-chip.wpn-pill.adds { box-shadow: 0 0 9px rgba(255, 79, 216, 0.6); }
+
+/* Weapon pills (js/weapon-pills.js): a weapon named on a card, in the weapon's colour. */
+.wpn-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--wc, #8ba3c7);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--wc, #8ba3c7) 16%, rgba(6, 10, 22, 0.85));
+  color: var(--wc, #c9d4e4);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  line-height: 1.35;
+  white-space: nowrap;
+  vertical-align: middle;
+  text-shadow: none;
+}
+.upg-weapons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+.upg-reach-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+.upg-weapons .wpn-pill + .upg-reach-label { margin-left: 6px; }
+.upg-stat-label .wpn-pill { margin-right: 5px; font-size: 9.5px; padding: 0 6px; }
+/* Replicator: one "pill +N UNIT" part per weapon. */
+.upg-headline-pills { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 17px; }
+.upg-headline-part { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.upg-headline-part .wpn-pill { font-size: 11px; }
 
 .guide-recipe .recipe-chips {
   display: flex;
@@ -4740,6 +4828,9 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe:not(:first-ch
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe { padding: 3px 5px; gap: 3px; font-size: 9px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe-head { font-size: 8px; letter-spacing: 1px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .recipe-chip { padding: 0 5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-weapons { margin: 0 0 4px; gap: 3px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .wpn-pill { font-size: 9.5px; padding: 0 6px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline-pills { font-size: 12px; gap: 3px 6px; }
 body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
 body.touch-mode .slot-tip-title { font-size: 20px; }
 body.touch-mode .slot-tip-line { font-size: 12.5px; margin-bottom: 10px; }

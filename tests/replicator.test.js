@@ -131,7 +131,11 @@ test('Replicator Array: card preview lists each weapon\'s gain, rows read the ne
   assert.match(card.className, /\bscope-global\b/);
   assert.match(card.className, /\brarity-rare\b/);
   // Its pinned RARE tier is not a +3 jump: the ribbon says so instead of '+3 RANKS'.
-  assert.match(card.html, /upg-jump-ribbon">◆ RARE CARD · \+1 RANK</);
+  assert.match(card.html, /upg-jump-ribbon upg-floor-ribbon">◆ RARE CARD · \+1 RANK</);
+  // Floored, not rolled: a normal card body with the tier on its frame (css .rarity-floored).
+  assert.match(card.className, /\brarity-floored\b/);
+  // Each weapon's gain leads with that weapon's pill; the plain headline text is unchanged.
+  assert.match(card.html, /upg-headline-pills"><span class="upg-headline-part"><span class="wpn-pill" style="--wc:#00f3ff">Autocannon<\/span> \+2 STREAMS/);
   assert.ok(!/\+\d (LEVELS|RANKS)/.test(card.html), 'no +N jump ribbon: it is one rank');
   // Preview never touches the player.
   assert.equal(p.upgradeLevels[REPLICATOR_ID], undefined);
