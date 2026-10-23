@@ -7,7 +7,7 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  GlobalLeaderboard, requestJson, buildBoardView, SUBMIT_RETRIES, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
+  GlobalLeaderboard, requestJson, buildBoardView, SUBMIT_RETRIES, OUTBOX_KEY, OUTBOX_MAX_AGE_MS, OUTBOX_GAP_MS, describeOutbox, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
   renderModeOptions, buildModeOptions
 } = await import('../js/leaderboard.js');
 const { Game } = await import('../js/main.js');
@@ -147,8 +147,8 @@ test('submit: server refusals map to cooldown / rejected, network failures flip 
     [() => jsonResponse(429, { error: 'slow down' }), 'cooldown', /COOLING DOWN/],
     [() => jsonResponse(422, { error: 'run rejected: wave does not match' }), 'rejected', /REJECTED/],
     [() => jsonResponse(400, { error: 'bad name' }), 'rejected', /REJECTED/],
-    [() => jsonResponse(503, { error: 'busy' }), 'unavailable', /OFFLINE/],
-    [() => { throw new TypeError('offline'); }, 'offline', /OFFLINE/]
+    [() => jsonResponse(503, { error: 'busy' }), 'unavailable', /UNREACHABLE \/\/ RUN QUEUED FOR UPLOAD/],
+    [() => { throw new TypeError('offline'); }, 'offline', /UNREACHABLE \/\/ RUN QUEUED FOR UPLOAD/]
   ];
   for (const [respond, reason, text] of cases) {
     const board = new GlobalLeaderboard({ fetchImpl: async () => respond(), storage: memoryStorage(), sleep: async () => {} });
@@ -472,7 +472,9 @@ test('submit gives up visibly after its retries, and a lost answer (429 on a ret
   assert.equal(posts, 1 + SUBMIT_RETRIES);
   assert.equal(failed.ok, false);
   assert.equal(down.status, 'offline', 'the GLOBAL tab falls back to local runs');
-  assert.match(describeSubmit(failed).text, /OFFLINE \/\/ RUN SAVED LOCALLY/);
+  assert.match(describeSubmit(failed).text, /RUN QUEUED FOR UPLOAD/);
+  assert.equal(failed.queued, true);
+  assert.equal(down.pendingUploads, 1, 'kept in the outbox, never dropped silently');
 
   // No API at all (the local server's 404 page) is not retried.
   posts = 0;
@@ -689,4 +691,75 @@ test('renderBoardView: 100 rows under the column head, medal classes, a controll
   // An empty board is no scroll stop.
   renderBoardView(list, null, buildBoardView({ tab: 'global', board: { ...board, entries: [] }, local: [] }));
   assert.equal('gpScroll' in list.dataset, false);
+});
+
+test('outbox: a run that fails every retry is kept, sent again with the same nonce, and dropped once it lands', async () => {
+  const storage = memoryStorage();
+  const sent = [];
+  let up = false;
+  const fetchImpl = async (url, init) => {
+    if (init.method !== 'POST') return jsonResponse(200, { entries: [], total: 0 });
+    sent.push(JSON.parse(init.body));
+    if (!up) throw new TypeError('network');
+    return jsonResponse(201, { accepted: true, onBoard: true, rank: 5, allTimeRank: 5, id: 'queued-run', version: GAME_VERSION, entries: GLOBAL, total: 3 });
+  };
+  const first = new GlobalLeaderboard({ fetchImpl, storage, sleep: async () => {} });
+  const failed = await first.submit(RUN);
+  assert.equal(failed.queued, true);
+  assert.equal(first.pendingUploads, 1);
+  assert.equal(describeOutbox(first.pendingUploads), '◌ 1 RUN WAITING TO UPLOAD');
+  assert.equal(describeOutbox(2), '◌ 2 RUNS WAITING TO UPLOAD');
+  assert.equal(describeOutbox(0), '');
+  const nonce = sent[0].nonce;
+
+  // Next launch: the outbox survives a reload and goes up with the same nonce.
+  up = true;
+  const t0 = Date.now();
+  const next = new GlobalLeaderboard({ fetchImpl, storage, sleep: async () => {} });
+  assert.equal(next.pendingUploads, 1);
+  const [a, b] = [next.flushOutbox(t0), next.flushOutbox(t0)];
+  assert.equal(a, b, 'concurrent flushes share one send, so a run is never sent twice at once');
+  const r = await a;
+  assert.equal(r.sent, true);
+  assert.equal(sent.at(-1).nonce, nonce);
+  assert.equal(sent.filter(p => p.nonce === nonce).length, 1 + SUBMIT_RETRIES + 1);
+  assert.equal(next.pendingUploads, 0);
+  assert.deepEqual(JSON.parse(storage.getItem(OUTBOX_KEY)), []);
+  assert.ok(next.myIds.has('queued-run'), 'the landed run is highlighted as the pilot\'s');
+  assert.equal((await next.flushOutbox(t0 + OUTBOX_GAP_MS)).sent, false, 'nothing left to send');
+});
+
+test('outbox: one send per cooldown, a refusal drops the run, a dead network keeps it, and old runs expire', async () => {
+  const t0 = Date.parse('2026-10-20T12:00:00Z');
+  const storage = memoryStorage();
+  const q = (nonce, queuedAt = t0) => ({ payload: { ...RUN, nonce }, queuedAt, tries: 0 });
+  storage.setItem(OUTBOX_KEY, JSON.stringify([q('n-old-xxxxxxxxxxxxx', t0 - OUTBOX_MAX_AGE_MS - 1), q('n-a-xxxxxxxxxxxxxxx'), q('n-b-xxxxxxxxxxxxxxx'), q('n-c-xxxxxxxxxxxxxxx'), { junk: true }]));
+  const replies = [
+    () => jsonResponse(201, { accepted: true, onBoard: false, rank: null, id: 'a', version: GAME_VERSION, entries: [], total: 0 }),
+    () => jsonResponse(422, { error: 'run rejected: score too high' }),
+    () => { throw new TypeError('network'); }
+  ];
+  const sent = [];
+  const board = new GlobalLeaderboard({ fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body).nonce); return replies[sent.length - 1](); }, storage });
+  // Expired and malformed entries are dropped on load (a few days at most).
+  board.outbox = board.loadOutbox(t0);
+  assert.equal(board.pendingUploads, 3);
+  const r1 = await board.flushOutbox(t0);
+  assert.equal(r1.sent, true);
+  assert.equal(r1.retryInMs, OUTBOX_GAP_MS, 'the next one waits out the server cooldown');
+  const early = await board.flushOutbox(t0 + 1000);
+  assert.equal(early.sent, false);
+  assert.equal(sent.length, 1, 'no send inside the gap');
+  const r2 = await board.flushOutbox(t0 + OUTBOX_GAP_MS);
+  assert.equal(r2.sent, false);
+  assert.equal(board.pendingUploads, 1, 'a refused run (422) is dropped');
+  const r3 = await board.flushOutbox(t0 + 2 * OUTBOX_GAP_MS);
+  assert.equal(r3.retryInMs, null, 'a dead network waits for the next launch or board view');
+  assert.equal(board.pendingUploads, 1, 'kept');
+  assert.equal(board.outbox[0].tries, 1);
+  assert.deepEqual(sent, ['n-a-xxxxxxxxxxxxxxx', 'n-b-xxxxxxxxxxxxxxx', 'n-c-xxxxxxxxxxxxxxx']);
+  // A run sits in the outbox at most OUTBOX_MAX_AGE_MS (3 days).
+  await board.flushOutbox(t0 + OUTBOX_MAX_AGE_MS + 1);
+  assert.equal(board.pendingUploads, 0);
+  assert.equal(sent.length, 3, 'an expired run is dropped, not sent');
 });
