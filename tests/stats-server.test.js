@@ -6,7 +6,7 @@ import {
   createStatsHandler, STATS_SERVER_LIMITS, RUNS_PREFIX, STATS_RATE_PREFIX, summaryKey, runKey, summaryVersion, newestFirst, listKeys
 } from '../netlify/lib/stats.mjs';
 import { hashIp } from '../netlify/lib/leaderboard.mjs';
-import { aggregateRuns, percentile, median, flagFor, OUTLIER_BAND, SUMMARY_SCHEMA } from '../js/stats-aggregate.js';
+import { aggregateRuns, percentile, median, flagFor, OUTLIER_BAND, SUMMARY_SCHEMA, TIME_INDEX_BUCKETS } from '../js/stats-aggregate.js';
 import { STATS_LIMITS, armoryTier } from '../js/stats-rules.js';
 import { META_UPGRADES, armorySpent } from '../js/progression.js';
 import { KNOWN_VERSIONS } from '../js/changelog.js';
@@ -203,7 +203,7 @@ const weaponRun = (rows, extra = {}) => ({
   ...extra
 });
 
-test('DPS vs target, the same-level peer index and the ±20% outlier flags', () => {
+test('DPS vs target, the peer index and the ±20% outlier flags', () => {
   // At LV 4 (target 24): alpha realizes 50%, beta 30%, gamma 40%, delta 40% -> median 40%.
   const runs = Array.from({ length: 3 }, () => weaponRun([
     ['alpha', 4, 100, 0.5 * 24 * 100, 24],
@@ -239,6 +239,32 @@ test('DPS vs target, the same-level peer index and the ±20% outlier flags', () 
   assert.equal(flagFor(null), null);
 });
 
+test('the index compares weapons held at the same run time: a late LV 1 pick-up is not an outlier for being late', () => {
+  // Early (minute 0-1) every weapon realizes 30% of its LV 1 potential, late (minute 5-6) 120%: denser waves.
+  // 'late' is only ever picked up late, at LV 1, and realizes exactly what its late peers do.
+  const at = (id, from, share) => [id, from, share];
+  const run = (rows) => ({
+    ...weaponRun([]),
+    weapons: Object.fromEntries(rows.map(([id, from, share]) => [id, { dmg: 1, kills: 1, owned: 60, from, curve: 1, tl: [[from, 1]],
+      lv: { 1: [60, 10, share * 3 * 60, 40, 1, 4, 3] } }]))
+  });
+  const early = ['a', 'b', 'c', 'g'].map((id) => at(id, 0, 0.3));
+  const lateRows = ['d', 'e'].map((id) => at(id, 300, 1.2));
+  const runs = Array.from({ length: 3 }, () => run([...early, ...lateRows, at('late', 300, 1.2)]));
+  const s = aggregateRuns(runs);
+  const by = Object.fromEntries(s.weapons.map((w) => [w.id, w]));
+  assert.ok(by.late.levelIndex > 2, `the same-level comparison calls it ${by.late.levelIndex}x`);
+  assert.equal(by.late.index, 1, 'the same-time comparison calls it even');
+  assert.equal(by.late.flag, 'ok');
+  assert.equal(by.late.levels[0].meanTime, 330, 'from its level timeline (no recorded mean)');
+  assert.ok(!s.outliers.some((o) => o.id === 'late'));
+  assert.deepEqual(s.timeIndexBuckets, [...TIME_INDEX_BUCKETS]);
+  // The recorded mean run time (row[9]) wins over the timeline.
+  const recorded = structuredClone(runs);
+  for (const r of recorded) r.weapons.late.lv[1].push(40, 4, 30);
+  assert.ok(aggregateRuns(recorded).weapons.find((w) => w.id === 'late').index > 2, 'held at minute 0-1 it would be strong');
+});
+
 test('weapon shares leave out Supernova and ram (listed with their share of everything); bombs per run and kills per bomb', () => {
   const run = (extra = {}) => weaponRun([['alpha', 4, 100, 2400, 24], ['beta', 4, 100, 2400, 24]], extra);
   const withBomb = run();
@@ -268,7 +294,8 @@ test('low-sample weapon levels are reported but never flagged or used as the pee
   assert.equal(gamma.levels[0].index, null);
   assert.equal(gamma.flag, null);
   const alpha = s.weapons.find((w) => w.id === 'alpha').levels[0];
-  assert.ok(Math.abs(alpha.index - 1 / 0.75) < 0.01, 'median of alpha (1.0) and beta (0.5) is 0.75');
+  assert.ok(Math.abs(alpha.levelIndex - 1 / 0.75) < 0.01, 'same-level: median of alpha (1.0) and beta (0.5) is 0.75');
+  assert.ok(Math.abs(alpha.index - 1 / 0.75) < 0.01, 'and the same-time index, centred on the median rated weapon, leaves gamma out too');
 });
 
 test('run shape, enemies, cards and gold aggregate across runs', () => {

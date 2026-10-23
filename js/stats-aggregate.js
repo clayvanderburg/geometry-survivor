@@ -9,7 +9,15 @@
 // Real fights never land every attack, so every weapon realizes only part of its potential. What the
 // rule predicts is that they realize the SAME part at the same level, so a weapon is judged against its
 // peers at that level:
-//   index = vsTarget / median(vsTarget of the curve weapons with enough data at that level)
+//   levelIndex = vsTarget / median(vsTarget of the curve weapons with enough data at that level)
+// But how much of its potential a weapon realizes also depends on WHEN it is held: a late pick-up sits at
+// LV 1-3 in a dense, tanky wave 15 and realizes far more than the LV 1-3 weapons of the first minute (v0.46: the
+// Autocannon re-bought at minute 4 read 14.7x its target). So the index that flags a weapon compares it with the
+// other weapons over the same stretch of the run:
+//   index = its realized potential / what a typical curve weapon (the median weapon effect of a seconds-weighted
+//           log fit: weapon + run time + level) realizes at the same run times (TIME_INDEX_BUCKETS, by the mean run
+//           time each level was held) and the same levels (LEVEL_INDEX_BUCKETS)
+// and falls back to levelIndex where a weapon level has too little data. vsAutocannon = index / the Autocannon's.
 // index > 1 + OUTLIER_BAND -> "needs nerf", index < 1 - OUTLIER_BAND -> "needs buff".
 //
 // Shares: a weapon's dmgShare / killShare (overall and per level) are of WEAPON damage and kills only, without
@@ -31,6 +39,50 @@ export const FAIRNESS_MIN_EXPECTED = 20;
 export const FAIRNESS_Z = 3;
 export const TARGET_LEVEL = 50;       // the user's targets: reach LV 50 ...
 export const TARGET_SECONDS = 30 * 60; // ... and survive 30 minutes
+// Run-time buckets (s) for the time-normalized index.
+export const TIME_INDEX_BUCKETS = Object.freeze([60, 120, 240, 420, 660, 960, 1320]);
+const timeBucket = (t) => { let i = 0; while (i < TIME_INDEX_BUCKETS.length && t >= TIME_INDEX_BUCKETS[i]) i++; return i; };
+// Weapon-level buckets for the same fit (a level's realized share falls as the level climbs past the wave).
+export const LEVEL_INDEX_BUCKETS = Object.freeze([2, 3, 4, 6, 9, 13]);
+const levelBucket = (L) => { let i = 0; while (i < LEVEL_INDEX_BUCKETS.length && L >= LEVEL_INDEX_BUCKETS[i]) i++; return i; };
+// Seconds-weighted fit of log(realized share) = weapon + time bucket + level bucket (alternating means). Returns the
+// share a typical weapon (median effect among weapons with minSecs of data) realizes at a sample's time and level.
+function fitShares(samples, minSecs) {
+  const ys = samples.map((s) => Math.log(Math.max(1e-4, s.units / s.secs)));
+  for (const s of samples) s.lb = levelBucket(s.level);
+  const W = new Map(), T = new Map(), Lv = new Map();
+  const w = (s) => W.get(s.id) || 0, t = (s) => T.get(s.tb) || 0, l = (s) => Lv.get(s.lb) || 0;
+  const refit = (eff, keyOf, others) => {
+    const acc = new Map();
+    samples.forEach((s, i) => {
+      const a = acc.get(keyOf(s)) || [0, 0];
+      acc.set(keyOf(s), a);
+      a[0] += s.secs * (ys[i] - others(s)); a[1] += s.secs;
+    });
+    for (const [k, [num, den]] of acc) eff.set(k, den > 0 ? num / den : 0);
+  };
+  // Time and level first: where a weapon was only ever held at one time and level, the gap is put down to when it
+  // was held, not to the weapon (never flag what the data can't separate).
+  for (let it = 0; it < 40; it++) {
+    refit(T, (s) => s.tb, (s) => w(s) + l(s));
+    refit(Lv, (s) => s.lb, (s) => w(s) + t(s));
+    refit(W, (s) => s.id, (s) => t(s) + l(s));
+  }
+  const secsBy = new Map();
+  for (const s of samples) secsBy.set(s.id, (secsBy.get(s.id) || 0) + s.secs);
+  const base = median([...W].filter(([id]) => secsBy.get(id) >= minSecs).map(([, v]) => v)) ?? 0;
+  return { expected: (s) => Math.exp(base + t(s) + l(s)) };
+}
+// Mean run time a weapon held level L, from its level timeline [[t, lv], ...] (older runs lack row[9]).
+function timelineMean(tl, L, end) {
+  let secs = 0, tsum = 0;
+  for (let i = 0; i < (tl?.length || 0); i++) {
+    if (tl[i][1] !== L) continue;
+    const a = tl[i][0], b = i + 1 < tl.length ? tl[i + 1][0] : end;
+    if (b > a) { secs += b - a; tsum += (b - a) * (a + b) / 2; }
+  }
+  return secs > 0 ? tsum / secs : null;
+}
 const TIME_BUCKETS = [[0, 120], [120, 300], [300, 600], [600, 900], [900, 1200], [1200, 1800], [1800, Infinity]];
 const LEVEL_BUCKETS = [[1, 9], [10, 19], [20, 29], [30, 39], [40, 49], [50, Infinity]];
 const PACE_LEVELS = [10, 20, 30, 40, 50];
@@ -80,6 +132,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
 
   // --- Weapons and other damage groups -----------------------------------------------------------
   const groups = new Map();
+  const samples = []; // { id, level, secs, units (realized potential, DPS_TARGET-seconds), tb } per run and weapon level
   let allDamage = 0, allKills = 0, weaponDamage = 0, weaponKills = 0;
   for (const r of list) {
     for (const [id, w] of Object.entries(r.weapons || {})) {
@@ -114,6 +167,11 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
           b.wAllDmg += row.length >= 9 ? row[7] || 0 : row[3] || 0;
           b.wAllKills += row.length >= 9 ? row[8] || 0 : row[5] || 0;
           if (row[6] > 0) b.target = row[6];
+          // When it was held: the recorded mean (row[9]), else the level timeline, else the middle of its ownership.
+          // (A timeline's last level runs to the end of its ownership, from + owned, which a discard would cut.)
+          const tm = Number.isFinite(row[9]) ? row[9] : timelineMean(w.tl, L, Math.min(r.time, (w.from || 0) + (w.owned || r.time))) ?? (w.from || 0) + (w.owned || 0) / 2;
+          b.tsum = (b.tsum || 0) + tm * (row[0] || 0);
+          if (w.curve === 1 && row[6] > 0 && row[0] > 0) samples.push({ id, level: L, secs: row[0], units: (row[2] || 0) / row[6], tb: timeBucket(tm) });
         }
       }
     }
@@ -129,7 +187,7 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
         level: b.level, runs: b.runs, seconds: round(b.secs, 1), dps: round(ratio(b.dmg, b.secs)), normDps: round(normDps, 3),
         target: b.target || null, vsTarget: round(vsTarget, 3), dmgShare: round(ratio(b.dmg, b.wAllDmg), 4), killShare: round(ratio(b.kills, b.wAllKills), 4),
         allDmgShare: round(ratio(b.dmg, b.allDmg), 4), allKillShare: round(ratio(b.kills, b.allKills), 4),
-        enough: enough(b), index: null, flag: null
+        meanTime: round(ratio(b.tsum || 0, b.secs), 1), enough: enough(b), index: null, levelIndex: null, flag: null
       };
       if (g.curve && row.enough && vsTarget !== null) {
         if (!levelRows.has(b.level)) levelRows.set(b.level, []);
@@ -146,31 +204,60 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
       allDmgShare: round(ratio(g.dmg, allDamage), 4), allKillShare: round(ratio(g.kills, allKills), 4),
       ownedSeconds: g.isWeapon ? round(g.owned, 1) : null, dps: g.isWeapon ? round(ratio(g.dmg, g.owned)) : null,
       medianAcquiredAt: g.isWeapon ? round(median(g.acquiredAt), 1) : null,
-      levels: lvRows, vsTarget: null, index: null, flag: null
+      levels: lvRows, vsTarget: null, index: null, levelIndex: null, vsAutocannon: null, flag: null
     };
   });
 
-  // Peer index per level, then a seconds-weighted roll-up per weapon.
+  // Same-level peer index (levelIndex), then the same-time index (index, which flags), then seconds-weighted roll-ups.
   for (const rows of levelRows.values()) {
     if (rows.length < 2) continue;
     const mid = median(rows.map((r) => r.vsTarget));
     if (!(mid > 0)) continue;
-    for (const row of rows) {
-      row.index = round(row.vsTarget / mid, 3);
-      row.flag = flagFor(row.index, band);
-    }
+    for (const row of rows) row.levelIndex = round(row.vsTarget / mid, 3);
+  }
+  // How much potential a weapon realizes depends on its level AND on when in the run it is held (a fresh LV 1
+  // pick-up at minute 5 out-realizes both the LV 1 weapons of minute 1 and the LV 12 one it fights beside). So fit,
+  // seconds-weighted in log space over every run's weapon levels:
+  //   log(realized share) = weapon effect + run-time effect (TIME_INDEX_BUCKETS) + level effect (LEVEL_INDEX_BUCKETS)
+  // and judge each weapon level against a typical weapon (median weapon effect) at the same times and levels.
+  const fit = fitShares(samples, minSample.seconds);
+  const timeTotals = new Map(); // `${id}|${level}` -> { actual, expected }
+  for (const s of samples) {
+    const ref = fit.expected(s);
+    if (!(ref > 0)) continue;
+    const key = `${s.id}|${s.level}`;
+    const t = timeTotals.get(key) || { actual: 0, expected: 0 };
+    timeTotals.set(key, t);
+    t.actual += s.units; t.expected += s.secs * ref;
   }
   for (const w of weapons) {
+    let actual = 0, expected = 0;
+    for (const row of w.levels) {
+      const t = timeTotals.get(`${w.id}|${row.level}`);
+      if (w.curve && row.enough && t?.expected > 0) { actual += t.actual; expected += t.expected; }
+    }
     const rated = w.levels.filter((r) => r.vsTarget !== null && r.enough);
     const secs = sum(rated.map((r) => r.seconds));
     if (secs > 0) w.vsTarget = round(sum(rated.map((r) => r.vsTarget * r.seconds)) / secs, 3);
-    const indexed = rated.filter((r) => r.index !== null);
-    const isecs = sum(indexed.map((r) => r.seconds));
-    if (isecs > 0) {
-      w.index = round(sum(indexed.map((r) => r.index * r.seconds)) / isecs, 3);
-      w.flag = flagFor(w.index, band);
-    }
+    const lvRated = rated.filter((r) => r.levelIndex !== null);
+    const lsecs = sum(lvRated.map((r) => r.seconds));
+    if (lsecs > 0) w.levelIndex = round(sum(lvRated.map((r) => r.levelIndex * r.seconds)) / lsecs, 3);
+    w.fitIndex = expected > 0 ? actual / expected : null;
   }
+  // Centre the fit on the weapons it rates: the median rated weapon is 1 (as levelIndex is per level).
+  const centre = median(weapons.map((w) => w.fitIndex).filter((v) => v > 0)) || 1;
+  for (const w of weapons) {
+    for (const row of w.levels) {
+      const t = timeTotals.get(`${w.id}|${row.level}`);
+      row.index = w.curve && row.enough && t?.expected > 0 ? round(t.actual / t.expected / centre, 3) : row.levelIndex;
+      row.flag = row.enough ? flagFor(row.index, band) : null;
+    }
+    w.index = w.fitIndex !== null ? round(w.fitIndex / centre, 3) : w.levelIndex;
+    delete w.fitIndex;
+    w.flag = flagFor(w.index, band);
+  }
+  const auto = weapons.find((w) => w.id === 'blaster')?.index;
+  if (auto > 0) for (const w of weapons) if (w.index !== null) w.vsAutocannon = round(w.index / auto, 3);
   weapons.sort((a, b) => (b.isWeapon - a.isWeapon) || b.damage - a.damage);
 
   // --- Damage sub-sources --------------------------------------------------------------------------
@@ -293,6 +380,8 @@ export function aggregateRuns(runs, { version = 'all', source = 'players', gener
     cards,
     weaponPicks,
     newWeapon: nw ? { offered: nw.offered, picked: nw.picked, pickRate: nw.pickRate } : { offered: 0, picked: 0, pickRate: null },
-    outliers: weapons.filter((w) => w.flag === 'buff' || w.flag === 'nerf').map((w) => ({ id: w.id, flag: w.flag, index: w.index, vsTarget: w.vsTarget }))
+    timeIndexBuckets: TIME_INDEX_BUCKETS,
+    levelIndexBuckets: LEVEL_INDEX_BUCKETS,
+    outliers: weapons.filter((w) => w.flag === 'buff' || w.flag === 'nerf').map((w) => ({ id: w.id, flag: w.flag, index: w.index, levelIndex: w.levelIndex, vsTarget: w.vsTarget }))
   };
 }

@@ -9,8 +9,9 @@
 //   gold        { earned, spent, rerolls, locks, banishes, skips }
 //   loadout     [{ id, lv }] at the end of the run
 //   weapons     { group: { dmg, kills, owned?, from?, curve?, tl?: [[t, lv]], lv?: { L: [secs, dmg,
-//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L), allWeaponDmg?, allWeaponKills?] } } }
-//                 (the last two leave out the non-weapon groups: Supernova, ram, ...; older runs lack them)
+//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L), allWeaponDmg?, allWeaponKills?, meanTime?] } } }
+//                 (allWeapon* leave out the non-weapon groups: Supernova, ram, ...; meanTime is the mean run time
+//                 the level was held; older runs lack them)
 //   sources     { stat id: damage }  (sub-sources such as burn, helix, collapse, storm, siege)
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
 //   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
@@ -121,6 +122,7 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
         out.lv[level] = [secs, dec(row[1], L.MAX_DAMAGE, 0), dec(row[2], L.MAX_DAMAGE, 2), dec(row[3], L.MAX_DAMAGE, 0),
           int(row[4], L.MAX_COUNT), int(row[5], L.MAX_COUNT), dec(row[6], 1e9, 2)];
         if (row.length >= 9) out.lv[level].push(dec(row[7], L.MAX_DAMAGE, 0), int(row[8], L.MAX_COUNT));
+        if (row.length >= 10) out.lv[level].push(dec(row[9], t));
         n++;
       }
     }

@@ -294,7 +294,7 @@ export class RunStats {
     if (lv > 0) {
       let bucket = rec.levels.get(lv);
       if (!bucket) {
-        bucket = { secs: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, wAllDmg: 0, wAllKills: 0 };
+        bucket = { secs: 0, tsum: 0, dmg: 0, norm: 0, allDmg: 0, kills: 0, allKills: 0, wAllDmg: 0, wAllKills: 0 };
         rec.levels.set(lv, bucket);
       }
       bucket.dmg0 = this.totalDmg;
@@ -310,6 +310,7 @@ export class RunStats {
     if (!cur || rec.lv <= 0) return;
     const dt = Math.max(0, t - rec.since);
     cur.secs += dt;
+    cur.tsum += dt * (rec.since + t) / 2; // run time held, so the summary can compare like with like
     rec.owned += dt;
     cur.allDmg += this.totalDmg - cur.dmg0;
     cur.allKills += this.totalKills - cur.kills0;
@@ -341,8 +342,9 @@ export class RunStats {
           if (!(b.secs > 0)) continue;
           const target = this.dpsTarget && out.curve ? r2(this.dpsTarget(lv)) : 0;
           // [seconds, damage, damage / base damage, all damage, kills, all kills, DPS_TARGET(lv),
-          //  all weapon damage, all weapon kills] (the last two leave out NON_WEAPON_GROUPS; older runs lack them)
-          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target, r0(b.wAllDmg), b.wAllKills];
+          //  all weapon damage, all weapon kills, mean run time held (s)] (the weapon totals leave out NON_WEAPON_GROUPS;
+          //  older runs lack the last three)
+          out.lv[lv] = [r1(b.secs), r0(b.dmg), r2(b.norm), r0(b.allDmg), b.kills, b.allKills, target, r0(b.wAllDmg), b.wAllKills, r1(b.tsum / b.secs)];
         }
       }
       weapons[rec.id] = out;
