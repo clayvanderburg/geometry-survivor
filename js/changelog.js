@@ -23,7 +23,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
       { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
-      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails keep full power but are RARE finds, framed in a glowing border. Tag cards give +20/25/25% and show the passive they boost.' },
+      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails are RARE finds at full power. ELECTRIC is gone: Tesla Arc and Shock Field are SHOCK weapons; Overvolt Coils is retired.' },
       { type: 'balance', text: 'Crits are reworked, FROST now bites (frostbite damage, chilled enemies take more), Tesla Arc fires twice as often and the Flamethrower spins faster.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
       { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' },
