@@ -221,7 +221,7 @@ test('cards preview the discs exactly: the pick leads with discs per throw, each
   for (const [m, row] of [[6, 'glaiveFission'], [12, 'glaiveMomentum'], [18, 'glaiveRecall']]) {
     const card = describeBreakthrough(g.player, 'glaive', m, 'transform');
     assert.equal(card.category, 'GLAIVE DISCS');
-    assert.match(card.headline, /\+22% DPS/);
+    assert.ok(Math.abs(card.dpsGain - 0.22) < 0.01 && card.rows[0].id === 'potentialDps' && !/DPS/.test(card.headline));
     assert.ok(card.rows.some((r) => r.id === row), `${m}: ${row}`);
   }
   assert.ok(g.glaive instanceof GlaiveDiscs);

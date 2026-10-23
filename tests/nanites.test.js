@@ -141,7 +141,7 @@ test('cards preview their own stat; the pick and Breakthrough cards name the wea
   const t = describeBreakthrough(p, 'nanites', 6, 'transform');
   assert.equal(t.name, 'Fission Bloom');
   assert.equal(t.category, 'NANITE SWARM');
-  assert.match(t.headline, /\+22% DPS/);
+  assert.ok(Math.abs(t.dpsGain - 0.22) < 0.01 && t.rows[0].id === 'potentialDps' && !/DPS/.test(t.headline));
 });
 
 test('a launch flies to the densest pack in range and bursts into a swarm there', () => {
