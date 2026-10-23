@@ -22,7 +22,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'new', text: 'New global cards: Tempo Core, Cooldown Matrix, Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%); tag cards give +20/25/25% and are always UNCOMMON.' },
       { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
-      { type: 'balance', text: 'Phase Piercer and Extra Nozzle keep full power but are RARE finds. Split Rails is toned down, crits reworked, FROST bites, and Tesla Arc fires twice as often.' },
+      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails keep full power but are RARE finds. Crits are reworked, FROST bites, and Tesla Arc fires twice as often.' },
       { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' }
     ]
   },
