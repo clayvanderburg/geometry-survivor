@@ -105,7 +105,7 @@ import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.
 import { playPreset, semis } from './sfx-layers.js';
 import { GlowSprites } from './glow-sprite.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
-import { kickMount, mountWorld } from './hardpoints.js';
+import { kickMount, mountWorld, WINGTIP } from './hardpoints.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -158,6 +158,10 @@ const SINGULARITY_IMPLODE_TIME = 0.35;
 const BLACKHOLE_GRID_DEPTH = 290;
 // Rocket Pods converge on the aim line this far out when no enemy sits near the aim.
 const ROCKET_CONVERGE = 480; // 320 before v0.39.8: the wingtip streams stay apart from the Autocannon longer
+// A Rocket Pod warhead arms this long after launch: with the swarm on the hull, rockets used to burst on
+// their first tick at the pod, unseen, under the launch sound. Now every rocket flies clear first.
+const ROCKET_ARM_TIME = 0.06;
+const ROCKET_DRAW_SCALE = 1.4; // drawn size only (the hitbox stays 4.5 px)
 // `from` eased by `rate` of the shortest turn toward `to` (radians), for smoothly turning headings.
 function turnToward(from, to, rate) {
   let d = to - from;
@@ -3242,12 +3246,14 @@ export class Game {
       b.x += b.vx;
       b.y += b.vy;
       b.life -= dt;
+      const armed = !(b.armT > 0); // Rocket Pods: not yet armed, it flies through enemies (cover still stops it)
+      if (!armed) b.armT -= dt;
       b.hitEnemies ||= new Set();
       const hits = [];
       const segmentRadius = Math.hypot(b.x - x0, b.y - y0) / 2;
       const midX = (x0 + b.x) / 2, midY = (y0 + b.y) / 2;
       for (const e of this.projectileEnemyIndex.query(midX, midY, segmentRadius + maxEnemyRadius + b.radius)) {
-        if (e.dead || b.hitEnemies.has(e)) continue;
+        if (e.dead || b.hitEnemies.has(e) || !armed) continue;
         // Shield plates (Shielders, SHIELDED lieutenants) stop shots arriving from the front.
         if (e.shieldArc) {
           const ts = this.segmentHitTime(x0, y0, b.x, b.y, e.x, e.y, e.shieldRadius + b.radius);
@@ -3603,8 +3609,8 @@ export class Game {
       const hx = Math.cos(heading), hy = Math.sin(heading);
       // Pod mount in hull space: out at the wingtips (ship-renderer.js: tips at -0.95r, 1.76r), well clear of
       // the Autocannon's centre line (it launched from the carapace flanks, 1.12r out, before v0.39.8).
-      const fwd = -p.radius * 0.5 - tier * 7;
-      const out = p.radius * 1.7 + tier * 4;
+      const fwd = p.radius * WINGTIP.x - tier * 7; // the wingtip pods drawn by hardpoints.js
+      const out = p.radius * WINGTIP.y + tier * 4;
       let wx = p.x + hx * fwd - hy * side * out;
       let wy = p.y + hy * fwd + hx * side * out;
       // A pod buried in the rock face being mined would launch its rocket inside the rock, where it died
@@ -3622,6 +3628,7 @@ export class Game {
         hue: 354,
         radius: 4.5,
         life: W.wingRocketLife / vel,
+        armT: ROCKET_ARM_TIME,
         source: 'rocket',
         kind: 'rocket',
         knock: KNOCKBACK.missile,
@@ -3632,7 +3639,9 @@ export class Game {
         mirvT: b.t12 ? W.mirvTime : 0,
         mirvParts: mirv
       }));
-      this.particles?.spawnFlash?.(wx, wy, 11, 30, 0.1);
+      // Launch kick: a hot flash at the pod and a puff of exhaust thrown back, so every rocket reads as it leaves.
+      this.particles?.spawnFlash?.(wx, wy, 18, 24, 0.14);
+      this.particles?.spawnDirectionalSparks?.(wx, wy, a + Math.PI, 0.7, 4, 30, 6);
     }
     kickMount(p, 'rockets');
     if (this.sound.playRocketLaunch) this.sound.playRocketLaunch();
@@ -6673,47 +6682,57 @@ export class Game {
   // Rocket Pod rocket: an orange dart with a flickering exhaust plume, distinct from blaster streaks.
   // Rocket Pod rocket: a crimson finned body (not the amber of Swarm Missiles or the cyan Autocannon),
   // a white-hot engine core inside a red flame, and a fading grey smoke streak behind it.
+  // Rocket Pod rocket, in its own frame (nose along +x), 1.4x the old size so it reads over a busy field:
+  // a smoke streak, a hot exhaust bloom and flame, then a long red body with swept fins and a white nose.
   drawWingRocket(ctx, b) {
-    const a = Math.atan2(b.vy, b.vx);
-    const c = Math.cos(a), s = Math.sin(a);
-    const smoke = 26;
-    ctx.strokeStyle = 'rgba(190, 190, 205, 0.18)';
+    const k = ROCKET_DRAW_SCALE;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.atan2(b.vy, b.vx));
+    ctx.scale(k, k);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(200, 200, 215, 0.22)';
     ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(b.x - c * 8, b.y - s * 8);
-    ctx.lineTo(b.x - c * (8 + smoke), b.y - s * (8 + smoke));
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(-34, 0);
     ctx.stroke();
+    ctx.fillStyle = 'hsla(24, 100%, 60%, 0.32)';
+    ctx.beginPath();
+    ctx.arc(-9, 0, 7, 0, Math.PI * 2);
+    ctx.fill();
     const flame = 10 + Math.random() * 8;
-    ctx.strokeStyle = 'hsla(356, 100%, 58%, 0.8)';
+    ctx.strokeStyle = 'hsla(356, 100%, 60%, 0.9)';
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(b.x - c * 7, b.y - s * 7);
-    ctx.lineTo(b.x - c * (7 + flame), b.y - s * (7 + flame));
+    ctx.moveTo(-7, 0);
+    ctx.lineTo(-7 - flame, 0);
     ctx.stroke();
     ctx.strokeStyle = '#fff6e0';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(b.x - c * 7, b.y - s * 7);
-    ctx.lineTo(b.x - c * (7 + flame * 0.55), b.y - s * (7 + flame * 0.55));
+    ctx.moveTo(-7, 0);
+    ctx.lineTo(-7 - flame * 0.55, 0);
     ctx.stroke();
     // Body: a long nose, swept fins at the tail.
     ctx.fillStyle = '#ff3a52';
-    ctx.strokeStyle = '#ffd0d6';
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#ffe0e4';
+    ctx.lineWidth = 1.4 / k;
     ctx.beginPath();
-    ctx.moveTo(b.x + c * 10, b.y + s * 10);
-    ctx.lineTo(b.x - c * 4 - s * 2.6, b.y - s * 4 + c * 2.6);
-    ctx.lineTo(b.x - c * 8 - s * 5, b.y - s * 8 + c * 5);
-    ctx.lineTo(b.x - c * 6, b.y - s * 6);
-    ctx.lineTo(b.x - c * 8 + s * 5, b.y - s * 8 - c * 5);
-    ctx.lineTo(b.x - c * 4 + s * 2.6, b.y - s * 4 - c * 2.6);
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-4, 2.6);
+    ctx.lineTo(-8, 5);
+    ctx.lineTo(-6, 0);
+    ctx.lineTo(-8, -5);
+    ctx.lineTo(-4, -2.6);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(b.x + c * 6.5, b.y + s * 6.5, 1.6, 0, Math.PI * 2);
+    ctx.arc(6.5, 0, 1.6, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   // Swarm micro-missile: a soft exhaust glow under a tapered core trail (drawn in four chunks), then
@@ -7164,10 +7183,7 @@ export class Game {
 
     for (let i = 0; i < this.bullets.length; i++) {
       const b = this.bullets[i];
-      if (b.kind === 'rocket') {
-        this.drawWingRocket(ctx, b);
-        continue;
-      }
+      if (b.kind === 'rocket') continue; // drawn in the air layer below
       if (b.kind === 'shard') {
         this.drawShard(ctx, b);
         continue;
@@ -7195,7 +7211,6 @@ export class Game {
       ctx.stroke();
     }
 
-    for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
     this.weaponFx?.draw(ctx, this);
 
     this.gasTrail?.drawGround(ctx, this);
@@ -7218,6 +7233,10 @@ export class Game {
     this.weaponFx?.drawAir(ctx, this);
     this.grenades?.drawAir(ctx, this);
     this.quakeMortar?.drawAir(ctx, this);
+    // Rockets and missiles fly over gas, nanites, shock fields, enemy packs and spray cones: drawn under
+    // them, a 1.3 s rocket flight was lost in the clutter and a volley read as a sound with no shot.
+    for (let i = 0; i < this.bullets.length; i++) if (this.bullets[i].kind === 'rocket') this.drawWingRocket(ctx, this.bullets[i]);
+    for (let i = 0; i < this.missiles.length; i++) this.drawMissile(ctx, this.missiles[i]);
 
     const p = this.player;
     if (this.state !== 'GAMEOVER') {
