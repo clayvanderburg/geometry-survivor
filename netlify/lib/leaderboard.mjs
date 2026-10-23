@@ -73,7 +73,7 @@ export function boardKey(version, mode = DEFAULT_MODE) {
 
 export const LIMITS = Object.freeze({
   BOARD_SIZE: 100,       // runs kept in the blob
-  PUBLIC_SIZE: 50,       // runs returned by GET
+  PUBLIC_SIZE: 100,      // runs returned by GET and POST: the whole board (the GLOBAL list scrolls)
   MAX_PER_NAME: 5,       // one callsign can't flood the board
   COOLDOWN_MS: 20_000,   // per-IP gap between submissions
   MAX_BODY_BYTES: 2048,

@@ -151,6 +151,16 @@ export class MenuNavigator {
       return;
     }
 
+    // A scrolling panel ([data-gp-scroll], the leaderboard) takes up / down itself while it can still
+    // scroll that way, so the d-pad reads down the board before focus moves on past its end.
+    if (pad.navY !== 0 && el.dataset?.gpScroll !== undefined) {
+      const max = (el.scrollHeight || 0) - (el.clientHeight || 0);
+      if ((pad.navY > 0 && el.scrollTop < max - 1) || (pad.navY < 0 && el.scrollTop > 1)) {
+        el.scrollBy?.({ top: pad.navY * Math.max(60, (el.clientHeight || 0) * 0.4), behavior: 'smooth' });
+        return;
+      }
+    }
+
     // Prefer pure vertical/horizontal moves; diagonals resolve on the dominant axis.
     const dx = pad.navY !== 0 ? 0 : pad.navX;
     const dy = pad.navY;

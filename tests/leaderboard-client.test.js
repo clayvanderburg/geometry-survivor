@@ -297,7 +297,7 @@ test('GLOBAL opens on the shared ALL-TIME board; the selector filters by version
   assert.deepEqual(board.versions, [GAME_VERSION, '0.0.1']);
   const view = buildBoardView({ tab: 'global', board, local: LOCAL });
   assert.equal(view.board, GAME_VERSION);
-  assert.equal(view.note, `TOP 50 // v${GAME_VERSION}`);
+  assert.equal(view.note, `TOP 100 // v${GAME_VERSION}`);
   assert.ok(view.rows.every(r => r.version === ''), 'a single-version board needs no per-row version');
   assert.deepEqual(view.versions.map(o => [o.label, o.active, o.current]), [
     ['ALL-TIME', false, false], [`v${GAME_VERSION}`, true, true], ['v0.0.1', false, false]
@@ -338,7 +338,7 @@ test('the ALL-TIME view shows each run\'s version; runs from before versioning r
   ];
   const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries, versions: [] }, local: LOCAL });
   assert.equal(view.board, 'all');
-  assert.equal(view.note, 'TOP 50 // ALL-TIME');
+  assert.equal(view.note, 'TOP 100 // ALL-TIME');
   assert.deepEqual(view.rows.map(r => r.version), [`v${GAME_VERSION}`, LEGACY_VERSION_LABEL, LEGACY_VERSION_LABEL]);
   assert.equal(LEGACY_VERSION_LABEL, 'pre-0.9');
   assert.deepEqual(view.versions[0], { id: 'all', label: 'ALL-TIME', current: false, active: true });
@@ -462,7 +462,9 @@ test('renderVersionOptions: focusable buttons built once, active mark moves with
   const list = new FakeEl('div', fakeDoc);
   const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries: [{ ...GLOBAL[0], version: null }] }, local: [] });
   renderBoardView(list, null, view);
-  const meta = list.children[0].children[2];
+  assert.equal(list.children[0].className, 'hs-head', 'a pinned column head comes first');
+  assert.deepEqual(list.children[0].children.map(c => c.textContent), ['#', 'PILOT', 'RUN', 'SCORE']);
+  const meta = list.children[1].children[2];
   assert.equal(meta.children[0].textContent, LEGACY_VERSION_LABEL);
   assert.equal(meta.children[0].classes.has('legacy'), true);
 });
@@ -525,7 +527,7 @@ test('modes: the switch reads ?mode= boards (NORMAL keeps the old URL) and keeps
   assert.equal(urls[1], '/api/scores?version=all&mode=blitz');
   assert.equal(board.entries.length, 1);
   const view = buildBoardView({ tab: 'global', board, local: LOCAL });
-  assert.equal(view.note, 'TOP 50 // BLITZ // ALL-TIME');
+  assert.equal(view.note, 'TOP 100 // BLITZ // ALL-TIME');
   assert.deepEqual(view.modes.map((m) => [m.label, m.active]), [['NORMAL', false], ['HARDCORE', false], ['BLITZ', true]]);
   assert.deepEqual(view.rows.length, 1);
   assert.equal(board.setMode('blitz'), false);
@@ -563,4 +565,27 @@ test('renderModeOptions: three focusable buttons built once, the active mark mov
   renderModeOptions(container, buildModeOptions('blitz'));
   assert.deepEqual(container.children, first, 'not rebuilt');
   assert.deepEqual(first.slice(1).map(b => b.attrs['aria-pressed']), ['false', 'false', 'true']);
+});
+
+test('renderBoardView: 100 rows under the column head, medal classes, a controller scroll stop and a YOU #n jump', () => {
+  const entries = Array.from({ length: 100 }, (_, i) => ({ ...GLOBAL[0], id: `r${i}`, name: i === 61 ? 'MADKING' : `P${i}`, score: 1e6 - i }));
+  const board = { status: 'ready', version: 'all', entries, boardSize: 100, isMine: (e) => e.name === 'MADKING' };
+  const view = buildBoardView({ tab: 'global', board, local: [], pilotName: 'MADKING' });
+  assert.equal(view.rows.length, 100);
+  assert.equal(view.note, 'TOP 100 // ALL-TIME');
+  const list = new FakeEl('div', fakeDoc);
+  renderBoardView(list, null, view);
+  const rows = list.children.filter(c => c.classes.has('hs-row'));
+  assert.equal(rows.length, 100);
+  assert.deepEqual(rows.slice(0, 4).map(r => ['hs-top1', 'hs-top2', 'hs-top3'].find(c => r.classes.has(c)) || ''), ['hs-top1', 'hs-top2', 'hs-top3', '']);
+  assert.ok(rows[61].classes.has('hs-mine'));
+  const jump = list.children.at(-1);
+  assert.equal(jump.tagName, 'BUTTON');
+  assert.ok(jump.classes.has('hs-jump'));
+  assert.equal(jump.dataset.rank, '62');
+  assert.equal(jump.dataset.target, rows[61].dataset.rowKey);
+  assert.ok('gpScroll' in list.dataset && 'gpNav' in list.dataset, 'the d-pad can focus and scroll the board');
+  // An empty board is no scroll stop.
+  renderBoardView(list, null, buildBoardView({ tab: 'global', board: { ...board, entries: [] }, local: [] }));
+  assert.equal('gpScroll' in list.dataset, false);
 });

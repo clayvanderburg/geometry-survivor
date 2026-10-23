@@ -206,7 +206,7 @@ export class GlobalLeaderboard {
     this.reason = '';
   }
 
-  // Loads the top 50 of the selected board. Concurrent calls for the same board share one request.
+  // Loads the selected board (its top 100).  Concurrent calls for the same board share one request.
   // Resolves to this (never rejects).
   refresh() {
     const { version, mode } = this;
@@ -344,7 +344,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
     };
   });
   const scope = (modeTag ? `${modeTag} // ` : '') + (allTime ? 'ALL-TIME' : versionLabel(boardVersion));
-  let note = `TOP 50 // ${scope}`;
+  let note = `TOP ${board.boardSize || 100} // ${scope}`;
   if (status !== 'ready') note = 'SYNCING GLOBAL BOARD…';
   else if (!rows.length) note = allTime && !modeTag ? 'NO GLOBAL RUNS YET // BE THE FIRST' : `NO ${scope} RUNS YET // BE THE FIRST`;
   const versions = buildVersionOptions({ current, versions: board.versions, selected: boardVersion });
@@ -447,7 +447,27 @@ export function renderModeOptions(container, options) {
   }
 }
 
-// Draws a view into a list element and its note element (DOM only; logic is in buildBoardView).
+// Column heads pinned to the top of the scrolling list.
+const HEAD_CELLS = [['hs-rank', '#'], ['hs-name', 'PILOT'], ['hs-meta', 'RUN'], ['hs-score', 'SCORE']];
+
+// Where scrollTop puts `row` in the middle of `list`.
+const centredTop = (list, row) => Math.max(0, row.offsetTop - (list.clientHeight - row.offsetHeight) / 2);
+
+// Shows the "jump to me" button while the player's best row is out of sight, pointing the way to it.
+function syncJumpButton(list) {
+  const btn = list.querySelector?.('.hs-jump');
+  if (!btn) return;
+  const row = list.querySelector(`[data-row-key="${btn.dataset.target}"]`);
+  const head = list.querySelector('.hs-head')?.offsetHeight || 0;
+  const top = list.scrollTop + head, bottom = list.scrollTop + list.clientHeight - btn.offsetHeight;
+  const away = !row || list.clientHeight <= 0 ? 0 : row.offsetTop + row.offsetHeight <= top ? -1 : row.offsetTop >= bottom ? 1 : 0;
+  btn.classList.toggle('hidden', away === 0);
+  btn.textContent = `${away < 0 ? '▲' : '▼'} YOU #${btn.dataset.rank}`;
+}
+
+// Draws a view into a list element and its note element (DOM only; logic is in buildBoardView). The list
+// scrolls inside its panel (wheel, touch drag; the controller's d-pad and right stick via [data-gp-scroll])
+// under a pinned column head. When the player's best row is out of sight a "YOU #n" button jumps to it.
 export function renderBoardView(listEl, noteEl, view) {
   if (noteEl) {
     noteEl.textContent = view.note;
@@ -457,16 +477,35 @@ export function renderBoardView(listEl, noteEl, view) {
   const doc = listEl.ownerDocument;
   listEl.replaceChildren();
   if (!view.rows.length) {
+    delete listEl.dataset.gpScroll;
+    delete listEl.dataset.gpNav;
+    listEl.removeAttribute?.('tabindex');
     const empty = doc.createElement('div');
     empty.className = 'hs-empty';
     empty.textContent = view.source === 'global' && view.note.startsWith('SYNCING') ? '· · ·' : 'NO RUNS YET';
     listEl.appendChild(empty);
     return;
   }
+  // A controller focus stop that the d-pad scrolls (gamepad.js MenuNavigator); keyboard-focusable too.
+  listEl.dataset.gpScroll = '';
+  listEl.dataset.gpNav = '';
+  listEl.setAttribute('tabindex', '0');
+  const head = doc.createElement('div');
+  head.className = 'hs-head';
+  head.setAttribute('aria-hidden', 'true');
+  for (const [cls, text] of HEAD_CELLS) {
+    const span = doc.createElement('span');
+    span.className = cls;
+    span.textContent = text;
+    head.appendChild(span);
+  }
+  listEl.appendChild(head);
   let newEl = null;
+  let best = null; // the player's best row on this board
   for (const row of view.rows) {
     const el = doc.createElement('div');
-    el.className = 'hs-row' + (row.isNew ? ' hs-current' : '') + (row.mine ? ' hs-mine' : '');
+    el.className = 'hs-row' + (row.rank <= 3 ? ` hs-top${row.rank}` : '') + (row.isNew ? ' hs-current' : '') + (row.mine ? ' hs-mine' : '');
+    el.dataset.rowKey = row.key;
     if (row.date) el.title = row.date;
     const cell = (cls, text) => {
       const span = doc.createElement('span');
@@ -487,10 +526,31 @@ export function renderBoardView(listEl, noteEl, view) {
     cell('hs-score', row.score.toLocaleString());
     listEl.appendChild(el);
     if (row.isNew) newEl = { el, key: row.key };
+    if (!best && (row.mine || row.isNew)) best = { el, row };
+  }
+  if (best) {
+    const jump = doc.createElement('button');
+    jump.type = 'button';
+    jump.className = 'hs-jump hidden';
+    jump.dataset.target = best.row.key;
+    jump.dataset.rank = String(best.row.rank);
+    jump.title = 'Scroll to your best run on this board';
+    jump.addEventListener?.('click', () => {
+      const row = listEl.querySelector(`[data-row-key="${jump.dataset.target}"]`);
+      if (row) listEl.scrollTo?.({ top: centredTop(listEl, row), behavior: 'smooth' });
+    });
+    listEl.appendChild(jump);
+  }
+  if (!listEl.dataset.jumpBound) {
+    listEl.dataset.jumpBound = '1';
+    listEl.addEventListener?.('scroll', () => syncJumpButton(listEl), { passive: true });
+    // A board drawn while its panel was hidden (the other screen, a closed phone window) re-checks once shown.
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => syncJumpButton(listEl)).observe(listEl);
   }
   // Centre the run just finished once (not on every re-render, so manual scrolling sticks).
   if (newEl && listEl.dataset.scrolledTo !== newEl.key && listEl.clientHeight > 0) {
     listEl.dataset.scrolledTo = newEl.key;
-    listEl.scrollTop = Math.max(0, newEl.el.offsetTop - (listEl.clientHeight - newEl.el.offsetHeight) / 2);
+    listEl.scrollTop = centredTop(listEl, newEl.el);
   }
+  syncJumpButton(listEl);
 }
