@@ -59,6 +59,10 @@ export const FIRE_RATE_TRIM = Object.freeze({ missiles: 1.3 });
 // Recharge rank realized far more than a Voltage rank and the weapon spiked at LV 18 once the damage-first
 // build turned to Recharge (0.43x the Autocannon at LV 12, 0.95x at LV 18 under kiting; 0.66x / 0.91x now).
 export const RATE_STEP_TRIM = Object.freeze({ lightning: 0.6, harpoon: 0.8 * 1.3 / 1.1 }); // Drill Driver Winch ranks 1.3x the Autocannon's rate steps (its card steps are x1.1, see CARD_STEP_TRIM)
+// The Sentry Turret has two rate cards, so Loosen Bolts (charge reload) never meets the diminishing return
+// Tighten Springs (fire rate) puts on the other: each reload rank realized ~1.5x a Bigger Cogs (damage) rank on
+// the realistic benches (tools/balance/hand-bench.mjs). Its step is trimmed to match (v0.46).
+export const TURRET_RELOAD_TRIM = 0.65;
 const lv1Trim = (id) => LV1_TRIM[id] ?? 1;
 
 // Class-based balance rule (Clay, v0.43.1): a weapon's REALIZED damage per target, at equal weapon level,
@@ -466,7 +470,7 @@ export const WEAPON_SCALING = {
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
   turretCharges: (b) => 2 + (b.r?.charges || 0) + (b.t4 ? 1 : 0), // r.charges: REPLICATOR ARRAY ranks (no card)
-  turretReload: (b) => 6 / rateMult(b.r.reload) / cdr(b),
+  turretReload: (b) => 6 / (1 + RATE_STEP * TURRET_RELOAD_TRIM * (b.r.reload || 0)) / cdr(b),
   turretDuration: (b) => 10 * persist(b),
   turretStillTime: 0.5,
   turretDropStill: 0.25,
@@ -1092,7 +1096,9 @@ export const WEAPON_SCALING = {
   supercritBonusMult: 1.5,
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
-  tagDamageStep: { kinetic: 0.2, explosive: 0.3, electric: 0.3 },
+  // Per tag-card rank, added (v0.46: 0.2 / 0.3 / 0.3). Sized so a tag card beats Reactor Overdrive (x1.12, compounding)
+  // only modestly when every carried weapon has the tag (hand-bench.mjs: at 1 weapon it realized 1.5-2.3x Overdrive).
+  tagDamageStep: { kinetic: 0.15, explosive: 0.2, electric: 0.2 },
   // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
   // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
   // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
