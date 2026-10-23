@@ -225,7 +225,7 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS; the cards des
   assert.equal(card.id, 'bt:shockfield:6:lash');
   assert.equal(card.name, 'Arc Lash');
   assert.equal(card.category, 'SHOCK FIELD');
-  assert.match(card.headline, /\+22% DPS/);
+  assert.ok(Math.abs(card.dpsGain - 0.22) < 0.01 && card.rows[0].id === 'potentialDps' && !/DPS/.test(card.headline));
   assert.ok(card.rows.some((r) => r.id === 'fieldLash'));
   assert.ok(describeBreakthrough(p, 'shockfield', 12, 'transform').rows.some((r) => r.id === 'fieldDashRefund'));
   assert.ok(describeBreakthrough(p, 'shockfield', 18, 'transform').rows.some((r) => r.id === 'fieldClap'));

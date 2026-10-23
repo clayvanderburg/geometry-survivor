@@ -131,6 +131,16 @@ export const PASSIVES = [
 
 export const PASSIVE_BY_ID = Object.fromEntries(PASSIVES.map((x) => [x.id, x]));
 
+// Damage sources that are not weapons (the passive, the drill and dash evolutions) but carry tags, so a tag or
+// Field Amplifier card can be in the hand for them alone: its card shows them as pills (upgrade-cards.js cardReach).
+// `source` is their WEAPON_TAGS key; `what` names what the card boosts there.
+export const SHIP_SOURCES = [
+  { id: 'shrapnel', name: 'Volatile Shatter', color: '#d6dde8', source: 'shrapnel', what: 'shards', owned: (p) => ownedPassives(p).includes('shrapnel') },
+  { id: 'tectonic', name: 'Tectonic Bore', color: '#ffb347', source: 'tectonic', what: 'drill blasts', owned: (p) => (p.weapons?.tectonicBore || 0) >= 1 },
+  { id: 'nova', name: 'Dash Shockwave', color: '#ffe45c', source: 'nova', what: 'shockwave', owned: (p) => (p.weapons?.dashNova || 0) >= 1 }
+];
+export const shipSourcesWith = (p, tag) => SHIP_SOURCES.filter((s) => s.owned(p) && (WEAPON_TAGS[s.source] || []).includes(tag));
+
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));

@@ -1593,6 +1593,8 @@ body:not(.reduce-effects) .new-weapon-card > .card-glow { display: block; }
   vertical-align: middle;
   text-shadow: none;
 }
+/* A non-weapon source a tag or area card boosts (Volatile Shatter, Tectonic Bore, Dash Shockwave): dashed, no slot. */
+.wpn-pill.source-pill { border-style: dashed; }
 .upg-weapons {
   display: flex;
   flex-wrap: wrap;

@@ -146,9 +146,9 @@ function globalCards() {
     req: reaches(kind), summary, apply() {}, ...extra
   });
   return [
-    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks faster, ones you pick up later too: fire, throw, drop and tick rates. Only attack rate.'),
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks more often, later pickups too: fire, reload, recharge, throw, tick. Not Orbit Blades.'),
     // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
-    card('cooldown', 'Cooldown Matrix', 'POWER', 'Every weapon (later pickups too) and your Phase Dash reload, recharge and cool down faster. Only cooldowns.', { req: undefined }),
+    card('cooldown', 'Cooldown Matrix', 'UTILITY', 'Your Phase Dash recharges faster, and so do Sentry Turret charges and Nanite Swarm canisters.', { req: undefined }),
     card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and mines last longer, later pickups too. Only lifetime.', { overcharge: false }),
     card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs, grenades. Only shot speed.', { overcharge: false })
   ];
@@ -654,7 +654,9 @@ export function cardWeight(u, luck = 1, player = null) {
     case 'status': return TUNING.statusCardWeight ?? 0.7;
     case 'core': return 0;
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
-    case 'tag': return TUNING.tagCardWeight ?? 0.7;
+    // A tag card in the hand only for a non-weapon source (the Volatile Shatter shards, Tectonic Bore blasts) is a
+    // weak pick there: TUNING.tagSourceOnlyWeight of the usual weight until a carried weapon has the tag.
+    case 'tag': return (TUNING.tagCardWeight ?? 0.7) * (player && !ownedWeapons(player).some((id) => weaponTags(id).includes(u.tags?.[0])) ? TUNING.tagSourceOnlyWeight ?? 0.4 : 1);
     case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
     default: return u.weightFor && player ? u.weightFor(player) : u.weight ?? 1;
   }

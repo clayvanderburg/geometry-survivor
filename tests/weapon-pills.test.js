@@ -127,7 +127,7 @@ test('no global, tag, crit, STATUS or Replicator card counts weapons, on the car
       assert.ok(!COUNT.test(d.headline), `${u.id} headline`);
       if (d.reach) {
         shown++;
-        assert.match(d.reach.label, /^(ALL WEAPONS|EVERY [A-Z ]+WEAPON)/, `${u.id} scope says it covers later weapons too`);
+        assert.match(d.reach.label, /^(ALL WEAPONS|(DASH \+ )?EVERY [A-Z ]+WEAPON)/, `${u.id} scope says it covers later weapons too`);
       }
     }
   }
@@ -141,7 +141,7 @@ test('a global card leads with its scope chip, then the weapons it boosts now', 
   applyUpgradeLevels(p, { ...UPGRADE_BY_ID.rockets_fire, levelJump: 1 });
   const scope = (id) => card(p, id).html.match(/upg-reach-scope"[^>]*>([^<]+)</)?.[1];
   assert.equal(scope('tempo_core'), 'ALL WEAPONS');
-  assert.equal(scope('cooldown_matrix'), 'ALL WEAPONS + DASH');
+  assert.equal(scope('cooldown_matrix'), 'DASH + EVERY DEPLOY WEAPON');
   assert.equal(scope('overdrive'), 'ALL WEAPONS');
   assert.equal(scope('crit_chance'), 'ALL WEAPONS');
   assert.equal(scope('tag_explosive'), 'EVERY EXPLOSIVE WEAPON');

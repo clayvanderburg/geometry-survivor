@@ -32,15 +32,14 @@ export const BT_BOOST_RANKS = 2;
 export const BOOST_RANKS = Object.freeze({ flamethrower: 1, cryospray: 1, acidspray: 1, gas: 1, mines: 1, nanites: 1, shockfield: 1, orbitals: 1, harpoon: 1 });
 export const boostRanksOf = (id) => BOOST_RANKS[id] ?? BT_BOOST_RANKS;
 // Weapons whose dead-pick UTILITY cards were all retired in v0.46 (Tesla Arc, Escort Drones, Glaive Discs) would
-// get nothing from ACROSS THE BOARD's ranks, so it would be a weaker Overtuned Core (Director, v0.46: never a trap).
-// BOOST_PERKS: hidden ranks of a retired stat, named on the card (`px`: what they add, tests check it against the
-// formula). Where no utility stat moves the bench (drone range and disc speed changed nothing at 6 ranks), BOOST_DPS
-// gives Across the Board more damage instead. Both tuned on the blend bench to ~1.0x Overtuned Core.
+// get nothing from ACROSS THE BOARD's ranks, so it would be a smaller Overtuned Core, a dominated pick (Clay).
+// BOOST_PERKS: hidden ranks of a retired stat that still matter, named on the card (`px`: what they add, tests
+// check it against the formula). A weapon with no utility stat and no perk never offers Across the Board
+// (boostOffered): its hand draws another transform instead. Drone range and disc speed moved nothing on the bench.
 export const BOOST_PERKS = Object.freeze({
   lightning: { stat: 'reach', ranks: 3, label: 'chain reach', px: 105 }
 });
-export const BOOST_DPS = Object.freeze({ drones: 1.15, glaive: 1.15 });
-export const boostDpsOf = (id) => BOOST_DPS[id] ?? BT_BOOST_DPS;
+export const boostOffered = (id) => !!BOOST_PERKS[id] || (STAT_CARDS[id] || []).some((c) => !POWER_STATS.has(c.stat));
 // OVERTUNED CORE: the POWER flat (DRG: Survivor's clean overclocks): more damage output, no utility and nothing
 // new, a bigger number than a transform's potential (transforms are calibrated on realized damage,
 // js/bt-calibration.js) to pay for doing nothing new. BT_OVERTUNED_DPS is the default: x1.3 damage per hit.
@@ -544,15 +543,16 @@ export function countRoom(p, id) {
 // GLOBAL CARDS (Vampire Survivors-style passives, v0.46): each rank reaches every equipped weapon that
 // has the stat, as a multiplier outside the weapon level (like REPLICATOR ARRAY, Breakthrough timing never
 // moves). Each step is about half a weapon card's (a Rate card is +40% of the base attack rate per rank), so
-// a global is worth a pick but a weapon's own card still does more for that weapon. `stats` are the
-// STAT_CARDS rank keys a card reaches (Tempo: attack / fire / tick rates; Cooldown: reloads, recharges and
-// cooldowns, plus the Phase Dash); Persistence reaches PERSIST_WEAPONS' lifetimes and Velocity
+// a global is worth a pick but a weapon's own card still does more for that weapon. Tempo reaches each
+// weapon's attack timer (TEMPO_STAT: how often it fires, throws, drops, ticks, reloads or recharges; every
+// weapon but Orbit Blades, which grind on contact); Cooldown reaches the Phase Dash and the charge timer of
+// the weapons that deploy (CHARGE_STAT); Persistence reaches PERSIST_WEAPONS' lifetimes and Velocity
 // VELOCITY_WEAPONS' projectile speed. Tempo, Cooldown and Persistence add DPS (POWER); Velocity only
 // changes how fast shots land (UTILITY). The step for each is GLOBAL_STEP (tests/global-cards.test.js prices them).
 export const GLOBAL_MAX_RANKS = 5;
 export const GLOBAL_CARDS = Object.freeze({
-  tempo: Object.freeze({ id: 'tempo_core', step: 0.08, stats: ['rate'] }), // reaches the most weapons, so the smallest step
-  cooldown: Object.freeze({ id: 'cooldown_matrix', step: 0.1, stats: ['reload', 'recharge', 'cooldown'] }),
+  tempo: Object.freeze({ id: 'tempo_core', step: 0.08 }), // every weapon but Orbit Blades: on the potential model one rank is about one weapon card at 5 weapons; realized it is ~0.6x Overdrive (hand-bench)
+  cooldown: Object.freeze({ id: 'cooldown_matrix', step: 0.15 }), // the dash and two deployers' charges: mostly utility, so the bigger step
   persistence: Object.freeze({ id: 'persistence_field', step: 0.15 }),
   velocity: Object.freeze({ id: 'velocity_coils', step: 0.15 })
 });
@@ -562,6 +562,20 @@ export const PERSIST_WEAPONS = Object.freeze(['singularity', 'nanites', 'gas', '
 export const VELOCITY_WEAPONS = Object.freeze(['blaster', 'rockets', 'missiles', 'turret', 'drones', 'glaive', 'grenades', 'nanites']);
 // Weapons whose base attack grows with Field Amplifier (the global AREA card; transforms' blasts grow too).
 export const AREA_WEAPONS = Object.freeze(['rockets', 'missiles', 'singularity', 'mines', 'grenades', 'gas', 'flamethrower', 'cryospray', 'acidspray', 'shockfield', 'nanites', 'quake']);
+// A weapon's attack timer (Tempo Core): its rate stat, or for weapons without one the reload / recharge /
+// cooldown that sets how often it attacks (Rocket Pods, Swarm Missiles, Tesla Arc, Vortex, Shock Field).
+const TIMER_STATS = ['reload', 'recharge', 'cooldown'];
+export const TEMPO_STAT = Object.freeze(Object.fromEntries(Object.entries(STAT_CARDS).flatMap(([id, cs]) => {
+  const stats = cs.map((c) => c.stat);
+  const stat = stats.includes('rate') ? 'rate' : TIMER_STATS.find((s) => stats.includes(s));
+  return stat ? [[id, stat]] : [];
+})));
+// A deploying weapon's charge timer (Cooldown Matrix): the reload / cooldown it has beside its attack rate
+// (Sentry Turret charges, Nanite Swarm canisters).
+export const CHARGE_STAT = Object.freeze(Object.fromEntries(Object.entries(STAT_CARDS).flatMap(([id, cs]) => {
+  const stat = TIMER_STATS.find((s) => cs.some((c) => c.stat === s));
+  return stat && TEMPO_STAT[id] !== stat ? [[id, stat]] : [];
+})));
 export const globalRanks = (p, kind) => p?.upgradeLevels?.[GLOBAL_CARDS[kind].id] || 0;
 export const globalMult = (p, kind) => 1 + GLOBAL_CARDS[kind].step * globalRanks(p, kind);
 // Weapons a global card reaches (equipped or not): the ones with one of its stats or on its list.
@@ -569,22 +583,22 @@ export function globalReaches(kind, id) {
   if (kind === 'persistence') return PERSIST_WEAPONS.includes(id);
   if (kind === 'velocity') return VELOCITY_WEAPONS.includes(id);
   if (kind === 'area') return AREA_WEAPONS.includes(id);
-  return (STAT_CARDS[id] || []).some((c) => GLOBAL_CARDS[kind].stats.includes(c.stat));
+  if (kind === 'tempo') return id in TEMPO_STAT;
+  if (kind === 'cooldown') return id in CHARGE_STAT;
+  return false;
 }
 
 export const BOOST_NAME = 'Across the Board';
-const boostPct = (id) => Math.round((boostDpsOf(id) - 1) * 100);
-const hasUtility = (id) => (STAT_CARDS[id] || []).some((c) => !POWER_STATS.has(c.stat));
+const boostPct = () => Math.round((BT_BOOST_DPS - 1) * 100);
 export const boostSummary = (weaponName, id) => {
   const perk = BOOST_PERKS[id];
   if (perk) return `${weaponName}: +${boostPct(id)}% damage and +${perk.px} px ${perk.label}. No new tricks, just more of the same.`;
-  if (id && !hasUtility(id)) return `${weaponName}: +${boostPct(id)}% damage (it has no utility stats to rank up). No new tricks, just more of the same.`;
   return `${weaponName}: +${boostPct(id)}% damage and +${boostRanksOf(id)} rank${boostRanksOf(id) > 1 ? 's' : ''} in every UTILITY stat (size, reach, range, pierce, status rank...). No new tricks, just more of the same.`;
 };
 export const boostHeadline = (id) => {
   const perk = BOOST_PERKS[id];
   if (perk) return `+${boostPct(id)}% DAMAGE + ${perk.px} PX ${perk.label.toUpperCase()}`;
-  return id && !hasUtility(id) ? `+${boostPct(id)}% DAMAGE` : `+${boostPct(id)}% DAMAGE + UTILITY`;
+  return `+${boostPct(id)}% DAMAGE + UTILITY`;
 };
 
 // In-world R&D lines for the Breakthrough header ({weapon} is the weapon's name).
@@ -794,7 +808,7 @@ export const BT_HAND_SIZE = 3;
 export function drawBreakthroughOptions(id, m, bt = {}, rng = Math.random) {
   const taken = takenTransforms(id, bt);
   const tfs = transformPool(id).filter((t) => transformEligible(t, m, taken)).map((t) => ({ id: t.id, w: (t.home === m ? BT_HOME_WEIGHT : BT_AWAY_WEIGHT) * (BT_DRAW_TRIM[`${id}|${t.id}|${m}`] ?? 1) }));
-  const flats = Object.keys(BT_FLATS).map((f) => ({ id: f, w: 1 }));
+  const flats = Object.keys(BT_FLATS).filter((f) => f !== 'boost' || boostOffered(id)).map((f) => ({ id: f, w: 1 }));
   const hand = [];
   const first = weightedTake(tfs, rng);
   if (first) hand.push(first.id);

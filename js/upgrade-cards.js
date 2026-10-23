@@ -12,10 +12,10 @@ import {
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage, dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
-import { WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
+import { WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES, shipSourcesWith } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
-import { weaponPill, weaponPills, rowWeapon } from './weapon-pills.js';
+import { weaponPill, weaponPills, sourcePill, rowWeapon } from './weapon-pills.js';
 import { clipHTML, transformClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, overtunedHeadline, boostHeadline, boostSummary, overtunedSummary, btOption,
@@ -325,7 +325,7 @@ export const STAT_ROWS = [
   { id: 'dashDistance', label: 'Dash distance', get: (p) => (blinkRank(p) > 0 ? null : W.dashDistance(p.stats.moveSpeed, dashRank(p)) * (p.dashDistanceMult ?? 1)), fmt: int, headline: 'size', unit: 'DASH DISTANCE' },
   { id: 'blinkDistance', label: 'Blink distance', get: (p) => (blinkRank(p) > 0 ? W.blinkDistance(blinkRank(p)) * W.dashDistanceMult(dashRank(p)) * (p.dashDistanceMult ?? 1) : null), fmt: int, headline: 'size', unit: 'BLINK DISTANCE', newText: () => 'DASH BLINKS' },
   // GLOBAL CARDS: the card's own multiplier (each weapon's rows below show what it does there)
-  ...[['tempo', 'Attack rate, all weapons'], ['cooldown', 'Recharge speed, all weapons + dash'], ['persistence', 'Lifetime, lingering effects'], ['velocity', 'Shot speed, all weapons']]
+  ...[['tempo', 'Attack rate, every timed weapon'], ['cooldown', 'Recharge speed, dash + deploy charges'], ['persistence', 'Lifetime, lingering effects'], ['velocity', 'Shot speed, all weapons']]
     .map(([kind, label]) => ({ id: `global_${kind}`, label, get: (p) => globalMult(p, kind), fmt: (v) => `+${Math.round((v - 1) * 100)}%` })),
   // Velocity Coils: the shot speed of each flying weapon (px/s; grenades show their lob time)
   ...[['blaster', 'Autocannon bolt speed', (p) => p.stats.bulletSpeed], ['rockets', 'Rocket speed', () => W.wingRocketSpeed],
@@ -403,17 +403,17 @@ const BUNDLE_HEADLINES = {
   thrusters: (r) => r.novaDamage && (r.novaDamage.b === null ? 'DASH SHOCKWAVE' : 'BIGGER DASH SHOCKWAVE')
 };
 
-// GLOBAL CARDS headline: the step this card adds ("+10% ATTACK RATE"; Cooldown Matrix "+10% RECHARGE + DASH").
+// GLOBAL CARDS headline: the step this card adds ("+8% ATTACK RATE"; Cooldown Matrix "+10% DASH & CHARGES").
 // Which weapons it reaches is the card's scope chip and pills (cardReach), never a count: a count of the
 // weapons carried now would read as if weapons picked up later were left out.
-const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'RECHARGE', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
+const GLOBAL_UNITS = { tempo: 'ATTACK RATE', cooldown: 'DASH & CHARGES', persistence: 'LIFETIME', velocity: 'SHOT SPEED', area: 'AREA SIZE' };
 export function globalHeadline(kind, before, after) {
   // The steps add up (rank 3 is +24%, not x1.08^3), so the headline names the points this card adds.
   const gain = kind === 'area'
     ? (after.stats.areaMult ?? 1) - (before.stats.areaMult ?? 1)
     : globalMult(after, kind) - globalMult(before, kind);
   if (!(gain > 0)) return '';
-  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}${kind === 'cooldown' ? ' + DASH' : ''}`;
+  return `+${Math.round(gain * 100)}% ${GLOBAL_UNITS[kind]}`;
 }
 
 // REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
@@ -447,15 +447,21 @@ function cardWeapons(player, upg, sc) {
 // What a global, tag, crit or STATUS card reaches: a scope label that also covers weapons picked up later
 // ("ALL WEAPONS", "EVERY KINETIC WEAPON") and the equipped weapons it boosts now (pills, loadout order).
 // null for every other card.
-const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'ALL WEAPONS + DASH', persistence: 'EVERY LINGERING WEAPON', velocity: 'EVERY SHOT WEAPON', area: 'EVERY AREA WEAPON' };
+// "ALL WEAPONS" only when the card reaches every weapon carried (tests/card-scope.test.js).
+const GLOBAL_SCOPE = { tempo: 'ALL WEAPONS', cooldown: 'DASH + EVERY DEPLOY WEAPON', persistence: 'EVERY LINGERING WEAPON', velocity: 'EVERY SHOT WEAPON', area: 'EVERY AREA WEAPON' };
+const globalScopeLabel = (kind, ids, owned) => (kind === 'tempo' && ids.length < owned.length ? 'EVERY TIMED WEAPON' : GLOBAL_SCOPE[kind]);
 const ALL_WEAPON_CARDS = new Set(['overdrive', 'crit_chance', 'crit_damage']);
 const STATUS_ELEMENT = { fire_damage: 'fire', frost_damage: 'frost', corrode_damage: 'corrode', shock_damage: 'shock', shock_conductor: 'shock' };
+// `sources`: the non-weapon sources it boosts too (SHIP_SOURCES), shown as dashed pills after the weapons.
 function cardReach(after, upg) {
   const owned = ownedWeapons(after);
-  if (upg.globalCard) return { label: GLOBAL_SCOPE[upg.globalCard], ids: globalReach(after, upg.globalCard) };
+  if (upg.globalCard) {
+    const ids = globalReach(after, upg.globalCard);
+    return { label: globalScopeLabel(upg.globalCard, ids, owned), ids, sources: upg.globalCard === 'area' ? shipSourcesWith(after, 'area') : [] };
+  }
   if (upg.category === 'SPECIALIST' && upg.tags?.length) {
     const tag = upg.tags[0];
-    return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)) };
+    return { label: `EVERY ${TAG_INFO[tag]?.label || tag.toUpperCase()} WEAPON`, ids: owned.filter((id) => weaponTags(id).includes(tag)), sources: shipSourcesWith(after, tag) };
   }
   if (ALL_WEAPON_CARDS.has(upg.id)) return { label: 'ALL WEAPONS', ids: owned };
   if (upg.statusCard) {
@@ -466,6 +472,15 @@ function cardReach(after, upg) {
     };
   }
   return null;
+}
+
+// A tag or area card in the hand for a non-weapon source alone says what it boosts there, and that weapons
+// picked up later count too ("Boosts your Volatile Shatter shards (and any KINETIC weapon you pick up later).").
+function sourceOnlySummary(upg, reach) {
+  if (!reach || reach.ids.length || !reach.sources?.length) return '';
+  const what = reach.sources.map((s) => `${s.name} ${s.what}`).join(' and ');
+  const family = upg.globalCard === 'area' ? 'AREA' : (TAG_INFO[upg.tags?.[0]]?.label || '');
+  return `Boosts your ${what} (and any ${family} weapon you pick up later).`;
 }
 
 const rowView = ({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a });
@@ -505,6 +520,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
   const replicated = upg.id === REPLICATOR_ID ? replicatorParts(player, copy) : null;
+  const reach = cardReach(copy, upg);
 
   return {
     id: upg.id,
@@ -515,13 +531,13 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     // Its tier comes from the floor, not the roll: the card keeps a normal body and wears the tier on its frame.
     rarityFloored: upg.rarityFloor > jump,
     weapons: cardWeapons(player, upg, sc),
-    reach: cardReach(copy, upg),
+    reach,
     headlineHtml: replicated?.length ? replicated.map((x) => `<span class="upg-headline-part">${weaponPill(x.weapon)} ${x.text}</span>`).join('') : '',
     name: upg.name,
     category: upg.category,
     scope: cardScope(upg),
     tags: (upg.tags || []).filter((t) => TAG_INFO[t]),
-    summary: upg.summary || '',
+    summary: sourceOnlySummary(upg, reach) || upg.summary || '',
     isSynergy: !!upg.isSynergy,
     rarity,
     rarityLabel: RARITY[rarity].label,
@@ -627,6 +643,17 @@ export function weaponPotentialDps(p, id, b = weaponBuild(p, id)) {
 // 'transform' (the milestone's home transform), or a flat ('boost' ACROSS THE BOARD, 'overtuned' OVERTUNED
 // CORE). `kind` is 'transform' or the flat id; `option` the id stored on the pick. Rows are the exact
 // before -> after stats with the choice installed on a copy of the player, led by the weapon's potential DPS.
+// What a Breakthrough card's potential-DPS row assumes, per weapon (Clay, v0.46: the headline says only the real
+// effect, and the DPS row must never read as a second bonus). Short enough for a phone-width card.
+export const DPS_BASIS = Object.freeze({
+  blaster: 'if every shot hits', rockets: 'if every rocket hits', missiles: 'if every missile hits',
+  lightning: 'if every jump lands', singularity: 'pack in the well', orbitals: 'blades always in contact',
+  mines: 'every mine triggered', turret: 'turrets always firing', drones: 'all drones firing',
+  grenades: 'if every blast lands', gas: 'pack in the cloud', flamethrower: 'pack in the spray',
+  cryospray: 'pack in the spray', acidspray: 'pack in the spray', shockfield: 'pack in the field',
+  raillance: 'if every lance hits', glaive: 'if every bounce hits', nanites: 'swarm always biting',
+  harpoon: 'if every drill hits', quake: 'if every wave lands'
+});
 const FLAT_TEXT = {
   boost: { summary: boostSummary, headline: boostHeadline },
   overtuned: { summary: overtunedSummary, headline: overtunedHeadline }
@@ -641,7 +668,7 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
   const dpsBefore = weaponPotentialDps(player, weaponId);
   const dpsAfter = weaponPotentialDps(copy, weaponId);
   const gain = dpsBefore ? dpsAfter / dpsBefore - 1 : 0;
-  const rows = [{ id: 'potentialDps', label: `${weapon.hudName} potential DPS`, before: dec1(dpsBefore || 0), after: dec1(dpsAfter || 0) }, ...changed];
+  const rows = [{ id: 'potentialDps', label: `Potential DPS (${DPS_BASIS[weaponId] || 'if every hit lands'})`, before: dec1(dpsBefore || 0), after: dec1(dpsAfter || 0) }, ...changed];
   const transform = opt?.kind === 'transform' ? opt.transform : null;
   const flat = FLAT_TEXT[opt?.kind] || FLAT_TEXT.boost;
   const rarity = transform ? 'transform' : 'boost';
@@ -663,8 +690,8 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
     color: RARITY[rarity].color,
     jump: 1,
     headline: transform
-      ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
-      : `${flat.headline(weaponId, weaponLevel(player, weaponId))} // +${Math.round(gain * 100)}% DPS`,
+      ? `⚛ ${transform.name.toUpperCase()}`
+      : flat.headline(weaponId, weaponLevel(player, weaponId)),
     weapons: [weaponId],
     rows: rows.slice(0, maxRows).map(rowView),
     hiddenRows: Math.max(0, rows.length - maxRows),
@@ -723,7 +750,7 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
           <div class="upg-stat"><span class="upg-stat-label">${pill}${label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`;
   }).join('');
   // Scope chip first ("ALL WEAPONS": now and later), then the weapons it boosts today.
-  const reach = d.reach ? `<span class="upg-reach-scope" title="Also boosts matching weapons you pick up later">${d.reach.label}</span>${weaponPills(d.reach.ids)}` : '';
+  const reach = d.reach ? `<span class="upg-reach-scope" title="Also boosts matching weapons you pick up later">${d.reach.label}</span>${weaponPills(d.reach.ids)}${(d.reach.sources || []).map(sourcePill).join('')}` : '';
   const weaponLine = own.length || reach ? `<div class="upg-weapons">${weaponPills(own)}${reach}</div>` : '';
   const tags = d.tags && d.tags.length
     ? `<div class="upg-tags">${d.tags.map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('')}</div>`

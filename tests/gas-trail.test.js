@@ -152,7 +152,7 @@ test('gas cards preview their own stat; the pick and Breakthrough cards name the
   assert.equal(t.id, 'bt:gas:6:seek');
   assert.equal(t.name, 'Seeking Miasma');
   assert.equal(t.category, 'GAS TRAIL');
-  assert.match(t.headline, /\+22% DPS/);
+  assert.ok(Math.abs(t.dpsGain - 0.22) < 0.01 && t.rows[0].id === 'potentialDps' && !/DPS/.test(t.headline));
   const b = describeBreakthrough(p, 'gas', 6, 'boost');
   assert.match(b.summary, /Corrosive Gas Trail/);
   assert.ok(b.rows.some((r) => r.id === 'gasRadius') && b.rows.some((r) => r.id === 'gasLife'), 'Across the Board: wider, longer clouds');

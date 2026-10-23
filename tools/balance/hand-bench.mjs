@@ -31,7 +31,9 @@ export const LOADOUTS = {
   2: ['blaster', 'rockets'],
   4: ['blaster', 'rockets', 'grenades', 'singularity'],
   5: ['blaster', 'rockets', 'grenades', 'singularity', 'drones'], // a full loadout (5 slots since v0.46)
-  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas']
+  sprayers: ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas'],
+  timers: ['missiles', 'rockets', 'singularity', 'shockfield', 'mines'], // Clay's v0.46 run: reload / recharge / cooldown weapons
+  deployers: ['turret', 'nanites', 'blaster', 'orbitals', 'grenades'] // the weapons with a charge timer (Cooldown Matrix)
 };
 // Non-weapon cards that add damage and can share a hand with weapon cards (ship utility is left out: it adds none).
 export const GLOBAL_IDS = ['overdrive', 'crit_chance', 'crit_damage', 'tag_kinetic', 'tag_explosive', 'tag_electric', 'tag_area',

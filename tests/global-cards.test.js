@@ -14,7 +14,8 @@ globalThis.document = { getElementById: element, createElement: element };
 const { TUNING } = await import('../js/config.js');
 const U = await import('../js/upgrades.js');
 const {
-  STAT_CARDS, GLOBAL_CARDS, GLOBAL_MAX_RANKS, PERSIST_WEAPONS, VELOCITY_WEAPONS, AREA_WEAPONS, weaponBuild, levelBuild, makeBuild
+  STAT_CARDS, GLOBAL_CARDS, GLOBAL_MAX_RANKS, PERSIST_WEAPONS, VELOCITY_WEAPONS, AREA_WEAPONS, weaponBuild, levelBuild, makeBuild,
+  TEMPO_STAT, CHARGE_STAT
 } = await import('../js/weapon-levels.js');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, RATE_STEP, dashCooldownFor, projectileSpeedMult } = await import('../js/weapon-scaling.js');
 const { WEAPON_BY_ID } = await import('../js/loadout.js');
@@ -51,7 +52,8 @@ const LOADOUTS = {
   5: ['blaster', 'rockets', 'grenades', 'singularity', 'drones'],
   '5 (sprayers & clouds)': ['flamethrower', 'missiles', 'lightning', 'nanites', 'gas']
 };
-const POWER_GLOBALS = ['tempo', 'cooldown', 'persistence'];
+// Cooldown Matrix is UTILITY since v0.46 (Tempo took the weapon attack timers): the dash, plus two deployers' charges.
+const POWER_GLOBALS = ['tempo', 'persistence'];
 
 test('global cards: five ranks, GLOBAL scope, POWER or UTILITY, a step about half a weapon card\'s', () => {
   for (const [kind, def] of Object.entries(GLOBAL_CARDS)) {
@@ -74,15 +76,23 @@ test('global cards: five ranks, GLOBAL scope, POWER or UTILITY, a step about hal
   assert.equal(U.cardWeight(area), TUNING.globalCardWeight ?? 1, 'weighted like the other global cards');
 });
 
-test('Tempo reaches every Rate card and Cooldown every reload / recharge / cooldown: together they reach every weapon but the passive-free ones', () => {
-  const tempo = Object.keys(STAT_CARDS).filter((w) => STAT_CARDS[w].some((c) => c.stat === 'rate'));
-  const cooldown = Object.keys(STAT_CARDS).filter((w) => STAT_CARDS[w].some((c) => ['reload', 'recharge', 'cooldown'].includes(c.stat)));
+test('Tempo reaches every weapon\'s attack timer (all but Orbit Blades); Cooldown only the deploy charges', () => {
+  // Tempo: how often each weapon attacks, whatever its stat is called (Clay, v0.46: Rocket Pods, Swarm
+  // Missiles, Vortex and Shock Field were Cooldown Matrix's, so Tempo showed one pill on a five-weapon run).
+  const tempo = Object.keys(TEMPO_STAT);
+  const cooldown = Object.keys(CHARGE_STAT);
+  assert.deepEqual(Object.keys(STAT_CARDS).filter((w) => !tempo.includes(w)), ['orbitals'], 'Orbit Blades grind on contact: no attack timer');
+  assert.deepEqual(TEMPO_STAT.rockets, 'reload');
+  assert.deepEqual([TEMPO_STAT.missiles, TEMPO_STAT.lightning, TEMPO_STAT.singularity, TEMPO_STAT.shockfield], ['reload', 'recharge', 'cooldown', 'recharge']);
+  assert.deepEqual(CHARGE_STAT, { turret: 'reload', nanites: 'cooldown' });
+  // Every weapon with a rate-like card has its attack timer on Tempo; no stat is on both cards.
+  for (const w of Object.keys(STAT_CARDS)) {
+    if (STAT_CARDS[w].some((c) => RATE.includes(c.stat))) assert.ok(tempo.includes(w), w);
+    assert.notEqual(TEMPO_STAT[w], CHARGE_STAT[w] ?? null, `${w}: one stat, one card`);
+  }
   const p = player(Object.keys(STAT_CARDS).slice(0, 6));
   assert.deepEqual(U.globalReach(p, 'tempo'), p.loadout.filter((w) => tempo.includes(w)));
-  // Every weapon with a rate-like card is reached by one of the two.
-  for (const w of Object.keys(STAT_CARDS)) {
-    if (STAT_CARDS[w].some((c) => RATE.includes(c.stat))) assert.ok(tempo.includes(w) || cooldown.includes(w), w);
-  }
+  assert.deepEqual(U.globalReach(p, 'cooldown'), p.loadout.filter((w) => cooldown.includes(w)));
   // One rank speeds each reached weapon by exactly its step (the weapon's own ranks untouched).
   for (const w of Object.keys(STAT_CARDS)) {
     const q = midRun([w]);
@@ -175,8 +185,11 @@ test('card headlines name the step and the reach; preview rows show each weapon\
   assert.equal(tempo.headline, '+8% ATTACK RATE');
   assert.ok(tempo.rows.some((r) => r.id === 'fireRate'), 'Autocannon fire rate row');
   const cd = describeUpgrade(p, { ...byId('cooldown_matrix'), levelJump: 1 });
-  assert.equal(cd.headline, '+10% RECHARGE + DASH');
-  for (const id of ['rocketCooldown', 'singularityCooldown', 'dashCooldown']) assert.ok(cd.rows.some((r) => r.id === id), id);
+  assert.equal(cd.headline, `+${Math.round(GLOBAL_CARDS.cooldown.step * 100)}% DASH & CHARGES`);
+  assert.deepEqual(cd.rows.map((r) => r.id).filter((id) => id !== 'global_cooldown'), ['dashCooldown'], 'no deployer carried: the dash only');
+  for (const id of ['rocketCooldown', 'singularityCooldown']) assert.ok(tempo.rows.some((r) => r.id === id), `${id} is Tempo's now`);
+  const deploy = describeUpgrade(player(['turret', 'nanites']), { ...byId('cooldown_matrix'), levelJump: 1 });
+  for (const id of ['turretReload', 'naniteCooldown', 'dashCooldown']) assert.ok(deploy.rows.some((r) => r.id === id), id);
   const persist = describeUpgrade(p, { ...byId('persistence_field'), levelJump: 2 });
   assert.equal(persist.headline, '+30% LIFETIME');
   assert.ok(persist.rows.some((r) => r.id === 'singularityLife'));

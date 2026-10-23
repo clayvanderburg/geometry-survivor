@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostDpsOf, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, boostRanksOf, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -29,7 +29,7 @@ export const DPS_TARGET = (lv) => 3 * Math.pow(Math.max(0, lv), 1.5);
 
 // Potential DPS budget of a build: the level curve times its Breakthrough multipliers.
 // Overtuned Core's free POWER ranks count at what they add on this build (its hit damage is in hitMult).
-export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
+export const buildBudget = (b) => DPS_TARGET(b.lv) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0) * overtunedRankGain(b) * Math.pow(BT_TRANSFORM_DPS, b.transforms);
 export function overtunedRankGain(b) {
   const o = b.ot && overtunedRanks(b.id);
   if (!o || !POTENTIAL_DPS[b.id]) return 1;
@@ -100,7 +100,7 @@ const fireRateTrim = (id) => FIRE_RATE_TRIM[id] ?? 1;
 export const damageGrowth = (id) => 1 + (DAMAGE_GROWTH - 1) * (CARD_STEP_TRIM[id] ?? 1);
 export const rateStep = (id) => RATE_STEP * (CARD_STEP_TRIM[id] ?? 1) * (RATE_STEP_TRIM[id] ?? 1);
 // Hit damage multiplier of a build: its Damage ranks, ACROSS THE BOARD and OVERTUNED CORE picks (nothing else).
-export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(boostDpsOf(b.id), b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
+export const hitMult = (b) => Math.pow(damageGrowth(b.id), b.r.damage || 0) * Math.pow(BT_BOOST_DPS, b.atb) * Math.pow(overtunedAt(b.id, b.lv), b.ot || 0);
 // Hit-damage rescale for transforms: the build's attack units with and without its transforms, so the
 // transforms together add exactly BT_TRANSFORM_DPS each, however many extra attacks they make; then
 // divided by the transforms' card-bench realized value (bt-calibration.js), which POTENTIAL_DPS counts back in.
@@ -108,6 +108,8 @@ const noTransforms = (b) => ({ ...b, t4: false, t8: false, t12: false, tf: new S
 const tfScale = (b, units) => (b.transforms ? Math.pow(BT_TRANSFORM_DPS, b.transforms) * units(noTransforms(b)) / units(b) / tfRealized(b) : 1);
 const rateMult = (rank) => 1 + RATE_STEP * (rank || 0);
 // GLOBAL CARDS multipliers a build carries (weapon-levels.js GLOBAL_CARDS; 1 for bare builds, so LV 1 solves never move).
+// GLOBAL CARDS (weapon-levels.js GLOBAL_CARDS): Tempo Core scales each weapon's attack timer (its TEMPO_STAT),
+// Cooldown Matrix only the charge timers of weapons that deploy (CHARGE_STAT: Sentry Turret charges, Nanite canisters).
 const tempo = (b) => b?.g?.tempo ?? 1;
 const cdr = (b) => b?.g?.cooldown ?? 1;
 const persist = (b) => b?.g?.persistence ?? 1;
@@ -180,7 +182,7 @@ export const WEAPON_SCALING = {
   // Dumbfire rockets from the flank pods, fired along the turret aim. Direct hit + a blast worth
   // wingRocketBlastShare of the hit, centred on the target.
   wingRocketCount: (b) => 2 + b.r.count,
-  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / cdr(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
+  wingRocketCooldown: (b) => 0.5 / rateMult(b.r.reload) / tempo(b), // 0.65 s before the weapons pass, 1 s before v0.39.8
   wingRocketBlastRadius: (b) => 50 * (1 + 0.12 * b.r.radius),
   wingRocketBlastShare: 0.5,
   wingRocketSpeed: 11, // 8.5 before v0.39.8
@@ -221,7 +223,7 @@ export const WEAPON_SCALING = {
 
   // --- Swarm Micro-Missiles (stats: damage, salvo, reload, radius) --------------------------------
   missileSalvo: (b) => 2 + b.r.salvo,
-  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / cdr(b), // 1.44 s before the weapons pass
+  missileCooldown: (b) => 1.44 / fireRateTrim('missiles') / rateMult(b.r.reload) / tempo(b), // 1.44 s before the weapons pass
   missileBlastRadius: (b) => 75 * (1 + 0.12 * b.r.radius),
   missileSpeed: 11,
   // Missiles lock targets within missileRange of the ship (about half a screen) and self-destruct after
@@ -264,7 +266,7 @@ export const WEAPON_SCALING = {
   // bound by targets (a jump already killed most of what it landed on), so faster, lighter discharges waste
   // less on overkill and crackle more like lightning (card bench: 0.43-0.54x the Autocannon at LV 6-12 under
   // kiting, now 0.66-0.88x). Storm Protocol's chains keep their damage (stormArcScale).
-  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / cdr(b),
+  lightningCooldown: (b) => 0.775 / (1 + rateStep('lightning') * (b.r.recharge || 0)) / tempo(b),
   stormArcScale: 2,
   lightningRange: (b) => 420 + 35 * (b.r.reach || 0), // +40% (was 300 + 25/rank); Reach card retired in v0.46 (dead pick)
   lightningChains: (b) => (b.t4 ? 2 : 1),
@@ -311,7 +313,7 @@ export const WEAPON_SCALING = {
   // its rim (TUNING.singularityCollapseEdgeFalloff): stat cards and transforms never change either.
   singularityPullRadius: (b) => 175 + 25 * b.r.pull + (b.t8 ? W.aftershockPull : 0),
   singularityLife: (b) => (2.6 + 0.3 * b.r.duration) * persist(b),
-  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / cdr(b),
+  singularityCooldown: (b) => 4 / rateMult(b.r.cooldown) / tempo(b),
   singularityCoreRadius: (b) => 22 * (1 + 0.15 * (b?.r?.core || 0)),
   singularityCollapseRadiusFrac: 0.85,
   // Transforms: Twin Singularities (2 cores, each pulling at twinPullScale and valued as twinUnitShare extra), Aftershock Collapse (a
@@ -757,7 +759,7 @@ export const WEAPON_SCALING = {
   // on one target (fieldHitShare), like a mine blast: the crowd it catches is mostly fodder that dies to
   // the first jolt, so it realizes less than the damage dealers (measured in the balance harness).
   fieldRadius: (b) => 125 + 24 * (b?.r?.radius || 0), // +12 per rank before v0.39.7
-  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / cdr(b),
+  fieldCooldown: (b) => 2.2 / rateMult(b.r.recharge) / tempo(b),
   fieldStunRank: (b) => Math.min(ELEMENT_MAX_RANKS, 1 + (b?.r?.stun || 0)),
   fieldHitShare: 1,
   fieldKnock: 1.2, // a light outward shove on every discharge
