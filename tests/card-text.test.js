@@ -83,3 +83,26 @@ test('weapon summaries describe how the weapon actually fires', () => {
     assert.doesNotMatch(WEAPON_BY_ID[id].summary, /where you aim/, id);
   }
 });
+
+test('RARE weapon cards (Phase Piercer, Extra Nozzle) stay strong but rarer, and say so on the card', async () => {
+  // Clay (v0.46): swingy cards are balanced with rarity, not cut. They always show RARE (a +1 roll is not a jump,
+  // so the ribbon reads "◆ RARE CARD · +1 LEVEL") and are drawn at RARE_CARD.weightMult of a stat card's share.
+  const { RARE_CARD } = await import('../js/weapon-levels.js');
+  const U = await import('../js/upgrades.js');
+  const { describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
+  const h = await import('../tools/balance/harness.mjs');
+  const g = h.createHeadlessGame();
+  g.resetRun();
+  for (const w of ['flamethrower', 'cryospray', 'acidspray']) U.acquireWeapon(g.player, w);
+  for (const id of ['pierce', 'flamethrower_nozzles', 'cryospray_nozzles', 'acidspray_nozzles']) {
+    const card = U.UPGRADE_BY_ID[id];
+    assert.equal(U.rarityFor(card, 1), 'rare', `${id}: a +1 roll shows RARE`);
+    const sibling = U.UPGRADE_POOL.find((u) => u.weapon === card.weapon && u.statCard && u.id !== id && !u.rarityFloor);
+    assert.ok(Math.abs(U.cardWeight(card) / U.cardWeight(sibling) - RARE_CARD.weightMult) < 1e-9, `${id}: drawn at ${RARE_CARD.weightMult}x`);
+    const html = renderUpgradeCard(describeUpgrade(g.player, { ...card, levelJump: 1 }), '[1]').html;
+    assert.match(html, /◆ RARE CARD · \+1 LEVEL/, id);
+  }
+  for (const id of ['blaster_damage', 'firerate', 'flamethrower_damage', 'flamethrower_rate']) {
+    assert.equal(U.UPGRADE_BY_ID[id].rarityFloor, undefined, `${id}: core Damage / Rate cards stay common`);
+  }
+});

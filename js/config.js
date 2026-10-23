@@ -229,7 +229,7 @@ export const DEFAULT_TUNING = {
   globalCardWeight: 1,      // each GLOBAL card (Tempo, Cooldown, Persistence, Velocity, Area): like Overdrive or a crit card
   weaponLineWeight: 1.5,
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
-  tagCardWeight: 0.7,
+  tagCardWeight: 0.45,       // tag cards: strong in a one-family build, so uncommon (rarityFloor 2) and lighter
   statusCardWeight: 0.7,    // each global STATUS card
   replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,

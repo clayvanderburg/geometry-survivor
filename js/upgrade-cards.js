@@ -469,7 +469,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     // Weapon (and passive) cards raise a LEVEL; every other card stacks RANKS of its own.
     unit: sc || PASSIVES.some((x) => x.upgradeId === upg.id) ? 'LV' : 'RANK',
     // A card pinned to a rarity tier above its jump (Replicator Array: always RARE, always one rank) says so.
-    rarityNote: upg.rarityFloor > jump ? `◆ ${RARITY[rarity].label} CARD · +${jump} RANK` : '',
+    rarityNote: upg.rarityFloor > jump ? `◆ ${RARITY[rarity].label} CARD · +${jump} ${sc ? 'LEVEL' : 'RANK'}` : '',
     name: upg.name,
     category: upg.category,
     scope: cardScope(upg),

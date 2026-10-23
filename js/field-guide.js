@@ -487,7 +487,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'pierce', icon: '➤', title: 'PIERCE FALLOFF',
     body: () => [
-      `Piercing bolts deal full damage to the first enemy; each one behind takes ${pct(TUNING.pierceFalloff ?? 0.7)} of the hit before it (Autocannon bolts ${pct(W.blasterPierceKeep)}). Line enemies up and the front of the column melts first.`
+      `Piercing bolts deal full damage to the first enemy; each one behind takes ${pct(TUNING.pierceFalloff ?? 0.7)} of the hit before it. Line enemies up and the front of the column melts first.`
     ]
   },
   {

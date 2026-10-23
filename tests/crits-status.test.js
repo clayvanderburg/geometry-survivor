@@ -14,7 +14,7 @@ const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { DamageNumbers, CRIT_COLOR } = await import('../js/damage-numbers.js');
 const { EnemyManager } = await import('../js/enemies.js');
-const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows } = await import('../js/upgrades.js');
+const { UPGRADE_POOL, applyUpgradeLevels, loadoutAllows, cardWeight } = await import('../js/upgrades.js');
 const { STAT_ROWS, describeUpgrade, renderUpgradeCard } = await import('../js/upgrade-cards.js');
 const { WEAPON_SCALING: W, WEAPON_TAGS, TAG_INFO, weaponDamage, critMultiplier } = await import('../js/weapon-scaling.js');
 const { updateStatusEffects, damageTakenMult, isAfflicted, shockCritBonus } = await import('../js/status-effects.js');
@@ -439,13 +439,13 @@ test('live tuning re-derives crit stats from the tuned base plus owned crit card
   reset();
 });
 
-test('a tag card rank stays within reach of a Reactor Overdrive rank (no strictly dominant pick)', () => {
-  // Overdrive adds +12% to every weapon, compounding; a tag card adds its step to one family, summed. With
-  // every carried weapon in the family (always true at 1 weapon) the tag card should only modestly beat it:
-  // at +20% / +30% it realized 1.5-2.3x Overdrive on the hand bench (tools/balance/hand-bench.mjs --part early).
+test('tag cards are strong in a one-family build, so they are rarer: always UNCOMMON and lighter than Overdrive', () => {
+  // Clay (v0.46): balance swingy cards with rarity. A tag rank beats Reactor Overdrive's +12% inside its family
+  // (1.5-2x on hand-bench.mjs at 1 weapon), so it shows at least UNCOMMON and turns up about half as often.
   for (const [tag, step] of Object.entries(W.tagDamageStep)) {
-    assert.ok(step > 0.12, `${tag}: still a step up from Overdrive's +12% inside its family`);
-    assert.ok(step <= 0.2 + 1e-9, `${tag}: at most +20% per rank`);
-    assert.ok(1 + 5 * step <= Math.pow(1.12, 5) * 1.25, `${tag}: five ranks stay within 25% of five Overdrive ranks`);
+    assert.ok(step > 0.12 && step <= 0.25 + 1e-9, `${tag}: +12-25% per rank`);
+    const card = UPGRADE_POOL.find((u) => u.category === 'SPECIALIST' && u.tags[0] === tag);
+    assert.equal(card.rarityFloor, 2, `${tag}: always at least UNCOMMON`);
   }
+  assert.ok((TUNING.tagCardWeight ?? 0.45) <= 0.5 * cardWeight(byId('overdrive')), 'about half as often as Overdrive');
 });
