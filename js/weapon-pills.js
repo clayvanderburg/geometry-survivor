@@ -15,6 +15,9 @@ export function weaponPill(id, { cls = '', text = null, suffix = '' } = {}) {
   return `<span class="wpn-pill${cls ? ` ${cls}` : ''}"${style}>${esc(label)}${suffix}</span>`;
 }
 
+// A non-weapon source a card boosts (loadout.js SHIP_SOURCES: Volatile Shatter, Tectonic Bore, Dash Shockwave): dashed.
+export const sourcePill = (s) => `<span class="wpn-pill source-pill" style="--wc:${s.color}">${esc(s.name)}</span>`;
+
 export const weaponPills = (ids) => [...new Set(ids)].filter(Boolean).map((id) => weaponPill(id)).join('');
 
 // Which weapon a card stat row (upgrade-cards.js STAT_ROWS id) belongs to, or null for ship-wide rows.

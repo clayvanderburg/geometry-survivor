@@ -99,3 +99,58 @@ test('STATUS card pills are the carried weapons with a matching element', () => 
     }
   }
 });
+
+// Clay (v0.46): Tungsten Penetrators said EVERY KINETIC WEAPON with no pill at all on a run whose only KINETIC
+// source was the Volatile Shatter passive. Non-weapon sources (loadout.js SHIP_SOURCES) get their own pills.
+const { TUNING } = await import('../js/config.js');
+const { SHIP_SOURCES } = await import('../js/loadout.js');
+const { renderUpgradeCard } = await import('../js/upgrade-cards.js');
+const { WEAPON_TAGS } = await import('../js/weapon-scaling.js');
+function withSources(weapons) {
+  const p = player(weapons);
+  U.applyUpgradeLevels(p, { ...U.UPGRADE_BY_ID.shrapnel, levelJump: 1 });
+  p.weapons.tectonicBore = 1;
+  p.weapons.dashNova = 1;
+  return p;
+}
+
+test('a tag or Field Amplifier card in the hand always has a pill: a carried weapon or a passive / evolution source', () => {
+  const offered = new Set();
+  for (const weapons of [...LOADOUTS, ['singularity']]) {
+    for (const p of [player(weapons), withSources(weapons)]) {
+      for (const u of U.eligibleUpgrades(p).filter((x) => x.category === 'SPECIALIST' || x.globalCard === 'area')) {
+        offered.add(u.id);
+        const d = describeUpgrade(p, { ...u, levelJump: 1 }, 99);
+        const where = `${u.id} on ${p.loadout.join('+')}`;
+        assert.ok(d.reach.ids.length + d.reach.sources.length > 0, `${where}: offered with an empty pill row`);
+        const tag = u.globalCard === 'area' ? 'area' : u.tags[0];
+        for (const s of d.reach.sources) assert.ok(s.owned(p) && WEAPON_TAGS[s.source].includes(tag), `${where}: ${s.name}`);
+        if (d.reach.sources.length) assert.match(renderUpgradeCard(d, '[1]').html, /wpn-pill source-pill/);
+      }
+    }
+  }
+  assert.deepEqual([...offered].sort(), ['tag_area', 'tag_electric', 'tag_explosive', 'tag_kinetic']);
+  assert.ok(SHIP_SOURCES.every((s) => WEAPON_TAGS[s.source]), 'sources are real tag keys');
+});
+
+test('Clay\'s run + Volatile Shatter: Tungsten Penetrators pills the passive, says what it boosts, and turns up less', () => {
+  const p = player(LOADOUTS[0]);
+  U.applyUpgradeLevels(p, { ...U.UPGRADE_BY_ID.shrapnel, levelJump: 1 });
+  const card = { ...U.UPGRADE_BY_ID.tag_kinetic, levelJump: 1 };
+  const d = describeUpgrade(p, card, 99);
+  assert.deepEqual(d.reach.ids, []);
+  assert.deepEqual(d.reach.sources.map((s) => s.name), ['Volatile Shatter']);
+  assert.match(d.headline, /KINETIC DAMAGE/);
+  assert.equal(d.summary, 'Boosts your Volatile Shatter shards (and any KINETIC weapon you pick up later).');
+  assert.match(renderUpgradeCard(d, '[1]').html, /EVERY KINETIC WEAPON<\/span><span class="wpn-pill source-pill" style="--wc:#d6dde8">Volatile Shatter<\/span>/);
+  // Weight: TUNING.tagSourceOnlyWeight of a tag card's usual weight until a carried weapon has the tag.
+  const usual = TUNING.tagCardWeight;
+  assert.ok(Math.abs(U.cardWeight(card, 1, p) - usual * TUNING.tagSourceOnlyWeight) < 1e-9);
+  assert.ok(TUNING.tagSourceOnlyWeight < 1);
+  const kinetic = player(['blaster']);
+  U.applyUpgradeLevels(kinetic, { ...U.UPGRADE_BY_ID.shrapnel, levelJump: 1 });
+  assert.equal(U.cardWeight(card, 1, kinetic), usual, 'a KINETIC weapon: the usual weight');
+  const both = describeUpgrade(kinetic, card, 99);
+  assert.deepEqual([both.reach.ids, both.reach.sources.map((s) => s.id)], [['blaster'], ['shrapnel']]);
+  assert.equal(both.summary, U.UPGRADE_BY_ID.tag_kinetic.summary, 'the usual summary once a weapon has the tag');
+});
