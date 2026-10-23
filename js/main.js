@@ -1569,13 +1569,19 @@ export class Game {
       return;
     }
     this.globalSubmit = { pending: true };
-    this.globalBoard.submit(run).then((result) => {
+    // A busy board or a dropped connection is retried quietly; the game-over line says so meanwhile.
+    const onRetry = (attempt) => {
+      if (this.globalSubmitToken !== token) return;
+      this.globalSubmit = { pending: true, retrying: attempt };
+      this.renderBoards();
+    };
+    this.globalBoard.submit(run, { onRetry }).then((result) => {
       if (this.globalSubmitToken !== token) return;
       this.globalSubmit = result;
       if (result.ok) this.lastGlobalRunId = result.id;
-      // The answer carries the run's own version board (of its mode); another board on screen (e.g.
-      // ALL-TIME) is re-read so the new run shows up there too.
-      const shown = this.globalBoard.version === (result.version || 'all') && (!result.mode || this.globalBoard.mode === result.mode);
+      // The answer carries every board the run landed on (its version board and ALL-TIME, of its mode),
+      // so it shows at once; only another board on screen (a different version) is re-read.
+      const shown = (this.globalBoard.version === 'all' || this.globalBoard.version === (result.version || 'all')) && (!result.mode || this.globalBoard.mode === result.mode);
       if (result.ok && typeof this.globalBoard.refresh === 'function' && !shown) {
         this.refreshGlobalBoard();
       } else {

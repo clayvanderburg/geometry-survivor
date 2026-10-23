@@ -7,12 +7,13 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
+  GlobalLeaderboard, requestJson, buildBoardView, SUBMIT_RETRIES, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
   renderModeOptions, buildModeOptions
 } = await import('../js/leaderboard.js');
 const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { GAME_VERSION, LEGACY_VERSION_LABEL } = await import('../js/version.js');
+const { ALL_TIME } = await import('../js/leaderboard-rules.js');
 
 const jsonResponse = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 const htmlResponse = (status, text) => new Response(text, { status, headers: { 'content-type': 'text/html' } });
@@ -129,7 +130,9 @@ test('submit: success remembers the run id, adopts the returned board and report
   const board = new GlobalLeaderboard({ fetchImpl, storage });
   board.setVersion(GAME_VERSION); // filtered to this version, so the returned version board is shown
   const result = await board.submit(RUN);
-  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION, mode: 'normal' });
+  const { nonce, ...fields } = sent;
+  assert.deepEqual(fields, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION, mode: 'normal' });
+  assert.match(nonce, /^[A-Za-z0-9_-]{16,64}$/, 'every run carries a nonce, so a retry never lands twice');
   assert.equal(result.ok, true);
   assert.equal(result.rank, 12);
   assert.equal(board.status, 'ready');
@@ -148,13 +151,13 @@ test('submit: server refusals map to cooldown / rejected, network failures flip 
     [() => { throw new TypeError('offline'); }, 'offline', /OFFLINE/]
   ];
   for (const [respond, reason, text] of cases) {
-    const board = new GlobalLeaderboard({ fetchImpl: async () => respond(), storage: memoryStorage() });
+    const board = new GlobalLeaderboard({ fetchImpl: async () => respond(), storage: memoryStorage(), sleep: async () => {} });
     const result = await board.submit(RUN);
     assert.equal(result.ok, false);
     assert.equal(result.reason, reason);
     assert.match(describeSubmit(result).text, text);
   }
-  const board = new GlobalLeaderboard({ fetchImpl: async () => { throw new TypeError('offline'); }, storage: memoryStorage() });
+  const board = new GlobalLeaderboard({ fetchImpl: async () => { throw new TypeError('offline'); }, storage: memoryStorage(), sleep: async () => {} });
   await board.submit(RUN);
   assert.equal(buildBoardView({ tab: 'global', board, local: LOCAL }).source, 'local');
 });
@@ -383,7 +386,7 @@ test('submit sends the game version and the game-over line names it; an unknown 
   assert.deepEqual(describeSubmit(refused), { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' });
 });
 
-test('game over on another board (ALL-TIME) re-reads it after the submit so the new run shows there too', async () => {
+test('after a submit only a board the answer did not carry (another version) is re-read', async () => {
   let refreshed = 0;
   const fake = {
     globalBoard: { version: 'all', refresh() { refreshed++; return Promise.resolve(this); }, submit: async () => ({ ok: true, id: 'r', rank: 2, version: GAME_VERSION }) },
@@ -393,11 +396,109 @@ test('game over on another board (ALL-TIME) re-reads it after the submit so the 
   };
   Game.prototype.submitGlobalRun.call(fake, RUN);
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(refreshed, 1);
+  assert.equal(refreshed, 0, 'ALL-TIME came back with the answer: no re-read from the CDN cache');
   fake.globalBoard.version = GAME_VERSION;
   Game.prototype.submitGlobalRun.call(fake, RUN);
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(refreshed, 1, 'the run\'s own board came back with the answer');
+  assert.equal(refreshed, 0, 'nor the run\'s own version board');
+  fake.globalBoard.version = '0.0.1';
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(refreshed, 1, 'a different version board on screen is re-read');
+});
+
+test('submit adopts the all-time board from the answer; a stale CDN copy of it is ignored', async () => {
+  const older = [{ ...GLOBAL[0], id: 'old-top' }];
+  const fresh = [...older, { ...GLOBAL[1], id: 'my-run' }];
+  let gets = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') {
+      assert.equal(init.cache, 'no-store');
+      return jsonResponse(201, { accepted: true, onBoard: true, rank: 2, allTimeRank: 2, id: 'my-run', version: GAME_VERSION, entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z',
+        allTime: { entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z' }, boardSize: 100 });
+    }
+    gets++;
+    assert.equal(init.cache, 'default', 'GETs may use the CDN cache');
+    // The CDN's copy from before the run landed.
+    return jsonResponse(200, { version: 'all', entries: older, total: 1, updated: '2026-10-17T12:00:00.000Z', boardSize: 100 });
+  };
+  const board = new GlobalLeaderboard({ fetchImpl, storage: memoryStorage(), sleep: async () => {} });
+  assert.equal(board.version, ALL_TIME);
+  const result = await board.submit(RUN);
+  assert.equal(result.ok, true);
+  assert.deepEqual(board.entries.map(e => e.id), ['old-top', 'my-run'], 'shown at once from the answer');
+  await board.refresh();
+  assert.equal(gets, 1);
+  assert.deepEqual(board.entries.map(e => e.id), ['old-top', 'my-run'], 'the older CDN copy does not wipe the run out');
+  assert.equal(board.status, 'ready');
+  // A newer board (someone else's run since) is taken.
+  const newer = new GlobalLeaderboard({ fetchImpl: async () => jsonResponse(200, { version: 'all', entries: older, total: 1, updated: '2026-10-17T13:00:00.000Z' }), storage: memoryStorage() });
+  newer.adopt({ entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z' }, ALL_TIME);
+  await newer.refresh();
+  assert.deepEqual(newer.entries.map(e => e.id), ['old-top']);
+});
+
+test('submit retries a busy server or a dropped connection quietly, with the same nonce', async () => {
+  const sent = [];
+  const sleeps = [];
+  const retries = [];
+  const replies = [
+    () => jsonResponse(503, { error: 'leaderboard busy, try again', partial: false }),
+    () => { throw new TypeError('network'); },
+    () => jsonResponse(201, { accepted: true, onBoard: true, rank: 4, allTimeRank: 9, id: 'landed', version: GAME_VERSION, entries: GLOBAL, total: 3 })
+  ];
+  const board = new GlobalLeaderboard({
+    fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body)); return replies[sent.length - 1](); },
+    storage: memoryStorage(),
+    sleep: async (ms) => { sleeps.push(ms); }
+  });
+  const result = await board.submit(RUN, { onRetry: (n) => retries.push(n) });
+  assert.equal(result.ok, true);
+  assert.equal(result.allTimeRank, 9);
+  assert.equal(sent.length, 3);
+  assert.ok(sent.every(p => p.nonce === sent[0].nonce), 'one nonce for every try');
+  assert.deepEqual(retries, [1, 2]);
+  assert.ok(sleeps[0] >= 2000, 'a 503 waits at least its retry-after (2 s)');
+  assert.ok(sleeps[1] >= 1500 && sleeps[1] <= 2500, 'then exponential backoff with jitter');
+  assert.equal(result.retry, undefined, 'internal retry flags stay internal');
+  assert.notEqual(board.status, 'offline');
+  assert.deepEqual(describeSubmit({ pending: true, retrying: 1 }), { text: '◎ GLOBAL BOARD BUSY // RETRYING UPLINK…', tone: 'cyan' });
+});
+
+test('submit gives up visibly after its retries, and a lost answer (429 on a retry) waits out the cooldown once', async () => {
+  let posts = 0;
+  const down = new GlobalLeaderboard({ fetchImpl: async () => { posts++; throw new TypeError('network'); }, storage: memoryStorage(), sleep: async () => {} });
+  const failed = await down.submit(RUN);
+  assert.equal(posts, 1 + SUBMIT_RETRIES);
+  assert.equal(failed.ok, false);
+  assert.equal(down.status, 'offline', 'the GLOBAL tab falls back to local runs');
+  assert.match(describeSubmit(failed).text, /OFFLINE \/\/ RUN SAVED LOCALLY/);
+
+  // No API at all (the local server's 404 page) is not retried.
+  posts = 0;
+  const local = new GlobalLeaderboard({ fetchImpl: async () => { posts++; return { ok: false, status: 404, headers: { get: () => 'text/html' } }; }, storage: memoryStorage(), sleep: async () => { throw Error('no retry'); } });
+  assert.equal((await local.submit(RUN)).reason, 'unavailable');
+  assert.equal(posts, 1);
+
+  // A first-try 429 is a real cooldown: no retry.
+  posts = 0;
+  const cooling = new GlobalLeaderboard({ fetchImpl: async () => { posts++; return jsonResponse(429, { error: 'slow down', retryAfter: 12 }); }, storage: memoryStorage(), sleep: async () => {} });
+  assert.equal((await cooling.submit(RUN)).reason, 'cooldown');
+  assert.equal(posts, 1);
+
+  // A timeout (the run landed, the answer was lost), then the cooldown, then success with the same nonce.
+  const sleeps = [];
+  const seq = [
+    () => { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); },
+    () => jsonResponse(429, { error: 'slow down', retryAfter: 18 }),
+    () => jsonResponse(201, { accepted: true, onBoard: true, rank: 3, id: 'once', version: GAME_VERSION, entries: GLOBAL, total: 3 })
+  ];
+  posts = 0;
+  const lost = new GlobalLeaderboard({ fetchImpl: async () => seq[posts++](), storage: memoryStorage(), sleep: async (ms) => { sleeps.push(ms); } });
+  const ok = await lost.submit(RUN);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.id, 'once');
+  assert.ok(sleeps[1] >= 18_000, 'the retry waited out the cooldown');
 });
 
 test('Game.setBoardVersion switches the board and re-syncs it', () => {

@@ -112,6 +112,10 @@ const text = (page, sel) => page.locator(sel).innerText();
       const gets = [];
       const modes = [];
       let posted = null;
+      const nonces = [];
+      let busyPosts = 1; // the first submit meets a busy board (503): the game retries it quietly
+      // GETs come through the CDN's short cache: after a submit they keep serving the board from before it.
+      const cdnStale = {};
       const api = async route => {
         const req = route.request();
         if (req.method() === 'GET') {
@@ -120,19 +124,29 @@ const text = (page, sel) => page.locator(sel).innerText();
           const mode = params.get('mode') || 'normal';
           gets.push(version);
           modes.push(mode);
-          const entries = boards[`${mode}|${version}`] || [];
-          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version, mode, current: GAME_VERSION, versions: [GAME_VERSION], entries, total: entries.length, boardSize: 100 }) });
+          const key = `${mode}|${version}`;
+          const served = cdnStale[key] || { entries: boards[key] || [], updated: '2026-10-17T12:00:00.000Z' };
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version, mode, current: GAME_VERSION, versions: [GAME_VERSION], entries: served.entries, total: served.entries.length, boardSize: 100, updated: served.updated }) });
         }
         posted = JSON.parse(req.postData());
         if (req.headers()['content-type'] !== 'application/json') throw Error('POST must be JSON');
-        const entry = { id: 'run-new', ...posted, date: new Date().toISOString() };
-        for (const key of [posted.version, 'all'].map(v => `${posted.mode}|${v}`)) {
+        nonces.push(posted.nonce);
+        if (busyPosts > 0) {
+          busyPosts--;
+          return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'retry-after': '2' }, body: JSON.stringify({ error: 'leaderboard busy, try again', partial: false }) });
+        }
+        const updated = new Date().toISOString();
+        const entry = { id: 'run-new', ...posted, date: updated };
+        const keys = [posted.version, 'all'].map(v => `${posted.mode}|${v}`);
+        for (const key of keys) {
           const list = boards[key] || [];
+          cdnStale[key] = { entries: list, updated: '2026-10-17T12:00:00.000Z' }; // the CDN still has the old copy
           boards[key] = [...list.slice(0, 11), entry, ...list.slice(11)].slice(0, 100);
         }
-        const own = boards[`${posted.mode}|${posted.version}`];
+        const own = boards[keys[0]];
         const rank = own.findIndex(e => e.id === 'run-new') + 1;
-        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank, allTimeRank: rank, version: posted.version, mode: posted.mode, id: 'run-new', name: posted.name, censored: false, entries: own, total: 100, boardSize: 100, versions: [GAME_VERSION] }) });
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ accepted: true, onBoard: true, rank, allTimeRank: rank, version: posted.version, mode: posted.mode, id: 'run-new', name: posted.name, censored: false, entries: own, total: 100, boardSize: 100, versions: [GAME_VERSION], updated,
+          allTime: { entries: boards[keys[1]], total: boards[keys[1]].length, updated } }) });
       };
       const { page, errors } = await openGame(browser, api);
       // GLOBAL opens on the one shared board that never resets: ALL-TIME, every row tagged with its version.
@@ -264,12 +278,22 @@ const text = (page, sel) => page.locator(sel).innerText();
       await page.evaluate(() => __game.menuNav.setFocus(document.getElementById('btn-start-game')));
 
       await endRun(page);
-      await page.waitForFunction(() => /GLOBAL RANK #12/.test(document.getElementById('go-global-rank').textContent));
+      // The board was busy: the game says it's retrying, then lands the run with the same nonce.
+      await page.waitForFunction(() => /RETRYING UPLINK/.test(document.getElementById('go-global-rank').textContent), null, { timeout: 5000 });
+      await page.waitForFunction(() => /GLOBAL RANK #12/.test(document.getElementById('go-global-rank').textContent), null, { timeout: 15000 });
+      if (nonces.length !== 2 || !/^[A-Za-z0-9_-]{16,64}$/.test(nonces[0]) || nonces[0] !== nonces[1]) throw Error('The retry should resend the run with the same nonce: ' + nonces);
       if (await text(page, '#go-global-rank') !== `◎ GLOBAL RANK #12 · v${GAME_VERSION}`) throw Error('Rank line should name the version: ' + await text(page, '#go-global-rank'));
       const expected = { name: 'MADKING', score: 123456, wave: 10, level: 14, kills: 900, multiplier: 12.3, time: 200.4, version: GAME_VERSION, mode: 'normal' };
-      if (JSON.stringify(posted) !== JSON.stringify(expected)) throw Error('Unexpected submission: ' + JSON.stringify(posted));
-      // The ALL-TIME board on screen is re-read after the submit: wait for it to come back with the new run.
+      const { nonce: _nonce, ...fields } = posted;
+      if (JSON.stringify(fields) !== JSON.stringify(expected)) throw Error('Unexpected submission: ' + JSON.stringify(posted));
+      // The ALL-TIME board on screen came back with the submit answer: the new run shows at once, and the
+      // CDN's stale copy (GET) can't wipe it out.
       await page.waitForFunction(() => document.querySelectorAll('#go-highscore-list .hs-current').length === 1);
+      const getsAfterSubmit = gets.length;
+      await page.evaluate(() => __game.refreshGlobalBoard());
+      await page.waitForTimeout(500);
+      if (gets.length <= getsAfterSubmit) throw Error('refreshGlobalBoard should GET the board');
+      if (await page.locator('#go-highscore-list .hs-current').count() !== 1) throw Error('A stale CDN copy of ALL-TIME must not drop the just-posted run');
       const current = page.locator('#go-highscore-list .hs-current');
       if (await current.count() !== 1 || !/#12/.test(await current.innerText())) throw Error('The new run should be highlighted at #12');
       // The board glides to the new run (smooth scrolling), so give it a moment to arrive.
@@ -338,6 +362,6 @@ const text = (page, sel) => page.locator(sel).innerText();
       if (errors.length) throw Error(errors.join('\n'));
       await context.close();
     }
-    console.log('Leaderboard smoke PASS: offline fallback, a full 100-run board scrolling under a pinned head (wheel, d-pad, right stick, YOU #n jump; touch drag at phone width), slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version, NORMAL / HARDCORE / BLITZ boards (mouse + controller), a HARDCORE run on its own board; no page errors.');
+    console.log('Leaderboard smoke PASS: offline fallback (after quiet retries), a busy board retried with the same nonce, a stale CDN board ignored after a submit, a full 100-run board scrolling under a pinned head (wheel, d-pad, right stick, YOU #n jump; touch drag at phone width), slow-API timeout fallback, shared ALL-TIME board by default with version tags incl. pre-0.9, VERSION filter (mouse + controller), tabs, versioned auto-submit + GLOBAL RANK #12 · version, NORMAL / HARDCORE / BLITZ boards (mouse + controller), a HARDCORE run on its own board; no page errors.');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
