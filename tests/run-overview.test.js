@@ -75,7 +75,7 @@ test('Void Armory ranks land in PERMANENT; cards picked this run land in THIS RU
   assert.equal(r.maxHp.total, String(Math.round(BASE_SHIELD + 10 + 20)));
   assert.equal(r.critChance.run, '+10%');
   assert.equal(r.critChance.total, '17%');
-  assert.equal(r.tag_explosive.run, '+30%');
+  assert.equal(r.tag_explosive.run, '+20%');
   assert.equal(r.dash.run, '−0.12 s', "a Cooldown Matrix rank (1.5 s / 1.1) after the armory's -10% dash cooldown");
   assert.equal(r.dash.up.run, true);
   assert.match(r.fireRate.run, /^\+\d+%$/, 'fire-rate cards count in THIS RUN');

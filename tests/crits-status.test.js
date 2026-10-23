@@ -336,18 +336,18 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   const g = game([], p);
 
   const kinetic = describeUpgrade(p, byId('tag_kinetic'));
-  assert.equal(kinetic.headline, '+20% KINETIC DAMAGE');
+  assert.equal(kinetic.headline, `+${Math.round(W.tagDamageStep.kinetic * 100)}% KINETIC DAMAGE`);
   assert.deepEqual(kinetic.tags, ['kinetic']);
   for (const id of ['damage', 'orbitalDamage']) assert.ok(kinetic.rows.some((r) => r.id === id), id);
   assert.ok(!kinetic.rows.some((r) => r.id === 'missileDamage'), 'missiles are not kinetic');
   applyUpgradeLevels(p, byId('tag_kinetic'));
   g.firePrimaryWeapon();
-  assert.equal(g.bullets[0].damage, 10 * 1.2);
+  assert.equal(g.bullets[0].damage, 10 * (1 + W.tagDamageStep.kinetic));
   assert.equal(g.bullets[0].damage.toFixed(1), row('damage').fmt(row('damage').get(p)));
 
   applyUpgradeLevels(p, byId('tag_explosive'));
   g.fireSwarmMissiles(1);
-  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * 1.3);
+  assert.equal(g.missiles[0].damage, 10 * W.missileDamageMult(levelBuild('missiles', 1)) * (1 + W.tagDamageStep.explosive));
 
   const area = describeUpgrade(p, byId('tag_area'));
   assert.equal(area.headline, '+10% AREA SIZE · 1 WEAPON', 'the global AREA card names how many weapons grow');
@@ -358,7 +358,7 @@ test('tag cards boost every weapon carrying the tag, and firing uses the preview
   assert.equal(g.missiles.at(-1).blastRadius, W.missileBlastRadius(levelBuild('missiles', 1)) * (1 + W.areaStep));
 
   applyUpgradeLevels(p, byId('tag_electric'));
-  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * 1.3);
+  assert.equal(weaponDamage(p, 'lightning', 1), 10 * W.lightningDamageMult(levelBuild('lightning', 1)) * (1 + W.tagDamageStep.electric));
 });
 
 test('tag cards are only offered once an equipped weapon carries the tag', () => {
@@ -434,4 +434,15 @@ test('live tuning re-derives crit stats from the tuned base plus owned crit card
   assert.ok(Math.abs(p.stats.critChance - (DEFAULT_TUNING.baseCritChance + 2 * W.critChanceStep + W.supercritChance)) < 1e-9);
   assert.equal(p.stats.critDamage, DEFAULT_TUNING.baseCritDamage + W.critDamageStep);
   reset();
+});
+
+test('a tag card rank stays within reach of a Reactor Overdrive rank (no strictly dominant pick)', () => {
+  // Overdrive adds +12% to every weapon, compounding; a tag card adds its step to one family, summed. With
+  // every carried weapon in the family (always true at 1 weapon) the tag card should only modestly beat it:
+  // at +20% / +30% it realized 1.5-2.3x Overdrive on the hand bench (tools/balance/hand-bench.mjs --part early).
+  for (const [tag, step] of Object.entries(W.tagDamageStep)) {
+    assert.ok(step > 0.12, `${tag}: still a step up from Overdrive's +12% inside its family`);
+    assert.ok(step <= 0.2 + 1e-9, `${tag}: at most +20% per rank`);
+    assert.ok(1 + 5 * step <= Math.pow(1.12, 5) * 1.25, `${tag}: five ranks stay within 25% of five Overdrive ranks`);
+  }
 });
