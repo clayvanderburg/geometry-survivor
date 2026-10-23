@@ -677,15 +677,15 @@ export const WEAPON_SCALING = {
   // ~5 s at LV 1), +35% per Spin Rotor rank. A swarm trails the ship on one side, so a slow cone spends
   // most of its turn on empty space: spin, not damage, is what a sprayer's realized DPS rides on (reference
   // bench). The Flamethrower spins flameTurnTrim faster (its fire burns out between passes; the Cryo and
-  // Acid Sprayers' lingering frost and acid carry them), and the LV 6 burst and the puddles transforms
-  // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
+  // Acid Sprayers' lingering frost and acid carry them), and every sprayer transform builds in flameTfTurnRanks
+  // Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD (bt-calibration.js BT_SPRAYER_BAND).
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
-  flameTfTurnRanks: 1,
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
+  flameTfTurnRanks: 3,
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + W.flameTfTurnRanks * (b?.transforms || 0),
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
   // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
-  // whirlEvery s the nozzle adds one full turn over whirlTime s, plus flameTfTurnRanks Spin Rotor rank), Seeker (the
+  // whirlEvery s the nozzle adds one full turn over whirlTime s), Seeker (the
   // nozzle swings toward the densest pack within its range at seekTurnMult x its spin speed instead of spinning;
   // it spins on when nobody is in reach).
   whirlEvery: 2.5,

@@ -14,16 +14,16 @@
 //
 // Target: each transform realizes BT_BENCH_BAND x Across the Board at each milestone (earlier milestones
 // Across the Board). Transforms that trade damage for control (BT_CONTROL) may sit lower. The sprayers
-// sit a little under Across the Board (BT_SPRAYER_BAND): their realized damage rides on how fast the cone
-// sweeps the swarm, so Across the Board's free Spin Rotor rank outvalues any damage number; the LV 6 burst
-// and puddle transforms build in a Spin Rotor rank to match (W.flameTfTurnRanks).
+// may sit a little lower (BT_SPRAYER_BAND): their realized damage rides on how fast the cone sweeps the swarm,
+// so Across the Board's free Spin Rotor rank outvalues any damage number. Every sprayer transform builds in
+// W.flameTfTurnRanks Spin Rotor ranks to match (v0.46: 1 rank on two of them held the sprayers at 0.78-1.13x).
 // BT_BENCH_EXEMPT lists the (weapon, transform, milestone) cases damage numbers can't bring into band.
 // The Electric Shield Field is defensive (CLASS_TARGET.defensive): it sits lower by design, and its
 // discharge kills everything inside, so its options barely move with damage; they stay at 1.
 // Every transform in every pool needs an entry here (tests/bt-calibration.test.js): bench new ones first.
 export const BT_BENCH_BAND = Object.freeze([1.05, 1.3]);
 export const BT_CONTROL_BAND = Object.freeze([0.95, 1.3]);
-export const BT_SPRAYER_BAND = Object.freeze([0.85, 1.0]);
+export const BT_SPRAYER_BAND = Object.freeze([0.95, 1.3]);
 export const BT_REALIZED_RANGE = Object.freeze([0.6, 1.7]);
 export const BT_SPRAYERS = Object.freeze(['flamethrower', 'cryospray', 'acidspray']);
 export const BT_CONTROL = Object.freeze({
@@ -43,9 +43,9 @@ export const TF_REALIZED = {
   drones: { wingman: [1.01, 1.02, 1.02], homing: [1, 1, 1], pods: [1, 1, 0.82], overdrive: [1, 0.88, 0.92], kamikaze: [1.1, 0.75, 0.75] },
   grenades: { cluster: [1, 1.42, 1], cloud: [0.6, 0.69, 0.6], gravity: [1.58, 1.7, 1.45], sticky: [0.6, 0.75, 0.62], geyser: [0.95, 1.15, 0.85] },
   gas: { seek: [0.6, 0.6, 0.6], pockets: [0.6, 0.6, 0.6], shroud: [0.6, 0.6, 0.6], tendrils: [0.75, 0.75, 0.75], spores: [0.65, 0.6, 0.62] },
-  flamethrower: { fireballs: [0.91, 1, 0.68], napalm: [0.6, 0.64, 0.6], ring: [1, 1.7, 1.53], whirl: [0.85, 0.8, 0.7], seeker: [1.15, 0.95, 0.85] },
-  cryospray: { shatter: [0.62, 0.82, 0.6], slicks: [0.6, 0.62, 0.6], blizzard: [0.71, 1, 0.95], whirl: [0.85, 0.7, 0.65], seeker: [1, 1, 1] },
-  acidspray: { meltdown: [0.73, 0.83, 0.6], pools: [0.6, 0.87, 0.6], caustic: [1, 1.7, 1.4], whirl: [0.8, 1, 0.65], seeker: [0.9, 1, 0.8] },
+  flamethrower: { fireballs: [0.8, 0.85, 0.6], napalm: [0.6, 0.64, 0.6], ring: [1.2, 1.7, 1.2], whirl: [0.85, 0.8, 0.65], seeker: [1.5, 0.95, 0.6] },
+  cryospray: { shatter: [0.8, 0.82, 0.6], slicks: [0.6, 0.6, 0.6], blizzard: [0.71, 1.1, 0.85], whirl: [0.95, 0.85, 0.7], seeker: [1.7, 1.25, 1.2] },
+  acidspray: { meltdown: [0.6, 0.7, 0.6], pools: [0.6, 0.7, 0.6], caustic: [0.85, 1.7, 1.2], whirl: [0.7, 0.85, 0.75], seeker: [1.7, 1.1, 0.85] },
   shockfield: { lash: [1, 1, 1], repulse: [1, 1, 1], overcharge: [1, 1, 1], pulse: [1, 1, 1], capacitor: [1, 1, 1] },
   raillance: { magnet: [1, 1, 1], wake: [1, 1.16, 1], overload: [0.6, 1, 1], static: [1.2, 1.45, 1], reflect: [1.1, 1, 1] },
   glaive: { fission: [1, 1.13, 1], momentum: [0.84, 0.87, 0.9], recall: [1, 1, 1], shatter: [1, 1, 1], arcdisc: [0.85, 1, 1] },
@@ -75,7 +75,7 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'gas|shroud|6': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|12': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
   'gas|shroud|18': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
-  ...Object.fromEntries(['cryospray|slicks|18', 'acidspray|meltdown|18'].map((k) => [k, SPRAYER_REACH])),
+  ...Object.fromEntries(['cryospray|slicks|18', 'acidspray|pools|18', 'flamethrower|napalm|18', 'acidspray|meltdown|12'].map((k) => [k, SPRAYER_REACH])),
   // Defensive by design (CLASS_TARGET.defensive): under kiting its Across the Board baseline is tiny, so every
   // ratio swings; its options stay at 1.
   ...Object.fromEntries(['lash', 'repulse', 'overcharge', 'pulse', 'capacitor'].flatMap((t) => [6, 12, 18].map((m) => [`shockfield|${t}|${m}`, 'defensive class: discharges kill everything inside the field, so damage barely matters']))),
@@ -84,7 +84,6 @@ export const BT_BENCH_EXEMPT = Object.freeze({
   'mines|cluster|18': 'damage-insensitive in the bench',
   'raillance|overload|6': 'damage-insensitive in the bench (one lance already kills)',
   'nanites|fission|6': 'daughter swarms need kills to bud: damage-insensitive at LV 6',
-  'acidspray|caustic|12': 'a hair over the sprayer band at BT_REALIZED_RANGE (the ring hits the whole pack)',
   'raillance|overload|12': 'damage-insensitive in the bench (one lance already kills)',
   'raillance|overload|18': 'damage-insensitive in the bench (one lance already kills)',
   'gas|spores|18': 'gas trails barely reach the bench pack; capped at BT_REALIZED_RANGE',
