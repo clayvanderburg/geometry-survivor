@@ -43,13 +43,18 @@ const cap = (maxLevel) => ({ maxLevel });
 // hookable hull, pierce keep at 100%, an element rank at ELEMENT_MAX_RANKS). ACROSS THE BOARD's free ranks
 // count toward it, so the card is never offered a rank that does nothing (upgrades.js levelRoom).
 const sharedCap = (maxLevel) => ({ maxLevel, boostCapped: true });
+// A swingy card kept strong but made rarer (Clay: "for things that are out of balance, consider altering
+// rarity"): it always shows at least RARE (rarityFloor, a jump size; its card says so) and is drawn at
+// weightMult of a normal stat card's share (upgrades.js cardWeight). Core Damage / Rate cards stay common.
+export const RARE_CARD = Object.freeze({ rarityFloor: 3, weightMult: 0.35 });
+const rare = (maxLevel) => ({ maxLevel, ...RARE_CARD });
 
 export const STAT_CARDS = {
   blaster: [
     card('blaster', 'blaster_damage', 'damage', 'Autocannon Plasma Charge', 'damage', 'Autocannon: hotter bolts. Only damage per bolt.'),
     card('blaster', 'multishot', 'prism', 'Prism Split', 'bulletCount', 'Autocannon: adds a pair of streams (rear, then sides, then diagonals). Your forward pair never moves.', cap(5)),
     card('blaster', 'firerate', 'rate', 'Hyper-Capacitor', 'fireRate', 'Autocannon: fire faster. Only fire rate.', cap(8)),
-    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes less than the one before).', cap(6))
+    card('blaster', 'pierce', 'pierce', 'Phase Piercer', 'pierce', 'Autocannon: each bolt slices through one more target (each one behind takes less than the one before).', rare(6))
   ],
   rockets: [
     card('rockets', 'rockets_damage', 'damage', 'Rocket Pod Warheads', 'rocketDamage', 'Rocket Pods: heavier warheads. Only damage per rocket.'),
@@ -120,7 +125,7 @@ export const STAT_CARDS = {
     card('flamethrower', 'flamethrower_range', 'range', 'Flamethrower Nozzle Pressure', 'flameRange', 'Flamethrower: the flames reach further. Only flame length.', cap(8)),
     card('flamethrower', 'flamethrower_cone', 'cone', 'Flamethrower Wide Nozzle', 'flameCone', 'Flamethrower: a wider cone of fire. Only cone width.', cap(8)),
     card('flamethrower', 'flamethrower_burn', 'burn', 'Flamethrower Sticky Gel', 'flamethrower:burn', 'Flamethrower: the fuel clings and burns hotter: a stronger FIRE burn on everything it touches.', sharedCap(4)),
-    card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', cap(3))
+    card('flamethrower', 'flamethrower_nozzles', 'nozzles', 'Flamethrower Extra Nozzle', 'flameNozzles', 'Flamethrower: one more nozzle, spaced evenly round the spin: one more stream of fire.', rare(3))
   ],
   cryospray: [
     card('cryospray', 'cryospray_damage', 'damage', 'Cryo Sprayer Supercooled Mix', 'cryoDamage', 'Cryo Sprayer: colder coolant. Only spray damage.'),
@@ -128,7 +133,7 @@ export const STAT_CARDS = {
     card('cryospray', 'cryospray_range', 'range', 'Cryo Sprayer Nozzle Pressure', 'cryoRange', 'Cryo Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('cryospray', 'cryospray_cone', 'cone', 'Cryo Sprayer Wide Nozzle', 'cryoCone', 'Cryo Sprayer: a wider cone of frost. Only cone width.', cap(8)),
     card('cryospray', 'cryospray_chill', 'chill', 'Cryo Sprayer Deep Freeze', 'cryospray:chill', 'Cryo Sprayer: a stronger FROST rank: more cold per hit, a harder slow and longer freezes.', sharedCap(4)),
-    card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', cap(3))
+    card('cryospray', 'cryospray_nozzles', 'nozzles', 'Cryo Sprayer Extra Nozzle', 'cryoNozzles', 'Cryo Sprayer: one more nozzle, spaced evenly round the spin: one more stream of frost.', rare(3))
   ],
   acidspray: [
     card('acidspray', 'acidspray_damage', 'damage', 'Acid Sprayer Concentrate', 'acidDamage', 'Acid Sprayer: a stronger acid. Only spray damage.'),
@@ -136,7 +141,7 @@ export const STAT_CARDS = {
     card('acidspray', 'acidspray_range', 'range', 'Acid Sprayer Nozzle Pressure', 'acidRange', 'Acid Sprayer: the spray reaches further. Only spray length.', cap(8)),
     card('acidspray', 'acidspray_cone', 'cone', 'Acid Sprayer Wide Nozzle', 'acidCone', 'Acid Sprayer: a wider cone of acid. Only cone width.', cap(8)),
     card('acidspray', 'acidspray_etch', 'acid', 'Acid Sprayer Etching Agent', 'acidspray:corrodeMax', 'Acid Sprayer: a stronger CORROSIVE rank: more corrosion per hit and a higher damage-taken cap.', sharedCap(4)),
-    card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', cap(3))
+    card('acidspray', 'acidspray_nozzles', 'nozzles', 'Acid Sprayer Extra Nozzle', 'acidNozzles', 'Acid Sprayer: one more nozzle, spaced evenly round the spin: one more stream of acid.', rare(3))
   ],
   shockfield: [
     card('shockfield', 'shockfield_damage', 'damage', 'Shock Field Voltage', 'fieldDamage', 'Electric Shield Field: a harder jolt. Only discharge damage.'),

@@ -74,7 +74,8 @@ function weaponGroup(id) {
   const core = { id: w.levelId, name: w.name, category: w.category, tags, maxLevel: 1, isCore: true, weapon: id, ...CORE_INFO[id], apply: bump };
   const stats = STAT_CARDS[id].map((c) => ({
     id: c.id, name: c.name, category: WEAPON_BADGE[id], owners: [id], tags, maxLevel: c.maxLevel, headline: c.headline,
-    summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump
+    summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump,
+    ...(c.rarityFloor ? { rarityFloor: c.rarityFloor } : {})
   }));
   // Element cards (weapon-levels.js ELEMENT_CARDS): level cards like the stat cards, plus the element's
   // rank in player.weapons. `req` is the element lock: once the weapon has an element, only that one's
@@ -397,6 +398,7 @@ export const UPGRADE_POOL = [
     id: 'tag_kinetic',
     name: 'Tungsten Penetrators',
     category: 'SPECIALIST',
+    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
     tags: ['kinetic'],
     maxLevel: 5,
     headline: 'kineticDamage',
@@ -412,6 +414,7 @@ export const UPGRADE_POOL = [
     id: 'tag_explosive',
     name: 'Shaped Charges',
     category: 'SPECIALIST',
+    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
     tags: ['explosive'],
     maxLevel: 5,
     headline: 'explosiveDamage',
@@ -427,6 +430,7 @@ export const UPGRADE_POOL = [
     id: 'tag_electric',
     name: 'Overvolt Coils',
     category: 'SPECIALIST',
+    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
     tags: ['electric'],
     maxLevel: 5,
     headline: 'electricDamage',
@@ -639,7 +643,10 @@ export function loadoutAllows(player, u) {
 // weight is a TUNING value.
 export function cardWeight(u, luck = 1, player = null) {
   switch (upgradeKind(u)) {
-    case 'weapon': return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[STAT_CARD_BY_ID[u.id].weapon].length || 1);
+    case 'weapon': {
+      const c = STAT_CARD_BY_ID[u.id];
+      return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[c.weapon].length || 1) * (c.weightMult ?? 1); // RARE_CARD: rarer
+    }
     case 'element': return (TUNING.elementCardWeight ?? 1.5) / (player && weaponElement(player, u.weapon) ? 1 : ELEMENTS.length);
     case 'status': return TUNING.statusCardWeight ?? 0.7;
     case 'core': return 0;

@@ -223,9 +223,7 @@ export class Flamethrower {
   scorch(game, p, b, n) {
     const k = this.kind;
     const source = k.source;
-    // Extra nozzles widen the coverage, so each scorch carries W.flameNozzleMult / nozzles of a full hit: the
-    // streams together realize what the model values them at (a 2nd nozzle realized ~2x a Damage rank before v0.46).
-    const damage = weaponDamage(p, source, b) * n * W.flameNozzleMult(b) / W.flameNozzles(b);
+    const damage = weaponDamage(p, source, b) * n;
     const enemies = game.enemyManager.enemies;
     const trigger = b.t4 && k.burst !== 'fireball' ? k.burst : null;
     const pending = this.pendingBursts;

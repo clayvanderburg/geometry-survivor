@@ -136,10 +136,6 @@ export const WEAPON_SCALING = {
   blasterRateMult: (b) => (1 + W.blasterRateStep * (b.r.rate || 0)) * tempo(b),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
-  // Share of a hit each enemy behind the first takes from an Autocannon bolt (Phase Piercer). TUNING.pierceFalloff
-  // (0.7) before v0.46: a Piercer rank then out-realized a Plasma Charge rank ~1.5x early and mid-run
-  // (tools/balance/hand-bench.mjs), so the UTILITY card was the strictly better pick.
-  blasterPierceKeep: 0.4,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
   // bolt at 60% damage), Arc Rounds (every hit arcs into 2 nearby enemies for 30% each).
   flakShare: 0.5,
@@ -702,7 +698,7 @@ export const WEAPON_SCALING = {
   // the spin, each extra one valued at flameNozzleShare of a stream (cones that sweep past each other
   // catch fewer fresh enemies).
   flameNozzles: (b) => 1 + (b?.r?.nozzles || 0),
-  flameNozzleShare: 0.45,
+  flameNozzleShare: 0.6,
   flameNozzleMult: (b) => 1 + W.flameNozzleShare * (W.flameNozzles(b) - 1),
   // Transforms: the LV 6 burst (one per sprayer: Fireballs lobbed from every nozzle to the tip of its
   // stream every flameBurstEvery s; Shatter, a frozen enemy the spray hits bursts in ice shards;
@@ -1106,9 +1102,10 @@ export const WEAPON_SCALING = {
   supercritBonusMult: 1.5,
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
-  // Per tag-card rank, added (v0.46: 0.2 / 0.3 / 0.3). Sized so a tag card beats Reactor Overdrive (x1.12, compounding)
-  // only modestly when every carried weapon has the tag (hand-bench.mjs: at 1 weapon it realized 1.5-2.3x Overdrive).
-  tagDamageStep: { kinetic: 0.15, explosive: 0.2, electric: 0.2 },
+  // Per tag-card rank, added. v0.45: 0.2 / 0.3 / 0.3, which realized 1.5-2.3x Reactor Overdrive whenever every
+  // carried weapon had the tag (hand-bench.mjs). v0.46 keeps them strong but rarer (Clay: balance with rarity):
+  // 0.2 / 0.25 / 0.25, always at least UNCOMMON (rarityFloor 2) and drawn at TUNING.tagCardWeight 0.45 (was 0.7).
+  tagDamageStep: { kinetic: 0.2, explosive: 0.25, electric: 0.25 },
   // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
   // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
   // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
