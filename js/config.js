@@ -231,6 +231,7 @@ export const DEFAULT_TUNING = {
   overdriveWeightTaper: 0.1, // Reactor Overdrive's hand weight drops this much per weapon carried past 3 (0.8 at a full 5)
   elementCardWeight: 1.5,   // shared by a weapon's element cards on offer (weapon-levels.js ELEMENT_CARDS)
   tagCardWeight: 0.45,       // tag cards: strong in a one-family build, so uncommon (rarityFloor 2) and lighter
+  tagSourceOnlyWeight: 0.4,  // x tagCardWeight while only a passive / drill or dash evolution carries the tag (no weapon)
   statusCardWeight: 0.7,    // each global STATUS card
   replicatorWeight: 0.25,   // Replicator Array (global +1 count rank on every weapon): rare in hands
   evolutionWeight: 1,
@@ -539,6 +540,7 @@ export const TUNING_SCHEMA = [
       { key: 'elementCardWeight', label: 'Element Card Weight (per weapon)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'overdriveWeightTaper', label: 'Overdrive Weight Taper per Weapon past 3', type: 'range', min: 0, max: 0.2, step: 0.01, unit: 'x' },
       { key: 'tagCardWeight', label: 'Tag Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
+      { key: 'tagSourceOnlyWeight', label: 'Tag Card Weight, No Weapon With The Tag', type: 'range', min: 0, max: 1, step: 0.05, unit: 'x' },
       { key: 'replicatorWeight', label: 'Replicator Array Weight', type: 'range', min: 0, max: 5, step: 0.05, unit: 'x' },
       { key: 'statusCardWeight', label: 'Status Card Weight', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' },
       { key: 'evolutionWeight', label: 'Evolution Weight (x Luck, semi-rare)', type: 'range', min: 0, max: 10, step: 0.25, unit: 'x' }

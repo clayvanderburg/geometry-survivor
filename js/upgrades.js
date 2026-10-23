@@ -654,7 +654,9 @@ export function cardWeight(u, luck = 1, player = null) {
     case 'status': return TUNING.statusCardWeight ?? 0.7;
     case 'core': return 0;
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
-    case 'tag': return TUNING.tagCardWeight ?? 0.7;
+    // A tag card in the hand only for a non-weapon source (the Volatile Shatter shards, Tectonic Bore blasts) is a
+    // weak pick there: TUNING.tagSourceOnlyWeight of the usual weight until a carried weapon has the tag.
+    case 'tag': return (TUNING.tagCardWeight ?? 0.7) * (player && !ownedWeapons(player).some((id) => weaponTags(id).includes(u.tags?.[0])) ? TUNING.tagSourceOnlyWeight ?? 0.4 : 1);
     case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
     default: return u.weightFor && player ? u.weightFor(player) : u.weight ?? 1;
   }
