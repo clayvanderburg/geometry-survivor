@@ -3773,6 +3773,8 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 .gold-flash-gain { animation: gold-flash-gain 0.55s ease-out; }
 .gold-flash-spend { animation: gold-flash-spend 0.6s ease-out; }
 .gold-flash-short { animation: gold-flash-short 0.45s ease-out; }
+/* A lock refunded in its own hand (toggleCardLock): the gold springs back with an overshoot pop. */
+.gold-flash-refund { animation: gold-flash-refund 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
 @keyframes gold-flash-gain {
   0% { transform: scale(1.18); background: rgba(255, 204, 0, 0.55); color: #fff; box-shadow: 0 0 22px var(--gold); }
@@ -3781,6 +3783,12 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 
 @keyframes gold-flash-spend {
   0% { transform: scale(0.9); background: rgba(255, 0, 127, 0.35); box-shadow: 0 0 22px rgba(255, 0, 127, 0.8); }
+  100% { transform: scale(1); }
+}
+
+@keyframes gold-flash-refund {
+  0% { transform: scale(0.86); }
+  45% { transform: scale(1.22); background: rgba(255, 220, 90, 0.6); color: #fff; box-shadow: 0 0 26px var(--gold), 0 0 8px rgba(160, 255, 140, 0.7); }
   100% { transform: scale(1); }
 }
 
