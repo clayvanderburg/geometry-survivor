@@ -626,6 +626,17 @@ html, body {
   padding: 16px;
 }
 
+/* The world paused behind the pause menu, a level-up / Breakthrough hand or a cache is a still frame
+   (Game.holdFrozenFrame): the layers under the modal are blurred with a filter, which the compositor
+   computes once while they stay still, instead of the backdrop blur, which Chromium redoes over the whole
+   screen on every frame the cards animate. Same 7px blur. */
+body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #chest-modal:not(.hidden)) :is(#pause-modal, #upgrade-modal, #chest-modal) {
+  backdrop-filter: none;
+}
+body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #chest-modal:not(.hidden)) :is(#game-canvas, #hud, #hud-hidden-hint, #range-panel, #low-shield-vignette) {
+  filter: blur(7px);
+}
+
 .hidden {
   display: none !important;
 }
@@ -1212,7 +1223,7 @@ html, body {
    on the frame: a rarity border with a slow glow and a light sweeping round it, plus the ◆ ribbon. */
 .upgrade-option.rarity-floored {
   --rarity-bg: rgba(30, 36, 52, 0.94);
-  animation: floor-glow 2.4s ease-in-out infinite;
+  animation: none; /* the glow pulses on .card-glow (below) */
 }
 .upgrade-option.rarity-floored .upg-name { color: #e8eef8; }
 .upgrade-option.rarity-floored::before {
@@ -1229,10 +1240,7 @@ html, body {
   animation: floor-sheen 3s linear infinite;
   pointer-events: none;
 }
-@keyframes floor-glow {
-  0%, 100% { box-shadow: 0 0 10px var(--rarity-soft); }
-  50% { box-shadow: 0 0 26px var(--rarity-soft), 0 0 3px var(--rarity) inset; }
-}
+
 @keyframes floor-sheen {
   from { background-position: 100% 0; }
   to { background-position: -50% 0; }
@@ -1246,16 +1254,44 @@ html, body {
   to { background-position: -100% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .upgrade-option.rarity-floored, .upgrade-option.rarity-floored::before, .upg-jump-ribbon.upg-floor-ribbon { animation: none; }
+  .upgrade-option.rarity-floored::before, .upg-jump-ribbon.upg-floor-ribbon { animation: none; }
 }
 
-/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special. */
-.upgrade-option.breakthrough-card { animation: breakthrough-pulse 1.8s ease-in-out infinite; }
-@keyframes breakthrough-pulse {
-  0%, 100% { box-shadow: 0 0 14px var(--rarity-soft); }
-  50% { box-shadow: 0 0 32px var(--rarity-soft), 0 0 4px var(--rarity) inset; }
+/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special (.card-glow). */
+
+/* Card glow pulses (rarity floor, Breakthrough, NEW WEAPON): a .card-glow layer first in the card
+   (js/main.js dealInCard) carries the two glows of the pulse as static shadows on ::before (dim) and
+   ::after (bright) and cross-fades their opacity, which the compositor animates without repainting the
+   card. Each sits on the padding box with the 2px border added as spread, so it lines up with the card's
+   own (border-box) shadow, and the bright one's inset glow sits inside the border like the card's. Where
+   the old pulses stopped (REDUCE EFFECTS; reduced motion for the floor and Breakthrough pulses) the layer
+   is off and the card keeps its plain shadow. */
+.card-glow { display: none; position: absolute; inset: 0; border-radius: 10px; pointer-events: none; }
+body:not(.reduce-effects) .upgrade-option.new-weapon-card:has(> .card-glow),
+body:not(.reduce-effects) .upgrade-option.new-weapon-card:has(> .card-glow):hover { box-shadow: none; }
+body:not(.reduce-effects) .new-weapon-card > .card-glow { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  body:not(.reduce-effects) :is(.upgrade-option.rarity-floored, .upgrade-option.breakthrough-card):has(> .card-glow),
+  body:not(.reduce-effects) :is(.upgrade-option.rarity-floored, .upgrade-option.breakthrough-card):has(> .card-glow):hover { box-shadow: none; }
+  body:not(.reduce-effects) :is(.rarity-floored, .breakthrough-card) > .card-glow { display: block; }
 }
-@media (prefers-reduced-motion: reduce) { .upgrade-option.breakthrough-card { animation: none; } }
+.card-glow::before, .card-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.card-glow::after { opacity: 0; }
+.rarity-floored > .card-glow::before { box-shadow: 0 0 10px 2px var(--rarity-soft); animation: glow-dim 2.4s ease-in-out infinite; }
+.rarity-floored > .card-glow::after { box-shadow: 0 0 26px 2px var(--rarity-soft), 0 0 3px var(--rarity) inset; animation: glow-bright 2.4s ease-in-out infinite; }
+.breakthrough-card > .card-glow::before { box-shadow: 0 0 14px 2px var(--rarity-soft); animation: glow-dim 1.8s ease-in-out 0.7s infinite backwards; }
+.breakthrough-card > .card-glow::after { box-shadow: 0 0 32px 2px var(--rarity-soft), 0 0 4px var(--rarity) inset; animation: glow-bright 1.8s ease-in-out 0.7s infinite; }
+.new-weapon-card > .card-glow::before { box-shadow: 0 0 12px 2px var(--rarity-soft); animation: glow-fade-out 1.1s ease-in-out infinite alternate; }
+.new-weapon-card > .card-glow::after { box-shadow: 0 0 30px 2px var(--rarity), inset 0 0 18px rgba(255, 138, 61, 0.12); animation: glow-fade-in 1.1s ease-in-out infinite alternate; }
+@keyframes glow-dim { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes glow-bright { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes glow-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes glow-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 .upgrade-option {
   position: relative;
@@ -1972,7 +2008,7 @@ html, body {
     repeating-linear-gradient(135deg, rgba(255, 138, 61, 0.08) 0 10px, transparent 10px 20px),
     linear-gradient(180deg, var(--rarity-bg), rgba(8, 12, 26, 0.97) 60%);
   border-style: dashed;
-  animation: new-weapon-pulse 1.1s ease-in-out infinite alternate;
+  animation: none; /* the glow pulses on .card-glow */
 }
 
 .upgrade-option.new-weapon-card .upg-headline {
@@ -2076,10 +2112,6 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   margin-top: 4px;
 }
 
-@keyframes new-weapon-pulse {
-  from { box-shadow: 0 0 12px var(--rarity-soft); }
-  to { box-shadow: 0 0 30px var(--rarity), inset 0 0 18px rgba(255, 138, 61, 0.12); }
-}
 
 /* HUD strip: one chip per weapon slot, then the other installed upgrades on the next row. */
 .weapon-slot-chip {
@@ -5129,34 +5161,43 @@ body.reduce-effects *::after {
   animation: card-deal 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.07s) backwards;
 }
 .upgrade-option.breakthrough-card {
-  animation: card-deal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.12s) backwards,
-    breakthrough-pulse 1.8s ease-in-out 0.7s infinite;
+  animation: card-deal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.12s) backwards;
 }
 @keyframes card-deal {
   from { opacity: 0; translate: 0 70px; rotate: -7deg; scale: 0.82; }
   60% { opacity: 1; }
   to { opacity: 1; translate: 0 0; rotate: 0deg; scale: 1; }
 }
-/* Rare and better: a light sweep across the face every few seconds, in the rarity colour. */
+/* Rare and better: a light sweep across the face every few seconds, in the rarity colour. The sweep is a
+   band 2.6x the card's width sliding across it (transform, so the compositor moves it without repainting
+   the card): -80% to +18.46% of its width is the 130% to -30% background-position it used to animate. */
 .card-shimmer {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--rarity) 30%, transparent) 50%, transparent 62%) no-repeat;
-  background-size: 260% 100%;
-  background-position: 130% 0;
+  overflow: hidden;
   mix-blend-mode: screen;
+}
+.card-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 260%;
+  background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--rarity) 30%, transparent) 50%, transparent 62%);
+  transform: translateX(-80%);
   animation: card-shimmer 3.2s ease-in-out calc(0.45s + var(--deal-i, 0) * 0.07s) infinite;
 }
-.rarity-epic .card-shimmer, .rarity-evolution .card-shimmer, .rarity-transform .card-shimmer, .rarity-boost .card-shimmer { animation-duration: 2.6s; }
-.rarity-legendary .card-shimmer {
+.rarity-epic .card-shimmer::before, .rarity-evolution .card-shimmer::before, .rarity-transform .card-shimmer::before, .rarity-boost .card-shimmer::before { animation-duration: 2.6s; }
+.rarity-legendary .card-shimmer::before {
   background-image: linear-gradient(115deg, transparent 34%, rgba(255, 236, 150, 0.4) 48%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 236, 150, 0.4) 52%, transparent 66%);
   animation-duration: 2.1s;
 }
 @keyframes card-shimmer {
-  0% { background-position: 130% 0; }
-  45%, 100% { background-position: -30% 0; }
+  0% { transform: translateX(-80%); }
+  45%, 100% { transform: translateX(18.4615%); }
 }
 /* Modals ease in instead of popping. */
 .modal-overlay:not(.hidden) { animation: modal-fade 0.18s ease-out; }
@@ -5164,7 +5205,7 @@ body.reduce-effects *::after {
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-pop { from { opacity: 0; scale: 0.94; translate: 0 10px; } }
 @media (prefers-reduced-motion: reduce) {
-  .upgrade-option, .upgrade-option.breakthrough-card, .card-shimmer,
+  .upgrade-option, .upgrade-option.breakthrough-card, .card-shimmer::before,
   .modal-overlay:not(.hidden), .modal-overlay:not(.hidden) > .modal-card { animation: none; }
 }
 
