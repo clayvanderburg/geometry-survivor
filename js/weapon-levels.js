@@ -43,7 +43,7 @@ export const OVERTUNED = Object.freeze({
   missiles: { dmg: [1.4, 1.45, 1.4] },
   singularity: { stat: 'cooldown', ranks: 1, label: 'cooldown', dmg: [1.1, 1, 1.1] },
   orbitals: { stat: 'count', ranks: 1, label: 'blade', unit: true, dmg: [1.2, 1.2, 1.2] },
-  mines: { stat: 'rate', ranks: 2, label: 'drop rate', dmg: [1, 1, 1] },
+  mines: { stat: 'rate', ranks: 2, label: 'drop rate', dmg: [1, 1, 1.3] },
   turret: { dmg: [1.5, 1.45, 1.3] },
   grenades: { stat: 'rate', ranks: 1, label: 'throw rate', dmg: [1.15, 1.15, 1.6] },
   gas: { stat: 'rate', ranks: 3, label: 'tick rate', dmg: [1.2, 1.2, 1.2] },

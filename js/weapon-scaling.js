@@ -688,7 +688,7 @@ export const WEAPON_SCALING = {
   // Acid Sprayers' lingering frost and acid carry them), and every sprayer transform builds in flameTfTurnRanks
   // Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD (bt-calibration.js BT_SPRAYER_BAND).
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
-  flameTfTurnRanks: 3,
+  flameTfTurnRanks: 1,
   flameTurnRanks: (b) => (b?.r?.turn || 0) + W.flameTfTurnRanks * (b?.transforms || 0),
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
@@ -698,9 +698,9 @@ export const WEAPON_SCALING = {
   // it spins on when nobody is in reach).
   whirlEvery: 2.5,
   whirlTime: 0.6,
-  // The nozzle swings at this share of its own spin speed (bt-bench, blend: 3.2 rad/s parked the cone on the pack,
-  // Cryo/Acid 1.45-1.52x). The Flamethrower spins flameTurnTrim faster, so its share is lower.
-  seekTurnMult: Object.freeze({ flamethrower: 0.6, cryospray: 0.7, acidspray: 0.7 }),
+  // The nozzle swings at this share of its own spin speed, Seeker's balance lever (bt-bench, blend: 0.7 parked the
+  // Cryo / Acid cone on the pack, 1.4-1.8x Across the Board). The Flamethrower spins flameTurnTrim faster, so its share is lower.
+  seekTurnMult: Object.freeze({ flamethrower: 0.6, cryospray: 0.55, acidspray: 0.45 }),
   seekEvery: 0.25,
   flameEdgeFalloff: 0.35,
   flameHitShare: 0.45, // 2.2 while it aimed: a spinning cone only sweeps a given pack part of the time

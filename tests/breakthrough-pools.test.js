@@ -179,7 +179,7 @@ test('Overtuned Core: each weapon\'s own version is damage and POWER ranks only,
   for (const [id, o] of Object.entries(OVERTUNED)) {
     assert.ok(STAT_CARDS[id], `${id} is a weapon`);
     assert.equal(o.dmg.length, 3, id);
-    for (const x of o.dmg) assert.ok(x >= 1 && x <= 2, `${id}: ${o.dmg}`);
+    for (const x of o.dmg) assert.ok(x >= 1 && x <= 2, `${id}: ${o.dmg}`); // never lighter hits: the card would show less boss damage
     if (o.stat) {
       assert.ok(POWER_STATS.has(o.stat) && o.stat !== 'damage', `${id}: ${o.stat} is a POWER stat, never utility`);
       assert.ok(Number.isInteger(o.ranks) && o.ranks >= 1 && o.label, id);
@@ -199,6 +199,10 @@ test('Overtuned Core: each weapon\'s own version is damage and POWER ranks only,
     if (otr) {
       assert.ok(d.headline.includes(`+${otr.ranks} ${OVERTUNED[id].label.toUpperCase()}`), `${id}: ${d.headline}`);
       assert.ok(d.summary.includes(`+${otr.ranks} ${otr.card.name}`), `${id}: ${d.summary}`);
+    }
+    for (const m of BREAKTHROUGH_LEVELS) {
+      const q = playerWith(id, m);
+      assert.ok(describeBreakthrough(q, id, m, 'overtuned').dpsGain > describeBreakthrough(q, id, m, 'boost').dpsGain, `${id} LV ${m}: Overtuned Core shows more DPS than Across the Board`);
     }
     applyBreakthrough(p, id, 12, 'overtuned');
     const after = weaponBuild(p, id).r;
