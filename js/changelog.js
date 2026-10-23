@@ -16,6 +16,7 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
+      { type: 'new', text: 'Your weapons are on your ship: every weapon you equip mounts a part on the hull (pods, racks, coils, tubes...) that launches its shots and flashes, kicks and glows as it fires.' },
       { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
       { type: 'balance', text: 'Breakthrough cards state what you get once; potential DPS is a stat below. Escort Drones and Glaive Discs offer Overtuned Core and two transforms (no Across the Board).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, such as Hot Barrel, Kamikaze Wing, Parting Gift, Gravity Lens, Fire Whirl and White Hole.' },
@@ -26,8 +27,7 @@ export const CHANGELOG = Object.freeze([
       { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails are RARE finds at full power. ELECTRIC is gone: Tesla Arc and Shock Field are SHOCK weapons; Overvolt Coils is retired.' },
       { type: 'balance', text: 'Crits are reworked, FROST now bites (frostbite damage, chilled enemies take more), Tesla Arc fires twice as often and the Flamethrower spins faster.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Cards show evolution recipes, and the Field Guide lists every recipe against your build.' },
-      { type: 'new', text: 'Bosses escape after 3 minutes: kill one in time for its Alien Tech Cache (the renamed supply cache). Its boss bar counts down the last 30 seconds.' },
-      { type: 'balance', text: 'Lancers telegraph clearly: a bright aim line locks and flashes white before firing, then sweeps only to the marked side. At most 2 fire at once.' }
+      { type: 'new', text: 'Bosses escape after 3 minutes, so kill them in time for an Alien Tech Cache. Lancers telegraph clearly: the aim line locks and flashes, then sweeps only to the marked side.' }
     ]
   },
   {
