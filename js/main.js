@@ -4673,7 +4673,8 @@ export class Game {
         badge.textContent = '🔒 LOCKED';
         el.appendChild(badge);
       } else if (!locked && badge) badge.remove?.();
-      const banish = el.querySelector?.('.card-banish-toggle');
+      // LOCK / BANISH live in the card's own action strip under it (renderChoiceCards), not on the card.
+      const banish = this.choiceBanishEls?.[idx];
       if (banish) {
         const bc = banishCost();
         const armed = this.banishArmed === idx;
@@ -4681,13 +4682,13 @@ export class Game {
         banish.classList?.[nw ? 'add' : 'remove']('hidden');
         banish.classList?.[this.gold >= bc ? 'remove' : 'add']('unaffordable');
         banish.classList?.[armed || this.banishMode ? 'add' : 'remove']('armed');
-        banish.textContent = armed ? `✕ CONFIRM ${bc} ${GOLD_ICON}` : `✕ ${bc} ${GOLD_ICON}`;
-        banish.title = this.gold >= bc ? `Banish for ${bc} gold: it never comes up again this run (click twice)` : `Need ${bc} gold to banish`;
+        banish.innerHTML = armed ? `✕ CONFIRM <span class="act-cost">${bc} ${GOLD_ICON}</span>` : `✕ <span class="act-word">BANISH</span> <span class="act-cost">${bc} ${GOLD_ICON}</span>`;
+        banish.title = this.gold >= bc ? `Banish for ${bc} gold: this card never comes up again this run, at any level (click twice)` : `Need ${bc} gold to banish`;
       }
-      const toggle = el.querySelector?.('.card-lock-toggle');
+      const toggle = this.choiceLockEls?.[idx];
       if (!toggle) return;
       const affordable = locked || this.gold >= lc;
-      toggle.textContent = locked ? '🔓 UNLOCK' : `🔒 ${lc} ${GOLD_ICON}`;
+      toggle.innerHTML = locked ? '🔓 UNLOCK' : `🔒 <span class="act-word">LOCK</span> <span class="act-cost">${lc} ${GOLD_ICON}</span>`;
       toggle.classList?.[affordable ? 'remove' : 'add']('unaffordable');
       toggle.classList?.[locked ? 'add' : 'remove']('on');
       toggle.setAttribute?.('aria-pressed', String(locked));
@@ -4722,6 +4723,8 @@ export class Game {
     const shownAt = performance.now();
     this.choicesShownAt = shownAt;
     this.choiceCardEls = [];
+    this.choiceLockEls = [];
+    this.choiceBanishEls = [];
     descs.forEach((d, idx) => {
       const view = renderUpgradeCard(d, `[${idx + 1}]`);
       const card = document.createElement('div');
@@ -4741,27 +4744,34 @@ export class Game {
         this.openCardDetail(idx, view);
       });
       card.appendChild(more);
-      // Gold LOCK toggle (level-up hands only; renderHandControls labels it). Not a <button>, so the
-      // controller's focus stays on whole cards: it locks the focused card with Y.
+      // Each card sits in a slot; in level-up hands the slot adds a strip of big LOCK / BANISH buttons
+      // UNDER the card, outside it and past a gap, so a near-miss can never pick the card (the card only
+      // listens for clicks on itself). renderHandControls labels them. Not <button>s, so the controller's
+      // focus stays on whole cards: Y locks and RB×2 banishes the focused card.
+      const slot = document.createElement('div');
+      slot.className = 'card-slot';
+      slot.appendChild(card);
       if (this.handPhase === 'hand') {
-        const lock = document.createElement('div');
-        lock.className = 'card-lock-toggle';
-        lock.setAttribute?.('role', 'button');
-        lock.addEventListener('click', (e) => {
-          e.stopPropagation?.();
-          this.toggleCardLock(idx);
-        });
-        card.appendChild(lock);
-        const banish = document.createElement('div');
-        banish.className = 'card-banish-toggle';
-        banish.setAttribute?.('role', 'button');
-        banish.addEventListener('click', (e) => {
-          e.stopPropagation?.();
-          this.banishCard(idx);
-        });
-        card.appendChild(banish);
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+        actions.style?.setProperty?.('--deal-i', idx);
+        const action = (cls, fn) => {
+          const el = document.createElement('div');
+          el.className = `card-action ${cls}`;
+          el.setAttribute?.('role', 'button');
+          el.addEventListener('click', (e) => {
+            e.stopPropagation?.();
+            if (performance.now() - shownAt < CHOICE_CLICK_GUARD_MS) return;
+            fn();
+          });
+          actions.appendChild(el);
+          return el;
+        };
+        this.choiceLockEls[idx] = action('card-lock-toggle', () => this.toggleCardLock(idx));
+        this.choiceBanishEls[idx] = action('card-banish-toggle', () => this.banishCard(idx));
+        slot.appendChild(actions);
       }
-      container.appendChild(card);
+      container.appendChild(slot);
       this.choiceCardEls.push(card);
     });
   }
