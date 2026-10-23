@@ -3,9 +3,25 @@ const FLASH_POOL = 64;
 const TRAIL_CAP = 48;
 const LIGHTNING_CAP = 72;
 const LIGHTNING_REJAG = 0.035; // seconds between re-jags of a lingering bolt (the crackle flicker)
+const SPARK_CAP = 1800;
+
+// A spark's colour, hsl(hue, 100%, 68%), worked out once when it spawns as '#rrggbb' (the same 8-bit
+// colour the canvas makes of the hsl string). Its fade is drawn with globalAlpha, so a frame of sparks
+// formats and parses no colour strings.
+const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+export function sparkRgb(hue) {
+  const h = ((hue % 360) + 360) % 360;
+  const l = 0.68, a = 1 - l; // saturation 100%: a = min(l, 1 - l)
+  const f = (n) => {
+    const k = (n + h / 30) % 12;
+    return HEX[Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255)];
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
 export class ParticleSystem {
   constructor() {
     this.sparks = [];
+    this.sparkPool = [];
     this.shards = [];
     this.shockwaves = [];
     this.lightnings = [];
@@ -117,6 +133,22 @@ export class ParticleSystem {
     slot.maxLife = life;
   }
 
+  // Sparks are recycled: a burst-heavy wave spawns and drops thousands a second.
+  addSpark(x, y, vx, vy, hue, life, size, drag) {
+    const s = this.sparkPool.pop() || { x: 0, y: 0, vx: 0, vy: 0, hue: 0, rgb: '', life: 0, maxLife: 1, size: 0, drag: 1 };
+    s.x = x;
+    s.y = y;
+    s.vx = vx;
+    s.vy = vy;
+    s.hue = hue;
+    s.rgb = sparkRgb(hue);
+    s.life = s.maxLife = life;
+    s.size = size;
+    s.drag = drag;
+    this.sparks.push(s);
+    return s;
+  }
+
   // Burst of velocity-stretched neon line sparks (Geometry Wars signature explosion)
   spawnExplosionSparks(x, y, count, hue, speedMin = 3, speedMax = 16, size = 2.2) {
     count = Math.ceil(count * this.density);
@@ -124,17 +156,9 @@ export class ParticleSystem {
       const angle = Math.random() * Math.PI * 2;
       const speed = speedMin + Math.pow(Math.random(), 0.7) * (speedMax - speedMin);
       const life = 0.45 + Math.random() * 0.55;
-      this.sparks.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        hue: hue + (Math.random() - 0.5) * 28,
-        life,
-        maxLife: life,
-        size: size * (0.7 + Math.random() * 0.6),
-        drag: 0.94 + Math.random() * 0.035
-      });
+      const h = hue + (Math.random() - 0.5) * 28;
+      const sz = size * (0.7 + Math.random() * 0.6);
+      this.addSpark(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, h, life, sz, 0.94 + Math.random() * 0.035);
     }
   }
 
@@ -145,17 +169,7 @@ export class ParticleSystem {
       const angle = baseAngle + (Math.random() - 0.5) * spread;
       const speed = 2 + Math.random() * speedMax;
       const life = 0.22 + Math.random() * 0.3;
-      this.sparks.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        hue: hue + (Math.random() - 0.5) * 20,
-        life,
-        maxLife: life,
-        size: 1.8,
-        drag: 0.92
-      });
+      this.addSpark(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, hue + (Math.random() - 0.5) * 20, life, 1.8, 0.92);
     }
   }
 
@@ -360,7 +374,7 @@ export class ParticleSystem {
           const out = Math.atan2(f.y - f.well.y, f.x - f.well.x);
           const speed = 5 + Math.random() * 7;
           const life = 0.4 + Math.random() * 0.4;
-          this.sparks.push({ x: f.x, y: f.y, vx: Math.cos(out) * speed, vy: Math.sin(out) * speed, hue: f.hue, life, maxLife: life, size: 2.2, drag: 0.93 });
+          this.addSpark(f.x, f.y, Math.cos(out) * speed, Math.sin(out) * speed, f.hue, life, 2.2, 0.93);
         }
         this.infall[i] = this.infall[this.infall.length - 1];
         this.infall.pop();
@@ -389,13 +403,12 @@ export class ParticleSystem {
       if (s.life <= 0) {
         this.sparks[i] = this.sparks[this.sparks.length - 1];
         this.sparks.pop();
+        this.sparkPool.push(s);
       }
     }
 
     // Cap max sparks to keep 60+ fps rock solid during massive screen-wipes
-    if (this.sparks.length > 1800) {
-      this.sparks.length = 1800;
-    }
+    while (this.sparks.length > SPARK_CAP) this.sparkPool.push(this.sparks.pop());
 
     // Update Shards
     for (let i = this.shards.length - 1; i >= 0; i--) {
@@ -655,18 +668,21 @@ export class ParticleSystem {
     // 4. Draw Velocity-Stretched Sparks
     for (let i = 0; i < this.sparks.length; i++) {
       const s = this.sparks[i];
-      if (!visible(s.x, s.y, Math.hypot(s.vx, s.vy) * 2.3 + s.size)) continue;
+      // |vx| + |vy| >= the streak's length: a slightly looser cull than Math.hypot, for free.
+      if (!visible(s.x, s.y, (Math.abs(s.vx) + Math.abs(s.vy)) * 2.3 + s.size)) continue;
       const alpha = Math.max(0, s.life / s.maxLife);
       const tailX = s.x - s.vx * 2.3;
       const tailY = s.y - s.vy * 2.3;
 
-      ctx.strokeStyle = `hsla(${s.hue}, 100%, 68%, ${alpha})`;
+      ctx.strokeStyle = s.rgb || sparkRgb(s.hue);
+      ctx.globalAlpha = alpha;
       ctx.lineWidth = s.size * alpha;
       ctx.beginPath();
       ctx.moveTo(tailX, tailY);
       ctx.lineTo(s.x, s.y);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
     // 4b. Draw Infall Streams: comet streaks batched into one path per (hue, band) so hundreds of
     // streaks cost a handful of strokes. The outer band is dim; the inner band runs white-hot.
