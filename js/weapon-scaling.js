@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_BOOST_RANKS, overtunedAt, overtunedRanks, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -142,10 +142,6 @@ export const WEAPON_SCALING = {
   blasterRateMult: (b) => (1 + W.blasterRateStep * (b.r.rate || 0)) * tempo(b),
   blasterExtraStreams: (b) => W.multishotBolts * b.r.prism,
   blasterExtraPierce: (b) => b.r.pierce,
-  // Share of a hit each enemy behind the first takes from an Autocannon bolt (Phase Piercer). TUNING.pierceFalloff
-  // (0.7) before v0.46: a Piercer rank then out-realized a Plasma Charge rank ~1.5x early and mid-run
-  // (tools/balance/hand-bench.mjs), so the UTILITY card was the strictly better pick.
-  blasterPierceKeep: 0.4,
   // Transforms: Flak Rounds (a small blast at every hit), Ricochet Rounds (a hit spawns one ricochet
   // bolt at 60% damage), Arc Rounds (every hit arcs into 2 nearby enemies for 30% each).
   flakShare: 0.5,
@@ -689,7 +685,9 @@ export const WEAPON_SCALING = {
   // Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD (bt-calibration.js BT_SPRAYER_BAND).
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
   flameTfTurnRanks: 1,
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + W.flameTfTurnRanks * (b?.transforms || 0),
+  // The Spin Rotor card was retired in v0.46 (a dead pick on its own), but spin is still the sprayers' lever: the
+  // transforms build their ranks in, and ACROSS THE BOARD's free utility ranks still reach it (b.atb x BT_BOOST_RANKS).
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.atb || 0) * BT_BOOST_RANKS + W.flameTfTurnRanks * (b?.transforms || 0),
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
   // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
@@ -708,7 +706,7 @@ export const WEAPON_SCALING = {
   // the spin, each extra one valued at flameNozzleShare of a stream (cones that sweep past each other
   // catch fewer fresh enemies).
   flameNozzles: (b) => 1 + (b?.r?.nozzles || 0),
-  flameNozzleShare: 0.45,
+  flameNozzleShare: 0.6,
   flameNozzleMult: (b) => 1 + W.flameNozzleShare * (W.flameNozzles(b) - 1),
   // Transforms: the LV 6 burst (one per sprayer: Fireballs lobbed from every nozzle to the tip of its
   // stream every flameBurstEvery s; Shatter, a frozen enemy the spray hits bursts in ice shards;
@@ -805,10 +803,10 @@ export const WEAPON_SCALING = {
   railChargeShare: 0.8,
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
-  // Split Rails: each extra lance is worth railLanceShare of a lance (fanned lances share the pack, like the
-  // sprayers' extra nozzles). Every lance carries railLanceMult / lances of a hit, so the volley realizes what
-  // the model values it at; at full value a 2nd lance doubled the weapon (+50-105% vs a Slug Mass rank, v0.46).
-  railLanceShare: 0.5,
+  // Split Rails: each extra lance is worth railLanceShare of a lance; every lance carries railLanceMult / lances of a
+  // hit. 1 = full lances: a 2nd lance doubles the weapon (+50-117% vs a Slug Mass rank), so the card is a RARE find
+  // (weapon-levels.js RARE_CARD) rather than a weaker one (v0.46: 0.5 for a moment, then rarity per Clay).
+  railLanceShare: 1,
   railLanceMult: (b) => 1 + W.railLanceShare * (W.railLances(b) - 1),
   railSpread: 0.12,                               // rad between Split Rails lances
   railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)
@@ -1112,9 +1110,10 @@ export const WEAPON_SCALING = {
   supercritBonusMult: 1.5,
 
   // Tag cards: additive damage bonus per level for every weapon carrying the tag; AREA scales radii.
-  // Per tag-card rank, added (v0.46: 0.2 / 0.3 / 0.3). Sized so a tag card beats Reactor Overdrive (x1.12, compounding)
-  // only modestly when every carried weapon has the tag (hand-bench.mjs: at 1 weapon it realized 1.5-2.3x Overdrive).
-  tagDamageStep: { kinetic: 0.15, explosive: 0.2, electric: 0.2 },
+  // Per tag-card rank, added. v0.45: 0.2 / 0.3 / 0.3, which realized 1.5-2.3x Reactor Overdrive whenever every
+  // carried weapon had the tag (hand-bench.mjs). v0.46 keeps them strong but rarer (Clay: balance with rarity):
+  // 0.2 / 0.25 / 0.25, always at least UNCOMMON (rarityFloor 2) and drawn at TUNING.tagCardWeight 0.45 (was 0.7).
+  tagDamageStep: { kinetic: 0.2, explosive: 0.25, electric: 0.25 },
   // Field Amplifier (the global AREA card): +10% area per rank (+15% before v0.46). Area is UTILITY in the
   // potential model, but a wider blast, cloud or cone is real damage: on the card bench (tools/balance/card-bench.mjs)
   // one +15% rank out-damaged a Reactor Overdrive rank with 4 weapons (+6.6-7.0% vs +4.7-6.2%), breaking the
