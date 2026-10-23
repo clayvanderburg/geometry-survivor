@@ -7,7 +7,7 @@
 // ACROSS THE BOARD boosts (`atb`). Each stat formula reads ONLY its own rank, so a stat card changes
 // exactly the stat it names: the Damage card is the only card that changes damage per hit.
 import { TUNING } from './config.js';
-import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
+import { BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_BOOST_RANKS, BT_OVERTUNED_DPS, levelBuild, weaponBuild, ELEMENTS, ELEMENT_KEYS, FIXED_ELEMENTS, ELEMENT_MAX_RANKS, flameBurnRank, globalMult } from './weapon-levels.js';
 import { loadoutDamageMult } from './slot-rewards.js';
 import { tfRealized } from './bt-calibration.js';
 
@@ -679,7 +679,9 @@ export const WEAPON_SCALING = {
   // build in flameTfTurnRanks Spin Rotor ranks, the reach they lacked against ACROSS THE BOARD.
   flameTurnTrim: Object.freeze({ flamethrower: 1.5 }),
   flameTfTurnRanks: 1,
-  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
+  // The Spin Rotor card was retired in v0.46 (a dead pick on its own), but spin is still the sprayers' lever: the
+  // transforms build their ranks in, and ACROSS THE BOARD's free utility ranks still reach it (b.atb x BT_BOOST_RANKS).
+  flameTurnRanks: (b) => (b?.r?.turn || 0) + (b?.atb || 0) * BT_BOOST_RANKS + (b?.t4 || b?.t8 || b?.tf?.has('whirl') ? W.flameTfTurnRanks : 0), // Whirl too (pool, bt-extras.js)
   flameTurnRate: (b) => 1.2 * (W.flameTurnTrim[b?.id] ?? 1) * (1 + 0.35 * W.flameTurnRanks(b)),
   // Pool transforms (js/flamethrower.js via bt-extras.js), the same on all three sprayers. Both add sweep, the reach
   // a sprayer lacks (no extra attacks: the rescale makes every scorch BT_TRANSFORM_DPS harder): Whirl (every
@@ -795,10 +797,10 @@ export const WEAPON_SCALING = {
   railChargeShare: 0.8,
   railCharge: (b) => W.railCycle(b) * W.railChargeShare,
   railLances: (b) => 1 + (b.r.count || 0),
-  // Split Rails: each extra lance is worth railLanceShare of a lance (fanned lances share the pack, like the
-  // sprayers' extra nozzles). Every lance carries railLanceMult / lances of a hit, so the volley realizes what
-  // the model values it at; at full value a 2nd lance doubled the weapon (+50-105% vs a Slug Mass rank, v0.46).
-  railLanceShare: 0.5,
+  // Split Rails: each extra lance is worth railLanceShare of a lance; every lance carries railLanceMult / lances of a
+  // hit. 1 = full lances: a 2nd lance doubles the weapon (+50-117% vs a Slug Mass rank), so the card is a RARE find
+  // (weapon-levels.js RARE_CARD) rather than a weaker one (v0.46: 0.5 for a moment, then rarity per Clay).
+  railLanceShare: 1,
   railLanceMult: (b) => 1 + W.railLanceShare * (W.railLances(b) - 1),
   railSpread: 0.12,                               // rad between Split Rails lances
   railWidth: (b) => 6 * (1 + 0.5 * (b.r.width || 0)), // px half-width of the hit line (plus the enemy's hull); +6 px full width per Flux Lens (was +3.6)

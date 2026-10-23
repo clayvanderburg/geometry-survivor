@@ -84,7 +84,7 @@ test('weapon summaries describe how the weapon actually fires', () => {
   }
 });
 
-test('RARE weapon cards (Phase Piercer, Extra Nozzle) stay strong but rarer, and say so on the card', async () => {
+test('RARE weapon cards (Phase Piercer, Extra Nozzle, Split Rails) stay strong but rarer, and say so on the card', async () => {
   // Clay (v0.46): swingy cards are balanced with rarity, not cut. They always show RARE (a +1 roll is not a jump,
   // so the ribbon reads "◆ RARE CARD · +1 LEVEL") and are drawn at RARE_CARD.weightMult of a stat card's share.
   const { RARE_CARD } = await import('../js/weapon-levels.js');
@@ -94,7 +94,8 @@ test('RARE weapon cards (Phase Piercer, Extra Nozzle) stay strong but rarer, and
   const g = h.createHeadlessGame();
   g.resetRun();
   for (const w of ['flamethrower', 'cryospray', 'acidspray']) U.acquireWeapon(g.player, w);
-  for (const id of ['pierce', 'flamethrower_nozzles', 'cryospray_nozzles', 'acidspray_nozzles']) {
+  U.acquireWeapon(g.player, 'raillance');
+  for (const id of ['pierce', 'flamethrower_nozzles', 'cryospray_nozzles', 'acidspray_nozzles', 'raillance_count']) {
     const card = U.UPGRADE_BY_ID[id];
     assert.equal(U.rarityFor(card, 1), 'rare', `${id}: a +1 roll shows RARE`);
     const sibling = U.UPGRADE_POOL.find((u) => u.weapon === card.weapon && u.statCard && u.id !== id && !u.rarityFloor);
@@ -105,4 +106,18 @@ test('RARE weapon cards (Phase Piercer, Extra Nozzle) stay strong but rarer, and
   for (const id of ['blaster_damage', 'firerate', 'flamethrower_damage', 'flamethrower_rate']) {
     assert.equal(U.UPGRADE_BY_ID[id].rarityFloor, undefined, `${id}: core Damage / Rate cards stay common`);
   }
+});
+
+test('Reactor Overdrive turns up a little less as the loadout grows (it out-realizes a weapon card with 6 weapons)', async () => {
+  const U = await import('../js/upgrades.js');
+  const h = await import('../tools/balance/harness.mjs');
+  const g = h.createHeadlessGame();
+  g.resetRun();
+  const od = U.UPGRADE_BY_ID.overdrive;
+  const w = () => U.cardWeight(od, 1, g.player);
+  assert.equal(w(), 1, '1 weapon: a full share');
+  for (const id of ['rockets', 'missiles']) U.acquireWeapon(g.player, id);
+  assert.equal(w(), 1, '3 weapons: still a full share');
+  for (const id of ['lightning', 'glaive', 'quake']) U.acquireWeapon(g.player, id);
+  assert.ok(Math.abs(w() - 0.7) < 1e-9, '6 weapons: 0.7');
 });
