@@ -66,8 +66,8 @@ test('a card that moves a recipe forward shows it on the card; one that complete
   assert.equal(pick.recipes[0].id, 'evo_tempest', 'the most complete recipe leads');
   const html = renderUpgradeCard(pick, '[1]').html;
   assert.match(html, /⚗ COMPLETES STORM PROTOCOL/);
-  assert.match(html, /recipe-chip ok">Missiles ✓/);
-  assert.match(html, /recipe-chip adds">Tesla Arc ★/);
+  assert.match(html, /wpn-pill recipe-chip ok" style="--wc:#ffe14d">Missiles <b class="recipe-mark">✓<\/b>/);
+  assert.match(html, /wpn-pill recipe-chip adds" style="--wc:#c79bff">Tesla Arc <b class="recipe-mark">★<\/b>/);
 
   // Prism Split at rank 0, +1: progress toward Pulsar Helix (needs rank 2).
   const prism = describeUpgrade(p, { ...UPGRADE_BY_ID.multishot, levelJump: 1 });
@@ -100,12 +100,12 @@ test('an evolution card shows its own recipe, all checked', () => {
 test('Field Guide evolutions list their recipe, with ✓ / ✗ during a run', () => {
   const plain = upgradesHTML();
   for (const id of EVOLUTION_IDS) assert.ok(plain.includes(`data-entry="${id}"`));
-  assert.match(plain, /UNLOCKS WITH[\s\S]*recipe-chip plain">Missiles</);
+  assert.match(plain, /UNLOCKS WITH[\s\S]*recipe-chip plain" style="--wc:#ffe14d">Missiles</);
   const p = freshPlayer();
   acquireWeapon(p, 'missiles');
   const live = upgradesHTML(p.upgradeLevels, p);
-  assert.match(live, /recipe-chip ok">Missiles ✓/);
-  assert.match(live, /recipe-chip miss">Tesla Arc ✗/);
+  assert.match(live, /recipe-chip ok" style="--wc:#ffe14d">Missiles <b class="recipe-mark">✓/);
+  assert.match(live, /recipe-chip miss" style="--wc:#c79bff">Tesla Arc <b class="recipe-mark">✗/);
   assert.equal(recipeView('evo_tempest', null).parts[0].met, null);
   assert.ok(UPGRADE_POOL.length > 0);
 });
@@ -117,6 +117,6 @@ test('a rank ingredient still short of its target shows how far along it is', ()
   const d = describeUpgrade(p, { ...UPGRADE_BY_ID.crit_chance, levelJump: 1 });
   const sc = d.recipes.find((v) => v.id === 'evo_supercrit');
   assert.equal(sc.parts[0].label, 'Deadeye LV 1/2');
-  assert.match(recipeStripHtml([sc]), /recipe-chip miss">Deadeye LV 1\/2 ✗/);
+  assert.match(recipeStripHtml([sc]), /recipe-chip miss">Deadeye LV 1\/2 <b class="recipe-mark">✗/);
   assert.equal(recipeView('evo_supercrit', null).parts[0].label, 'Deadeye LV 2');
 });

@@ -12,9 +12,10 @@ import {
   freezeShare, freezeDuration, corrodeCap, shockConductShare, stunDurationMult, elementDamageMult, baseDamage, dashCooldownFor, projectileSpeedMult
 } from './weapon-scaling.js';
 import { grenadeElement } from './grenades.js';
-import { WEAPON_BY_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
+import { WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, weaponSlots, weaponTags, weaponLevel, PASSIVES } from './loadout.js';
 import { slotReward } from './slot-rewards.js';
 import { recipesAdvanced, recipeView, recipeStripHtml } from './evolution-recipes.js';
+import { weaponPill, weaponPills, rowWeapon } from './weapon-pills.js';
 import { clipHTML, transformClip } from './weapon-media.js';
 import {
   WEAPON_MAX_LEVEL, WEAPON_BADGE, BOOST_NAME, BT_BOOST_RANKS, BT_BOOST_DPS, BT_OVERTUNED_DPS, boostSummary, overtunedSummary, btOption,
@@ -419,15 +420,39 @@ export function globalHeadline(kind, before, after) {
 // REPLICATOR ARRAY headline: what each equipped weapon gets, in loadout order ("+2 STREAMS · +1 DRONE ·
 // +1 TURRET"). Weapons at their count cap (or with no count stat) are left out.
 export function replicatorHeadline(before, after) {
+  return replicatorParts(before, after).map((x) => x.text).join(' · ');
+}
+
+// The same, one { weapon, text } per weapon (the card shows each with its weapon pill).
+function replicatorParts(before, after) {
   const parts = [];
   for (const id of ownedWeapons(after)) {
     const cs = COUNT_STATS[id];
     if (!cs) continue;
     const n = ((weaponBuild(after, id).r[cs.stat] || 0) - (weaponBuild(before, id).r[cs.stat] || 0)) * cs.per;
-    if (n > 0) parts.push(`+${n} ${cs.unit}${n > 1 && !cs.unit.endsWith('S') ? 'S' : ''}`);
+    if (n > 0) parts.push({ weapon: id, text: `+${n} ${cs.unit}${n > 1 && !cs.unit.endsWith('S') ? 'S' : ''}` });
   }
-  return parts.join(' · ');
+  return parts;
 }
+
+// The weapons a card works on (shown as pills under its name): the weapon a level / stat / element card
+// raises, or an evolution's weapons.
+function cardWeapons(player, upg, sc) {
+  if (sc) return [sc.weapon];
+  const core = WEAPON_BY_LEVEL_ID[upg.id];
+  if (core) return [core.id];
+  if (upg.ownersAll) return upg.ownersAll;
+  return (upg.owners || []).filter((id) => ownsWeapon(player, id));
+}
+
+// The equipped weapons a tag or global card boosts (after it is taken), in loadout order.
+function cardReach(after, upg) {
+  if (upg.globalCard) return globalReach(after, upg.globalCard);
+  if (upg.category === 'SPECIALIST' && upg.tags?.length) return ownedWeapons(after).filter((id) => weaponTags(id).includes(upg.tags[0]));
+  return [];
+}
+
+const rowView = ({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a });
 
 // Everything a card shows, computed by installing `upg` on a copy of `player`.
 // Rows list only stats whose displayed value changes; `hiddenRows` counts any beyond maxRows.
@@ -463,6 +488,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
       : changed.length ? BUNDLE_HEADLINES[upg.id]?.(Object.fromEntries(changed.map((r) => [r.id, r]))) : '';
   const headline = bundle || (lead ? headlineText(ROW_BY_ID[lead.id], lead.b, lead.a) : upg.name.toUpperCase());
   const rarity = rarityFor(upg, jump);
+  const replicated = upg.id === REPLICATOR_ID ? replicatorParts(player, copy) : null;
 
   return {
     id: upg.id,
@@ -470,6 +496,11 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     unit: sc || PASSIVES.some((x) => x.upgradeId === upg.id) ? 'LV' : 'RANK',
     // A card pinned to a rarity tier above its jump (Replicator Array: always RARE, always one rank) says so.
     rarityNote: upg.rarityFloor > jump ? `◆ ${RARITY[rarity].label} CARD · +${jump} ${sc ? 'LEVEL' : 'RANK'}` : '',
+    // Its tier comes from the floor, not the roll: the card keeps a normal body and wears the tier on its frame.
+    rarityFloored: upg.rarityFloor > jump,
+    weapons: cardWeapons(player, upg, sc),
+    reach: cardReach(copy, upg),
+    headlineHtml: replicated?.length ? replicated.map((x) => `<span class="upg-headline-part">${weaponPill(x.weapon)} ${x.text}</span>`).join('') : '',
     name: upg.name,
     category: upg.category,
     scope: cardScope(upg),
@@ -486,7 +517,7 @@ export function describeUpgrade(player, upg, maxRows = MAX_ROWS) {
     weapon: sc ? sc.weapon : null,
     bonus: bonusLevels(copy, sc ? sc.weapon : upg.id),
     headline,
-    rows: changed.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
+    rows: changed.slice(0, maxRows).map(rowView),
     hiddenRows: Math.max(0, changed.length - maxRows),
     // Evolution recipes: an evolution card shows its own; any other card the ones it moves forward.
     recipes: upg.isSynergy ? [recipeView(upg.id, player)] : recipesAdvanced(player, copy)
@@ -618,7 +649,8 @@ export function describeBreakthrough(player, weaponId, level, option, maxRows = 
     headline: transform
       ? `⚛ ${transform.name.toUpperCase()} // +${Math.round(gain * 100)}% DPS`
       : `${flat.headline()} // +${Math.round(gain * 100)}% DPS`,
-    rows: rows.slice(0, maxRows).map(({ id, label, before: b, after: a }) => ({ id, label, before: b, after: a })),
+    weapons: [weaponId],
+    rows: rows.slice(0, maxRows).map(rowView),
     hiddenRows: Math.max(0, rows.length - maxRows),
     levelHtml: `⚛ BREAKTHROUGH // ${weapon.name.toUpperCase()} LV ${level}`,
     dpsGain: gain
@@ -647,13 +679,36 @@ export function levelText(d, installed = false) {
   return `${installed ? 'INSTALLED // ' : ''}${from} → ${unit} ${d.toLevel}${bonusText(d.bonus)}${maxText(d.toLevel, d.maxLevel)}`;
 }
 
+// An element row's label without its weapon's name (the pill in front of it says it):
+// "Rocket Pods burn (of hit damage)" → "burn (of hit damage)". Other rows read on their own ("Missiles / salvo").
+function stripWeaponName(label, id) {
+  const w = WEAPON_BY_ID[id];
+  for (const name of [ELEMENT_WEAPON_LABEL[id], w?.name, w?.hudName]) {
+    if (name && label.startsWith(`${name} `)) return label.slice(name.length + 1);
+  }
+  return label;
+}
+
 // Returns { className, html } for an .upgrade-option card (level-up choice or cache reward).
 export function renderUpgradeCard(d, keyLabel, installed = false) {
-  const ribbon = d.jump > 1
-    ? `<div class="upg-jump-ribbon">${'★'.repeat(d.jump - 1)} +${d.jump} ${d.unit === 'RANK' ? 'RANKS' : 'LEVELS'}</div>`
-    : d.rarityNote ? `<div class="upg-jump-ribbon">${d.rarityNote}</div>` : '';
-  const rows = d.rows.map((r) => `
-          <div class="upg-stat"><span class="upg-stat-label">${r.label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`).join('');
+  const jumpText = d.jump > 1 ? `${'★'.repeat(d.jump - 1)} +${d.jump} ${d.unit === 'RANK' ? 'RANKS' : 'LEVELS'}` : '';
+  // A floored card says it is a strong card; a floored card that also rolled a jump says both.
+  const floorText = d.rarityFloored ? `◆ ${d.rarityLabel} CARD` : '';
+  const ribbon = floorText && jumpText ? `<div class="upg-jump-ribbon upg-floor-ribbon">${floorText} · ${jumpText}</div>`
+    : jumpText ? `<div class="upg-jump-ribbon">${jumpText}</div>`
+      : d.rarityNote ? `<div class="upg-jump-ribbon${d.rarityFloored ? ' upg-floor-ribbon' : ''}">${d.rarityNote}</div>` : '';
+  const own = d.weapons || [];
+  const rows = d.rows.map((r) => {
+    // A row of another weapon than the card's own (a tag or global card's per-weapon rows) leads with its pill.
+    const rw = rowWeapon(r.id);
+    const pill = rw && !own.includes(rw) ? weaponPill(rw) : '';
+    const label = pill && r.id.includes(':') ? stripWeaponName(r.label, rw) : r.label;
+    return `
+          <div class="upg-stat"><span class="upg-stat-label">${pill}${label}</span><span class="upg-stat-val"><span class="upg-before">${r.before}</span> → <b>${r.after}</b></span></div>`;
+  }).join('');
+  const weaponLine = own.length || d.reach?.length
+    ? `<div class="upg-weapons">${weaponPills(own)}${d.reach?.length ? `<span class="upg-reach-label">BOOSTS</span>${weaponPills(d.reach)}` : ''}</div>`
+    : '';
   const tags = d.tags && d.tags.length
     ? `<div class="upg-tags">${d.tags.map((t) => `<span class="upg-tag" style="--tag:${TAG_INFO[t].color}">${TAG_INFO[t].label}</span>`).join('')}</div>`
     : '';
@@ -661,16 +716,16 @@ export function renderUpgradeCard(d, keyLabel, installed = false) {
   // A Breakthrough's TRANSFORM card shows it in action (the generic boost has nothing new to show).
   const clip = d.isBreakthrough && d.transform ? clipHTML(transformClip(d.weaponId, d.transform), `${d.name} in action`) : '';
   return {
-    className: `upgrade-option rarity-${d.rarity}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}${SCOPE_LABEL[d.scope] ? ` scope-${d.scope}` : ''}`,
+    className: `upgrade-option rarity-${d.rarity}${d.rarityFloored ? ' rarity-floored' : ''}${d.jump > 1 ? ` jump-${d.jump}` : ''}${d.isNewWeapon ? ' new-weapon-card' : ''}${d.isWeaponPick ? ' weapon-pick-card' : ''}${d.isBreakthrough ? ' breakthrough-card' : ''}${SCOPE_LABEL[d.scope] ? ` scope-${d.scope}` : ''}`,
     html: `
       ${ribbon}${SCOPE_LABEL[d.scope] ? `<span class="upg-scope">${SCOPE_LABEL[d.scope]}</span>` : ''}
       <div>
         <div class="upg-top">
           <span class="upg-key">${keyLabel}</span>
-          <span class="upg-badge">${d.rarityLabel === d.category ? d.category : `${d.rarityLabel} · ${d.category}`}</span>
+          <span class="upg-badge">${d.rarityLabel === d.category || own.length === 1 ? d.rarityLabel : `${d.rarityLabel} · ${d.category}`}</span>
         </div>
-        <div class="upg-name">${d.name}</div>${tags}${clip}
-        ${d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
+        <div class="upg-name">${d.name}</div>${weaponLine}${tags}${clip}
+        ${d.headlineHtml ? `<div class="upg-headline upg-headline-pills">${d.headlineHtml}</div>` : d.headline ? `<div class="upg-headline">${d.headline}</div>` : ''}${slotRewardHtml(d.reward)}
         ${d.summary ? `<div class="upg-summary">${d.summary}</div>` : ''}
         ${rows || more ? `<div class="upg-stats">${rows}${more}
         </div>` : ''}${recipeStripHtml(d.recipes, { own: d.isSynergy })}

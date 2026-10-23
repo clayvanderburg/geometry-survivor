@@ -12,6 +12,7 @@
 // `label` overrides the name shown on chips (kept short for phone-width cards).
 import { UPGRADE_POOL, UPGRADE_BY_ID, ownedElements } from './upgrades.js';
 import { WEAPON_BY_ID, ownsWeapon, weaponLevel } from './loadout.js';
+import { weaponPill } from './weapon-pills.js';
 
 export const EVOLUTION_RECIPES = {
   evo_tectonic: [{ card: 'mining_speed', level: 2, label: 'Rotary Drill' }],
@@ -63,7 +64,7 @@ export function recipeView(id, player, after = null) {
     const n = need(ing);
     // Still short of a rank target: show how far ("Deadeye LV 1/2").
     const have = player && !ing.anyOf && n > 1 && !now ? Math.floor(progress(after || player, ing)) : null;
-    return { label: ingredientLabel(ing, { have }), met: before, adds: !before && !!now };
+    return { label: ingredientLabel(ing, { have }), weapon: ing.weapon || null, met: before, adds: !before && !!now };
   });
   return { id, name: evolutionName(id), parts, ready: player ? parts.every((x) => x.met || x.adds) : false };
 }
@@ -85,12 +86,14 @@ export function recipesAdvanced(before, after, max = 2) {
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// Chips for one recipe view: ✓ have it, ★ this card adds it, ✗ missing.
+// Chips for one recipe view: ✓ have it, ★ this card adds it, ✗ missing. A weapon is its weapon pill
+// (in the weapon's colour) with the same mark.
 export function recipeChipsHtml(view) {
   return view.parts.map((x) => {
     const state = x.met ? 'ok' : x.adds ? 'adds' : x.met === null ? 'plain' : 'miss';
-    const mark = { ok: ' ✓', adds: ' ★', miss: ' ✗', plain: '' }[state];
-    return `<span class="recipe-chip ${state}">${esc(x.label)}${mark}</span>`;
+    const mark = state === 'plain' ? '' : `<b class="recipe-mark">${{ ok: '✓', adds: '★', miss: '✗' }[state]}</b>`;
+    if (x.weapon) return weaponPill(x.weapon, { cls: `recipe-chip ${state}`, text: x.label, suffix: mark ? ` ${mark}` : '' });
+    return `<span class="recipe-chip ${state}">${esc(x.label)}${mark ? ` ${mark}` : ''}</span>`;
   }).join('<span class="recipe-plus">+</span>');
 }
 
