@@ -251,7 +251,7 @@ export class RangePanel {
       const locked = lv < m;
       const opt = btOption(w.id, m, rangeBtOptions(w.id, m).includes(w.bt?.[m]) ? w.bt[m] : 'transform');
       const boost = !!BT_FLATS[opt.id];
-      const summary = opt.id === 'boost' ? BOOST_NAME : opt.id === 'overtuned' ? overtunedSummary(WEAPON_BY_ID[w.id].name) : opt.transform.summary;
+      const summary = opt.id === 'boost' ? BOOST_NAME : opt.id === 'overtuned' ? overtunedSummary(WEAPON_BY_ID[w.id].name, w.id, Math.max(m, lv)) : opt.transform.summary;
       const label = `<b>LV ${m}</b> ⚛ ${boost ? opt.name.toUpperCase() : esc(opt.name)}`;
       return btn('bt', label, {
         w: w.id, v: m, cls: `rg-bt ${boost ? 'is-boost' : 'is-transform'}`, off: locked,

@@ -28,7 +28,22 @@ export const BT_BOOST_DPS = 1.08;
 export const BT_BOOST_RANKS = 1;
 // OVERTUNED CORE: damage only (DRG: Survivor's clean overclocks), a bigger number than a transform's potential
 // (transforms are calibrated on realized damage, js/bt-calibration.js) to pay for doing nothing new.
+// BT_OVERTUNED_DPS is the default; OVERTUNED_DPS[weapon] = [LV 6, LV 12, LV 18] is each weapon's own value, set on
+// the blend bench so Overtuned Core realizes about BT_OVERTUNED_BAND x Across the Board at every milestone (Clay,
+// v0.46: neither flat is a trap). Weapons whose output barely follows damage (cones, fields, auras) need a much
+// bigger number; the card shows it. Between milestones the value follows the weapon level, like TF_REALIZED.
 export const BT_OVERTUNED_DPS = 1.3;
+export const BT_OVERTUNED_BAND = Object.freeze([1, 1.15]);
+export const OVERTUNED_DPS = {};
+const OT_LEVELS = [6, 12, 18];
+export function overtunedAt(id, lv) {
+  const v = OVERTUNED_DPS[id];
+  if (!v) return BT_OVERTUNED_DPS;
+  if (lv <= OT_LEVELS[0]) return v[0];
+  if (lv >= OT_LEVELS[2]) return v[2];
+  const i = lv < OT_LEVELS[1] ? 0 : 1;
+  return v[i] + (v[i + 1] - v[i]) * (lv - OT_LEVELS[i]) / (OT_LEVELS[i + 1] - OT_LEVELS[i]);
+}
 
 // Single-stat cards per weapon. `stat` is the rank key read by weapon-scaling.js; `headline` the
 // STAT_ROWS id shown enlarged on the card; maxLevel is the most ranks one card can take (the weapon
@@ -555,7 +570,9 @@ export const BT_FLATS = Object.freeze({
   boost: Object.freeze({ id: 'boost', name: 'Across the Board', dps: BT_BOOST_DPS }),
   overtuned: Object.freeze({ id: 'overtuned', name: 'Overtuned Core', dps: BT_OVERTUNED_DPS })
 });
-export const overtunedSummary = (weaponName) => `${weaponName}: +${Math.round((BT_OVERTUNED_DPS - 1) * 100)}% damage on every hit. No new tricks, no extras: just a hotter core.`;
+// `id` / `lv`: the weapon and its level (the card shows that weapon's own number).
+export const overtunedPct = (id, lv) => Math.round((overtunedAt(id, lv) - 1) * 100);
+export const overtunedSummary = (weaponName, id, lv) => `${weaponName}: +${overtunedPct(id, lv)}% damage on every hit. No new tricks, no extras: just a hotter core.`;
 // Draw weights of a transform: at its home milestone, and at any other one.
 export const BT_HOME_WEIGHT = 3;
 export const BT_AWAY_WEIGHT = 1;

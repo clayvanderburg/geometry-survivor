@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 const h = await import('../tools/balance/harness.mjs');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon, applyBreakthrough } = await import('../js/upgrades.js');
 const {
-  STAT_CARDS, TRANSFORMS, BREAKTHROUGH_LEVELS, BT_FLATS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, BT_HAND_SIZE,
+  STAT_CARDS, TRANSFORMS, BREAKTHROUGH_LEVELS, BT_FLATS, BT_TRANSFORM_DPS, BT_BOOST_DPS, BT_OVERTUNED_DPS, BT_HAND_SIZE, overtunedAt, OVERTUNED_DPS,
   drawBreakthroughOptions, transformPool, makeBuild, btOption, EXTRA_TRANSFORMS
 } = await import('../js/weapon-levels.js');
 const { describeBreakthrough } = await import('../js/upgrade-cards.js');
@@ -95,10 +95,10 @@ function playerWith(id, lv) {
   return p;
 }
 
-test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core x1.30, Across the Board x1.08', () => {
-  const want = (o) => (o === 'boost' ? BT_BOOST_DPS : o === 'overtuned' ? BT_OVERTUNED_DPS : BT_TRANSFORM_DPS) - 1;
+test('every option is worth its pinned potential DPS at every milestone: transforms x1.22, Overtuned Core its weapon\'s own value, Across the Board x1.08', () => {
   for (const id of WEAPONS) {
     for (const m of BREAKTHROUGH_LEVELS) {
+      const want = (o) => (o === 'boost' ? BT_BOOST_DPS : o === 'overtuned' ? overtunedAt(id, m) : BT_TRANSFORM_DPS) - 1;
       const p = playerWith(id, m);
       for (const o of [...transformPool(id).map((t) => t.id), ...Object.keys(BT_FLATS)]) {
         const d = describeBreakthrough(p, id, m, o);
@@ -167,5 +167,20 @@ test('a transform that builds on another never comes before it; notBefore keeps 
     assert.equal(makeBuild('rockets', 18, {}, p.breakthroughs.rockets).tf.has('test_follow'), true);
   } finally {
     delete EXTRA_TRANSFORMS.rockets;
+  }
+});
+
+test('Overtuned Core: each weapon has its own value at each milestone, never under the default, and the card shows it', () => {
+  for (const [id, v] of Object.entries(OVERTUNED_DPS)) {
+    assert.equal(v.length, 3, id);
+    for (const x of v) assert.ok(x >= BT_OVERTUNED_DPS && x <= 3, `${id}: ${v}`);
+    assert.ok(STAT_CARDS[id], `${id} is a weapon`);
+  }
+  for (const id of WEAPONS) {
+    const p = playerWith(id, 12);
+    const d = describeBreakthrough(p, id, 12, 'overtuned');
+    const pct = Math.round((overtunedAt(id, 12) - 1) * 100);
+    assert.match(d.headline, new RegExp(`\\+${pct}% DAMAGE`), id);
+    assert.match(d.summary, new RegExp(`\\+${pct}% damage`), id);
   }
 });
