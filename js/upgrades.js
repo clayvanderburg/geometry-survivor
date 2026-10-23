@@ -59,7 +59,7 @@ const CORE_INFO = {
   raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
   glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
   nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
-  harpoon: { headline: 'harpoonRange', summary: 'Fires spinning drill bits where you aim: each one bores through every enemy on its line and drills through rock, mining it as it goes.' },
+  harpoon: { headline: 'harpoonRange', summary: 'Launches your front drills on a cable where you aim: each one bores through every enemy on its line out and back, and drills through rock, mining it as it goes.' },
   quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over and shoving it back. Tidal Shear cards and Spacetime Fractures let it break rocks too.' }
 };
 
@@ -396,7 +396,7 @@ export const UPGRADE_POOL = [
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, drill bits and shards.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, drills and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }

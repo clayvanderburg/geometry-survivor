@@ -1964,8 +1964,8 @@ export class SoundEngine {
     }
   }
 
-  // Drill Driver launch: a short rising spin-up whine as the bit winds up, then a punchy "chunk" with a sub
-  // kick under it and a bright band-passed whoosh as the bit leaves. Twin Drills (bits 2) sound heavier.
+  // Drill Driver launch: a short rising spin-up whine as the drill winds up, then a punchy "chunk" (the
+  // launch thunk) with a sub kick under it and a bright whoosh as it leaves. Twin Drills (bits 2) sound heavier.
   playDrillLaunch(bits = 1) {
     if (!this.enabled || !this.ctx) return;
     const dur = 0.2;
@@ -2131,6 +2131,72 @@ export class SoundEngine {
     g.connect(this.sfxGain);
     o.start(t);
     o.stop(t + dur + 0.01);
+  }
+
+  // Drill Driver reel: one burst of winch whir (a band-passed saw buzz), called every ~70 ms while a drill
+  // reels in; it climbs in pitch as the drill nears the arm (k 0..1).
+  playDrillReel(k = 0) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.06;
+    if (!this.claimVoice('drillReel', 40, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const band = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    const f = (180 + 220 * k) * (0.95 + Math.random() * 0.1);
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.linearRampToValueAtTime(f * 1.08, t + dur);
+    band.type = 'bandpass';
+    band.frequency.value = 900 + 700 * k;
+    band.Q.value = 2.2;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.03, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + dur + 0.01);
+    const noise = this.noiseSource();
+    const hb = this.ctx.createBiquadFilter();
+    hb.type = 'bandpass';
+    hb.frequency.value = 3000 + Math.random() * 600;
+    hb.Q.value = 3;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.02, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    noise.connect(hb);
+    hb.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.03);
+  }
+
+  // Drill Driver dock: the drill slams back onto its arm: a ringing metal clank (two inharmonic triangle
+  // partials over a square click) with a low thump under it.
+  playDrillDock() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('drillDock', 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const pitch = 0.94 + Math.random() * 0.12;
+    const tone = (type, f0, f1, vol, len) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + len);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + len);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + len + 0.01);
+    };
+    tone('triangle', 1250 * pitch, 1230 * pitch, 0.04, 0.2);
+    tone('triangle', 1870 * pitch, 1850 * pitch, 0.022, 0.14);
+    tone('square', 2600 * pitch, 1800, 0.016, 0.02);
+    tone('sine', 150 * pitch, 60, 0.09, 0.09);
   }
 
   // Detonator Bit: a sharp crack over a heavy low crunch and a sub thud.
