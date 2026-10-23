@@ -11,6 +11,7 @@ import { weaponBuild, levelBuild } from './weapon-levels.js';
 import * as BTX from './bt-extras.js'; // pool Breakthroughs: Overdrive Sync, Kamikaze Wing, Parting Gift, Overwatch Link
 
 export const DEPLOYABLE_HUES = { mine: 8, turret: 208, drone: 82 };
+import { kickMount, setMountCharge } from './hardpoints.js';
 
 const MINE_POOL = 36;   // >= W.mineMaxActive at max level (capacity 11, x3 with Minefield Triad)
 const TURRET_POOL = TURRET_MAX_ACTIVE; // >= W.turretMaxActive at max level
@@ -190,6 +191,7 @@ export class Deployables {
       m.x += Math.cos(a) * W.triadSpacing;
       m.y += Math.sin(a) * W.triadSpacing;
     }
+    kickMount(p, 'mines'); // the chute empties and reloads (hardpoints.js)
     m.cluster = level.t4;
     m.seeker = level.t8;
     m.shock = !!level.tf?.has('shock');
@@ -250,6 +252,7 @@ export class Deployables {
       const max = W.turretCharges(level);
       if (this.turretCharges === null) this.turretCharges = max; // first equipped: a full bank
       this.turretCharges = Math.min(this.turretCharges, max);
+      setMountCharge(p, 'turret', this.turretCharges / max); // the cradle's charge pips
       const room = this.turretCount < TURRET_POOL;
       const reload = W.turretReload(level);
       this.turretReloadT += dt;
@@ -362,6 +365,7 @@ export class Deployables {
     t.retarget = 0;
     t.flash = 0;
     t.packing = false;
+    kickMount(p, 'turret');
     // Landing: a ring, sparks kicked out sideways, a dent in the grid and a heavy clunk.
     game.particles.spawnShockwave(t.x, t.y, 48 * TURRET_SCALE, DEPLOYABLE_HUES.turret, 2.5, 0.25);
     game.particles.spawnExplosionSparks(t.x, t.y, 10, DEPLOYABLE_HUES.turret, 1, 4, 1.2);
@@ -466,6 +470,7 @@ export class Deployables {
         d.x = p.x;
         d.y = p.y;
         if (d.launch > 0) continue;
+        kickMount(p, 'drones'); // the bay hatch pops as each drone leaves
         d.vx = (tx - p.x) * 0.22;
         d.vy = (ty - p.y) * 0.22;
         game.particles.spawnShockwave(p.x, p.y, 28, DEPLOYABLE_HUES.drone, 2, 0.2);

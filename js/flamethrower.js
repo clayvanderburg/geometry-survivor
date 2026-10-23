@@ -33,6 +33,7 @@ import * as BTX from './bt-extras.js'; // pool Breakthroughs: the whirl and the 
 
 export const FLAME_RAYS = 9;      // rays across one nozzle's cone, each clipped at the first rock
 const MAX_PUFFS = 240;
+import { setMountSpray } from './hardpoints.js';
 const PUFF_LIFE = 0.32;           // s a flame puff lives (it travels the nozzle's reach in that time)
 const PUFFS_PER_TICK = 3;         // per nozzle per 60 Hz tick
 export const MAX_NOZZLES = 4;     // 1 + Extra Nozzle cards (cap 3)
@@ -140,6 +141,7 @@ export class Flamethrower {
         }
       }
       for (const nz of this.nozzles) if (nz.on) this.spray(nz, p);
+      setMountSpray(p, k.weapon, this.swivel, Math.min(MAX_NOZZLES, W.flameNozzles(b)), true); // rim nozzle heads (hardpoints.js)
     } else {
       for (const nz of this.nozzles) nz.on = false;
     }

@@ -28,11 +28,11 @@ hardpoint:
 | Hardpoint | Position | Notes |
 |---|---|---|
 | SPINE | (−0.6r, 0) | rear of the carapace, over the inner facet; the turret draws on top of it |
-| PORT / STBD ROOT | (0.1r, ±0.95r) | wing roots, at the carapace shoulders, clear of the claw arms |
-| PORT / STBD WING | (−0.6r, ±1.4r) | on the wing rib, inboard of the rocket pods |
+| PORT / STBD ROOT | (0.3r, ±0.98r) | on the carapace's wide shoulders, just behind the claw arms |
+| PORT / STBD WING | (−0.3r, ±1.2r) | on the wing rib, inboard of the rocket pods |
 
-Each weapon has a preferred hardpoint type. Weapons fill hardpoints in slot order: port side before starboard,
-then the fallback order below if their type is full. Five hardpoints cover the worst case of five weapons with
+Each weapon has a preferred hardpoint type. Weapons fill hardpoints in slot order. Each takes the side with fewer parts (port on a tie), so the ship stays
+balanced, then uses the fallback order below if its type is full. Five hardpoints cover the worst case of five weapons with
 no built-in mount. The layout is worked out from `p.loadout`, so a discarded weapon's part disappears and the
 remaining weapons stay put; only a new weapon fills the free spot.
 
@@ -80,7 +80,7 @@ because that is information.
 
 ## 3. Readability
 
-- Parts are a dark fill (`#051024`, like the turret hub) with a 1.2 px stroke in the weapon colour. They sit
+- Parts are solid weapon-colour bodies with dark (`#051024`) detail lines, drawn 1.25×: at 6–9 px a filled shape reads through the hull's glow where an outline is lost. They sit
   inside the hull outline, so the silhouette, the shield outline and the hitbox (`shipHull`) are unchanged.
 - They draw after the hull and before the turret and claws, so the turret and drills always read on top.
 - Wing hardpoints and rocket pods scale with the bank, so they lean with the wings.

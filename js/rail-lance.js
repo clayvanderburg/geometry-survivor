@@ -16,6 +16,7 @@
 // Beams and wakes live in fixed pools and draw as a few batched strokes.
 import { WEAPON_SCALING as W, weaponDamage } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import { kickMount, setMountCharge } from './hardpoints.js';
 
 export const RAIL_HUE = 250;      // electric indigo, white-hot core
 export const MAX_LANCES = 4;      // 1 + Split Rails (cap 3)
@@ -131,6 +132,7 @@ export class RailLance {
       this.fired = false;
     }
     this.chargeShare = this.fired ? 0 : Math.min(1, this.t / charge);
+    setMountCharge(p, 'raillance', this.chargeShare); // the rail brightens as it charges (hardpoints.js)
   }
 
   // Aim of lance `i` of `n` (fanned round the turret's aim).
@@ -182,6 +184,7 @@ export class RailLance {
   fire(game, p, b) {
     const overload = this.overloadNext(b);
     this.shots++;
+    kickMount(p, 'raillance');
     const n = Math.min(MAX_LANCES, W.railLances(b));
     const dmg = weaponDamage(p, 'rail', b) * (overload ? W.overloadMult : 1) * W.railLanceMult(b) / W.railLances(b);
     const width = W.railWidth(b) * (overload ? W.overloadWidth : 1);

@@ -26,6 +26,7 @@ export const GRENADE_ELEMENTS = {
   corrode: { id: 'corrode', label: 'CORROSIVE', hue: 100 },
   shock: { id: 'shock', label: 'SHOCK', hue: 62 }
 };
+import { kickMount, mountWorld } from './hardpoints.js';
 
 // The grenade's element: the one its element card locked in, or plasma when it has none.
 export function grenadeElement(p) {
@@ -213,8 +214,11 @@ export class Grenades {
         dy *= range / dist;
       }
       const g = this.items[this.count++];
-      g.sx = g.x = p.x + (dx / dist) * (p.radius || 15) * 0.6;
-      g.sy = g.y = p.y + (dy / dist) * (p.radius || 15) * 0.6;
+      // Lobbed from the launcher (hardpoints.js); the landing spot is unchanged.
+      const tube = mountWorld(p, 'grenades', this._tube ||= {}, game);
+      g.sx = g.x = tube.x;
+      g.sy = g.y = tube.y;
+      kickMount(p, 'grenades', Math.atan2(dy, dx));
       g.lx = p.x + dx;
       g.ly = p.y + dy;
       g.z = 0;
@@ -241,8 +245,9 @@ export class Grenades {
     for (let k = 0; k < MAX_TARGETS; k++) this.targets[k] = this.picks[k] = null;
     this.throws++;
     const fx = game.particles;
-    fx.spawnFlash?.(p.x, p.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
-    fx.spawnShockwave(p.x, p.y, 26 + Math.min(n, 7) * 2, el.hue, 2, 0.2);
+    const tube = mountWorld(p, 'grenades', this._tube ||= {}, game);
+    fx.spawnFlash?.(tube.x, tube.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
+    fx.spawnShockwave(tube.x, tube.y, 26 + Math.min(n, 7) * 2, el.hue, 2, 0.2);
     if (game.sound.playGrenadeThrow) game.sound.playGrenadeThrow();
     else game.sound.playLaser?.(0.42);
   }

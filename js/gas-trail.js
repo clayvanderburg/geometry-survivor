@@ -24,6 +24,7 @@ import * as BTX from './bt-extras.js'; // pool Breakthroughs: Toxic Tendrils, Sp
 
 export const GAS_HUE = 122;     // sickly neon green body; rims run teal, bubbles acid
 const RIM_HUE = 166;
+import { kickMount } from './hardpoints.js';
 const BUBBLE_HUE = 92;
 const MAX_PUFFS = 256;          // >= puffs alive at once: life / (spacing x radius / ship speed), oldest recycled past it
 const MAX_POCKETS = 8;          // >= pockets alive at once (one every ~1.2 s, ~1.8 s fuse at most)
@@ -143,6 +144,7 @@ export class GasTrail {
     f.vy = Math.sin(t.a) * DRIFT;
     this.last = f;
     this.puffsDropped++;
+    kickMount(p, 'gas', null, 0.5); // the vents puff (hardpoints.js)
     if (this.hissT <= 0) {
       this.hissT = HISS_EVERY;
       game.sound.playGasVent?.();
