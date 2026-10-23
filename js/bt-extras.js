@@ -11,16 +11,35 @@ const has = (b, id) => !!b?.tf?.has(id);
 
 // --- Autocannon -----------------------------------------------------------------------------------
 
-// Hot Barrel: heat (0..1) climbs while the Autocannon fires and bleeds off when it stops. Returns the
-// fire-rate multiplier for this tick (1 without the transform).
-export function hotBarrelRate(game, dt, firing, b) {
+// Hot Barrel: heat (0..1) comes from HITS. Every Autocannon bolt that lands stokes the barrel (a full
+// volley of hits adds hotPerHit); a bolt that flies out without touching anything vents hotMissVent; and
+// after hotGrace s with no hit (nothing in reach, or every shot missing) the barrel cools over hotCool s.
+// Returns the fire-rate multiplier for this tick (1 without the transform).
+export function hotBarrelRate(game, dt, b) {
   if (!has(b, 'hotbarrel')) {
     game.barrelHeat = 0;
     return 1;
   }
-  const heat = game.barrelHeat || 0;
-  game.barrelHeat = firing ? Math.min(1, heat + dt / W.hotHeatUp) : Math.max(0, heat - dt / W.hotCool);
-  return 1 + W.hotRateMax * game.barrelHeat;
+  game.barrelSinceHit = (game.barrelSinceHit ?? Infinity) + dt;
+  if (game.barrelSinceHit > W.hotGrace && game.barrelHeat > 0) game.barrelHeat = Math.max(0, game.barrelHeat - dt / W.hotCool);
+  return 1 + W.hotRateMax * (game.barrelHeat || 0);
+}
+
+// A Hot Barrel bolt (bolt.bx.hot = its share of the volley) touching its first enemy, or leaving
+// without one. Each bolt counts once: the share is spent either way.
+export function hotBoltHit(game, bolt) {
+  const share = bolt.bx?.hot;
+  if (!share) return;
+  bolt.bx.hot = 0;
+  game.barrelHeat = Math.min(1, (game.barrelHeat || 0) + W.hotPerHit * share);
+  game.barrelSinceHit = 0;
+}
+
+export function hotBoltMiss(game, bolt) {
+  const share = bolt.bx?.hot;
+  if (!share) return;
+  bolt.bx.hot = 0;
+  game.barrelHeat = Math.max(0, (game.barrelHeat || 0) - W.hotMissVent * share);
 }
 
 // Called once per Autocannon volley, before its bolts go out: whether this volley is a Tracer Slug one.
@@ -30,9 +49,11 @@ export function blasterVolley(game, b) {
   return game.slugCount === 0;
 }
 
-// Shape one Autocannon bolt for the pool transforms (slug: this volley is a slug volley).
-export function shapeBlasterBolt(game, b, bolt, slug) {
-  const heat = has(b, 'hotbarrel') ? game.barrelHeat || 0 : 0;
+// Shape one Autocannon bolt for the pool transforms (slug: this volley is a slug volley; streams: bolts
+// in the volley, so a whole volley of Hot Barrel hits adds hotPerHit however many streams it has).
+export function shapeBlasterBolt(game, b, bolt, slug, streams = 1) {
+  const hot = has(b, 'hotbarrel');
+  const heat = hot ? game.barrelHeat || 0 : 0;
   if (heat > 0 && !slug) {
     // Cyan -> white-hot orange as the barrel heats, bolts a touch fatter.
     bolt.hue = bolt.hue + (22 - bolt.hue) * heat;
@@ -46,10 +67,11 @@ export function shapeBlasterBolt(game, b, bolt, slug) {
     bolt.hue = 34;
     bolt.bx = { slug: true };
   }
+  if (hot) (bolt.bx ||= {}).hot = 1 / Math.max(1, streams);
   return bolt;
 }
 
-// After the volley fired: the slug's heavier kick, and the hot barrel's shimmer.
+// After the volley fired: the slug's heavier kick, and the hot barrel's glow and shimmer.
 export function blasterVolleyFx(game, p, slug) {
   const nx = p.x + Math.cos(p.angle) * 22, ny = p.y + Math.sin(p.angle) * 22;
   if (slug) {
@@ -60,6 +82,7 @@ export function blasterVolleyFx(game, p, slug) {
     game.shake = Math.max(game.shake || 0, 1.6);
   }
   const heat = game.barrelHeat || 0;
+  if (heat > 0.2) game.particles.spawnFlash?.(nx, ny, 5 + 9 * heat, 186 + (22 - 186) * heat, 0.05 + 0.05 * heat); // the barrel glows
   if (heat > 0.6 && Math.random() < heat * 0.6) game.particles.spawnDirectionalSparks(nx, ny, p.angle + Math.PI, 1.6, 1, 24 + 20 * Math.random(), 3);
 }
 

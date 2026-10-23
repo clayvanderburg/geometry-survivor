@@ -151,17 +151,20 @@ export const WEAPON_SCALING = {
   arcRoundRange: 150,
   // Pool transforms (EXTRA_TRANSFORMS): Tracer Slugs (every slugEvery-th shot is a slug worth slugMult bolts,
   // slugPierce more pierce: utility; valued at slugValue, since a slug overkills small targets), Hot Barrel
-  // (sustained fire heats the barrel to +hotRateMax fire rate over hotHeatUp s, cooling over hotCool s; valued
-  // at hotValue of full heat, since the extra bolts overkill too). Both values from the card bench.
+  // (landed bolts heat the barrel toward +hotRateMax fire rate: a volley of hits adds hotPerHit, a bolt that
+  // misses vents hotMissVent of its share, and hotGrace s without a hit cools it over hotCool s; valued at
+  // hotValue of full heat, since heat must be earned and the extra bolts overkill). Both values from the card bench.
   slugEvery: 4,
   slugMult: 2.5,
   slugPierce: 2,
   slugRadiusMult: 1.8,
   slugValue: 0.6,
   hotRateMax: 0.6,
-  hotHeatUp: 2.5,
-  hotCool: 1.2,
-  hotValue: 0.45,
+  hotPerHit: 0.07,
+  hotMissVent: 0.03,
+  hotGrace: 0.4,
+  hotCool: 1.5,
+  hotValue: 0.4,
   slugUnits: (b) => (b.tf?.has('slug') ? (W.slugEvery - 1 + W.slugMult * W.slugValue) / W.slugEvery : 1),
   hotUnits: (b) => (b.tf?.has('hotbarrel') ? 1 + W.hotRateMax * W.hotValue : 1),
   blasterUnits: (b) => (1 + (b.t4 ? W.flakShare : 0) + (b.t12 ? W.arcRoundJumps * W.arcRoundShare : 0)) * (1 + (b.t8 ? W.ricochetShare * W.ricochetValue : 0)) * W.slugUnits(b) * W.hotUnits(b),
@@ -311,6 +314,8 @@ export const WEAPON_SCALING = {
   // collapsing like a small core).
   singularityCount: (b) => (b.t4 ? 2 : 1),
   twinPullScale: 1,
+  twinFan: 0.75, // with no enemy behind you the twins fan this far (rad) either side of the aim, ~86 degrees apart
+  twinMinSeparation: 160, // px: live cores closer than this are eased apart so a pair never merges into one
   twinUnitShare: 0.5, // the second core flies the other way and often finds fewer enemies: valued at half
   aftershockShare: 0.22,
   aftershockDelay: 0.6,

@@ -71,29 +71,41 @@ test('Tracer Slugs: every fourth volley is slugs, slugMult harder with more pier
   assert.ok(p);
 });
 
-test('Hot Barrel heats while firing (up to +hotRateMax fire rate), cools when you stop', () => {
+test('Hot Barrel heats from bolts that hit (up to +hotRateMax fire rate); misses and lulls cool it', () => {
   const { g, p } = fight('blaster', { 12: 'hotbarrel' });
   const b = weaponBuild(p, 'blaster');
+  const bolt = () => BTX.shapeBlasterBolt(g, b, { hue: 186, radius: 4, damage: 1, pierce: 1 }, false, 2);
+  // Firing alone never heats it: only landed bolts do.
   let mult = 1;
-  for (let t = 0; t < W.hotHeatUp * 60 + 2; t++) mult = BTX.hotBarrelRate(g, 1 / 60, true, b);
-  assert.ok(Math.abs(mult - (1 + W.hotRateMax)) < 1e-9, 'full heat');
-  const hot = BTX.shapeBlasterBolt(g, b, { hue: 186, radius: 4, damage: 1, pierce: 1 }, false);
-  assert.ok(hot.hue < 60, 'white-hot orange bolts');
-  for (let t = 0; t < W.hotCool * 60 + 2; t++) mult = BTX.hotBarrelRate(g, 1 / 60, false, b);
-  assert.equal(mult, 1, 'cold again');
+  for (let t = 0; t < 600; t++) mult = BTX.hotBarrelRate(g, 1 / 60, b);
+  assert.equal(mult, 1, 'firing without hitting stays cold');
+  for (let k = 0; k < Math.ceil(2 / W.hotPerHit); k++) BTX.hotBoltHit(g, bolt()); // two streams: half a volley each
+  assert.ok(Math.abs(BTX.hotBarrelRate(g, 1 / 60, b) - (1 + W.hotRateMax)) < 1e-9, 'full heat');
+  assert.ok(bolt().hue < 60, 'white-hot orange bolts');
+  const once = bolt();
+  BTX.hotBoltHit(g, once);
+  g.barrelHeat = 0.5;
+  BTX.hotBoltHit(g, once);
+  assert.equal(g.barrelHeat, 0.5, 'a piercing bolt heats once');
+  BTX.hotBoltMiss(g, bolt());
+  assert.ok(Math.abs(g.barrelHeat - (0.5 - W.hotMissVent / 2)) < 1e-9, 'a miss vents its share');
+  for (let t = 0; t < (W.hotGrace + W.hotCool) * 60 + 2; t++) mult = BTX.hotBarrelRate(g, 1 / 60, b);
+  assert.equal(mult, 1, 'a lull with no hits cools it');
   // Without the transform nothing changes.
   const { g: g2, p: p2 } = fight('blaster', { 12: 'transform' });
-  assert.equal(BTX.hotBarrelRate(g2, 1, true, weaponBuild(p2, 'blaster')), 1);
-  // Live: firing for a few seconds fires faster than the cold rate.
-  const shots = (bt) => {
-    const { g: gg } = fight('blaster', bt, [[900, 0]]);
+  assert.equal(BTX.hotBarrelRate(g2, 1, weaponBuild(p2, 'blaster')), 1);
+  // Live: a close target heats the barrel and it fires faster; a target out of reach leaves it cold.
+  const run = (bt, at) => {
+    const { g: gg } = fight('blaster', bt, at);
+    gg.enemyManager.update = () => {};
     let n = 0;
     const fire = gg.firePrimaryWeapon.bind(gg);
     gg.firePrimaryWeapon = () => { n++; fire(); };
     for (let i = 0; i < 60 * 5; i++) gg.update(1 / 60);
-    return n;
+    return { n, heat: gg.barrelHeat || 0 };
   };
-  assert.ok(shots({ 12: 'hotbarrel' }) > shots({ 12: 'boost' }) * 1.25);
+  assert.ok(run({ 12: 'hotbarrel' }, [[150, 0]]).n > run({ 12: 'boost' }, [[150, 0]]).n * 1.25, 'hits heat it up');
+  assert.ok(run({ 12: 'hotbarrel' }, [[2000, 0]]).heat < 0.05, 'nothing in reach: no heat');
 });
 
 test('Shrapnel Shells: a rocket hit sprays shellShards shards that skip the enemy it hit', () => {

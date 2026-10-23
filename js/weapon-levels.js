@@ -359,7 +359,7 @@ export const TRANSFORMS = {
     18: tf('strike', 'Thunderstrike', 'Every Tesla Arc chain ends in a lightning strike from above on its last target and anything right beside it, stronger the more enemies the chain hit.')
   },
   singularity: {
-    6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two singularities at once: the second goes after enemies on your far side.'),
+    6: tf('twin', 'Twin Singularities', 'Vortex Singularity launches two singularities at once that fly apart: the second goes after enemies on your far side, or fans out beside the first.'),
     12: tf('aftershock', 'Aftershock Collapse', 'Vortex Singularity pulls from further out and collapses twice: a tighter second implosion follows.'),
     18: tf('cascade', 'Hawking Cascade', 'Collapsing Vortex Singularities spit out three mini-singularities that drift onto nearby enemies and implode in turn.')
   },
@@ -575,7 +575,7 @@ export const BT_MIDDLE_TRANSFORM_CHANCE = 0.5;
 export const EXTRA_TRANSFORMS = {
   blaster: [
     { id: 'slug', home: 6, name: 'Tracer Slugs', summary: 'Every fourth Autocannon shot is a heavy tracer slug: a big, hot bolt that hits far harder and punches through two more enemies.' },
-    { id: 'hotbarrel', home: 12, name: 'Hot Barrel', summary: 'Keep the Autocannon firing and its barrel heats up, firing faster and faster (up to +60%) as the bolts glow from cyan to white-hot orange.' }
+    { id: 'hotbarrel', home: 12, name: 'Hot Barrel', summary: 'Every Autocannon bolt that hits heats the barrel: it fires faster and faster (up to +60%) as the bolts glow from cyan to white-hot orange. Misses and lulls cool it off.' }
   ],
   rockets: [
     { id: 'shrapnel', home: 6, name: 'Shrapnel Shells', summary: 'Every Rocket Pod blast sprays a ring of jagged shrapnel that tears through the enemies around it.' },

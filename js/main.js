@@ -544,6 +544,8 @@ export class Game {
     this.missileTimer = 0;
     this.lightningTimer = 0;
     this.singularityTimer = 0;
+    this.barrelHeat = 0; // Hot Barrel
+    this.barrelSinceHit = Infinity;
     this.helixAngle = 0;
     this.orbitalAngle = 0;
     this.bladeFlingTimer = this.bladeNovaTimer = undefined;
@@ -3227,6 +3229,7 @@ export class Game {
         if (e.dead) continue;
         // Pierce falloff: the first enemy takes full damage, each one behind it TUNING.pierceFalloff of the last.
         const pierceMult = Math.pow(TUNING.pierceFalloff ?? 0.7, b.hitEnemies.size);
+        if (b.bx?.hot) BTX.hotBoltHit(this, b); // Hot Barrel: a landed bolt stokes the barrel
         b.hitEnemies.add(e);
         b.pierce--;
         const hx = x0 + (b.x - x0) * hit.t;
@@ -3262,7 +3265,7 @@ export class Game {
       }
       if (!blocked && b.pierce > 0 && b.life > 0 && b.x >= 10 && b.x <= this.worldWidth - 10 && b.y >= 10 && b.y <= this.worldHeight - 10) {
         this.bullets.push(b);
-      }
+      } else if (b.bx?.hot) BTX.hotBoltMiss(this, b); // gone without a hit: the barrel vents
     }
   }
 
@@ -3462,7 +3465,8 @@ export class Game {
     const sideY = Math.cos(p.angle);
     const vel = projectileSpeedMult(p); // Velocity Coils: faster bolts, same reach
     const speed = p.stats.bulletSpeed * vel;
-    for (const stream of prismStreams(blasterStreams(p, b))) {
+    const streams = prismStreams(blasterStreams(p, b));
+    for (const stream of streams) {
       const a = p.angle + stream.angle;
       const noseX = p.x + Math.cos(a) * 16 + sideX * stream.lateral;
       const noseY = p.y + Math.sin(a) * 16 + sideY * stream.lateral;
@@ -3481,7 +3485,7 @@ export class Game {
         ...flak,
         ricochet: b.t8 ? 1 : 0,
         arcRounds: b.t12
-      }, slug));
+      }, slug, streams.length));
     }
 
     if (p.weapons.pulsarHelix) {
@@ -3791,13 +3795,14 @@ export class Game {
     const target = this.findNearestEnemy(p.x, p.y);
     const angle = target ? Math.atan2(target.y - p.y, target.x - p.x) : p.angle;
     // Twin Singularities: the second core heads for the nearest enemy on the far side (over 100 degrees
-    // from the first) so the two pulls never half-overlap; with nobody back there it stacks on the first.
+    // from the first); with nobody back there the pair fans out W.twinFan rad either side of the aim, so
+    // the two cores always fly apart and read as two (never stacked on one spot).
     const count = W.singularityCount(b);
     const angles = [angle];
     if (count > 1) {
       const far = this.findNearestEnemyAway(p.x, p.y, angle, 1.75, 700);
       if (far) angles.push(Math.atan2(far.y - p.y, far.x - p.x));
-      else angles.push(angle);
+      else angles.splice(0, 1, angle - W.twinFan, angle + W.twinFan);
     }
     const pullRadius = singularityPullRadius(p, b) * (count > 1 ? W.twinPullScale : 1);
     const life = W.singularityLife(b);
@@ -4054,6 +4059,7 @@ export class Game {
       sg.vx *= 0.985;
       sg.vy *= 0.985;
       sg.life -= dt;
+      if (!sg.mini) this.separateSingularity(sg, i);
       BTX.singularityAccretion(this, sg, dt);
 
       const imploding = sg.life <= SINGULARITY_IMPLODE_TIME;
@@ -4091,6 +4097,24 @@ export class Game {
         this.collapseSingularity(sg);
         this.singularities.splice(i, 1);
       }
+    }
+  }
+
+  // Full singularity cores never pull each other (the pull above only drags enemies) and never merge: a
+  // core that drifts within W.twinMinSeparation px of another is eased back out (a share of the gap per
+  // tick, so a fresh pair glides apart from the ship instead of popping) and a pair stays two.
+  separateSingularity(sg, i) {
+    const min = W.twinMinSeparation;
+    for (let j = 0; j < i; j++) {
+      const o = this.singularities[j];
+      if (o.mini) continue;
+      let dx = sg.x - o.x, dy = sg.y - o.y;
+      let d = Math.hypot(dx, dy);
+      if (d >= min) continue;
+      if (d < 1e-6) { dx = Math.cos(i); dy = Math.sin(i); d = 1; }
+      const push = (min - d) * 0.06;
+      sg.x += dx / d * push; sg.y += dy / d * push;
+      o.x -= dx / d * push; o.y -= dy / d * push;
     }
   }
 
@@ -5543,9 +5567,9 @@ export class Game {
 
     // 3. Primary Weapon Firing
     const shouldFire = !jumping && (this.autoFire || this.mouse.down || touchAiming || (gp && (Math.abs(gp.aimX) > 0 || Math.abs(gp.aimY) > 0)));
-    if (!shouldFire && this.barrelHeat) BTX.hotBarrelRate(this, dt, false, weaponBuild(p, 'blaster')); // Hot Barrel cools off
+    const hotRate = this.barrelHeat || shouldFire ? BTX.hotBarrelRate(this, dt, weaponBuild(p, 'blaster')) : 1; // Hot Barrel cools between hits
     if (shouldFire && ownsWeapon(p, 'blaster')) {
-      this.fireAccumulator += dt * blasterFireRate(p) * BTX.hotBarrelRate(this, dt, true, weaponBuild(p, 'blaster'));
+      this.fireAccumulator += dt * blasterFireRate(p) * hotRate;
       while (this.fireAccumulator >= 1) {
         this.fireAccumulator -= 1;
         this.firePrimaryWeapon();
