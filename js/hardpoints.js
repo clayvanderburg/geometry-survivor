@@ -1,7 +1,7 @@
 // Ship hardpoints (docs/SHIP_HARDPOINTS.md): every equipped weapon shows a small part on the hull in its
 // weapon colour, and its shots, lobs and deploys leave from that part.
 //
-// Built-in mounts keep the place a weapon already fires from (turret, claws, wingtips, the hull rim, the
+// Built-in mounts keep the place a weapon already fires from (turret, drills, wingtips, the hull rim, the
 // hub under the turret) and take no hardpoint. Everything else fills one of five hardpoints in slot order:
 // its preferred type first (port before starboard), then the fallback order. Assignments live on the
 // player (visual state, never read by the simulation) and stay put when another weapon is discarded.
@@ -34,7 +34,7 @@ export const RIM = 0.95; // sprayer nozzles ride the hull rim here (flamethrower
 export const MOUNTS = {
   blaster: { builtin: 'turret', part: 'barrels', color: '#00f3ff' },
   raillance: { builtin: 'turret', part: 'rail', color: '#9d8cff' },
-  harpoon: { builtin: 'claws', part: null, color: '#ffcc00' },
+  harpoon: { builtin: 'drills', part: null, color: '#ffcc00' },
   rockets: { builtin: 'wingtips', part: 'pod', color: '#ff9b3d' },
   flamethrower: { builtin: 'rim', part: 'nozzle', color: '#ffa526' },
   cryospray: { builtin: 'rim', part: 'nozzle', color: '#8fe8ff' },
@@ -90,7 +90,7 @@ export function wingLean(bank, side) {
   return 1 - (lean > 0 ? 0.26 : -0.06) * Math.abs(lean);
 }
 
-// Hull-space position of a weapon's mount (px), or null for weapons with no single mount (claws, rim,
+// Hull-space position of a weapon's mount (px), or null for weapons with no single mount (drills, rim,
 // hub). Rocket Pods return the port pod unless `side` is 1.
 export function mountLocal(p, id, out = {}, side = -1) {
   const m = MOUNTS[id];
@@ -390,7 +390,7 @@ function variantOf(part, fx) {
 }
 
 // Hardpoint parts, rocket pods and sprayer nozzles, drawn in the hull frame (ship-renderer.js calls
-// this after the carapace, before the claws and turret). `bank` squashes the wing parts with the wings.
+// this after the carapace, before the drills and turret). `bank` squashes the wing parts with the wings.
 export function drawHardpoints(ctx, p, bank, now = 0) {
   const owned = ownedWeapons(p);
   const r = p.radius || 15;

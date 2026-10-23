@@ -18,7 +18,7 @@ hardpoint:
 |---|---|---|
 | Autocannon | central turret | twin barrels (the turret that's drawn today; hidden if you discard it) |
 | Rail Lance | central turret | one long rail between the barrels; it glows violet as it charges |
-| Drill Driver | the claws | unchanged |
+| Drill Driver | the drills | unchanged |
 | Rocket Pods | wingtips (−0.5r, ±1.7r), where rockets already launch | a two-tube pod on each wingtip |
 | Flame / Cryo / Acid Sprayer | the hull rim at 0.95r, where the nozzles already spin | a nozzle head that rides the rim at its real angle, with a heat glow while it sprays |
 | Orbit Blades | ring under the turret hub | a toothed ring that turns with the blades |
@@ -28,7 +28,7 @@ hardpoint:
 | Hardpoint | Position | Notes |
 |---|---|---|
 | SPINE | (−0.6r, 0) | rear of the carapace, over the inner facet; the turret draws on top of it |
-| PORT / STBD ROOT | (0.3r, ±0.98r) | on the carapace's wide shoulders, just behind the claw arms |
+| PORT / STBD ROOT | (0.3r, ±0.98r) | on the carapace's wide shoulders, just behind the drill arms |
 | PORT / STBD WING | (−0.3r, ±1.2r) | on the wing rib, inboard of the rocket pods |
 
 Each weapon has a preferred hardpoint type. Weapons fill hardpoints in slot order. Each takes the side with fewer parts (port on a tie), so the ship stays
@@ -82,7 +82,7 @@ because that is information.
 
 - Parts are solid weapon-colour bodies with dark (`#051024`) detail lines, drawn 1.25×: at 6–9 px a filled shape reads through the hull's glow where an outline is lost. They sit
   inside the hull outline, so the silhouette, the shield outline and the hitbox (`shipHull`) are unchanged.
-- They draw after the hull and before the turret and claws, so the turret and drills always read on top.
+- They draw after the hull and before the turret and drills, so the turret and drills always read on top.
 - Wing hardpoints and rocket pods scale with the bank, so they lean with the wings.
 - I'll check the ship at gameplay zoom with 1, 3 and 5 weapons, with screenshots in the PR. With 1 weapon the
   ship looks like today's, plus one part.
