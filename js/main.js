@@ -83,6 +83,7 @@ import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WA
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import { UnlockTracker, unlockOverride } from './weapon-unlocks.js';
+import { SpaceBackdrop } from './space-backdrop.js';
 import { attachSaves } from './save-setup.js';
 import { UnlockUI } from './unlock-ui.js';
 import { WeaponRange } from './weapon-range.js';
@@ -7205,8 +7206,14 @@ export class Game {
     // Afterglow fades per unit time (half per 60 Hz tick). The 0.38 floor keeps high-refresh displays
     // from stacking redrawn glow too bright while still giving them longer trails than before.
     const fade = Math.max(0.38, 1 - Math.pow(0.5, (this.frameSeconds ?? 1 / 60) * 60));
-    ctx.fillStyle = `rgba(3, 4, 11, ${fade})`;
-    ctx.fillRect(0, 0, this.width, this.height);
+    // The fade goes toward deep space (js/space-backdrop.js: starfield, nebula, a far planet), drawn in
+    // place of the flat fill; headless (no canvas) it stays the flat fill.
+    this.backdrop ||= new SpaceBackdrop();
+    this.backdrop.update(Math.min(0.1, this.frameSeconds ?? 1 / 60));
+    if (!this.backdrop.draw(ctx, { camX: this.camX, camY: this.camY, w: this.width, h: this.height, rs, alpha: fade, ship: this.player, worldW: this.worldWidth, worldH: this.worldHeight })) {
+      ctx.fillStyle = `rgba(3, 4, 11, ${fade})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
 
     ctx.save();
     let offsetX = -this.camX;
