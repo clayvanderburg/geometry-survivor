@@ -12,10 +12,11 @@
 // Grenades live in a fixed pool (nothing is allocated while throwing or simulating them) and are
 // simulated only from Game.update, so pause, hit-stop and slow-mo freeze them with the rest of the world.
 // Damage goes through Game.damageEnemiesInRadius / hitEnemy; bomblets and clouds run in weapon-fx.js.
-import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, grenadeBlastRadius, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild, weaponElement } from './weapon-levels.js';
 import { wellPullScale } from './gravity.js';
 import { isDeployableTarget } from './deployables.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Sticky Plasma, Plasma Geyser
 
 // Element look per grenade element, with the blast / cloud hue. Plasma is the plain one.
 export const GRENADE_ELEMENTS = {
@@ -25,6 +26,7 @@ export const GRENADE_ELEMENTS = {
   corrode: { id: 'corrode', label: 'CORROSIVE', hue: 100 },
   shock: { id: 'shock', label: 'SHOCK', hue: 62 }
 };
+import { kickMount, mountWorld } from './hardpoints.js';
 
 // The grenade's element: the one its element card locked in, or plasma when it has none.
 export function grenadeElement(p) {
@@ -104,6 +106,7 @@ export class Grenades {
         continue;
       }
       g.armedT += dt;
+      if (g.stuck) BTX.grenadeRide(g);
       if (g.armedT >= g.fuse) {
         // Swap-remove keeps live grenades packed; `g` keeps its data until the slot is reused.
         this.items[i] = this.items[this.count - 1];
@@ -181,7 +184,8 @@ export class Grenades {
     const damage = weaponDamage(p, 'grenade', b);
     const el = grenadeElement(p);
     const emp = !!p.weapons.empGrenades && (p.weapons.lightning || 0) > 0;
-    const lead = W.grenadeFlight * 60 * LEAD;
+    const flight = W.grenadeFlight / projectileSpeedMult(p); // Velocity Coils: a quicker lob
+    const lead = flight * 60 * LEAD;
     for (let k = 0; k < n && this.count < POOL; k++) {
       let tx, ty;
       if (found > 0) {
@@ -210,14 +214,17 @@ export class Grenades {
         dy *= range / dist;
       }
       const g = this.items[this.count++];
-      g.sx = g.x = p.x + (dx / dist) * (p.radius || 15) * 0.6;
-      g.sy = g.y = p.y + (dy / dist) * (p.radius || 15) * 0.6;
+      // Lobbed from the launcher (hardpoints.js); the landing spot is unchanged.
+      const tube = mountWorld(p, 'grenades', this._tube ||= {}, game);
+      g.sx = g.x = tube.x;
+      g.sy = g.y = tube.y;
+      kickMount(p, 'grenades', Math.atan2(dy, dx));
       g.lx = p.x + dx;
       g.ly = p.y + dy;
       g.z = 0;
       g.h = 34 + Math.min(range, Math.hypot(dx, dy)) * 0.18;
       g.age = 0;
-      g.flight = W.grenadeFlight * (0.9 + 0.2 * (k / Math.max(1, n - 1)));
+      g.flight = flight * (0.9 + 0.2 * (k / Math.max(1, n - 1)));
       g.fuse = b.t12 ? W.gravityFuse : W.grenadeFuse;
       g.armedT = 0;
       g.landed = false;
@@ -228,6 +235,9 @@ export class Grenades {
       g.cluster = b.t4;
       g.cloud = b.t8;
       g.gravity = b.t12;
+      g.sticky = !!b.tf?.has('sticky');
+      g.geyser = !!b.tf?.has('geyser');
+      g.stuck = null;
       g.emp = emp;
       g.pullRadius = radius * W.gravityPullRadiusMult;
       g.spin = Math.random() * Math.PI * 2;
@@ -235,8 +245,9 @@ export class Grenades {
     for (let k = 0; k < MAX_TARGETS; k++) this.targets[k] = this.picks[k] = null;
     this.throws++;
     const fx = game.particles;
-    fx.spawnFlash?.(p.x, p.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
-    fx.spawnShockwave(p.x, p.y, 26 + Math.min(n, 7) * 2, el.hue, 2, 0.2);
+    const tube = mountWorld(p, 'grenades', this._tube ||= {}, game);
+    fx.spawnFlash?.(tube.x, tube.y, 16 + Math.min(n, 7) * 2, el.hue, 0.12);
+    fx.spawnShockwave(tube.x, tube.y, 26 + Math.min(n, 7) * 2, el.hue, 2, 0.2);
     if (game.sound.playGrenadeThrow) game.sound.playGrenadeThrow();
     else game.sound.playLaser?.(0.42);
   }
@@ -251,6 +262,7 @@ export class Grenades {
     fx.spawnShockwave(g.x, g.y, 20, g.hue, 1.6, 0.18);
     fx.spawnExplosionSparks(g.x, g.y, 3, g.hue, 1, 4, 1.4);
     if (g.cluster) this.cluster(game, g);
+    BTX.grenadeStick(game, g);
     if (g.gravity) {
       fx.spawnShockwave(g.x, g.y, g.pullRadius, g.hue, 2.5, g.fuse, true);
       if (this.throwSound !== this.throws) {
@@ -306,6 +318,7 @@ export class Grenades {
         damage: g.damage * W.cloudShare / ticks, hue: g.hue, source: 'grenade', look: g.element });
     }
     if (g.emp) this.emp(game, g);
+    BTX.grenadeBlast(game, g);
   }
 
   // Cluster Grenades: the grenade splits as it lands and the bomblets hop onto enemies just outside its

@@ -93,7 +93,7 @@ test('grenade cards preview their own stat; the NEW WEAPON pick and Breakthrough
   const t = describeBreakthrough(p, 'grenades', 6, 'transform');
   assert.equal(t.name, 'Cluster Grenades');
   assert.equal(t.category, 'PLASMA GRENADES');
-  assert.match(t.headline, /\+22% DPS/);
+  assert.ok(Math.abs(t.dpsGain - 0.22) < 0.01 && t.rows[0].id === 'potentialDps' && !/DPS/.test(t.headline));
 });
 
 test('grenade element cards are offered with grenades, lock the element for good, and leave with the weapon', () => {

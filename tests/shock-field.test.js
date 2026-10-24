@@ -62,12 +62,12 @@ function addFoe(g, { d, a = 0, hp = 1e7, ...extra }) {
 // Step only the field (no enemy movement, spawns or other weapons), like Game.update does each tick.
 const tick = (g, n = 1) => { for (let i = 0; i < n; i++) g.shockField.update(DT, g); };
 
-test('Electric Shield Field is a DEFENSIVE slot weapon: source shockfield, ELECTRIC + AREA tags, four single-stat cards', () => {
+test('Electric Shield Field is a DEFENSIVE slot weapon: source shockfield, SHOCK + AREA tags, four single-stat cards', () => {
   const w = WEAPON_BY_ID.shockfield;
   assert.equal(w.name, 'Electric Shield Field');
   assert.equal(w.category, 'DEFENSIVE');
   assert.deepEqual(w.tagSources, ['shockfield']);
-  assert.deepEqual(WEAPON_TAGS.shockfield, ['electric', 'area']);
+  assert.deepEqual(WEAPON_TAGS.shockfield, ['shock', 'area']);
   for (const t of weaponTags('shockfield')) assert.ok(TAG_INFO[t], t);
   assert.equal(SOURCE_WEAPON.shockfield, 'shockfield');
   assert.ok(DAMAGE_SOURCE_COLORS.shockfield);
@@ -222,10 +222,10 @@ test('Breakthroughs: each transform adds exactly BT_TRANSFORM_DPS; the cards des
   }
   const { p } = fieldGame({ cards: [['shockfield_damage', 5]] });
   const card = describeBreakthrough(p, 'shockfield', 6, 'transform');
-  assert.equal(card.id, 'bt:shockfield:6:transform');
+  assert.equal(card.id, 'bt:shockfield:6:lash');
   assert.equal(card.name, 'Arc Lash');
   assert.equal(card.category, 'SHOCK FIELD');
-  assert.match(card.headline, /\+22% DPS/);
+  assert.ok(Math.abs(card.dpsGain - 0.22) < 0.01 && card.rows[0].id === 'potentialDps' && !/DPS/.test(card.headline));
   assert.ok(card.rows.some((r) => r.id === 'fieldLash'));
   assert.ok(describeBreakthrough(p, 'shockfield', 12, 'transform').rows.some((r) => r.id === 'fieldDashRefund'));
   assert.ok(describeBreakthrough(p, 'shockfield', 18, 'transform').rows.some((r) => r.id === 'fieldClap'));

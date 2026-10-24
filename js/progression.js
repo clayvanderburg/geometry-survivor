@@ -1,5 +1,6 @@
 // Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
 import { MODE_IDS, normalizeMode } from './modes.js';
+import { normalizeUnlocks } from './unlock-goals.js';
 
 const SAVE_KEY = 'vectra_survivor_save_v2';
 // Local highscores ("MY RUNS") kept per game mode.
@@ -45,12 +46,12 @@ const BASE_META_UPGRADES = [
   { id: 'xpGain', cat: 'economy', name: 'Geom Resonator', icon: '⬡', color: '#6dff9e', stat: 'XP gain', per: 0.01, fmt: 'pct', maxRank: 30, baseCost: 12, growth: 1.13 },
   { id: 'goldGain', cat: 'economy', name: 'Gold Assayer', icon: '◆', color: '#ffcc00', stat: 'gold from gold veins', per: 0.04, fmt: 'pct', maxRank: 20, baseCost: 15, growth: 1.15 },
   { id: 'startGold', cat: 'economy', name: 'Prospector Stake', icon: '⛁', color: '#ffe14d', stat: 'starting gold', per: 2, fmt: 'flat', maxRank: 15, baseCost: 18, growth: 1.17 },
-  { id: 'mining', cat: 'economy', name: 'Rotary Claw Drive', icon: '⚙', color: '#00f3ff', stat: 'mining speed', per: 0.015, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
+  { id: 'mining', cat: 'economy', name: 'Rotary Drill Drive', icon: '⚙', color: '#00f3ff', stat: 'mining speed', per: 0.015, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
   // UTILITY
   { id: 'luck', cat: 'utility', name: 'Quantum Fortune', icon: '🍀', color: '#9d4edd', stat: 'luck', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 15, growth: 1.15 },
   { id: 'magnet', cat: 'utility', name: 'Vacuum Array', icon: '⊛', color: '#b6ff4a', stat: 'pickup radius', per: 0.02, fmt: 'pct', maxRank: 25, baseCost: 9, growth: 1.13 },
   { id: 'reroll', cat: 'utility', name: 'Probability Engine', icon: '↻', color: '#ffcc00', stat: 'reroll cost', per: -0.02, fmt: 'pct', maxRank: 15, baseCost: 22, growth: 1.17 },
-  { id: 'miningReach', cat: 'utility', name: 'Extended Claws', icon: '⟟', color: '#7fd4ff', stat: 'drill reach', per: 0.02, fmt: 'pct', maxRank: 15, baseCost: 12, growth: 1.15 },
+  { id: 'miningReach', cat: 'utility', name: 'Extended Drills', icon: '⟟', color: '#7fd4ff', stat: 'drill reach', per: 0.02, fmt: 'pct', maxRank: 15, baseCost: 12, growth: 1.15 },
   { id: 'bombs', cat: 'utility', name: 'Supernova Reserve', icon: '✸', color: '#ffcc00', stat: 'starting Supernova bomb', per: 1, fmt: 'flat', maxRank: 3, baseCost: 400, growth: 3 }
 ];
 // An upgrade's growth steepened so its last rank costs about ARMORY_TOP_COST.
@@ -67,7 +68,7 @@ export const ARMORY_REVISIONS = Object.freeze({
   // v0.43.3, toward a full Armory of ~3x power (see armoryPower):
   damage: 2, // +1.5% per rank (was +1%)
   maxHp: 2, // +2 shield per rank (was +1.5)
-  // v0.44.0: Rotary Claw Drive +1.5% per rank (was +3%); mining was stacking to ~6x.
+  // v0.44.0: Rotary Drill Drive (then Rotary Claw Drive) +1.5% per rank (was +3%); mining was stacking to ~6x.
   mining: 2
 });
 const MAX_REFUND_NOTES = 24;
@@ -280,6 +281,7 @@ export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
     devWipe: DEV_WIPE.id, // the wipe check has run for this save (see DEV_WIPE)
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
+    unlocks: normalizeUnlocks(source.unlocks), // weapon unlock goals and progress (js/weapon-unlocks.js)
     highscores: keptScores.length ? topRunsPerMode(keptScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
   };
 }
@@ -294,6 +296,7 @@ export class ProgressionManager {
     try { revsChanged = JSON.stringify(JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')?.armoryRevs) !== JSON.stringify(this.data.armoryRevs); } catch { /* unreadable */ }
     if (this.data.armoryResetNotice || wipeCheckPending || revsChanged) this.save();
     this.onExternalChange = null;
+    this.onSave = null;
     // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
     globalThis.addEventListener?.('storage', (e) => {
       if (e.key !== SAVE_KEY) return;
@@ -318,6 +321,13 @@ export class ProgressionManager {
     } catch (e) {
       console.warn('Failed to save data:', e);
     }
+    this.onSave?.(); // the cloud save notes the change (js/cloud-save.js)
+  }
+
+  // Replaces the whole save (a restored cloud save, an import or a merge: js/save-ui.js).
+  replaceData(save) {
+    this.data = normalizeSave(save);
+    this.save();
   }
 
   setPilotName(name) {

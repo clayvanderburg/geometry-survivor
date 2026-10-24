@@ -1964,61 +1964,76 @@ export class SoundEngine {
     }
   }
 
-  // Claw Harpoon throw: a metal "chunk" as the claw kicks out of its socket, a cable zip falling in pitch
-  // and a short band-passed whoosh.
-  playHarpoonLaunch() {
+  // Drill Driver launch: a short rising spin-up whine as the drill winds up, then a punchy "chunk" (the
+  // launch thunk) with a sub kick under it and a bright whoosh as it leaves. Twin Drills (bits 2) sound heavier.
+  playDrillLaunch(bits = 1) {
     if (!this.enabled || !this.ctx) return;
-    const dur = 0.22;
-    if (!this.claimVoice('harpoonLaunch', 70, 2, dur)) return;
+    const dur = 0.2;
+    if (!this.claimVoice('drillLaunch', 70, 2, dur)) return;
     const t = this.ctx.currentTime;
-    const chunk = this.ctx.createOscillator();
-    const chunkGain = this.ctx.createGain();
-    chunk.type = 'square';
-    chunk.frequency.setValueAtTime(190 * (0.92 + Math.random() * 0.16), t); // a little pitch variety per throw
-    chunk.frequency.exponentialRampToValueAtTime(70, t + 0.06);
-    chunkGain.gain.setValueAtTime(0.05, t);
-    chunkGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-    chunk.connect(chunkGain);
-    chunkGain.connect(this.sfxGain);
-    chunk.start(t);
-    chunk.stop(t + 0.08);
-
-    const zip = this.ctx.createOscillator();
-    const zipGain = this.ctx.createGain();
-    zip.type = 'sawtooth';
-    zip.frequency.setValueAtTime(1500 + Math.random() * 150, t + 0.01);
-    zip.frequency.exponentialRampToValueAtTime(420, t + dur);
-    zipGain.gain.setValueAtTime(0.0001, t);
-    zipGain.gain.exponentialRampToValueAtTime(0.022, t + 0.02);
-    zipGain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    zip.connect(zipGain);
-    zipGain.connect(this.sfxGain);
-    zip.start(t);
-    zip.stop(t + dur + 0.01);
-
-    const noise = this.noiseSource();
+    const pitch = 0.92 + Math.random() * 0.16; // a little pitch variety per shot
+    const heavy = bits > 1 ? 1.25 : 1;
+    const tone = (type, f0, f1, vol, len, at = 0) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t + at);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + at + len);
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(vol, t + at + Math.min(0.01, len / 3));
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + len);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + len + 0.01);
+    };
+    // Spin-up whine: a sawtooth climbing fast through a band-pass (the motor winding up).
+    const whine = this.ctx.createOscillator();
     const band = this.ctx.createBiquadFilter();
+    const wg = this.ctx.createGain();
+    whine.type = 'sawtooth';
+    whine.frequency.setValueAtTime(520 * pitch, t);
+    whine.frequency.exponentialRampToValueAtTime(2300 * pitch, t + 0.045);
     band.type = 'bandpass';
-    band.frequency.setValueAtTime(900, t);
-    band.frequency.exponentialRampToValueAtTime(2600, t + dur);
-    band.Q.value = 1.2;
-    const whoosh = this.ctx.createGain();
-    whoosh.gain.setValueAtTime(0.0001, t);
-    whoosh.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
-    whoosh.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    noise.connect(band);
-    band.connect(whoosh);
-    whoosh.connect(this.sfxGain);
-    noise.start(t, Math.random() * 0.6, dur + 0.02);
+    band.frequency.value = 1800;
+    band.Q.value = 1.4;
+    wg.gain.setValueAtTime(0.0001, t);
+    wg.gain.exponentialRampToValueAtTime(0.03, t + 0.03);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    whine.connect(band);
+    band.connect(wg);
+    wg.connect(this.sfxGain);
+    whine.start(t);
+    whine.stop(t + 0.07);
+    // The punch: a square chunk and a sine sub drop right as the whine peaks.
+    tone('square', 210 * pitch, 70, 0.055 * heavy, 0.07, 0.04);
+    tone('sine', 140 * pitch, 42, 0.11 * heavy, 0.13, 0.04);
+    // Whoosh of the bit leaving.
+    const noise = this.noiseSource();
+    const nb = this.ctx.createBiquadFilter();
+    nb.type = 'bandpass';
+    nb.frequency.setValueAtTime(2400, t + 0.04);
+    nb.frequency.exponentialRampToValueAtTime(900, t + dur);
+    nb.Q.value = 1.1;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t + 0.04);
+    ng.gain.exponentialRampToValueAtTime(0.05, t + 0.06);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(nb);
+    nb.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t + 0.04, Math.random() * 0.6, dur);
   }
 
-  // Claw Harpoon impacts: 'enemy' a dull thunk, 'hook' a thunk with a bright clamp click, 'rock' a short
-  // gritty crunch as the bit bites in, 'bedrock' a ringing metal clang.
-  playHarpoonHit(kind = 'enemy') {
+  // Drill Driver impacts: 'enemy' a screw-through (a gritty buzz chattering at ~60 Hz over a dull thunk),
+  // 'rock' a crunch with chip ticks, 'bedrock' a ringing clang, 'ricochet' a bright falling ping,
+  // 'lodge' a tight click-thunk as a Detonator Bit screws in.
+  playDrillHit(kind = 'enemy') {
     if (!this.enabled || !this.ctx) return;
-    const dur = kind === 'bedrock' ? 0.35 : 0.14;
-    if (!this.claimVoice(`harpoon_${kind}`, kind === 'enemy' ? 45 : 70, 2, dur)) return;
+    const dur = kind === 'bedrock' ? 0.35 : kind === 'enemy' ? 0.12 : 0.14;
+    if (!this.claimVoice(`drill_${kind}`, kind === 'enemy' ? 45 : 70, 2, dur)) return;
     const t = this.ctx.currentTime;
+    const pitch = 0.9 + Math.random() * 0.2;
     const tone = (type, f0, f1, vol, len, at = 0) => {
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -2038,11 +2053,21 @@ export class SoundEngine {
       tone('sine', 240, 120, 0.05, 0.08);
       return;
     }
+    if (kind === 'ricochet') {
+      tone('triangle', 2600 * pitch, 1300 * pitch, 0.03, 0.09);
+      tone('square', 3400 * pitch, 3000 * pitch, 0.008, 0.03);
+      return;
+    }
+    if (kind === 'lodge') {
+      tone('square', 1800 * pitch, 1200, 0.02, 0.025);
+      tone('sine', 300 * pitch, 90, 0.07, 0.09, 0.015);
+      return;
+    }
     if (kind === 'rock') {
       const noise = this.noiseSource();
       const low = this.ctx.createBiquadFilter();
       low.type = 'lowpass';
-      low.frequency.setValueAtTime(1800, t);
+      low.frequency.setValueAtTime(2200, t);
       low.frequency.exponentialRampToValueAtTime(300, t + dur);
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(0.09, t);
@@ -2051,133 +2076,43 @@ export class SoundEngine {
       low.connect(g);
       g.connect(this.sfxGain);
       noise.start(t, Math.random() * 0.6, dur + 0.02);
-      tone('square', 110, 60, 0.03, 0.08);
+      tone('square', 110 * pitch, 60, 0.03, 0.08);
+      tone('square', 2900 * pitch, 2500, 0.01, 0.015, 0.03); // chips
+      tone('square', 3300 * pitch, 2900, 0.008, 0.015, 0.07);
       return;
     }
-    tone('sine', 230, 70, 0.08, 0.1);
-    if (kind === 'hook') tone('square', 2400, 1700, 0.018, 0.03, 0.01);
-  }
-
-  // Claw Harpoon tether whipping taut: a plucked steel-cable twang (a falling triangle with its octave) and
-  // a bright tick. Heavier and lower with a catch on the line.
-  playHarpoonSnap(loaded = false) {
-    if (!this.enabled || !this.ctx) return;
-    const dur = 0.22;
-    if (!this.claimVoice('harpoonSnap', 60, 2, dur)) return;
-    const t = this.ctx.currentTime;
-    const f = (loaded ? 150 : 210) * (0.94 + Math.random() * 0.12);
-    for (const [mult, vol] of [[1, 0.06], [2.02, 0.025]]) {
-      const o = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(f * mult * 1.25, t);
-      o.frequency.exponentialRampToValueAtTime(f * mult, t + 0.03);
-      g.gain.setValueAtTime(vol * (loaded ? 1.3 : 1), t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(g);
-      g.connect(this.sfxGain);
-      o.start(t);
-      o.stop(t + dur + 0.01);
-    }
-    const tick = this.ctx.createOscillator();
-    const tg = this.ctx.createGain();
-    tick.type = 'square';
-    tick.frequency.setValueAtTime(3100, t);
-    tg.gain.setValueAtTime(0.015, t);
-    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
-    tick.connect(tg);
-    tg.connect(this.sfxGain);
-    tick.start(t);
-    tick.stop(t + 0.03);
-  }
-
-  // Claw Harpoon winch: one ratchet click (the reel calls it every ~60 ms while it winds in).
-  playHarpoonReel() {
-    if (!this.enabled || !this.ctx) return;
-    const dur = 0.025;
-    if (!this.claimVoice('harpoonReel', 40, 1, dur)) return;
-    const t = this.ctx.currentTime;
-    const noise = this.noiseSource();
-    const band = this.ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = 3200 + Math.random() * 600;
-    band.Q.value = 3;
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.035, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    noise.connect(band);
-    band.connect(g);
-    g.connect(this.sfxGain);
-    noise.start(t, Math.random() * 0.8, dur + 0.01);
-  }
-
-  // A reeled-in catch crushed in the other claw: a heavy low crunch.
-  playHarpoonCrush() {
-    if (!this.enabled || !this.ctx) return;
-    const dur = 0.2;
-    if (!this.claimVoice('harpoonCrush', 80, 2, dur)) return;
-    const t = this.ctx.currentTime;
-    const noise = this.noiseSource();
-    const low = this.ctx.createBiquadFilter();
-    low.type = 'lowpass';
-    low.frequency.setValueAtTime(2400, t);
-    low.frequency.exponentialRampToValueAtTime(220, t + dur);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    noise.connect(low);
-    low.connect(g);
-    g.connect(this.sfxGain);
-    noise.start(t, Math.random() * 0.6, dur + 0.02);
-    const o = this.ctx.createOscillator();
-    const og = this.ctx.createGain();
-    o.type = 'square';
-    o.frequency.setValueAtTime(130 * (0.9 + Math.random() * 0.2), t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.15);
-    og.gain.setValueAtTime(0.05, t);
-    og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
-    o.connect(og);
-    og.connect(this.sfxGain);
-    o.start(t);
-    o.stop(t + 0.17);
-  }
-
-  // Seismic Slam: the claws snap shut in a thud (sub drop under a clack).
-  playHarpoonSlam() {
-    if (!this.enabled || !this.ctx) return;
-    const dur = 0.3;
-    if (!this.claimVoice('harpoonSlam', 120, 1, dur)) return;
-    const t = this.ctx.currentTime;
-    const sub = this.ctx.createOscillator();
-    const subGain = this.ctx.createGain();
-    sub.type = 'sine';
-    sub.frequency.setValueAtTime(120, t);
-    sub.frequency.exponentialRampToValueAtTime(34, t + 0.26);
-    subGain.gain.setValueAtTime(0.14, t);
-    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
-    sub.connect(subGain);
-    subGain.connect(this.sfxGain);
-    sub.start(t);
-    sub.stop(t + 0.3);
-    const clack = this.ctx.createOscillator();
-    const clackGain = this.ctx.createGain();
-    clack.type = 'square';
-    clack.frequency.setValueAtTime(700, t);
-    clack.frequency.exponentialRampToValueAtTime(240, t + 0.04);
-    clackGain.gain.setValueAtTime(0.04, t);
-    clackGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-    clack.connect(clackGain);
-    clackGain.connect(this.sfxGain);
-    clack.start(t);
-    clack.stop(t + 0.06);
+    // Screw-through: a sawtooth buzz gated by a fast square LFO (the threads chattering) over a thunk.
+    const buzz = this.ctx.createOscillator();
+    const lfo = this.ctx.createOscillator();
+    const gate = this.ctx.createGain();
+    const lfoDepth = this.ctx.createGain();
+    const bg = this.ctx.createGain();
+    buzz.type = 'sawtooth';
+    buzz.frequency.setValueAtTime(320 * pitch, t);
+    buzz.frequency.exponentialRampToValueAtTime(190 * pitch, t + dur);
+    lfo.type = 'square';
+    lfo.frequency.value = 62;
+    lfoDepth.gain.value = 0.5;
+    gate.gain.value = 0.5;
+    lfo.connect(lfoDepth);
+    lfoDepth.connect(gate.gain);
+    bg.gain.setValueAtTime(0.035, t);
+    bg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    buzz.connect(gate);
+    gate.connect(bg);
+    bg.connect(this.sfxGain);
+    buzz.start(t);
+    lfo.start(t);
+    buzz.stop(t + dur + 0.01);
+    lfo.stop(t + dur + 0.01);
+    tone('sine', 230 * pitch, 70, 0.07, 0.09);
   }
 
   // Drill Spin: a rising drill whine with a gritty buzz for the length of the spin.
-  playHarpoonSpin(len = 0.12) {
+  playDrillSpin(len = 0.12) {
     if (!this.enabled || !this.ctx) return;
     const dur = Math.max(0.06, Math.min(0.4, len));
-    if (!this.claimVoice('harpoonSpin', 60, 1, dur)) return;
+    if (!this.claimVoice('drillSpin', 60, 1, dur)) return;
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -2196,6 +2131,104 @@ export class SoundEngine {
     g.connect(this.sfxGain);
     o.start(t);
     o.stop(t + dur + 0.01);
+  }
+
+  // Drill Driver reel: one burst of winch whir (a band-passed saw buzz), called every ~70 ms while a drill
+  // reels in; it climbs in pitch as the drill nears the arm (k 0..1).
+  playDrillReel(k = 0) {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.06;
+    if (!this.claimVoice('drillReel', 40, 1, dur)) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const band = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    const f = (180 + 220 * k) * (0.95 + Math.random() * 0.1);
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.linearRampToValueAtTime(f * 1.08, t + dur);
+    band.type = 'bandpass';
+    band.frequency.value = 900 + 700 * k;
+    band.Q.value = 2.2;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.03, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(band);
+    band.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + dur + 0.01);
+    const noise = this.noiseSource();
+    const hb = this.ctx.createBiquadFilter();
+    hb.type = 'bandpass';
+    hb.frequency.value = 3000 + Math.random() * 600;
+    hb.Q.value = 3;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.02, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    noise.connect(hb);
+    hb.connect(ng);
+    ng.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.8, 0.03);
+  }
+
+  // Drill Driver dock: the drill slams back onto its arm: a ringing metal clank (two inharmonic triangle
+  // partials over a square click) with a low thump under it.
+  playDrillDock() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.22;
+    if (!this.claimVoice('drillDock', 70, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const pitch = 0.94 + Math.random() * 0.12;
+    const tone = (type, f0, f1, vol, len) => {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + len);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + len);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + len + 0.01);
+    };
+    tone('triangle', 1250 * pitch, 1230 * pitch, 0.04, 0.2);
+    tone('triangle', 1870 * pitch, 1850 * pitch, 0.022, 0.14);
+    tone('square', 2600 * pitch, 1800, 0.016, 0.02);
+    tone('sine', 150 * pitch, 60, 0.09, 0.09);
+  }
+
+  // Detonator Bit: a sharp crack over a heavy low crunch and a sub thud.
+  playDrillBlast() {
+    if (!this.enabled || !this.ctx) return;
+    const dur = 0.3;
+    if (!this.claimVoice('drillBlast', 100, 2, dur)) return;
+    const t = this.ctx.currentTime;
+    const noise = this.noiseSource();
+    const low = this.ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.setValueAtTime(3200, t);
+    low.frequency.exponentialRampToValueAtTime(200, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    noise.connect(low);
+    low.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(t, Math.random() * 0.6, dur + 0.02);
+    const sub = this.ctx.createOscillator();
+    const sg = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(110 * (0.9 + Math.random() * 0.2), t);
+    sub.frequency.exponentialRampToValueAtTime(32, t + 0.25);
+    sg.gain.setValueAtTime(0.15, t);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.27);
+    sub.connect(sg);
+    sg.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.28);
   }
 
   // Graviton Mortar volley (weapon id quake; method names kept): a deep "thoom" with a chest-deep recoil
@@ -2427,6 +2460,17 @@ export class SoundEngine {
     gain.connect(this.sfxGain);
     osc.start(t);
     osc.stop(t + 0.05);
+  }
+
+  // Escort drone docks in its formation slot: a soft servo click under a bright two-note chirp that climbs
+  // a pentatonic step per slot, so a squadron docking one by one plays a little rising run.
+  playDroneDock(slot = 0) {
+    if (!this.enabled || !this.ctx) return;
+    if (!this.claimVoice('droneDock', 40, 3, 0.16)) return;
+    const f = 1046 * Math.pow(2, [0, 3, 5, 7, 10][slot % 5] / 12) * (0.98 + Math.random() * 0.04);
+    this.noiseHit(0, 0.03, 0.05, 3200, 1.5);
+    this.tone(f, 0, 0.06, 0.035, 'square', f * 1.02);
+    this.tone(f * 1.5, 0.045, 0.1, 0.03, 'triangle', f * 1.52);
   }
 
   // Short band-passed noise burst (clanks, chatter, servo hiss) at `start` s from now.
@@ -2958,6 +3002,22 @@ export class SoundEngine {
     this.tone(2200 * k, 0.3, 0.09, 0.025, 'square', 2600 * k);
   }
 
+  // A Lancer winds up: a buzzing charge that rises in pitch over the whole aim, a hard click when the
+  // line locks, and a sharp high double-blip for the last flash before it fires. Rate-limited so a
+  // staggered pair still reads as two distinct charges, never a wall of buzz.
+  playLanceCharge(dur = 1.35, lockAt = 0.5, flashAt = 0.25) {
+    if (!this.enabled || !this.ctx) return;
+    const now = performance.now();
+    if (now - (this.lastLanceCharge || 0) < 250) return;
+    this.lastLanceCharge = now;
+    const k = 0.95 + Math.random() * 0.1;
+    this.tone(150 * k, 0, dur, 0.03, 'sawtooth', 640 * k);
+    this.tone(300 * k, 0.05, dur - 0.05, 0.018, 'square', 1280 * k);
+    this.tone(1900 * k, dur - lockAt, 0.05, 0.045, 'square', 1500 * k);
+    this.tone(2600 * k, dur - flashAt, 0.06, 0.04, 'square');
+    this.tone(2600 * k, dur - flashAt + 0.11, 0.06, 0.04, 'square');
+  }
+
   // The blink itself: a quick downward zip, so the arrival lands with a snap.
   playBlinkWarp() {
     if (!this.enabled || !this.ctx) return;
@@ -3104,6 +3164,27 @@ export class SoundEngine {
     [392.0, 523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.tone(f, i * 0.06, 0.32, 0.15));
     for (const f of [523.25, 659.25, 783.99, 1046.5]) this.tone(f, 0.32, 1.2, 0.08, 'sawtooth');
     this.sparkle(0.4, 6);
+  }
+
+  // Weapon unlocked (js/unlock-ui.js): a lock bolt snapping open (noise click + metal clank), a sub punch,
+  // then a bright rising run into a held chord. Pitch varies a touch each time.
+  playWeaponUnlock() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const v = 1 + (Math.random() - 0.5) * 0.04;
+    this.tone(1800 * v, 0, 0.035, 0.09, 'square', 900 * v); // the bolt click
+    this.tone(620 * v, 0.03, 0.12, 0.08, 'triangle', 410 * v); // metal clank
+    this.tone(92, 0.02, 0.45, 0.32, 'sine', 38); // sub punch
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.tone(f * v, 0.1 + i * 0.05, 0.24, 0.12, 'triangle'));
+    for (const f of [523.25, 783.99, 1046.5, 1568]) this.tone(f * v, 0.36, 1.1, 0.06, 'sawtooth');
+    this.sparkle(0.42, 5);
+  }
+
+  // The game-over reveal opening: a swelling riser into a low boom (each card adds playWeaponUnlock).
+  playWeaponReveal(count = 1) {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    this.tone(110, 0, 0.5, 0.08, 'sawtooth', 440);
+    this.tone(55, 0.18, 0.9, 0.3, 'sine', 30);
+    this.sparkle(0.2, Math.min(6, 3 + count));
   }
 
   // Menu focus move (controller d-pad) and menu confirm.

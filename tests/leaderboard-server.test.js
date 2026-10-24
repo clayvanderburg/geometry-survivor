@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createScoresHandler, LIMITS, BOARD_KEY, VERSION_BOARD_PREFIX, RATE_PREFIX, CENSORED_NAME, containsProfanity, checkPlausibility,
+  GET_CDN_CACHE, nonceId, rateBucket, rateKey, backoffMs, hashIp,
   validateRun, rankEntries, maxScoreFor, boardKey, checkVersion, checkMode, PURGES, MIGRATION_PREFIX
 } from '../netlify/lib/leaderboard.mjs';
 import { sanitizeCallsign, BOARD_VERSIONS } from '../js/leaderboard-rules.js';
@@ -39,6 +40,10 @@ class FakeStore {
   async list({ prefix = '' } = {}) {
     await null;
     return { blobs: [...this.blobs].filter(([key]) => key.startsWith(prefix)).map(([key, v]) => ({ key, etag: v.etag })), directories: [] };
+  }
+  async delete(key) {
+    await null;
+    this.blobs.delete(key);
   }
   put(key, value) {
     this.writes++;
@@ -84,13 +89,19 @@ function post(handler, body, { ip = freshIp(), contentType = 'application/json',
 const get = (handler, version = GAME_VERSION) => handler(new Request('https://game.example/api/scores' + (version === null ? '' : `?version=${encodeURIComponent(version)}`)), { ip: '1.1.1.1' });
 const body = (res) => res.json();
 
-test('GET on an empty store returns an empty board, uncached', async () => {
+test('GET on an empty store returns an empty board, cached briefly on the CDN but never in the browser', async () => {
   const { handler } = setup();
   const res = await get(handler);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('cache-control'), 'public, max-age=0, must-revalidate');
+  assert.equal(res.headers.get('netlify-cdn-cache-control'), GET_CDN_CACHE);
+  assert.match(GET_CDN_CACHE, /s-maxage=\d+, stale-while-revalidate=\d+/);
+  assert.equal(res.headers.get('netlify-vary'), 'query=version|mode', 'every board is its own cache entry');
   assert.equal(res.headers.get('access-control-allow-origin'), null, 'same origin: no CORS headers');
-  assert.deepEqual(await body(res), { version: GAME_VERSION, mode: 'normal', current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE });
+  assert.deepEqual(await body(res), { version: GAME_VERSION, mode: 'normal', current: GAME_VERSION, versions: [], entries: [], total: 0, boardSize: LIMITS.BOARD_SIZE, updated: null });
+  // Errors and POSTs are never cached.
+  assert.equal((await get(handler, '9.9.9-nope')).headers.get('cache-control'), 'no-store');
+  assert.equal((await post(handler, run())).headers.get('cache-control'), 'no-store');
 });
 
 test('POST stores a run and GET returns it with name, score, wave, level, time, date and version', async () => {
@@ -137,6 +148,21 @@ test('board keeps only the top N, GET returns the public top slice, and a low ru
   assert.equal(low.rank, null);
   assert.equal(store.writes, writes + 1, 'only the rate-limit blob is written for an off-board run');
   assert.equal(low.allTimeRank, null);
+});
+
+test('GET and POST return the whole board: up to 100 runs (the GLOBAL list scrolls through them)', async () => {
+  assert.equal(LIMITS.PUBLIC_SIZE, LIMITS.BOARD_SIZE);
+  assert.equal(LIMITS.BOARD_SIZE, 100);
+  const { handler, store } = setup();
+  let last;
+  for (let i = 1; i <= 104; i++) last = await body(await post(handler, run({ name: `P${i}`, score: 1_000_000 + i * 1000 })));
+  assert.equal(store.board().length, 100);
+  const pub = await body(await get(handler, 'all'));
+  assert.equal(pub.entries.length, 100);
+  assert.equal(pub.total, 100);
+  assert.equal(pub.entries[0].name, 'P104');
+  assert.equal(pub.entries[99].name, 'P5');
+  assert.equal(last.entries.length, 100, 'the submit answer carries the whole board too');
 });
 
 test('one callsign holds at most MAX_PER_NAME places', async () => {
@@ -270,7 +296,7 @@ test('rate limit: one submission per IP per cooldown, keyed by a hashed IP', asy
   const keys = [...store.blobs.keys()].filter(k => k.startsWith(RATE_PREFIX));
   assert.equal(keys.length, 2);
   for (const key of keys) {
-    assert.match(key, /^ratelimit\/[0-9a-f]{32}$/);
+    assert.match(key, /^ratelimit\/\d+\/[0-9a-f]{32}$/, 'keyed by window, then hashed IP');
     assert.ok(!key.includes('203.0.113.9'), 'raw IPs are never stored');
   }
   // Without context.ip the Netlify client-IP header is used.
@@ -333,16 +359,95 @@ test('a board that never stops changing gives up with 503 instead of looping', a
   assert.equal(store.board().length, 0, 'nothing reaches the all-time board either');
 });
 
-test('a contended all-time board does not fail a run that already made its version board', async () => {
+test('a board that stays contended answers 503, frees the cooldown, and the retry (same nonce) lands once', async () => {
   const { handler, store } = setup();
+  const nonce = 'nonce-contended-0001';
+  let contended = true;
   store.beforeSet = async (key) => {
-    if (key === BOARD_KEY) store.put(BOARD_KEY, { version: 1, entries: [] });
+    if (contended && key === BOARD_KEY) store.put(BOARD_KEY, { version: 1, entries: [] });
   };
-  const res = await post(handler, run());
-  assert.equal(res.status, 201);
-  const out = await body(res);
-  assert.deepEqual([out.rank, out.allTimeRank], [1, null]);
+  const first = await post(handler, run({ nonce }), { ip: '203.0.113.80' });
+  assert.equal(first.status, 503);
+  assert.equal(first.headers.get('retry-after'), '2');
+  assert.equal((await body(first)).partial, true, 'it made its version board, not the all-time one');
   assert.deepEqual(store.board(CURRENT_KEY).map(e => e.name), ['NOVA']);
+  contended = false;
+  const retry = await post(handler, run({ nonce }), { ip: '203.0.113.80' });
+  assert.equal(retry.status, 201, 'the cooldown slot was given back');
+  const out = await body(retry);
+  assert.deepEqual([out.rank, out.allTimeRank], [1, 1]);
+  assert.equal(store.board(CURRENT_KEY).length, 1, 'the retry replaced its own copy');
+  assert.equal(store.board().length, 1);
+  assert.equal(out.id, nonceId(nonce));
+});
+
+test('a contended version board answers 503 and frees the cooldown', async () => {
+  const { handler, store } = setup({ limits: { ...LIMITS, WRITE_ATTEMPTS: 3 } });
+  let writes = 0;
+  store.beforeSet = async (key) => {
+    if (key === CURRENT_KEY) { writes++; store.put(CURRENT_KEY, { version: 1, entries: [] }); }
+  };
+  const res = await post(handler, run(), { ip: '203.0.113.81' });
+  assert.equal(res.status, 503);
+  assert.equal((await body(res)).partial, false);
+  assert.equal(writes, 3, 'WRITE_ATTEMPTS tries');
+  store.beforeSet = null;
+  assert.equal((await post(handler, run(), { ip: '203.0.113.81' })).status, 201);
+});
+
+test('POST returns every board the run landed on, each stamped with its last write', async () => {
+  const { handler, advance } = setup();
+  await post(handler, run({ name: 'FIRST', score: 3_000_000 }));
+  advance(5000);
+  const out = await body(await post(handler, run({ name: 'SECOND' })));
+  assert.equal(out.updated, '2026-10-17T12:00:05.000Z');
+  assert.deepEqual(out.entries.map(e => e.name), ['FIRST', 'SECOND']);
+  assert.deepEqual(out.allTime.entries.map(e => e.name), ['FIRST', 'SECOND']);
+  assert.equal(out.allTime.total, 2);
+  assert.equal(out.allTime.updated, out.updated);
+  const got = await body(await get(handler, 'all'));
+  assert.equal(got.updated, out.updated, 'GET carries the same stamp, so the game can tell a stale CDN copy');
+  // A pre-versioning run only has the all-time board, which is its own board.
+  const legacy = await body(await post(handler, run({ name: 'OLD', version: undefined })));
+  assert.equal(legacy.allTime, undefined);
+});
+
+test('a run nonce gives a stable, opaque id; malformed nonces are ignored', async () => {
+  const { handler, store, advance } = setup();
+  const nonce = 'abcDEF0123456789-_xyz';
+  const a = await body(await post(handler, run({ nonce })));
+  assert.equal(a.id, nonceId(nonce));
+  assert.ok(!a.id.includes(nonce), 'the public id never reveals the nonce');
+  advance(LIMITS.COOLDOWN_MS + 1);
+  const b = await body(await post(handler, run({ nonce })));
+  assert.equal(b.id, a.id);
+  assert.equal(store.board().length, 1, 'a resubmitted run replaces itself');
+  for (const bad of ['short', 'x'.repeat(65), 'has spaces in it ok', 12345678901234567, null]) {
+    const out = await body(await post(handler, run({ nonce: bad, name: 'BAD' })));
+    assert.match(out.id, /^run-\d+$/, `nonce ${JSON.stringify(bad)} is ignored`);
+  }
+});
+
+test('rate-limit windows: the previous window still counts, older windows and legacy keys are swept', async () => {
+  const { handler, store, advance } = setup();
+  const ip = '203.0.113.90';
+  const hash = hashIp(ip, 'vexolith-survivor');
+  const t0 = Date.parse('2026-10-17T12:00:00Z');
+  // Stale blobs: a pre-window key and windows far in the past.
+  store.put(RATE_PREFIX + 'f'.repeat(32), { t: 1 });
+  store.put(rateKey(rateBucket(t0) - 5, 'a'.repeat(32)), { t: 1 });
+  store.put(rateKey(rateBucket(t0) - 2, 'b'.repeat(32)), { t: 1 });
+  // A submission 5 s before a window boundary, then one 5 s after it: still inside the cooldown.
+  const toEdge = LIMITS.RATE_BUCKET_MS - (t0 % LIMITS.RATE_BUCKET_MS) - 5000;
+  advance(toEdge);
+  assert.equal((await post(handler, run(), { ip })).status, 201);
+  advance(10_000);
+  assert.equal((await post(handler, run({ name: 'EDGE' }), { ip })).status, 429, 'a window boundary is no loophole');
+  const keys = [...store.blobs.keys()].filter(k => k.startsWith(RATE_PREFIX)).sort();
+  const now = rateBucket(t0 + toEdge + 10_000);
+  assert.ok(keys.every(k => Number(k.split('/')[1]) >= now - 1), 'only the current and previous windows are left: ' + keys);
+  assert.ok(keys.includes(rateKey(now - 1, hash)));
+  assert.ok(backoffMs(20) <= LIMITS.BACKOFF_CAP_MS && backoffMs(0, LIMITS, () => 0.999) < LIMITS.BACKOFF_BASE_MS);
 });
 
 test('a broken store returns 500 JSON, not an exception', async () => {

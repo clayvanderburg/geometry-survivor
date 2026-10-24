@@ -1,6 +1,6 @@
 // Procedural sound cues for the major bosses (js/bosses-major.js): entrances, attack tells, phase changes
-// and death blasts. Bosses queue cues on the EnemyManager (boss-hazards.js `cue`); the game plays them
-// through playBossCue on the SoundEngine's SFX bus. Each cue is a few oscillators and filtered noise
+// and death blasts. Bosses queue cues on the EnemyManager (queueBossCue); the game plays them each tick
+// (playBossCues) through playBossCue on the SoundEngine's SFX bus. Each cue is a few oscillators and filtered noise
 // (no samples), rate-limited per cue, and quieter the further the boss is from the ship.
 
 const MIN_GAP = 0.06; // s between two plays of the same cue
@@ -172,4 +172,25 @@ export function playBossCue(game, c) {
   out.connect(s.sfxGain);
   play(s, out);
   setTimeout(() => { try { out.disconnect(); } catch {} }, 3000);
+}
+
+// A sound cue for the game to play; `extra` may carry shake / hitStop. Field Guide previews just drop them.
+export function queueBossCue(m, name, at = null, extra = null) {
+  const q = (m.bossCues ||= []);
+  if (q.length < 32) q.push({ cue: name, x: at?.x, y: at?.y, ...extra });
+}
+
+// Game side, once per tick after the enemy update: play the queued cues. Weight: phase changes and
+// deaths shake the screen and hold a beat (hit-stop), scaled down with distance from the ship.
+export function playBossCues(game, play = playBossCue) {
+  const cues = game.enemyManager?.bossCues;
+  if (!cues?.length) return;
+  const p = game.player;
+  for (const c of cues) {
+    play(game, c);
+    const near = p && Number.isFinite(c.x) ? Math.max(0, 1 - Math.hypot(c.x - p.x, c.y - p.y) / 1400) : 1;
+    if (c.shake && near > 0) game.addShake?.(c.shake * near);
+    if (c.hitStop && near > 0.3) game.requestHitStop?.(c.hitStop);
+  }
+  cues.length = 0;
 }

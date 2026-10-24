@@ -14,7 +14,7 @@ import { isBossKind, bossDef, bossHp, BOSS_TIER, steerOrbiter, steerSpear, steer
 import { VETERAN_TYPES, VETERAN_SPEED, veteranTier } from './wave-plan.js';
 import { bossRam, drawBossRam } from './boss-ram.js';
 import { BossTelegraphs } from './boss-telegraphs.js';
-import { tickBossHazards, drawBossHazards } from './boss-hazards.js';
+import { drawLanceAim, updateLanceGate, LANCE } from './lancers.js';
 import { bindSegment, followLeader, traceSegment, traceSerpentHead } from './serpents.js';
 
 export const BOSS_NAME = 'PRISMATIC DREADNOUGHT';
@@ -178,7 +178,8 @@ export class EnemyManager {
     this.discarded = [];
     // Gunner plasma orbs (pooled). The game moves them and resolves hits against the ship.
     this.enemyBullets = new EnemyBulletPool();
-    // Telegraphed boss area attacks (js/boss-telegraphs.js): timed and drawn here, hits resolved by the game.
+    // Telegraphed boss area attacks, callouts and staged death fx (js/boss-telegraphs.js): timed and drawn
+    // here, hits resolved by the game.
     this.bossTelegraphs = new BossTelegraphs();
     // The game's SoundEngine (null in unit tests and Field Guide previews): bosses play their cues on it.
     this.sound = null;
@@ -210,7 +211,6 @@ export class EnemyManager {
     this.discarded = [];
     this.enemyBullets.clear();
     this.bossTelegraphs.clear();
-    if (this.bossHazards) this.bossHazards.length = 0;
   }
 
   // Queue an enemy with a brief neon materialization warning ring (Geometry Wars style).
@@ -534,6 +534,8 @@ export class EnemyManager {
     env.width = width;
     env.height = height;
     env.sound = this.sound;
+    // Lancers share a budget so a pack never fires all at once (js/lancers.js LANCE.maxActive / stagger).
+    env.lanceGate = updateLanceGate(this.lanceGate || (this.lanceGate = { wait: 0, active: 0 }), this.enemies, dt);
     const tick = this.tick++;
     const steer = this.steer;
 
@@ -777,7 +779,6 @@ export class EnemyManager {
       }
     }
     this.bossTelegraphs.update(dt, env);
-    tickBossHazards(this, dt, player, particles, grid); // major bosses' telegraphed blasts, lines and rings
   }
 
   // Soft hull-to-hull separation for the archetypes in archetypes.js (written into env.sepX/sepY).
@@ -1009,7 +1010,6 @@ export class EnemyManager {
       }
     }
 
-    drawBossHazards(ctx, this, camX, camY, viewW, viewH);
     // Boss attack telegraphs, then hostile plasma orbs, ride above the hulls so a crowd never hides them.
     this.bossTelegraphs.draw(ctx, camX, camY, viewW, viewH);
     this.enemyBullets.draw(ctx, camX, camY, viewW, viewH);
@@ -1017,17 +1017,24 @@ export class EnemyManager {
     ctx.restore();
   }
 
-  // Telegraphs that must read over everything, drawn after the particles (Game.draw): Blinker landing marks.
+  // Telegraphs that must read over everything, drawn after the particles (Game.draw): Blinker landing
+  // marks and Lancer aim lines (Eclipse Twins included).
   drawTopTelegraphs(ctx, camX = 0, camY = 0, viewW = Infinity, viewH = Infinity) {
     let any = false;
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
-      if (e.type !== 'blinker' || e.state !== 'telegraph') continue;
-      const pad = e.radius * 6 + 20;
-      const minX = Math.min(e.x, e.blinkX) - pad;
-      const maxX = Math.max(e.x, e.blinkX) + pad;
-      const minY = Math.min(e.y, e.blinkY) - pad;
-      const maxY = Math.max(e.y, e.blinkY) + pad;
+      const blink = e.type === 'blinker' && e.state === 'telegraph';
+      const lance = e.lanceState === 'aim';
+      if (!blink && !lance) continue;
+      // Bounds: the blink mark, or the lance line plus its sweep wedge (a box round the full reach).
+      const reach = lance ? LANCE.length + e.radius + 20 : 0;
+      const pad = lance ? reach : e.radius * 6 + 20;
+      const tx = blink ? e.blinkX : e.x;
+      const ty = blink ? e.blinkY : e.y;
+      const minX = Math.min(e.x, tx) - pad;
+      const maxX = Math.max(e.x, tx) + pad;
+      const minY = Math.min(e.y, ty) - pad;
+      const maxY = Math.max(e.y, ty) + pad;
       if (maxX < camX || maxY < camY || minX > camX + viewW || minY > camY + viewH) continue;
       if (!any) {
         ctx.save();
@@ -1035,7 +1042,8 @@ export class EnemyManager {
         ctx.lineCap = 'round';
         any = true;
       }
-      drawBlinkTelegraph(ctx, e);
+      if (blink) drawBlinkTelegraph(ctx, e);
+      else drawLanceAim(ctx, e);
     }
     if (any) ctx.restore();
   }

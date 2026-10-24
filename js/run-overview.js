@@ -8,7 +8,7 @@
 // PERMANENT = RUN START vs BASE (Void Armory) and THIS RUN = TOTAL vs RUN START (cards picked this run).
 import { TUNING } from './config.js';
 import { runStartPlayer, runUpgradeLines } from './upgrades.js';
-import { WEAPON_SCALING as W, blasterFireRate, baseDamage } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, blasterFireRate, baseDamage, dashCooldownFor } from './weapon-scaling.js';
 import { weaponBuild, weaponElement, ELEMENT_INFO } from './weapon-levels.js';
 import { WEAPON_BY_ID, PASSIVE_BY_ID, ownedWeapons, ownedPassives, weaponLevel, weaponSlots } from './loadout.js';
 import { weaponPotentialDps, bonusLevels, bonusText, maxText } from './upgrade-cards.js';
@@ -36,7 +36,7 @@ export const STAT_GROUPS = [
       { id: 'critChance', label: 'Crit chance', kind: 'add', fmt: 'pct', get: (s) => Math.min(1, s.stats.critChance ?? 0) },
       { id: 'critDamage', label: 'Crit damage', kind: 'add', fmt: 'pct', get: (s) => s.stats.critDamage ?? 1.5 },
       { id: 'area', label: 'Area size', kind: 'add', fmt: 'pct', get: (s) => s.stats.areaMult ?? 1 },
-      ...['kinetic', 'explosive', 'electric'].map((tag) => ({
+      ...['kinetic', 'explosive'].map((tag) => ({
         id: `tag_${tag}`, label: `${tag[0].toUpperCase()}${tag.slice(1)} weapon damage`, kind: 'add', fmt: 'pct', get: (s) => s.stats.tagDamage?.[tag] ?? 1
       }))
     ]
@@ -53,14 +53,14 @@ export const STAT_GROUPS = [
       { id: 'moveSpeed', label: 'Move speed', kind: 'mult', fmt: 'num1', get: (s) => s.stats.moveSpeed },
       {
         id: 'dash', label: 'Dash cooldown', kind: 'add', fmt: 'sec', lower: true,
-        get: (s, t) => W.dashCooldown(s.weapons?.dashNova || 0, t.dashCooldownBase ?? 1.5) * (s.dashCooldownMult ?? 1)
+        get: (s, t) => dashCooldownFor(s, t.dashCooldownBase ?? 1.5)
       },
       // Phase Dash reach (Dash Extender cards x Afterburner Jets), as a multiple of the bare dash.
       { id: 'dashDistance', label: 'Dash distance', kind: 'mult', fmt: 'pct', get: (s) => W.dashDistanceMult(s.upgradeLevels?.dash_range || 0) * (s.dashDistanceMult ?? 1) }
     ]
   },
   {
-    id: 'drill', label: 'DRILL CLAWS', rows: [
+    id: 'drill', label: 'DRILLS', rows: [
       { id: 'miningSpeed', label: 'Drill speed', kind: 'mult', fmt: 'rate0', get: (s) => s.stats.miningSpeed },
       { id: 'miningRange', label: 'Drill reach', kind: 'mult', fmt: 'num0', get: (s) => s.stats.miningRange },
       { id: 'drillScale', label: 'Drill size', kind: 'mult', fmt: 'x', get: (s) => s.stats.drillScale }
@@ -264,7 +264,10 @@ export function damageHtml(runStats) {
 
 // Weapon slot chips (equipped weapons in their colour, free slots dashed): the HUD row and the
 // level-up screen's loadout strip.
-// `charges` ({ weaponId: 0..1 }, optional) adds a charge gauge under a chip (Electric Shield Field's recharge).
+// `charges` ({ weaponId: 0..1 | 'on' }, optional) adds a gauge along a chip's bottom edge: a number is a
+// timed weapon's progress to its next attack (READY once full; the HUD refreshes it live, main.js
+// refreshWeaponChips), 'on' a continuous weapon's steady ALWAYS ON bar. The Sentry Turret's chip also
+// carries pips for its held charges. Every chip names its weapon in data-wid.
 export function weaponChipsHtml(p, charges = null) {
   const owned = ownedWeapons(p);
   const chips = [];
@@ -281,9 +284,10 @@ export function weaponChipsHtml(p, charges = null) {
     const title = el ? `${w.name} (${ELEMENT_INFO[el.element].label} ${el.rank})` : w.name;
     const charge = charges?.[w.id];
     const gauge = typeof charge === 'number';
-    const cls = gauge ? ` charge${charge >= 1 ? ' ready' : ''}` : '';
+    const cls = gauge ? ` charge${charge >= 1 ? ' ready' : ''}` : charge === 'on' ? ' charge on' : '';
     const style = gauge ? `--wc:${w.color};--charge:${charge}` : `--wc:${w.color}`;
-    chips.push(`<span class="weapon-slot-chip${cls}" style="${style}" title="${esc(title)}">${w.hudName}${lv}${elTag}</span>`);
+    const pips = gauge && w.id === 'turret' ? ' <span class="chip-pips"></span>' : '';
+    chips.push(`<span class="weapon-slot-chip${cls}" style="${style}" title="${esc(title)}" data-wid="${w.id}">${w.hudName}${lv}${elTag}${pips}</span>`);
   }
   return chips.join('');
 }

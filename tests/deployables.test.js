@@ -24,8 +24,8 @@ const { DamageNumbers, DAMAGE_SOURCE_COLORS } = await import('../js/damage-numbe
 const { TUNING, DEFAULT_TUNING, TUNING_SCHEMA } = await import('../js/config.js');
 const { UPGRADE_POOL, applyUpgradeLevels, rollUpgrades } = await import('../js/upgrades.js');
 const { describeUpgrade } = await import('../js/upgrade-cards.js');
-const { WEAPON_SCALING: W } = await import('../js/weapon-scaling.js');
-const { levelBuild, weaponBuild, makeBuild } = await import('../js/weapon-levels.js');
+const { WEAPON_SCALING: W, DRONE_MAX, DRONE_START, POTENTIAL_DPS, LV1_TRIM, droneFrontFor, RATE_STEP, TURRET_RELOAD_TRIM } = await import('../js/weapon-scaling.js');
+const { levelBuild, weaponBuild, makeBuild, BT_TRANSFORM_DPS } = await import('../js/weapon-levels.js');
 const L = (id, lv = 1) => levelBuild(id, lv);
 
 const silent = new Proxy({}, { get: () => () => {} });
@@ -168,31 +168,114 @@ test('a second turret planted by a parked ship steps aside, but never into a roc
   assert.equal(b.target, target, 'and the new turret can shoot');
 });
 
-test('escort drones fly in formation behind the hull, fire drone bolts, and never target vortex portals', () => {
+// Ship heading +x: which drones fly ahead of the hull (the front pair) and which behind it (the back row).
+const formation = (g) => {
+  const d = g.deployables.drones.slice(0, g.deployables.droneCount);
+  return { front: d.filter((u) => u.x > g.player.x), back: d.filter((u) => u.x < g.player.x) };
+};
+
+test('escort drones fly in formation round the hull, fire drone bolts, and never target vortex portals', () => {
   const portal = enemy(2150, 2000, { type: 'blackhole', radius: 22 });
   const g = arena({ enemies: [portal] });
   assert.equal(isDeployableTarget(portal), false);
   g.player.weapons.drones = 3;
-  g.player.upgradeLevels.drones_wingmen = 2; // three drones in the V
+  g.player.upgradeLevels.drones_wingmen = 1; // the starting front pair and the back-row centre
   tick(g, 2);
   const d = g.deployables;
   assert.equal(d.droneCount, 3);
   assert.equal(d.droneCount, W.droneCount(weaponBuild(g.player, 'drones')));
   for (let i = 0; i < d.droneCount; i++) {
     const drone = d.drones[i];
-    assert.ok(drone.x < g.player.x, `drone ${i} trails behind a ship heading +x`);
-    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.5);
+    assert.ok(Math.hypot(drone.x - g.player.x, drone.y - g.player.y) < TUNING.droneFormationRadius * 1.6 + 6);
   }
+  const { front, back } = formation(g);
+  assert.equal(front.length, 2);
+  assert.equal(back.length, 1);
+  assert.ok(Math.abs(back[0].y - g.player.y) < 8, 'a lone back drone flies the centre slot');
+  assert.ok(front[0].y < g.player.y !== front[1].y < g.player.y, 'the front pair flanks the nose');
   assert.equal(g.bullets.length, 0, 'the only enemy is a portal');
 
   const target = enemy(2150, 2050);
   g.enemyManager.enemies.push(target);
   tick(g, 1);
   assert.ok(g.bullets.length >= 3);
-  assert.ok(g.bullets.every((b) => b.source === 'drone' && b.damage === 10 * W.droneDamageMult(weaponBuild(g.player, 'drones'))));
+  const build = weaponBuild(g.player, 'drones');
+  const lead = 10 * W.droneDamageMult(build), wing = 10 * W.droneWingDamageMult(build);
+  assert.ok(Math.abs(wing / lead - W.droneWingHitShare) < 1e-12, 'wingmen fly lighter guns than the flight lead');
+  const is = (x, v) => Math.abs(x / v - 1) < 1e-9;
+  assert.ok(g.bullets.every((b) => b.source === 'drone' && (is(b.damage, lead) || is(b.damage, wing))));
+  assert.ok(g.bullets.some((b) => is(b.damage, lead)) && g.bullets.some((b) => is(b.damage, wing)));
   g.player.upgradeLevels.drones_wingmen = 0;
   tick(g, DT);
-  assert.equal(d.droneCount, 1);
+  assert.equal(d.droneCount, DRONE_START, 'LV 1 flies the lead and one wingman');
+});
+
+test('escort drones start as a front pair at LV 1, and every slot sits 6 px roomier than its formation radius', () => {
+  assert.equal(DRONE_START, 2);
+  assert.equal(W.droneCount(levelBuild('drones', 1)), 2);
+  // Two drones share the same LV 1 potential one drone had: the start adds coverage, not a DPS jump.
+  assert.ok(Math.abs(POTENTIAL_DPS.drones(levelBuild('drones', 1)) - 3 * LV1_TRIM.drones) < 1e-9);
+  const g = arena();
+  g.player.weapons.drones = 1;
+  tick(g, 2);
+  const f = formation(g);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 0);
+  // Pair slot (0.55, ±1.05) of the 54 px radius, pushed 6 px out (± the 3 px bob).
+  const want = Math.hypot(0.55, 1.05) * TUNING.droneFormationRadius + 6;
+  for (const u of f.front) assert.ok(Math.abs(Math.hypot(u.x - g.player.x, u.y - g.player.y) - want) < 4, `drone at ${Math.hypot(u.x - g.player.x, u.y - g.player.y).toFixed(1)} px`);
+});
+
+test('escort drones: up to 5 from Wingmen (2 front, 3 behind); Escort Squadron adds 3 in the same balanced order (3 front, 5 behind)', () => {
+  // One fill order for every drone: front centre, front pair, back row to 3, front centre, back sides.
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8].map(droneFrontFor), [1, 2, 2, 2, 2, 3, 3, 3]);
+  const g = arena();
+  const docks = [];
+  g.sound = new Proxy({}, { get: (_, k) => (k === 'playDroneDock' ? (slot) => docks.push(slot) : () => {}) });
+  g.player.weapons.drones = 5;
+  g.player.upgradeLevels.drones_wingmen = 3;
+  tick(g, 2);
+  let f = formation(g);
+  assert.equal(g.deployables.droneCount, 5);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 3);
+  assert.deepEqual(docks, [0, 1, 2, 3, 4]);
+
+  // LV 6 Escort Squadron on the full 5: 3 more peel off one by one, to 8 (3 in front, 5 behind).
+  g.player.weapons.drones = 6;
+  g.player.breakthroughs = { drones: { 6: 'transform' } };
+  tick(g, DT);
+  assert.equal(g.deployables.droneCount, DRONE_MAX);
+  assert.equal(DRONE_MAX, 8);
+  assert.ok(g.deployables.drones[7].launch > g.deployables.drones[6].launch, 'the squadron launches one drone at a time');
+  tick(g, 2);
+  f = formation(g);
+  assert.equal(f.front.length, 3);
+  assert.equal(f.back.length, 5);
+  const y = (u) => u.y - g.player.y;
+  assert.ok(Math.abs(f.front.reduce((a, u) => a + y(u), 0)) < 12 && Math.abs(f.back.reduce((a, u) => a + y(u), 0)) < 12, 'both rows balanced port and starboard');
+  assert.ok(g.deployables.drones.slice(0, 8).every((u) => u.pop === 0 && u.docked));
+
+  // The squadron with no Wingmen ranks follows the same order: 5 drones are the front pair + 3 behind.
+  const s = arena();
+  s.player.weapons.drones = 6;
+  s.player.breakthroughs = { drones: { 6: 'transform' } };
+  tick(s, 2);
+  f = formation(s);
+  assert.equal(s.deployables.droneCount, 5);
+  assert.equal(f.front.length, 2);
+  assert.equal(f.back.length, 3);
+
+  // Drones past 8 never go to waste: their guns ride on the rest (a Replicator rank on a full squadron).
+  const over = makeBuild('drones', 10, { wingmen: 4 }, { 6: 'transform' });
+  assert.equal(W.droneSquad(over), 9);
+  assert.equal(W.droneCount(over), DRONE_MAX);
+  assert.ok(Math.abs(W.droneWingDamageMult(over) / W.droneDamageMult(over) - W.droneWingHitShare * 8 / 7) < 1e-12, 'the surplus gun rides on the 7 wingmen');
+  // The squadron is the same damage step as before: each extra drone is a wingman gun.
+  const five = makeBuild('drones', 10, { wingmen: 3 });
+  const five6 = makeBuild('drones', 10, { wingmen: 3 }, { 6: 'transform' });
+  assert.equal(W.droneCount(five6), 8);
+  assert.ok(Math.abs(POTENTIAL_DPS.drones(five6) / POTENTIAL_DPS.drones(five) - BT_TRANSFORM_DPS) < 1e-9);
 });
 
 test('deployables freeze under hit-stop and pause, and never join the enemy list', () => {
@@ -266,7 +349,7 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   const p = g.player;
   assert.equal(describeUpgrade(p, byId('mines')).headline, `PROXIMITY MINES // ${W.mineMaxActive(L('mines'))} ACTIVE`);
   assert.equal(describeUpgrade(p, byId('turret')).headline, `SENTRY TURRET // ${W.turretCharges(L('turret'))} CHARGES`);
-  assert.equal(describeUpgrade(p, byId('drones')).headline, '+1 ESCORT DRONE');
+  assert.equal(describeUpgrade(p, byId('drones')).headline, '+2 ESCORT DRONES');
   applyUpgradeLevels(p, byId('turret'));
   // A stat card shows only its own stat.
   const punch = describeUpgrade(p, byId('turret_pierce'));
@@ -275,7 +358,7 @@ test('deployable cards preview exact numbers and Siege Battery needs mines + tur
   assert.deepEqual(punch.rows[0], { id: 'turretPierce', label: 'Turret bolt pierce', before: '2', after: '3' });
   const bolts = describeUpgrade(p, byId('turret_redeploy'));
   assert.deepEqual(bolts.rows.map((r) => r.id), ['turretReload']);
-  assert.deepEqual(bolts.rows[0], { id: 'turretReload', label: 'Turret charge reload', before: '6.00s', after: '4.29s' });
+  assert.deepEqual(bolts.rows[0], { id: 'turretReload', label: 'Turret charge reload', before: '6.00s', after: `${(6 / (1 + RATE_STEP * TURRET_RELOAD_TRIM)).toFixed(2)}s` });
   applyUpgradeLevels(p, byId('drones'));
   assert.equal(describeUpgrade(p, byId('drones_wingmen')).headline, '+1 ESCORT DRONE');
   for (const id of ['mines', 'turret', 'drones', 'evo_siege']) {
@@ -373,7 +456,7 @@ test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
   assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
 });
 
-test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held charge; charges reload; a full bank overflows', () => {
+test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held charge; the charge that fills the bank drops at once', () => {
   const lv = L('turret');
   assert.equal(W.turretCharges(lv), 2);
   assert.equal(W.turretReload(lv), 6);
@@ -388,8 +471,8 @@ test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held char
   tick(parked, 6 - (W.turretStillTime + 0.05 + W.turretDropStill) + 0.05);
   assert.equal(parked.deployables.turretCount, 3, 'a reloaded charge goes straight down while you stand still');
 
-  // On the move nothing is planted while the bank is short of full, and a charge that comes back to a
-  // full bank deploys by itself.
+  // On the move: the first full bank stays held, and every reload that would fill the bank (or overfill it)
+  // deploys right away (v0.46, Clay: no full bank sitting a whole reload without a drop).
   const moving = arena({ enemies: [enemy(2300, 2000)] });
   moving.player.weapons.turret = 1;
   moving.player.vx = 3;
@@ -397,15 +480,27 @@ test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held char
   assert.equal(moving.deployables.turretCount, 0, 'moving: charges stay in the bank');
   assert.equal(moving.deployables.turretCharges, 2);
   tick(moving, 0.2);
-  assert.equal(moving.deployables.turretCount, 1, 'overflow: the reload past a full bank deploys');
+  assert.equal(moving.deployables.turretCount, 1, 'the reload past a full bank deploys');
   assert.equal(moving.deployables.turretCharges, 2);
+  // After a stand-still dump the bank refills on the move to max - 1, and the reload that would fill it drops.
+  const kite = arena({ enemies: [enemy(2300, 2000)] });
+  kite.player.weapons.turret = 1;
+  tick(kite, W.turretStillTime + W.turretDropStill + 0.1);
+  assert.equal(kite.deployables.turretCount, 2, 'stood still: both charges down');
+  kite.player.vx = 3;
+  tick(kite, 6);
+  assert.equal(kite.deployables.turretCharges, 1, 'one charge back: max - 1 is held');
+  assert.equal(kite.deployables.turretCount, 2);
+  tick(kite, 6); // the two planted turrets have broken down by now (10 s)
+  assert.equal(kite.deployables.turretCount, 1, 'the reload that fills the bank drops at once, no extra wait');
+  assert.equal(kite.deployables.turretCharges, 1, 'still one short of full');
 
   // A turret breaks down after its lifetime; Loosen Bolts reloads faster.
   tick(moving, 6);
   assert.equal(moving.deployables.turretCount, 2);
   tick(moving, 4.1);
   assert.equal(moving.deployables.turretCount, 1, 'the first expired after 10 s');
-  assert.ok(Math.abs(W.turretReload(makeBuild('turret', 3, { reload: 2 })) - 6 / 1.8) < 1e-9);
+  assert.ok(Math.abs(W.turretReload(makeBuild('turret', 3, { reload: 2 })) - 6 / (1 + 2 * RATE_STEP * TURRET_RELOAD_TRIM)) < 1e-9, 'Loosen Bolts ranks are trimmed (TURRET_RELOAD_TRIM)');
 });
 
 test('Sentry Turret: Extra Capacity adds a charge, Add Punch pierces, the HUD chip shows the bank', () => {

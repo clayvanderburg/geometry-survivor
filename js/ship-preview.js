@@ -1,6 +1,6 @@
 // Large animated ship for the title screen and the pause menu: the real crab ship art (ship-renderer.js)
 // drawn big into its own canvas, idling in place with its legs scuttling and drill-claws spinning. It
-// reads the live player each frame, so the drill size (Tectonic Claw Bore) and shield charge match the
+// reads the live player each frame, so the drill size (Tectonic Drill Bore) and shield charge match the
 // ship in the run. Drawn from Game.loop only while its canvas is on screen.
 import { drawCrabShip, drawPlayerShield } from './ship-renderer.js';
 

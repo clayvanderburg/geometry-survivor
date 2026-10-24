@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 // three Breakthroughs (Magnetic Rail, Ion Wake, Overload Shot) and the registries every weapon needs.
 const h = await import('../tools/balance/harness.mjs');
 const { WEAPON_SCALING: W, POTENTIAL_DPS, DPS_TARGET, LV1_TRIM, WEAPON_TAGS, TAG_INFO, SOURCE_WEAPON, WEAPON_CLASS, weaponDamage } = await import('../js/weapon-scaling.js');
+const { tfRealizedAt } = await import('../js/bt-calibration.js');
 const { STAT_CARDS, POWER_STATS, TRANSFORMS, ELEMENT_CARDS, BREAKTHROUGH_LEVELS, BT_TRANSFORM_DPS, makeBuild, levelBuild, weaponBuild } = await import('../js/weapon-levels.js');
 const { UPGRADE_BY_ID, applyUpgradeLevels, acquireWeapon } = await import('../js/upgrades.js');
 const { WEAPON_BY_ID, weaponTags } = await import('../js/loadout.js');
@@ -152,7 +153,7 @@ test('Magnetic Rail drags enemies near the line onto it while charging (bosses h
   assert.equal(foes[2].y - p.y, -200, 'out of reach');
   assert.equal(magnetScale({ isBoss: true }), 0);
   const plain = W.railDamageMult(makeBuild('raillance', 6));
-  assert.ok(near(W.railDamageMult(makeBuild('raillance', 6, {}, { 6: 'transform' })), plain * BT_TRANSFORM_DPS / W.magnetHitShare));
+  assert.ok(near(W.railDamageMult(makeBuild('raillance', 6, {}, { 6: 'transform' })), plain * BT_TRANSFORM_DPS / W.magnetHitShare / tfRealizedAt('raillance', 'magnet', 6)), 'and its card-bench calibration (bt-calibration.js)');
   // Playtest retune: the pull and the Ion Wake / Overload Shot are valued by what they realize in the card
   // bench (each about x1.22; all three ~x1.75 against ~x2.2 when valued as single hits).
   assert.deepEqual([W.magnetPull, W.magnetHitShare, W.wakeHitShare, W.overloadHitShare], [110, 1.3, 1.25, 1]);

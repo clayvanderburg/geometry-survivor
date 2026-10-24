@@ -40,7 +40,7 @@ function makePlayer() {
       bulletCount: 2, spreadAngle: 0.14, pierce: 1, damage: TUNING.baseDamage,
       magnetRadius: TUNING.magnetRadius, xpMultiplier: TUNING.xpMultiplier, luck: TUNING.baseLuck,
       coreDropMult: 1, miningSpeed: TUNING.miningSpeed, miningRange: TUNING.miningRange, drillScale: TUNING.drillScale,
-      critChance: TUNING.baseCritChance, critDamage: TUNING.baseCritDamage, tagDamage: { kinetic: 1, explosive: 1, electric: 1 }, areaMult: 1
+      critChance: TUNING.baseCritChance, critDamage: TUNING.baseCritDamage, tagDamage: { kinetic: 1, explosive: 1 }, areaMult: 1
     },
     weapons: {
       missiles: 0, orbitals: 0, lightning: 0, singularity: 0, shrapnel: 0, dashNova: 0, pulsarHelix: 0, stormProtocol: 0, tectonicBore: 0,
@@ -70,8 +70,9 @@ test('a supply-cache level is the starting level of the next level-up card and t
   const g = game();
   // Leave Prism Split as the only eligible upgrade so the cache must install it (the other Autocannon
   // cards are banished: maxing them would fill the weapon's LV 12 cap).
-  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
-  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID)].filter((id) => id !== 'multishot').map((id) => [id, true]));
+  // Replicator Array is banished too (maxed, it would add its streams to the Autocannon).
+  for (const u of UPGRADE_POOL) if (u.id !== 'multishot' && u.id !== 'replicator_array' && !STAT_CARD_BY_ID[u.id] && !ELEMENT_CARD_BY_ID[u.id]) g.player.upgradeLevels[u.id] = u.maxLevel;
+  g.player.banished = Object.fromEntries([...Object.keys(STAT_CARD_BY_ID), ...Object.keys(ELEMENT_CARD_BY_ID), 'replicator_array'].filter((id) => id !== 'multishot').map((id) => [id, true]));
 
   // Draws: 1x cache tier, Prism Split's shuffle score, then a lucky +2 level roll.
   withRandom([0.99, 0.5, 0.05], () => g.openRelicChest({ guaranteedSuper: false }));
@@ -94,7 +95,7 @@ test('a supply-cache level is the starting level of the next level-up card and t
   withRandom([], () => g.triggerLevelUp());
   assert.equal(g.state, 'UPGRADE');
   assert.equal(g.currentChoices[0].id, 'multishot');
-  const levelCard = elements.get('upgrade-choices').children[0];
+  const levelCard = g.choiceCardEls[0]; // the card itself (the grid holds card slots: card + LOCK / BANISH strip)
   assert.match(levelCard.innerHTML, /LV 3 → LV 4/);
   assert.deepEqual(describeUpgrade(g.player, g.currentChoices[0]).rows.find((r) => r.id === 'bulletCount'),
     { id: 'bulletCount', label: 'Projectiles', before: '6', after: '8' });
@@ -167,7 +168,7 @@ test('only stats that change are listed', () => {
   assert.deepEqual(describeUpgrade(p, byId('firerate')).rows.map((r) => r.id), ['fireRate']);
   // Every weapon stat card shows exactly one stat: its own.
   for (const id of ['missiles', 'singularity', 'orbitals', 'mines']) applyUpgradeLevels(p, byId(id));
-  for (const id of ['singularity_pull', 'singularity_cooldown', 'singularity_core', 'orbitals_size', 'mines_fuse', 'missiles_radius', 'missiles_reload']) {
+  for (const id of ['singularity_pull', 'singularity_cooldown', 'orbitals_size', 'mines_radius', 'missiles_radius', 'missiles_reload']) {
     assert.equal(describeUpgrade(p, byId(id)).rows.length, 1, id);
   }
   p.bombs = 9; // bomb cap: the magnet card must not promise a bomb
@@ -192,7 +193,9 @@ test('rarity is the rolled level jump: +1 common up to +5 legendary; evolutions 
     const card = renderUpgradeCard(describeUpgrade(p, { ...byId('luck_boost'), levelJump: jump }), '[1]');
     assert.match(card.className, new RegExp(`\\brarity-${expected[jump - 1]}\\b`), `+${jump}`);
     assert.equal(card.html.includes('upg-jump-ribbon'), jump > 1);
-    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} LEVELS`));
+    // Luck is not a weapon: its jump is in RANKS (weapon cards say LEVELS, see the chest card above).
+    if (jump > 1) assert.match(card.html, new RegExp(`\\+${jump} RANKS`));
+    assert.match(card.html, /→ RANK \d+/);
   }
   const evo = UPGRADE_POOL.find((u) => u.isSynergy);
   assert.match(renderUpgradeCard(describeUpgrade(p, { ...evo, levelJump: 1 }), '[1]').className, /\brarity-evolution\b/);
@@ -328,18 +331,27 @@ test('cards that do several separate things name all of them in the headline, no
   assert.equal(headline('status_application'), 'ALL 4 STATUS REACTIONS STRONGER');
   assert.equal(headline('status_duration'), 'STACKS, FREEZES & STUNS LAST LONGER');
   assert.equal(headline('shock_conductor'), 'MORE & LONGER STUNS · MORE ARCING');
-  assert.equal(headline('magnet'), '+44% PICKUP · +15% XP · +1 BOMB');
-  assert.equal(headline('thrusters'), 'FASTER DASH + SHOCKWAVE');
+  assert.equal(headline('magnet'), '+44% PICKUP RADIUS', 'one card, one effect (v0.46): XP is Growth Lattice, bombs drop');
+  assert.equal(headline('xp_growth'), '+15% XP GAIN');
+  assert.equal(headline('thrusters'), 'DASH SHOCKWAVE');
   applyUpgradeLevels(p, UPGRADE_POOL.find((u) => u.id === 'thrusters'));
-  assert.equal(headline('thrusters'), 'FASTER DASH, BIGGER SHOCKWAVE');
+  assert.equal(headline('thrusters'), 'BIGGER DASH SHOCKWAVE');
   assert.equal(headline('move_speed'), '+10% MOVE SPEED', 'move speed is its own card');
-  assert.match(headline('overdrive'), /DAMAGE · ALL WEAPONS/, 'single-effect cards keep their stat headline');
+  assert.match(headline('overdrive'), /^\+\d+% BASE DAMAGE$/, 'single-effect cards keep their stat headline');
+  // It still never reads as an Autocannon-only card: its scope chip says ALL WEAPONS.
+  assert.equal(describeUpgrade(p, UPGRADE_POOL.find((u) => u.id === 'overdrive')).reach.label, 'ALL WEAPONS');
 });
 
-test('Geom Attractor Field maxes at 2x XP and half its old pickup radius (6.1x base)', () => {
+test('Geom Attractor Field maxes at half its old pickup radius (6.1x base); Growth Lattice at 2x XP', () => {
   const p = makePlayer();
+  const bombs = p.bombs;
   const card = UPGRADE_POOL.find((u) => u.id === 'magnet');
   for (let i = 0; i < card.maxLevel; i++) applyUpgradeLevels(p, card);
-  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
   assert.ok(Math.abs(p.stats.magnetRadius / TUNING.magnetRadius - Math.pow(1.65, 5) / 2) < 1e-9, 'LV 5 = half the old 12.2x radius');
+  assert.equal(p.stats.xpMultiplier, TUNING.xpMultiplier, 'only pickup radius');
+  assert.equal(p.bombs, bombs, 'no bombs: they are a rare drop now');
+  const growth = UPGRADE_POOL.find((u) => u.id === 'xp_growth');
+  for (let i = 0; i < growth.maxLevel; i++) applyUpgradeLevels(p, growth);
+  assert.ok(Math.abs(p.stats.xpMultiplier / TUNING.xpMultiplier - 2) < 1e-9, 'LV 5 = 2x XP');
+  assert.equal(card.weight + growth.weight, 1, 'the two cards split the old card\'s hand weight');
 });

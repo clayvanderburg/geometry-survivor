@@ -41,11 +41,11 @@ async function loadNames() {
     for (const w of [...WEAPONS, ...PASSIVES]) names.weapon[w.id] = w.name;
   } catch { /* ids only */ }
   try {
-    const { UPGRADE_POOL } = await import('./upgrades.js');
+    const { UPGRADE_POOL, RETIRED_CARDS } = await import('./upgrades.js');
     for (const u of UPGRADE_POOL) names.card[u.id] = u.name.replace('SYNERGY: ', '★ ');
     names.card.new_weapon = 'NEW WEAPON';
     const { RETIRED_STAT_CARDS } = await import('./weapon-levels.js');
-    Object.assign(names.card, RETIRED_STAT_CARDS);
+    Object.assign(names.card, RETIRED_STAT_CARDS, RETIRED_CARDS);
   } catch { /* ids only */ }
   try {
     const { HOSTILE_ENTRIES } = await import('./field-guide.js');
@@ -213,7 +213,8 @@ function overview() {
       ${tile('Survive 30 min <small>(target)</small>', (d) => pct(d.run.reach30min, 1))}
       ${tile('Wave median', (d) => d.run.wave.median ?? '—')}
       ${tile('Gold earned / spent', (d) => `${num(d.gold.earned)} <small>/ ${num(d.gold.spent)}</small>`)}
-      ${tile('Rerolls · locks · banishes / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)}</small>`)}
+      ${tile('Rerolls · locks · banishes · skips / run', (d) => `${fix(d.gold.rerolls, 1)} <small>· ${fix(d.gold.locks, 1)} · ${fix(d.gold.banishes ?? 0, 1)} · ${fix(d.gold.skips ?? 0, 1)}</small>`)}
+      ${tile('Supernova bombs / run · kills per bomb', (d) => (d.bombs?.runs ? `${fix(d.bombs.perRun.mean, 1)} <small>· ${fix(d.bombs.killsPerBomb, 0)}</small>` : '—'))}
       ${tile('Armory: none · partial · maxed · not recorded <small>(runs)</small>', (d) => (d.armoryTiers ? d.armoryTiers.map((t) => t.runs).join(' · ') : '—'))}
     </div></section>`;
 }
@@ -242,25 +243,25 @@ function weaponBalance() {
       const r = w.levels.find((x) => x.level === L);
       if (!r) return '<td class="cell muted">·</td>';
       const cls = !r.enough ? 'low' : r.flag || '';
-      const tip = `${weaponName(w.id)} LV ${L}: ${num(r.dps)} DPS, ${fix(r.normDps, 2)}x base/s vs target ${r.target ?? '—'}x (${pct(r.vsTarget)}), index ${fix(r.index)}, ${pct(r.dmgShare)} of damage, ${pct(r.killShare)} of kills, ${r.runs} runs / ${Math.round(r.seconds)} s`;
+      const tip = `${weaponName(w.id)} LV ${L}: ${num(r.dps)} DPS, ${fix(r.normDps, 2)}x base/s vs target ${r.target ?? '—'}x (${pct(r.vsTarget)}), index ${fix(r.index)} (vs weapons held at the same run time; ${fix(r.levelIndex)} vs the same level), held at ${r.meanTime !== null ? mmss(r.meanTime) : '—'} on average, ${pct(r.dmgShare)} of weapon damage, ${pct(r.killShare)} of weapon kills, ${r.runs} runs / ${Math.round(r.seconds)} s`;
       return `<td class="cell ${cls}" title="${esc(tip)}">${r.index !== null ? fix(r.index) : '—'}<small>${pct(r.vsTarget)}${r.enough ? '' : ' · n' + r.runs}</small></td>`;
     }).join('')}<td class="cell ${w.flag || ''}">${w.index !== null ? fix(w.index) : '—'}<small>${flagBadge(w.flag, w.index !== null)}</small></td></tr>`).join('');
     return `<div class="table-wrap"><table>${head}${body}</table></div>`;
   };
 
   const detail = (s) => {
-    const rows2 = state[s].weapons.filter((w) => w.isWeapon).flatMap((w) => w.levels.map((r) => `<tr><td>${esc(weaponName(w.id))}</td><td>${r.level}</td><td>${r.runs}</td><td>${Math.round(r.seconds)}</td><td>${num(r.dps)}</td><td>${fix(r.normDps, 2)}</td><td>${r.target ?? '—'}</td><td>${pct(r.vsTarget)}</td><td>${fix(r.index)}</td><td>${pct(r.dmgShare, 1)}</td><td>${pct(r.killShare, 1)}</td><td>${flagBadge(r.flag, r.enough)}</td></tr>`)).join('');
+    const rows2 = state[s].weapons.filter((w) => w.isWeapon).flatMap((w) => w.levels.map((r) => `<tr><td>${esc(weaponName(w.id))}</td><td>${r.level}</td><td>${r.runs}</td><td>${Math.round(r.seconds)}</td><td>${num(r.dps)}</td><td>${fix(r.normDps, 2)}</td><td>${r.target ?? '—'}</td><td>${pct(r.vsTarget)}</td><td>${r.meanTime !== null ? mmss(r.meanTime) : '—'}</td><td>${fix(r.index)}</td><td>${fix(r.levelIndex)}</td><td>${pct(r.dmgShare, 1)}</td><td>${pct(r.killShare, 1)}</td><td>${flagBadge(r.flag, r.enough)}</td></tr>`)).join('');
     return `<details><summary>${esc(s.toUpperCase())} · every weapon level (mean DPS, damage share, kill share, sample size)</summary><div class="table-wrap"><table>
-      <tr><th>Weapon</th><th>LV</th><th>Runs</th><th>Seconds</th><th>DPS</th><th>x base / s</th><th>Target</th><th>vs target</th><th>Index</th><th>Dmg share</th><th>Kill share</th><th></th></tr>${rows2}</table></div></details>`;
+      <tr><th>Weapon</th><th>LV</th><th>Runs</th><th>Seconds</th><th>DPS</th><th>x base / s</th><th>Target</th><th>vs target</th><th title="Mean run time this level was held">Held at</th><th title="vs the other weapons held at the same run time (flags)">Index</th><th title="vs the other weapons at the same level, whenever they were held (biased by pick-up time)">Same-level</th><th>Weapon dmg share</th><th>Weapon kill share</th><th></th></tr>${rows2}</table></div></details>`;
   };
 
   const overviewTable = (s) => {
-    const rows3 = state[s].weapons.map((w) => `<tr><td>${esc(weaponName(w.id))}${w.isWeapon ? '' : ' <span class="muted">(not a weapon)</span>'}</td><td>${pct(w.runShare)}</td><td>${pct(w.dmgShare, 1)}</td><td>${pct(w.killShare, 1)}</td><td>${w.dps !== null ? num(w.dps) : '—'}</td><td>${w.medianAcquiredAt !== null ? mmss(w.medianAcquiredAt) : '—'}</td><td>${pct(w.vsTarget)}</td><td>${w.index !== null ? fix(w.index) : '—'} ${flagBadge(w.flag, true)}</td></tr>`).join('');
-    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · source</th><th>In runs</th><th>Dmg share</th><th>Kill share</th><th>DPS owned</th><th>Picked at</th><th>vs target</th><th>Index</th></tr>${rows3}</table></div>`;
+    const rows3 = state[s].weapons.map((w) => `<tr><td>${esc(weaponName(w.id))}${w.isWeapon ? '' : ' <span class="muted">(not a weapon)</span>'}</td><td>${pct(w.runShare)}</td><td>${pct(w.dmgShare, 1)}</td><td>${pct(w.killShare, 1)}</td><td>${w.dps !== null ? num(w.dps) : '—'}</td><td>${w.medianAcquiredAt !== null ? mmss(w.medianAcquiredAt) : '—'}</td><td>${pct(w.vsTarget)}</td><td>${w.index !== null ? fix(w.index) : '—'} ${flagBadge(w.flag, true)}</td><td>${w.vsAutocannon !== null && w.vsAutocannon !== undefined ? fix(w.vsAutocannon) : '—'}</td><td>${w.levelIndex !== null && w.levelIndex !== undefined ? fix(w.levelIndex) : '—'}</td></tr>`).join('');
+    return `<div class="table-wrap"><table><tr><th>${esc(s.toUpperCase())} · source</th><th title="Weapons: share of weapon damage / kills. Supernova, ram and other non-weapon sources: share of everything.">In runs</th><th>Dmg share</th><th>Kill share</th><th>DPS owned</th><th>Picked at</th><th>vs target</th><th title="vs the other weapons held at the same run time">Index</th><th title="Index ÷ the Autocannon's index">vs Autocannon</th><th title="vs the other weapons at the same level, whenever they were held (biased by pick-up time)">Same-level</th></tr>${rows3}</table></div>`;
   };
 
   return `<section><div class="section-head"><h2>Weapon balance · DPS vs DPS_TARGET at equal level</h2>${legend()}</div>
-    <p class="note">Design rule: every weapon has the same potential DPS at the same level, <code>DPS_TARGET(lv) = 3 · lv^1.5</code> x base damage. <b>vs target</b> is the realized share of that potential (damage in base-damage units per second at that level). Real fights never land every attack, so the rule predicts every weapon realizes the <i>same</i> share: <b>index</b> = vs target ÷ the median of all curve weapons at that level. Index above ${fix(1 + band)} → needs nerf, below ${fix(1 - band)} → needs buff. Levels with fewer than ${state[slots[0]].minSample?.runs ?? 3} runs or ${state[slots[0]].minSample?.seconds ?? 60} s are low sample and never flagged.</p>
+    <p class="note">Design rule: every weapon has the same potential DPS at the same level, <code>DPS_TARGET(lv) = 3 · lv^1.5</code> x base damage. <b>vs target</b> is the realized share of that potential (damage in base-damage units per second at that level). Real fights never land every attack, so the rule predicts every weapon realizes the <i>same</i> share. But the share also grows with the wave a weapon fights in: a weapon picked up at minute 5 sits at LV 1-3 in a dense, tanky wave and out-realizes the LV 1-3 weapons of the first minute. So <b>index</b> = its realized potential ÷ the median of the <i>other</i> curve weapons held over the same stretch of the run (by the mean run time each level was held: <b>held at</b>), seconds-weighted. <b>Same-level</b> is the old comparison (vs the median of all curve weapons at that level, whenever held), kept for reference; <b>vs Autocannon</b> = index ÷ the Autocannon's. Index above ${fix(1 + band)} → needs nerf, below ${fix(1 - band)} → needs buff. Levels with fewer than ${state[slots[0]].minSample?.runs ?? 3} runs or ${state[slots[0]].minSample?.seconds ?? 60} s are low sample and never flagged.</p>
     ${hbarChart(rows, { refs: [1 - band, 1, 1 + band], mid: 1, fmt: (v) => fix(v), min: 0, max: Math.max(2, ...rows.flatMap((r) => Object.values(r.values)).filter(Number.isFinite)) * 1.05 })}
     <h2 style="margin-top:14px">Index by weapon level <span class="muted">(cell: index · vs target)</span></h2>
     ${slots.map(matrix).join('')}

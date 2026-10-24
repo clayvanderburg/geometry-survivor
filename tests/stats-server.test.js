@@ -6,7 +6,7 @@ import {
   createStatsHandler, STATS_SERVER_LIMITS, RUNS_PREFIX, STATS_RATE_PREFIX, summaryKey, runKey, summaryVersion, newestFirst, listKeys
 } from '../netlify/lib/stats.mjs';
 import { hashIp } from '../netlify/lib/leaderboard.mjs';
-import { aggregateRuns, percentile, median, flagFor, OUTLIER_BAND, SUMMARY_SCHEMA } from '../js/stats-aggregate.js';
+import { aggregateRuns, percentile, median, flagFor, OUTLIER_BAND, SUMMARY_SCHEMA, TIME_INDEX_BUCKETS } from '../js/stats-aggregate.js';
 import { STATS_LIMITS, armoryTier } from '../js/stats-rules.js';
 import { META_UPGRADES, armorySpent } from '../js/progression.js';
 import { KNOWN_VERSIONS } from '../js/changelog.js';
@@ -51,6 +51,7 @@ class FakeStore {
     if (!paginate) return Promise.resolve({ blobs: keys.map((key) => ({ key })), directories: [] });
     return (async function* () { for (const p of pages) yield p; })();
   }
+  async delete(key) { await null; this.blobs.delete(key); }
   json(key) { return JSON.parse(this.blobs.get(key).body); }
   keys(prefix = '') { return [...this.blobs.keys()].filter((k) => k.startsWith(prefix)); }
 }
@@ -93,7 +94,9 @@ test('POST stores one blob per run at runs/<version>/<date>/<id>.json, with no c
   assert.equal(stored.weapons.missiles.dmg, 900);
   const everything = JSON.stringify([...store.blobs]);
   assert.ok(!everything.includes('203.0.113.9'), 'the raw IP is stored nowhere');
-  assert.ok(store.keys(STATS_RATE_PREFIX + hashIp('203.0.113.9', 'vexolith-survivor')).length === 1, 'the rate limit keys on the salted hash');
+  const rateKeys = store.keys(STATS_RATE_PREFIX);
+  assert.equal(rateKeys.length, 1);
+  assert.match(rateKeys[0], new RegExp(`^ratelimit/\\d+/${hashIp('203.0.113.9', 'vexolith-survivor')}$`), 'the rate limit keys on a window and the salted hash');
 });
 
 test('rate limit: one upload per client per cooldown, then accepted again', async () => {
@@ -193,6 +196,7 @@ test('a broken store returns 500 JSON, not an exception', async () => {
 });
 
 // --- Aggregation math ---------------------------------------------------------------------------------
+const round4 = (v) => Math.round(v * 1e4) / 1e4;
 
 // Weapon w at level L for `secs` seconds dealing `norm` base-damage units (target T).
 const weaponRun = (rows, extra = {}) => ({
@@ -202,7 +206,7 @@ const weaponRun = (rows, extra = {}) => ({
   ...extra
 });
 
-test('DPS vs target, the same-level peer index and the ±20% outlier flags', () => {
+test('DPS vs target, the peer index and the ±20% outlier flags', () => {
   // At LV 4 (target 24): alpha realizes 50%, beta 30%, gamma 40%, delta 40% -> median 40%.
   const runs = Array.from({ length: 3 }, () => weaponRun([
     ['alpha', 4, 100, 0.5 * 24 * 100, 24],
@@ -238,6 +242,50 @@ test('DPS vs target, the same-level peer index and the ±20% outlier flags', () 
   assert.equal(flagFor(null), null);
 });
 
+test('the index compares weapons held at the same run time: a late LV 1 pick-up is not an outlier for being late', () => {
+  // Early (minute 0-1) every weapon realizes 30% of its LV 1 potential, late (minute 5-6) 120%: denser waves.
+  // 'late' is only ever picked up late, at LV 1, and realizes exactly what its late peers do.
+  const at = (id, from, share) => [id, from, share];
+  const run = (rows) => ({
+    ...weaponRun([]),
+    weapons: Object.fromEntries(rows.map(([id, from, share]) => [id, { dmg: 1, kills: 1, owned: 60, from, curve: 1, tl: [[from, 1]],
+      lv: { 1: [60, 10, share * 3 * 60, 40, 1, 4, 3] } }]))
+  });
+  const early = ['a', 'b', 'c', 'g'].map((id) => at(id, 0, 0.3));
+  const lateRows = ['d', 'e'].map((id) => at(id, 300, 1.2));
+  const runs = Array.from({ length: 3 }, () => run([...early, ...lateRows, at('late', 300, 1.2)]));
+  const s = aggregateRuns(runs);
+  const by = Object.fromEntries(s.weapons.map((w) => [w.id, w]));
+  assert.ok(by.late.levelIndex > 2, `the same-level comparison calls it ${by.late.levelIndex}x`);
+  assert.equal(by.late.index, 1, 'the same-time comparison calls it even');
+  assert.equal(by.late.flag, 'ok');
+  assert.equal(by.late.levels[0].meanTime, 330, 'from its level timeline (no recorded mean)');
+  assert.ok(!s.outliers.some((o) => o.id === 'late'));
+  assert.deepEqual(s.timeIndexBuckets, [...TIME_INDEX_BUCKETS]);
+  // The recorded mean run time (row[9]) wins over the timeline.
+  const recorded = structuredClone(runs);
+  for (const r of recorded) r.weapons.late.lv[1].push(40, 4, 30);
+  assert.ok(aggregateRuns(recorded).weapons.find((w) => w.id === 'late').index > 2, 'held at minute 0-1 it would be strong');
+});
+
+test('weapon shares leave out Supernova and ram (listed with their share of everything); bombs per run and kills per bomb', () => {
+  const run = (extra = {}) => weaponRun([['alpha', 4, 100, 2400, 24], ['beta', 4, 100, 2400, 24]], extra);
+  const withBomb = run();
+  withBomb.weapons.supernova = { dmg: 48000, kills: 60 };
+  for (const id of ['alpha', 'beta']) withBomb.weapons[id].lv[4].push(48000, 2); // weapon-only totals while at LV 4
+  withBomb.bombs = [3, 60];
+  const older = run(); // an older client: no weapon-only totals, no bombs
+  const s = aggregateRuns([withBomb, structuredClone(withBomb), withBomb, older], { version: GAME_VERSION });
+  const by = Object.fromEntries(s.weapons.map((w) => [w.id, w]));
+  assert.equal(by.alpha.dmgShare, 0.5, 'half of the weapon damage');
+  assert.equal(by.alpha.allDmgShare, round4(24000 * 4 / (24000 * 8 + 48000 * 3)), 'its share of everything is kept too');
+  assert.equal(by.supernova.isWeapon, false);
+  assert.equal(by.supernova.dmgShare, round4(48000 * 3 / (24000 * 8 + 48000 * 3)), 'Supernova: share of all damage');
+  const lv4 = by.alpha.levels.find((r) => r.level === 4);
+  assert.equal(lv4.dmgShare, round4(24000 * 4 / (48000 * 3 + 96000)), 'per level: weapon-only totals, older runs on all damage');
+  assert.deepEqual(s.bombs, { runs: 3, perRun: { median: 3, mean: 3 }, killsPerBomb: 20, weaponDamageShare: round4(24000 * 8 / (24000 * 8 + 48000 * 3)) });
+});
+
 test('low-sample weapon levels are reported but never flagged or used as the peer median', () => {
   const runs = [
     ...Array.from({ length: 3 }, () => weaponRun([['alpha', 1, 100, 300, 3], ['beta', 1, 100, 150, 3]])),
@@ -249,7 +297,8 @@ test('low-sample weapon levels are reported but never flagged or used as the pee
   assert.equal(gamma.levels[0].index, null);
   assert.equal(gamma.flag, null);
   const alpha = s.weapons.find((w) => w.id === 'alpha').levels[0];
-  assert.ok(Math.abs(alpha.index - 1 / 0.75) < 0.01, 'median of alpha (1.0) and beta (0.5) is 0.75');
+  assert.ok(Math.abs(alpha.levelIndex - 1 / 0.75) < 0.01, 'same-level: median of alpha (1.0) and beta (0.5) is 0.75');
+  assert.ok(Math.abs(alpha.index - 1 / 0.75) < 0.01, 'and the same-time index, centred on the median rated weapon, leaves gamma out too');
 });
 
 test('run shape, enemies, cards and gold aggregate across runs', () => {
@@ -323,4 +372,22 @@ test('Void Armory ranks and cores spent are stored; older payloads without them 
   assert.equal(none.armoryTiers.find((t) => t.tier === 'partial').runs, 1, 'the tier counts cover every run');
   assert.ok(store.keys(summaryKey('all', 'none')).length === 1, 'each tier has its own cached summary');
   assert.equal((await get(handler, '?version=all&armory=rich')).status, 400);
+});
+
+test('rate-limit windows: a window boundary is no loophole, and older windows and pre-window keys are swept', async () => {
+  const { handler, store, advance } = setup();
+  const W = STATS_SERVER_LIMITS.RATE_WINDOW_MS;
+  const t0 = Date.parse('2026-10-18T12:00:00Z');
+  const bucket = Math.floor(t0 / W);
+  store.blobs.set(STATS_RATE_PREFIX + 'f'.repeat(32), { body: '{"t":1}', etag: '"x"' });
+  store.blobs.set(`${STATS_RATE_PREFIX}${bucket - 3}/${'a'.repeat(32)}`, { body: '{"t":1}', etag: '"x"' });
+  store.blobs.set(`${STATS_RATE_PREFIX}${bucket - 1}/${'b'.repeat(32)}`, { body: '{"t":1}', etag: '"x"' });
+  const toEdge = W - (t0 % W) - 5000;
+  advance(toEdge);
+  assert.equal((await post(handler, runBody(), { ip: '203.0.113.91' })).status, 201);
+  advance(10_000); // across the boundary, still inside the 15 s cooldown
+  assert.equal((await post(handler, runBody(), { ip: '203.0.113.91' })).status, 429);
+  const left = store.keys(STATS_RATE_PREFIX).map((k) => Number(k.split('/')[1]));
+  const now = Math.floor((t0 + toEdge + 10_000) / W);
+  assert.ok(left.every((b) => b >= now - 1), 'only the current and previous windows are left: ' + left);
 });

@@ -5,9 +5,11 @@
 // Hostile entry ids are enemy `type` strings (bosses included), plus 'lieutenant' (any elite). Adding a new
 // enemy type? Give it an entry here: tests/field-guide.test.js fails until every type has one.
 import { TUNING, DEFAULT_TUNING } from './config.js';
+import { EVOLUTION_RECIPES } from './evolution-recipes.js';
 import { EnemyManager, contactDamageAt, waveScaleAt } from './enemies.js';
 import { ARCHETYPE_INFO, BRUISER, GUNNER, SHIELDER, BLINKER, CONDUIT, bruiserChargeLength } from './archetypes.js';
 import { HOSTILE_INFO, MAYFLY, CARRIER, DRONE, MITOSIS, REPULSOR } from './hostiles.js';
+import { BOSS_ESCAPE } from './boss-escape.js';
 import { BOSS_DEFS, BOSS_TIER, QUEEN, OURO, WING, HIVE, HORIZON, ARCH, PROG, COND, TWINS, PRISM } from './bosses.js';
 import { LANCE } from './lancers.js';
 import { RAM } from './boss-ram.js';
@@ -18,16 +20,20 @@ import { SERPENT } from './serpents.js';
 import { KESTREL } from './squadrons.js';
 import { BOSS_SCHEDULE, BOSS_EVERY, MAJOR_BOSS_EVERY, CAMPAIGN_WAVES, unlockWaveOf, VETERAN_SPEED } from './wave-plan.js';
 import { LT_MODIFIERS } from './lieutenants.js';
-import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD } from './upgrades.js';
+import { UPGRADE_POOL, RARITY, levelJumpChances, BASE_SHIELD, newWeaponChanceFor } from './upgrades.js';
 import { WEAPON_TAGS, TAG_INFO, WEAPON_SCALING as W } from './weapon-scaling.js';
-import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS } from './weapon-levels.js';
+import { ELEMENT_WEAPONS, ELEMENT_MAX_RANKS, BT_BOOST_DPS, BT_BOOST_RANKS, WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS } from './weapon-levels.js';
 import { playerPullCapShare } from './gravity.js';
 import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
-import { handSizeFor, slotDamageBonus } from './slot-rewards.js';
+import { handSizeFor, slotDamageBonus, BREAKTHROUGH_SLOT } from './slot-rewards.js';
 import { weaponFloor, weaponFloorStep } from './weapon-floor.js';
+import { OPEN_WEAPONS, UNLOCK_GOALS, GOAL_BY_WEAPON, goalText } from './weapon-unlocks.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
+
+// 1 .. weaponSlots - 1: the weapon counts that still leave a slot free (NEW WEAPON odds, weapon floor steps).
+const freeSlotCounts = () => Array.from({ length: weaponSlots() - 1 }, (_, i) => i + 1);
 
 export const GUIDE_GROUPS = [
   { id: 'swarm', label: 'CORE SWARM' },
@@ -186,8 +192,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'lancer', name: 'LANCER', group: 'archetype', unlockWave: unlockWaveOf('lancer'),
-    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a dashed line at you for ${secs(LANCE.aimTime)}. The line locks (turns red) for the last ${secs(LANCE.lockAt)}, then it fires a ${LANCE.length} px beam that sweeps ${Math.round(LANCE.sweep * 180 / Math.PI)}° to one side over ${secs(LANCE.fireTime)}. Debuts with the Eclipse Twins.`,
-    tip: 'When the line turns red, step sideways off it, against the sweep if you can guess it. Punish it while it is planted.'
+    what: () => `A red spear hull that closes to about ${LANCE.range} px, plants itself and aims a line through you for ${secs(LANCE.aimTime)}, with a shaded wedge showing the side it will sweep to. The line locks (turns solid red) for the last ${secs(LANCE.lockAt)} and flashes white just before it fires a ${LANCE.length} px beam along the line, sweeping ${Math.round(LANCE.sweep * 180 / Math.PI)}° into the wedge over ${secs(LANCE.fireTime)}. At most ${LANCE.maxActive} fire at once. Debuts with the Eclipse Twins.`,
+    tip: 'When the line turns red, step sideways off it AWAY from the shaded wedge: the beam swings into the wedge, never the other way. Punish it while it is planted.'
   },
   {
     id: 'borer', name: 'BORER', group: 'archetype', unlockWave: unlockWaveOf('borer'),
@@ -227,8 +233,8 @@ export const HOSTILE_ENTRIES = [
   },
   {
     id: 'event_horizon', name: BOSS_DEFS.event_horizon.name, group: 'boss', boss: true, unlockWave: bossWave('event_horizon'),
-    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that drifts after you with a ${HORIZON.pullRadius} px pull: it tugs your ship (never past the escape cap), bends your shots hard and drags other hostiles in. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. GRAVITY WAVE: every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) while green spokes mark ${HORIZON.gaps} safe gaps, then exhales an expanding ring that hits anything it crosses outside the gaps, with ${HORIZON.ring} orbs riding it. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes, breathes faster, and each wave is a double ripple whose second ring turns its gaps. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
-    tip: 'When it inhales, slide onto a green spoke and let the wave pass round you, or dash through the ring. Kill things away from it so it cannot feed.'
+    what: () => `${BOSS_DEFS.event_horizon.epithet}. A living black hole that hunts you with a ${HORIZON.pullRadius} px pull: it tugs your ship, bends your shots hard and drags other hostiles in. Once you are inside its pull it slows to a crawl, so flying straight out always gets you clear. Anything it swallows heals it ${pct(HORIZON.eatHeal)} of its max HP. GRAVITY WAVE: every ${secs(HORIZON.breathEvery)} it inhales (its pull swells) while dashed spokes mark where ${HORIZON.gaps} short arcs will sweep, then exhales them: they roll outward and hit anything they cross, and ${HORIZON.ring} orbs fly out through the wide gaps between them. At ${pct(HORIZON.rageAt)} HP it spits out ${HORIZON.vortexes} vortexes, breathes faster, and each wave is a double ripple whose second ring turns its gaps. Arrives with ${HORIZON.escortHulks} Hulks.${ramText('event_horizon')}${bossGrindText()}`,
+    tip: 'When it inhales, step off the dashed spokes: the arcs roll out along them. Weave between the orbs, and kill things away from it so it cannot feed.'
   },
   {
     id: 'architect', name: BOSS_DEFS.architect.name, group: 'boss', boss: true, unlockWave: bossWave('architect'),
@@ -362,7 +368,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'controls', icon: '⌨', title: 'CONTROLS',
     body: () => [
-      'Keyboard: WASD move (and drill rock with the claws) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause (1-4 tabs) · N damage numbers · G field guide · H hide HUD · V fullscreen · T tuner.',
+      'Keyboard: WASD move (and drill rock) · mouse aims · F auto-fire · C auto-aim · Space / right-click dash · E / Q Supernova · P / Esc pause (1-4 tabs) · N damage numbers · G field guide · H hide HUD · V fullscreen · T tuner.',
       'Controller: left stick move · right stick aim and fire · A dash · B Supernova · X / Y auto-fire / auto-aim · Start pause. Menus: d-pad + A, B back; in the pause menu and this guide LB / RB switch tabs.',
       'Level-up cards: 1 / 2 / 3 or A picks · R or X rerolls (gold) · Shift+1 / 2 / 3 or Y locks a card (gold).'
     ]
@@ -370,7 +376,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'mode_hardcore', icon: '☠', title: 'HARDCORE MODE',
     body: () => [
-      `Pick it next to LAUNCH ([2], or LB / RB on a controller). The shield is your only life: it never regenerates, no card raises or restores it (Shield Capacitor is never offered), relic caches and shield crystals repair nothing, and the Void Armory's Aegis Shield Matrix is switched off, so every run starts at the base ${BASE_SHIELD}. Every other armory upgrade still applies.`,
+      `Pick it next to LAUNCH ([2], or LB / RB on a controller). The shield is your only life: it never regenerates, no card raises or restores it (Shield Capacitor is never offered), Alien Tech Caches and shield crystals repair nothing, and the Void Armory's Aegis Shield Matrix is switched off, so every run starts at the base ${BASE_SHIELD}. Every other armory upgrade still applies.`,
       'When the shield hits 0 the run is over, as always. HARDCORE runs race on their own global board (ALL-TIME and per version) and in MY RUNS.'
     ]
   },
@@ -387,7 +393,7 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'shield', icon: '◈', title: 'SHIELD, HULL & DASH',
     body: () => [
-      'Your shield hugs the crab\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
+      'Your shield hugs the ship\'s silhouette and is the hitbox: if a hull or orb touches the glowing outline, you take the hit. Its arc shows charge; it shifts blue → amber → red as it drains.',
       `Contact damage is ${Math.round((TUNING.contactDamage ?? 18) * (TUNING.damageRampBase ?? 1))} per hit (bosses ${Math.round((TUNING.bossContactDamage ?? 38) * (TUNING.damageRampBase ?? 1))}) and each wave after wave ${TUNING.damageRampFrom ?? 5} adds ${pct(TUNING.damageRampPerWave ?? 0.08)} of the base, steepening again after wave ${TUNING.damageRampLateFrom ?? 30} (plasma orbs too). A hit gives 0.4 s of invulnerability and cuts your score multiplier by 25%. Dash grants 0.32 s of invulnerability (cooldown ${TUNING.dashCooldownBase ?? 1.5} s); Supernova grants 1.2 s and wipes every hostile orb.`
     ]
   },
@@ -395,7 +401,7 @@ export const MECHANIC_ENTRIES = [
     id: 'waves', icon: '⧗', title: 'WAVES & PACING',
     body: () => [
       `A new wave every ${TUNING.waveLength ?? 22} s (+1 Void Core). Every wave has a theme that tilts which packs show up. New hostiles only debut on boss waves, each announced once per run by a NEW HOSTILE SIGNATURE card, and join the regular mix after that.`,
-      `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
+      `A minor boss every ${BOSS_EVERY}th wave and a major boss every ${MAJOR_BOSS_EVERY}th (tougher, two phases, ${BOSS_TIER.major.cores} Void Cores instead of ${BOSS_TIER.minor.cores}). While a boss wave's boss is up, packs come ${pct(1 - (TUNING.bossPackRate ?? 0.7))} less often, but only until the wave ends. Outrun a boss and it warps back in near you through a rift. Every boss ESCAPES ${Math.round(BOSS_ESCAPE.time / 60)} minutes after it arrives (its bar counts down the last ${BOSS_ESCAPE.warnAt} s) and takes its Alien Tech Cache with it, except the final boss. Bosses can overlap: a slow kill meets the next one. Beat the wave ${CAMPAIGN_WAVES} boss to win the campaign; fly on into ENDLESS and bosses come in pairs. A lieutenant on every non-boss wave from wave ${TUNING.lieutenantFirstWave ?? 2}.`,
       `Packs are paced so every wave brings the same hit points per second as before the boss campaign: a heavy mix comes a little less often, a light one more often. The core swarm (swarmers, pinwheels, weavers, splitters, mayflies) fields veteran forms from waves 11 and 21: each adds an edge to the hull, for +${pct(VETERAN_SPEED[2] - 1)} and then +${pct(VETERAN_SPEED[3] - 1)} speed.`,
       `Enemy HP starts at ${TUNING.waveHpStart ?? 1}× base (light swarm fodder: ${TUNING.waveHpStartLight ?? 1}×) and grows +${pct(TUNING.waveHpPerWave ?? 0.25)} of base per wave, compounding a further ${(((TUNING.waveHpGrowth ?? 1.09) - 1) * 100).toFixed(1).replace(/\.0$/, '')}% per wave after wave ${TUNING.waveHpGrowthFrom ?? 6}${lateHpText()}.`
     ]
@@ -410,9 +416,9 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'status', icon: '☢', title: 'ELEMENTS: BURN · FREEZE · CORRODE · SHOCK',
     body: () => [
-      `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by a supply cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
+      `ELEMENTS: ${ELEMENT_WEAPONS.map((id) => WEAPON_BY_ID[id].name).join(', ')} can each be infused with FIRE, FROST, CORROSIVE or SHOCK by a level-up card (never by an Alien Tech Cache). The first pick locks that weapon's element for the run; more cards of the same element rank it up (up to ${ELEMENT_MAX_RANKS}), and every rank raises the weapon's level like its other cards.`,
       `${WEAPON_BY_ID.gas.name} is born CORROSIVE (no element cards): every gas tick corrodes, its corrode rank grows by 1 at LV 6, 12 and 18, and it counts as a CORROSIVE weapon for STATUS cards and the Corrosive Amplifier.`,
-      `${WEAPON_BY_ID.flamethrower.name} is born FIRE (no element cards): every scorch sets its targets burning, Sticky Gel cards raise its burn rank (up to ${ELEMENT_MAX_RANKS}), and it counts as a FIRE weapon for STATUS cards and the Fire Amplifier. It never aims: the nozzle spins slowly round the ship (faster with Spin Rotor cards) and sprays the whole time. Asteroids block its flames: a rock shadows the slice of the cone behind it.`,
+      `${WEAPON_BY_ID.flamethrower.name} is born FIRE (no element cards): every scorch sets its targets burning, Sticky Gel cards raise its burn rank (up to ${ELEMENT_MAX_RANKS}), and it counts as a FIRE weapon for STATUS cards and the Fire Amplifier. It never aims: the nozzle spins round the ship (faster with Fireballs and Napalm Puddles) and sprays the whole time. Asteroids block its flames: a rock shadows the slice of the cone behind it.`,
       `${WEAPON_BY_ID.cryospray.name} and ${WEAPON_BY_ID.acidspray.name} are the Flamethrower's twins: the same spinning cone (rocks block it), born FROST and CORROSIVE. Deep Freeze and Etching Agent cards raise their element rank. All three sprayers take Extra Nozzle cards (up to 4 streams). At LV 6 the Flamethrower lobs Fireballs, the Cryo Sprayer Shatters frozen enemies and the Acid Sprayer makes corroded kills Melt Down; LV 12 / 18 drop puddles / slicks / pools and roll out a ring.`,
       `${WEAPON_BY_ID.lightning.name} is born SHOCK (it's lightning; no element cards): every arc zap-stuns, sometimes long-stuns, and charges enemies that touch so shock arcs between them. Its shock rank grows by 1 at LV 6, 12 and 18, and it counts as a SHOCK weapon for STATUS cards and the Shock Amplifier.`,
       `${WEAPON_BY_ID.shockfield.name} is born SHOCK (no element cards): every discharge stuns through the usual SHOCK rules, its Stun Coils cards rank the stun, and it counts as a SHOCK weapon for STATUS cards and the Shock Amplifier.`,
@@ -426,28 +432,29 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'loadout', icon: '⬡', title: 'WEAPON SLOTS & LOADOUT',
     body: () => [
-      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the crab's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
-      `While a slot is free, a NEW WEAPON card turns up in ${[1, 2, 3, 4, 5].map((n) => pct(TUNING[`newWeaponChanceBy${n}`] ?? 0)).join(' / ')} of level-up hands when you carry 1 / 2 / 3 / 4 / 5 weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
-      `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${[1, 2, 3, 4, 5].map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
-      `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your 6th arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
+      `You carry up to ${weaponSlots()} weapons. After LAUNCH you pick the ship's starting weapon: ${START_WEAPON_CHOICES.map((id) => WEAPON_BY_ID[id].name).join(', ')} (your last pick is remembered). Level-ups offer upgrades for weapons you carry plus general upgrades; weapon add-ons and tag cards only appear when a carried weapon can use them.`,
+      `While a slot is free, a NEW WEAPON card turns up in ${freeSlotCounts().map((n) => pct(newWeaponChanceFor(n))).join(' / ')} of level-up hands when you carry ${freeSlotCounts().join(' / ')} weapons, and shows at least every ${TUNING.newWeaponPityOne ?? 2} hands while you carry a single weapon (every ${TUNING.newWeaponPity ?? 4} with more). Pick it to choose 1 of 3 new weapons (◆ ${weaponRerollCost()} gold rerolls the 3, doubling within one pick). With every slot full, no new weapons are offered until you DISCARD one from the LOADOUT panel in the pause menu.`,
+      `WEAPON FLOOR: every ${weaponFloorStep()} levels you must carry one more weapon (${freeSlotCounts().map((k) => `${weaponFloor(k * weaponFloorStep())} by LV ${k * weaponFloorStep()}`).join(', ')}). A level-up below that skips the hand and opens CHOOSE A WEAPON: pick 1 of 3 (gold can reroll them, but you can't skip it). A DISCARD can drop you below it, so your next level-up asks for a weapon again. NEW WEAPON cards still turn up earlier as usual.`,
+      `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your ${BREAKTHROUGH_SLOT}th (the last slot) also arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',
       'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
+      `WEAPON UNLOCKS: a new pilot flies with ${OPEN_WEAPONS.length} weapons. Each of the other ${UNLOCK_GOALS.length} unlocks from a small goal that teaches it (${goalText(GOAL_BY_WEAPON.cryospray)} for the ${WEAPON_BY_ID.cryospray.name}), counted over all your runs. Locked weapons never turn up in picks; the WEAPONS tab shows every goal and your progress.`,
       ...PASSIVES.map((x) => `${x.name} is a PASSIVE, not a weapon: it takes no slot and is never a NEW WEAPON pick. It turns up in ordinary level-up hands like any general upgrade (with the usual +2…+5 rarity jumps), and owning it unlocks ${passiveTagCards(x.id)}. ${x.summary}`)
     ]
   },
   {
     id: 'weaponlevels', icon: '⚛', title: 'WEAPON LEVELS & BREAKTHROUGHS',
     body: () => [
-      'Every weapon, Autocannon included, goes from LV 1 to LV 18. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that. Each card also adds a level.',
+      `Every weapon, Autocannon included, goes from LV 1 to LV ${WEAPON_MAX_LEVEL}. Each of its cards raises ONE stat and nothing else: Damage cards raise damage per hit, fire rate / reload / cooldown cards make it attack more often, count cards add projectiles, and size, radius, reach, pull and lifetime cards change only that (Orbit Blade Reach also raises blade damage to match the longer lap; Vortex Pull also widens the collapse). Each card also adds a level.`,
       'Damage, fire rate and count cards add damage output. Size, radius, reach and pull cards add none: they make the weapon easier to land, so a weapon built purely for damage hits as hard as any other weapon built the same way.',
-      'At LV 6, 12 and 18 the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+18% damage, and +1 to every size, reach and range stat of that weapon). A card that jumps past a milestone still triggers it.',
-      'EVOLUTIONS are semi-rare one-shot synergy cards that need two weapons (or a weapon and a passive). Every evolution names the weapons it upgrades.'
+      `At LV ${BREAKTHROUGH_LEVELS.join(', ').replace(/, (\d+)$/, ' and $1')} the weapon reaches a BREAKTHROUGH: your R&D team offers a TRANSFORM that changes how the weapon works (flak rounds, twin singularities, seeker mines, micro-missile pods...) or ACROSS THE BOARD (+${Math.round((BT_BOOST_DPS - 1) * 100)}% damage, and +${BT_BOOST_RANKS} ranks in every UTILITY stat of that weapon, 1 on a few: size, reach, range, pierce...). A card that jumps past a milestone still triggers it.`,
+      'EVOLUTIONS are semi-rare one-shot synergy cards. Most need two weapons; the rest need one card at LV 2 (Supercritical also needs a weapon with an element). Luck makes them turn up more often. Every evolution names what it upgrades, and the Field Guide lists its recipe.'
     ]
   },
   {
     id: 'rarity', icon: '★', title: 'UPGRADE RARITY = LEVEL JUMP',
     body: () => [
-      'Each level-up card rolls how many levels it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. EVOLUTION cards are one-shot synergies with their own magenta tier.',
+      'Each level-up card rolls how many steps it grants at once, and that jump is its rarity: +1 COMMON, +2 UNCOMMON, +3 RARE, +4 EPIC, +5 LEGENDARY. Weapon cards (and passives) jump in LEVELS; every other card in RANKS of its own. EVOLUTION cards are one-shot synergies with their own magenta tier. Replicator Array is the one exception: it always takes a single rank, but it is rare to find, so it always shows RARE and says so on the card.',
       `Odds at base luck: ${jumpOdds()}. Luck multiplies every chance; a jump never passes the level cap. Every card shows exact before → after numbers.`
     ],
     rarity: true
@@ -478,8 +485,8 @@ export const MECHANIC_ENTRIES = [
     id: 'blast', icon: '✸', title: 'BLAST FALLOFF',
     body: () => [
       `Area blasts (missiles, rockets, grenades, mines, drill blasts, singularity collapse) deal full damage at the center and fall off toward the edge: ${pct(1 - (TUNING.splashEdgeFalloff ?? 0.4))} at the rim. A direct hit keeps the weapon's full damage.`,
-      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures shatter any rock they cross (broken rocks count as mined; bedrock never cracks).`,
-      'Field Amplifier makes every AREA weapon reach further.'
+      `${WEAPON_BY_ID.quake.name} charges burst into gravity waves instead: space-time pinches in, then the wave ripples out through the warp grid, hitting each enemy once as it rolls past, shoving it outward. The waves leave rocks alone unless you take Tidal Shear cards; Spacetime Fractures crack any rock they cross (broken rocks count as mined; bedrock never cracks).`,
+      'Field Amplifier (a GLOBAL card) grows every blast, cloud, cone and field on every weapon.'
     ]
   },
   {
@@ -498,35 +505,35 @@ export const MECHANIC_ENTRIES = [
   {
     id: 'damage_numbers', icon: '#', title: 'DAMAGE NUMBERS',
     body: () => [
-      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, shock field pale cyan, glaive discs orange, nanite swarm pale lime, claw harpoon yellow, burn red-orange, everything else white.',
+      'Floating numbers are colored by source: blaster cyan, missiles orange, lightning violet, orbitals green, singularity pink, Supernova gold, mines red, turret blue, drones lime, grenades mint, gas trail toxic green, flamethrower amber, cryo sprayer ice blue, acid sprayer acid green, shock field pale cyan, rail lance lilac, glaive discs orange, nanite swarm pale lime, drill driver yellow, graviton mortar coral, burn red-orange, everything else white.',
       'Rapid hits on one enemy merge into one rising total. Crits are bigger and white-gold. Toggle with N or in the pause menu.'
     ]
   },
   {
     id: 'mining', icon: '⛏', title: 'MINING & ORE VEINS',
     body: () => [
-      'Only your front drill-claws mine. Weapons and bombs never break rock, so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.',
-      `The ${WEAPON_BY_ID.harpoon.name} is the one weapon that mines: it throws one of your drill-claws, which drills through the rock on its line (Rock Drill cards bore deeper, drill-speed upgrades help too) and bites to a stop in rock it can't finish. Rock it breaks counts as yours, ore and all.`,
-      'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your claws, elites, boss portals or blasts. Enemies have to go round it too.',
+      `Only your front drills mine. Weapons and bombs never break rock (except the ${WEAPON_BY_ID.harpoon.name}, and a ${WEAPON_BY_ID.quake.name} with Tidal Shear or Spacetime Fractures), so asteroids are cover for you and for gunner orbs. Drive into rock to carve tunnels.`,
+      `The ${WEAPON_BY_ID.harpoon.name} is the mining weapon: it launches your front drills on a cable, and they bore through the rock on their line (Rock Bore cards bore deeper, drill-speed upgrades help too) and bite to a stop in rock they can't finish. Rock it breaks counts as yours, ore and all.`,
+      'BEDROCK (pale violet rock: the wall round the sector, and the hard cores of some asteroids) never breaks: not for your drills, elites, boss portals or blasts. Enemies have to go round it too.',
       'Asteroids are solid masses: drill into one and the rock round the hole breaks loose into chunks, each taking the same time to drill. Ore runs through them in short seams.',
       ...(eliteMiningDps() > 0 ? [`Elites are the exception: lieutenants grind through rock in their way at ${eliteGrindSpeed()}, bosses bust through at ${eliteGrindSpeed(TUNING.bossMiningMult ?? 4)} and serpent heads drill at ${eliteGrindSpeed(TUNING.serpentMiningMult ?? 2)}, leaving the ore behind; a shield crystal they crush heals no one.`] : []),
       ...((TUNING.bossPortalBlast ?? 280) > 0 ? [`A boss's portal blows apart every rock within ${TUNING.bossPortalBlast ?? 280} px as it arrives, ore and all.`] : []),
-      `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Relic Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
+      `Veins: GOLD (${goldPerVein()} ◆ gold for rerolls and locks, ${pct(TUNING.goldVeinChestChance ?? 0.004)} × luck chance of a buried Alien Tech Cache), SHIELD CRYSTAL (+25 shield), DEEP CORE (+1 Void Core, near cluster cores). The radar shows veins.`
     ]
   },
   {
     id: 'gold', icon: '◆', title: 'GOLD, REROLL, LOCK & BANISH',
     body: () => [
-      `Gold veins drop ${goldPerVein()} ◆ gold as glowing gold coins (no XP). Your claws break them, and so do elites grinding through rock; either way the coins are yours to grab. Gold lasts for this run only and starts at 0: it is not Void Cores.`,
+      `Gold veins drop ${goldPerVein()} ◆ gold as glowing gold coins (no XP). Your drills break them, and so do elites grinding through rock; either way the coins are yours to grab. Gold lasts for this run only and starts at 0: it is not Void Cores.`,
       `REROLL on a level-up swaps every unlocked card for a fresh roll with the usual odds: ${rerollCost(0)} ◆, then ${rerollCost(1)} ◆, ${rerollCost(2)} ◆… within the same level-up, back to ${rerollCost(0)} ◆ on the next one. On a NEW WEAPON pick, REROLL swaps the 3 weapons for others: ${weaponRerollCost(0)} ◆, then ${weaponRerollCost(1)} ◆, ${weaponRerollCost(2)} ◆… Keys: R, or X on a controller.`,
-      `LOCK a card for ${lockCost()} ◆ (one at a time): it stays put through rerolls, and if you pick a different card it comes back in your next level-up hand (in place of one random card) until you take it. Unlocking is free but refunds nothing. A lock is dropped if the card can no longer be offered by then (maxed, weapon discarded, no free slot for NEW WEAPON). Keys: Shift+1 / 2 / 3, or Y on the focused card.`,
-      `BANISH a card for ${banishCost()} ◆: it never comes up again this run, and a fresh card takes its slot. It takes two presses so you can't do it by accident: click ✕ twice, press B then 1 / 2 / 3, or RB twice on the focused card. NEW WEAPON can't be banished.`
+      `LOCK a card for ${lockCost()} ◆ (one at a time): it stays put through rerolls, and if you pick a different card it comes back in your next level-up hand (in place of one random card) until you take it. Changed your mind? Unlocking it, or moving the lock to another card, in the same level-up refunds it in full; a lock carried in from an earlier level-up was paid for there and refunds nothing. A lock is dropped if the card can no longer be offered by then (maxed, weapon discarded, no free slot for NEW WEAPON). Keys: Shift+1 / 2 / 3, or Y on the focused card.`,
+      `BANISH a card for ${banishCost()} ◆: that card never comes up again this run, at any level, and a fresh card takes its slot. It takes two presses so you can't do it by accident: click ✕ twice, press B then 1 / 2 / 3, or RB twice on the focused card. NEW WEAPON can't be banished.`
     ]
   },
   {
-    id: 'caches', icon: '▣', title: 'RELIC CACHES & JACKPOTS',
+    id: 'caches', icon: '▣', title: 'ALIEN TECH CACHES & JACKPOTS',
     body: () => [
-      'Bosses always drop a Super Relic Cache. Lieutenants, vortexes, splitters and weavers have small luck-scaled chances; gold veins can hide one.',
+      'Bosses always drop a Super Alien Tech Cache (unless they escape: kill them within 3 minutes). Lieutenants, vortexes, splitters and weavers have small luck-scaled chances; gold veins can hide one.',
       `Opening one installs free upgrades: 1× normally, or a rare 2× (${pct(TUNING.chestDoubleChance ?? 0.075)}), 3× (${+((TUNING.chestTripleChance ?? 0.018) * 100).toFixed(1)}%) or 5× Penta-Core (${+((TUNING.chestPentaChance ?? 0.003) * 100).toFixed(1)}%) jackpot, all × luck (super caches roll better).`
     ]
   },
@@ -541,22 +548,13 @@ export const MECHANIC_ENTRIES = [
 
 // --- Weapons: a thin adapter over UPGRADE_POOL / WEAPON_TAGS -------------------------------------
 // Categories are taken from the pool in order, so new cards and categories show up with no edits.
-// Recipes are optional hints for evolutions (unknown ids are simply skipped).
+// Evolutions carry their recipe id; field-guide-ui.js renders it from js/evolution-recipes.js.
 // The crab's starting weapons, straight from the loadout registry.
 export const STARTING_KIT = STARTING_WEAPONS.map((id) => ({
   key: id,
   name: WEAPON_BY_ID[id].name.toUpperCase(),
   text: WEAPON_BY_ID[id].summary
 }));
-
-const EVOLUTION_RECIPES = {
-  evo_tectonic: 'Rotary Claw Overclock LV 2',
-  evo_pulsar: 'Prism Split LV 2 or Hyper-Capacitor LV 2',
-  evo_tempest: 'Swarm Micro-Missiles + Tesla Arc Emitter',
-  evo_siege: 'Proximity Mines + Sentry Turret',
-  evo_emp: 'Plasma Grenades + Tesla Arc Emitter',
-  evo_supercrit: 'Deadeye Targeting Lattice LV 2 + any weapon with an element'
-};
 
 const tagChips = (tags = []) => tags.filter(t => TAG_INFO[t]).map(t => ({ id: t, label: TAG_INFO[t].label, color: TAG_INFO[t].color }));
 
@@ -577,7 +575,7 @@ export function weaponGuide(levels = null, pool = UPGRADE_POOL) {
       maxLevel: u.maxLevel,
       evolution: !!u.isSynergy,
       weapon: !!WEAPON_BY_LEVEL_ID[u.id], // a slot weapon's own card (WEAPONS tab) vs an upgrade (UPGRADES tab)
-      recipe: EVOLUTION_RECIPES[u.id] || null,
+      recipe: EVOLUTION_RECIPES[u.id] ? u.id : null,
       tags: tagChips(u.tags),
       owned: levels ? (levels[u.id] || 0) : 0
     });

@@ -12,6 +12,40 @@ export const NOTE_TYPES = Object.freeze(['new', 'balance', 'fix']);
 
 export const CHANGELOG = Object.freeze([
   {
+    version: '0.46.0',
+    date: '2026-10-22',
+    title: 'Breakthrough Pools',
+    notes: [
+      { type: 'new', text: 'Your weapons are on your ship: every weapon mounts a part on the hull (pods, racks, coils, tubes...) that fires its shots, kicks as it fires and shows its reload ticking.' },
+      { type: 'new', text: 'Deep space: a faint nebula, a drifting starfield and a distant planet behind the grid, with the odd shooting star and dust that streaks as you dash.' },
+      { type: 'new', text: 'Weapon unlocks: start with 8 of 20 weapons; the rest unlock from small goals (freeze, burn, mine, bosses…) under 🔓 WEAPONS. You carry 5 (was 6), the 5th a capstone.' },
+      { type: 'new', text: 'Save protection: SAVE backs your progress up to the cloud with a recovery code, and exports or imports a save code. Restore on any device, or merge two saves.' },
+      { type: 'new', text: 'Breakthroughs are a draw at LV 6, 12 and 18: a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power). Cards state the effect once, DPS below.' },
+      { type: 'new', text: '40 new Breakthroughs across 20 weapons (Tank Tracks is now Formation Thrusters). The Claw Harpoon is now the Drill Driver: drills fly out on a cable and reel back.' },
+      { type: 'new', text: 'The GLOBAL leaderboard shows the full top 100 (tap YOU #n to jump to your run). Busy boards retry on their own, and a run that can\'t upload waits and sends itself later.' },
+      { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
+      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave. Phase Piercer, Extra Nozzle and Split Rails are RARE. ELECTRIC is now SHOCK (Tesla, Shock Field).' },
+      { type: 'balance', text: 'Crits reworked, FROST bites, Tesla fires twice as often, the Flamethrower spins faster, Orbit Blades hit harder, Gas Trail is trimmed, and turrets drop the moment their bank fills.' },
+      { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Moving or removing a LOCK in the same level-up refunds its gold. Cards show evolution recipes, listed in the Field Guide.' },
+      { type: 'new', text: 'Bosses escape after 3 minutes, so kill them in time for an Alien Tech Cache. Lancers telegraph clearly: the aim line locks and flashes, then sweeps only to the marked side.' }
+    ]
+  },
+  {
+    version: '0.45.0',
+    date: '2026-10-21',
+    title: 'Squadron & Replicator',
+    notes: [
+      { type: 'new', text: 'Escort Drones fly in formation: you start with a front pair, spaced wider, and Wingmen add a back row of 3. The lead has the heavy gun; drones hold ~85% of the Autocannon.' },
+      { type: 'new', text: 'New LV 6 drone Breakthrough, Escort Squadron: 3 more drones join at once, up to 8 (3 in front, 5 behind). New drones launch and snap into formation one by one.' },
+      { type: 'new', text: 'New global card, Replicator Array (always RARE or better, and rare in hands): each rank gives every equipped weapon one more of what it fires, up to its cap. Max 2 ranks.' },
+      { type: 'balance', text: 'Replicator Array never raises a weapon\'s level, so your Breakthroughs stay on schedule. It adds +2 Autocannon streams, +2 Tesla Arc jumps or +1 of everything else.' },
+      { type: 'balance', text: 'Rail Lance: Flux Lens widens the line more (+6 per card, was +4). Upgrade cards show size and reach boosts as percentages instead of pixels.' },
+      { type: 'new', text: 'Dialogue types at half speed and stays up twice as long, and Dr. Pixie talks from the bottom centre, close to your ship.' },
+      { type: 'new', text: 'The starting pick now offers 8 weapons: Escort Drones and Sentry Turret join it. REDUCE EFFECTS also dims the minor bosses\' glow flashes.' },
+      { type: 'balance', text: 'Event Horizon is fairer: you can always fly out of its pull, it spits you out on contact, its arcs are smaller, its orbs spaced out, and it no longer eats lieutenants.' }
+    ]
+  },
+  {
     version: '0.44.0',
     date: '2026-10-20',
     title: 'Big Guns, Bigger Bosses',

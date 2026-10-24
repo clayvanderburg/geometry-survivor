@@ -11,9 +11,11 @@
 // Simulated only from Game.update (pause, hit-stop and slow-mo freeze it); every number comes from
 // weapon-scaling.js so card previews stay exact. Damage goes through Game.hitEnemy (source 'glaive',
 // stat 'glaive_recall' for the way home). Discs live in a fixed pool; a full pool skips the extra discs.
-import { WEAPON_SCALING as W, weaponDamage } from './weapon-scaling.js';
+import { WEAPON_SCALING as W, weaponDamage, projectileSpeedMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Shatter Edge, Arc Discs
 import { shieldBlocks } from './archetypes.js';
+import { kickMount, mountWorld, setMountCharge } from './hardpoints.js';
 
 export const GLAIVE_HUE = 24;     // molten orange
 const POOL = 96;
@@ -75,6 +77,7 @@ export class GlaiveDiscs {
     if (b) {
       if (this.timer > 0) this.timer = Math.max(0, this.timer - dt);
       if (this.timer <= 0 && this.throwDiscs(game, p, b)) this.timer = W.glaiveCooldown(b);
+      setMountCharge(p, 'glaive', 1 - this.timer / W.glaiveCooldown(b)); // the disc spins up as it reloads
     }
     let n = 0;
     for (const d of this.discs) {
@@ -115,17 +118,19 @@ export class GlaiveDiscs {
     const n = W.glaiveCount(b);
     const picks = this.pickTargets(game, p, n);
     if (!picks.length) return false;
-    const speed = W.glaiveSpeed(b);
+    const speed = W.glaiveSpeed(b) * projectileSpeedMult(p); // Velocity Coils
     for (let i = 0; i < n; i++) {
       const d = this.spawn();
       if (!d) break;
       const t = picks[i % picks.length].e;
       const round = Math.floor(i / picks.length);
       const a = Math.atan2(t.y - p.y, t.x - p.x) + (round ? (round % 2 ? 1 : -1) * 0.35 * Math.ceil(round / 2) : 0);
-      const off = (p.radius || 15) + 6;
+      // Flung from the glaive launcher (hardpoints.js).
+      const slot = mountWorld(p, 'glaive', this._slot ||= {}, game);
+      kickMount(p, 'glaive', a);
       d.active = true;
-      d.x = p.x + Math.cos(a) * off;
-      d.y = p.y + Math.sin(a) * off;
+      d.x = slot.x;
+      d.y = slot.y;
       d.speed = d.launch = speed;
       d.vx = Math.cos(a) * speed;
       d.vy = Math.sin(a) * speed;
@@ -303,6 +308,7 @@ export class GlaiveDiscs {
       const dmg = this.hitDamage(d, game, b);
       d.hits++;
       game.hitEnemy(e, dmg, 'glaive', (d.vx / d.speed) * KNOCK, (d.vy / d.speed) * KNOCK, 1, 'glaive');
+      if (d.hits > 1) BTX.glaiveArc(game, b, d.last, e, dmg);
       game.particles.spawnDirectionalSparks(d.x, d.y, Math.atan2(d.vy, d.vx), 0.7, 5, GLAIVE_HUE + 15, 8);
       game.particles.spawnShockwave(e.x, e.y, e.radius + 14, GLAIVE_HUE + Math.min(30, d.hits * 4), 2, 0.12);
       if (this.soundHits++ < SOUND_HITS_PER_TICK) game.sound.playGlaiveRicochet?.(d.hits, 'enemy');
@@ -378,6 +384,7 @@ export class GlaiveDiscs {
     d.fade = FADE;
     d.target = null;
     game.particles.spawnExplosionSparks(d.x, d.y, 5, GLAIVE_HUE + 10, 1.5, 6, 1.6);
+    BTX.glaiveShatter(game, b, d, weaponDamage(game.player, 'glaive', b));
   }
 
   // Boomerang Recall: home on the ship, slicing each enemy on the way once (up to recallHits).

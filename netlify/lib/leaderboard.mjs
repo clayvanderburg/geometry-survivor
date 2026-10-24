@@ -12,12 +12,22 @@
 // the same keys with the mode's suffix: board-v1-hc / board-v1-hc@<version>, board-v1-blitz /
 // board-v1-blitz@<version>. A run without a `mode` (older clients) is NORMAL.
 // A run is written to its version's board and to the all-time board. Writes are compare-and-swap on the
-// blob's ETag and retried on conflict, so two runs submitted at the same moment both land. Rate limiting
-// keeps one small blob per hashed client IP.
+// blob's ETag and retried on conflict (full-jitter backoff), so runs submitted at the same moment all land;
+// a run that still can't get in after WRITE_ATTEMPTS answers 503 and frees its cooldown slot, so the game's
+// quiet retry gets through. A run may carry a client `nonce`: its id is derived from it, so a retried
+// submission replaces itself instead of landing twice. Rate limiting keeps one small blob per hashed client
+// IP per RATE_BUCKET_MS window (ratelimit/<bucket>/<hash>): only the current and previous windows are ever
+// read, and each function instance sweeps older windows once per window.
+// GET answers are cached on Netlify's CDN for a few seconds (GET_CDN_CACHE); every board carries `updated`
+// (its last write), so the game ignores a cached board older than one it already holds, and the POST
+// answer returns every board the run landed on, so a pilot's own run shows at once.
 //
 // Anti-cheat is deliberately "not trivially broken", not secure: the browser reports its own score,
 // so anyone who reads this file can submit a believable fake run. See README "Global leaderboard".
 import { createHash, randomUUID } from 'node:crypto';
+import { createRateLimiter, writeConditions } from './rate-limit.mjs';
+
+export { writeConditions };
 import { NAME_PATTERN, sanitizeCallsign, ALL_TIME, BOARD_VERSIONS } from '../../js/leaderboard-rules.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { MODE_IDS, DEFAULT_MODE, isMode, modeWaveLength } from '../../js/modes.js';
@@ -29,6 +39,26 @@ export const BOARD_KEY = 'board-v1'; // all-time board (it predates versioning, 
 export const VERSION_BOARD_PREFIX = 'board-v1@';
 export const RATE_PREFIX = 'ratelimit/';
 export const MIGRATION_PREFIX = 'migrations/';
+
+// GET answers on Netlify's CDN: fresh for 15 s, then served stale for up to 30 s more while one request
+// refreshes it. `durable` shares one cached copy across every edge node (without it each node keeps its
+// own, and most requests still reached the function). Browsers never cache them (cache-control), and each
+// ?version / ?mode is its own entry.
+export const GET_CDN_CACHE = 'public, durable, s-maxage=15, stale-while-revalidate=30';
+export const GET_CACHE_HEADERS = Object.freeze({
+  'cache-control': 'public, max-age=0, must-revalidate',
+  'netlify-cdn-cache-control': GET_CDN_CACHE,
+  'netlify-vary': 'query=version|mode'
+});
+
+// A client nonce: random, 16-64 URL-safe characters. Anything else is ignored (the run gets a fresh id).
+export const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+// Entry id for a nonce: a hash, so the public id never reveals the nonce that could replace the entry.
+export const nonceId = (nonce) => 'r' + createHash('sha256').update(`run:${nonce}`).digest('hex').slice(0, 24);
+
+// Rate-limit window of a time, and the blob key of one client in it.
+export const rateBucket = (t, limits = LIMITS) => Math.floor(t / limits.RATE_BUCKET_MS);
+export const rateKey = (bucket, ipHash) => `${RATE_PREFIX}${bucket}/${ipHash}`;
 
 // One-time board cleanups. Each runs once per store: the first /api/scores request after it deploys
 // removes every matching entry from every board (all-time and per version), then writes a marker blob
@@ -73,11 +103,15 @@ export function boardKey(version, mode = DEFAULT_MODE) {
 
 export const LIMITS = Object.freeze({
   BOARD_SIZE: 100,       // runs kept in the blob
-  PUBLIC_SIZE: 50,       // runs returned by GET
+  PUBLIC_SIZE: 100,      // runs returned by GET and POST: the whole board (the GLOBAL list scrolls)
   MAX_PER_NAME: 5,       // one callsign can't flood the board
   COOLDOWN_MS: 20_000,   // per-IP gap between submissions
   MAX_BODY_BYTES: 2048,
-  WRITE_ATTEMPTS: 8
+  WRITE_ATTEMPTS: 10,
+  BACKOFF_BASE_MS: 30,   // compare-and-swap retry pause: random 0..min(cap, base * 2^attempt) ("full jitter")
+  BACKOFF_CAP_MS: 600,
+  RATE_BUCKET_MS: 10 * 60_000, // rate-limit blobs are keyed by this window; older windows are swept
+  SWEEP_MAX_DELETES: 500 // per sweep, so one request never spends long cleaning up
 });
 
 // Hard field ranges: anything outside is malformed, not merely implausible.
@@ -293,12 +327,9 @@ export function hashIp(ip, salt) {
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Compare-and-swap options for a blob read as `current` (null when it didn't exist). Netlify Blobs
-// returns an ETag on every read in production; the local `netlify dev` sandbox doesn't, and there we
-// fall back to a plain last-writer-wins write rather than failing every submission.
-export function writeConditions(current) {
-  if (!current) return { onlyIfNew: true };
-  return current.etag ? { onlyIfMatch: current.etag } : {};
+// Full-jitter backoff before compare-and-swap attempt `attempt` (0-based) retries.
+export function backoffMs(attempt, limits = LIMITS, random = Math.random) {
+  return Math.floor(random() * Math.min(limits.BACKOFF_CAP_MS, limits.BACKOFF_BASE_MS * 2 ** attempt));
 }
 
 // options.store(context): returns the Store (called per request with the Netlify context, after Netlify has
@@ -319,7 +350,8 @@ export function createScoresHandler({
 } = {}) {
   async function getBoard(blobs, key) {
     const result = await blobs.getWithMetadata(key, { type: 'json' });
-    return { entries: readBoard(result?.data), conditions: writeConditions(result) };
+    const updated = typeof result?.data?.updated === 'string' ? result.data.updated : null;
+    return { entries: readBoard(result?.data), conditions: writeConditions(result), updated };
   }
 
   // Versions whose board blob exists in a mode (i.e. that have runs), newest first. One list call; a
@@ -343,7 +375,7 @@ export function createScoresHandler({
     if (error) return json(400, { error, current: currentVersion });
     const { mode, error: modeError } = modeFromQuery(params.get('mode'));
     if (modeError) return json(400, { error: modeError, current: currentVersion });
-    const [{ entries }, withRuns] = await Promise.all([getBoard(blobs, boardKey(board, mode)), versionsWithRuns(blobs, mode)]);
+    const [{ entries, updated }, withRuns] = await Promise.all([getBoard(blobs, boardKey(board, mode)), versionsWithRuns(blobs, mode)]);
     return json(200, {
       version: board,
       mode,
@@ -351,33 +383,28 @@ export function createScoresHandler({
       versions: withRuns,
       entries: entries.slice(0, limits.PUBLIC_SIZE).map(publicEntry),
       total: entries.length,
-      boardSize: limits.BOARD_SIZE
-    });
+      boardSize: limits.BOARD_SIZE,
+      updated
+    }, GET_CACHE_HEADERS);
   }
 
-  // Claims this IP's submission slot. Conditional write, so parallel requests can't all slip through.
-  async function claimRateSlot(blobs, ipHash, t) {
-    const key = RATE_PREFIX + ipHash;
-    const prev = await blobs.getWithMetadata(key, { type: 'json' });
-    const last = Number(prev?.data?.t) || 0;
-    if (prev && t - last < limits.COOLDOWN_MS) return Math.ceil((limits.COOLDOWN_MS - (t - last)) / 1000);
-    const write = await blobs.setJSON(key, { t }, writeConditions(prev));
-    return write.modified ? 0 : Math.ceil(limits.COOLDOWN_MS / 1000);
-  }
+  // Per-IP cooldown in RATE_BUCKET_MS windows, swept once per window (./rate-limit.mjs).
+  const rate = createRateLimiter({ prefix: RATE_PREFIX, cooldownMs: limits.COOLDOWN_MS, windowMs: limits.RATE_BUCKET_MS, sweepMaxDeletes: limits.SWEEP_MAX_DELETES, log });
 
-  // Merges one entry into a board blob. Resolves { ranked, rank } (rank null when it didn't make the
-  // board, in which case nothing is written) or { busy: true } after WRITE_ATTEMPTS conflicts.
+  // Merges one entry into a board blob (replacing an earlier copy of the same id: a retried submission).
+  // Resolves { ranked, rank, updated } (rank null when it didn't make the board, in which case nothing is
+  // written) or { busy: true } after WRITE_ATTEMPTS conflicts.
   async function insertEntry(blobs, key, entry, extra = {}) {
     for (let attempt = 0; attempt < limits.WRITE_ATTEMPTS; attempt++) {
-      const { entries, conditions } = await getBoard(blobs, key);
+      const { entries, conditions, updated } = await getBoard(blobs, key);
       const ranked = rankEntries([...entries.filter(e => e.id !== entry.id), entry], limits);
       const index = ranked.findIndex((e) => e.id === entry.id);
-      if (index === -1) return { ranked, rank: null };
+      if (index === -1) return { ranked, rank: null, updated };
       const write = await blobs.setJSON(key, { version: 1, ...extra, updated: entry.date, entries: ranked }, conditions);
-      if (write.modified) return { ranked, rank: index + 1 };
-      // Someone else wrote first: re-read and merge again after a jittered, growing pause so
+      if (write.modified) return { ranked, rank: index + 1, updated: entry.date };
+      // Someone else wrote first: re-read and merge again after a full-jitter, growing pause so
       // simultaneous writers fall out of lockstep.
-      await sleep(Math.floor(Math.random() * Math.min(400, 25 * 2 ** attempt)));
+      await sleep(backoffMs(attempt, limits));
     }
     return { busy: true };
   }
@@ -403,7 +430,8 @@ export function createScoresHandler({
     run.version = version.version;
 
     const t = now();
-    const retryAfter = await claimRateSlot(blobs, hashIp(clientIp(req, context), salt), t);
+    const { retryAfter, key: slotKey } = await rate.claim(blobs, hashIp(clientIp(req, context), salt), t);
+    await rate.sweepSoon(blobs, t, context);
     if (retryAfter > 0) {
       return json(429, { error: 'slow down: one run per pilot every few seconds', retryAfter }, { 'retry-after': String(retryAfter) });
     }
@@ -411,27 +439,39 @@ export function createScoresHandler({
     const implausible = checkPlausibility(run, mode);
     if (implausible) return json(422, { error: `run rejected: ${implausible}` });
 
-    const entry = { id: newId(), ...run, date: new Date(t).toISOString() };
+    const nonce = typeof body.nonce === 'string' && NONCE_PATTERN.test(body.nonce) ? body.nonce : null;
+    const entry = { id: nonce ? nonceId(nonce) : newId(), ...run, date: new Date(t).toISOString() };
     // The run's own version board first (that's the rank the game shows), then the all-time board, both
     // of the run's mode. A pre-versioning client's run only has the all-time board.
     const allTimeKey = boardKey(ALL_TIME, mode);
     const own = run.version
       ? await insertEntry(blobs, boardKey(run.version, mode), entry, { gameVersion: run.version })
       : await insertEntry(blobs, allTimeKey, entry);
-    if (own.busy) return json(503, { error: 'leaderboard busy, try again' }, { 'retry-after': '2' });
+    const busy = async (partial) => {
+      await rate.release(blobs, slotKey); // the game's retry isn't refused
+      return json(503, { error: 'leaderboard busy, try again', partial }, { 'retry-after': '2' });
+    };
+    if (own.busy) return busy(false);
     let allTimeRank = run.version ? null : own.rank;
+    let allTime = null;
     if (run.version) {
-      // Best effort: the run is already on its version's board, so a contended all-time board doesn't
-      // turn the submission into an error.
-      const allTime = await insertEntry(blobs, allTimeKey, entry);
-      if (allTime.busy) log?.warn?.('[scores] all-time board busy, run kept on its version board', entry.id);
-      else allTimeRank = allTime.rank;
+      // The run is on its version's board. If the all-time board stays too busy, the answer is still a
+      // 503 so the game retries; the retry replaces this copy (same id) and tries the all-time board again.
+      allTime = await insertEntry(blobs, allTimeKey, entry);
+      if (allTime.busy) {
+        log?.warn?.('[scores] all-time board busy, asking the client to retry', entry.id);
+        return busy(true);
+      }
+      allTimeRank = allTime.rank;
     }
+    const board = (b) => ({ entries: b.ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: b.ranked.length, updated: b.updated });
     return json(201, {
       accepted: true, onBoard: own.rank !== null, rank: own.rank, allTimeRank,
       version: run.version, board: run.version || ALL_TIME, mode, current: currentVersion,
       id: entry.id, name: entry.name, censored,
-      entries: own.ranked.slice(0, limits.PUBLIC_SIZE).map(publicEntry), total: own.ranked.length, boardSize: limits.BOARD_SIZE
+      ...board(own), boardSize: limits.BOARD_SIZE,
+      // The all-time board too (a version run lands on both), so the game never re-reads it from the CDN.
+      ...(allTime ? { allTime: board(allTime) } : {})
     });
   }
 
@@ -446,7 +486,7 @@ export function createScoresHandler({
       if (kept.length === entries.length) return 0;
       const write = await blobs.setJSON(key, { ...result.data, entries: kept }, writeConditions(result));
       if (write.modified) return entries.length - kept.length;
-      await sleep(Math.floor(Math.random() * Math.min(400, 25 * 2 ** attempt)));
+      await sleep(backoffMs(attempt, limits));
     }
     throw new Error(`purge: ${key} stayed busy`);
   }

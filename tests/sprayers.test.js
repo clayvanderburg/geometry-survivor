@@ -50,7 +50,7 @@ function rig(p, kind, enemies) {
 const enemy = (p, dx, dy) => ({ type: 'swarmer', x: p.x + dx, y: p.y + dy, radius: 10, hp: 1e6, maxHp: 1e6 });
 const run = (r, seconds) => { for (let i = 0; i < Math.round(seconds * 60); i++) r.ft.update(1 / 60, r.game, true); };
 
-test('two new PRIMARY weapons with their own source, tags, colour, run-stats group and seven cards', () => {
+test('two new PRIMARY weapons with their own source, tags, colour, run-stats group and six cards', () => {
   const groups = buildSourceGroups(WEAPONS);
   for (const [id, s] of Object.entries(SPRAYERS)) {
     const w = WEAPON_BY_ID[id];
@@ -62,7 +62,7 @@ test('two new PRIMARY weapons with their own source, tags, colour, run-stats gro
     assert.ok(DAMAGE_SOURCE_COLORS[s.source]);
     for (const t of WEAPON_TAGS[s.source]) assert.ok(TAG_INFO[t], t);
     assert.ok(weaponTags(id).includes('area'));
-    assert.equal(STAT_CARDS[id].length, 7);
+    assert.equal(STAT_CARDS[id].length, 6, 'Spin Rotor retired in v0.46');
     assert.ok(STAT_CARDS[id].some((c) => c.stat === 'nozzles'), 'an Extra Nozzle card');
     assert.equal(groups[s.burst], id, 'its LV 6 burst counts as its damage');
     assert.equal(SPRAY_KINDS[id].source, s.source);

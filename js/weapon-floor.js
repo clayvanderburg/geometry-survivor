@@ -1,8 +1,8 @@
 // Weapon floor: by player level you must carry a minimum number of weapons, so rushing one or two
 // weapons and then stacking global cards is no longer the dominant play.
 //
-//   player LV   6   12   18   24   30
-//   weapons     2    3    4    5    6 (all slots)
+//   player LV   6   12   18   24
+//   weapons     2    3    4    5 (all slots; v0.46: 5 slots, was 6 by LV 30)
 //
 // The floor is 1 + floor(LV / step) (step = TUNING.weaponFloorStep, 6; 5 would tighten it), capped at the
 // weapon slots. A level-up below the floor skips the hand and opens CHOOSE A WEAPON (1 of 3, gold can

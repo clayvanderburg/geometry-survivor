@@ -32,7 +32,8 @@ test('every entry has a date, a title and a handful of typed, player-facing note
     assert.match(entry.date, /^\d{4}-\d{2}-\d{2}$/, entry.version);
     assert.ok(!Number.isNaN(Date.parse(entry.date)), entry.version);
     assert.ok(typeof entry.title === 'string' && entry.title.trim().length > 0, entry.version);
-    assert.ok(Array.isArray(entry.notes) && entry.notes.length >= 1 && entry.notes.length <= 8, `${entry.version}: 1-8 notes`);
+    // Up to 12 notes: Clay wants fewer, bigger updates (v0.46), so one entry can carry a bigger release.
+    assert.ok(Array.isArray(entry.notes) && entry.notes.length >= 1 && entry.notes.length <= 12, `${entry.version}: 1-12 notes`);
     for (const note of entry.notes) {
       assert.ok(NOTE_TYPES.includes(note.type), `${entry.version}: unknown note type ${note.type}`);
       assert.ok(typeof note.text === 'string' && note.text.length >= 10 && note.text.length <= 180, `${entry.version}: ${note.text}`);

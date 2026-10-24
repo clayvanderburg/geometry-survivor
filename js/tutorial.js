@@ -15,19 +15,19 @@ import { TUNING } from './config.js';
 
 export const TUTORIAL_SEEN_KEY = 'vexolith_tutorial_seen';
 // The GAME_VERSION major.minor the slides were last checked against (see the rule above).
-export const TUTORIAL_REVIEWED_FOR = '0.44';
+export const TUTORIAL_REVIEWED_FOR = '0.46';
 export const TUTORIAL_MEDIA_DIR = 'assets/tutorial/';
 
 // Lines are plain text with **bold** and [[gold|green|purple:colored]] spans. A line may be an object
 // with a variant per input: keyboard (mouse + keys), touch (phone / tablet) and pad (controller).
 export function tutorialSlides(tuning = TUNING) {
-  const slots = tuning.weaponSlots ?? 6;
+  const slots = tuning.weaponSlots ?? 5;
   const floorStep = tuning.weaponFloorStep ?? 6;
   const ltWave = tuning.lieutenantFirstWave ?? 2;
   return [
     {
       id: 'fly', title: 'FLY & FIGHT', media: 'fly.webp',
-      alt: 'The crab ship flying loops and shooting a swarm',
+      alt: 'The ship flying loops and shooting a swarm',
       lines: [
         {
           keyboard: '**WASD** flies · **mouse** aims · your guns fire on their own.',
@@ -53,7 +53,7 @@ export function tutorialSlides(tuning = TUNING) {
       id: 'mine', title: 'MINE ASTEROIDS', media: 'mine.webp',
       alt: 'The ship drilling through asteroids with gold and green veins',
       lines: [
-        'Fly into rock to drill it: only your **drill-claws** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
+        'Fly into rock to drill it: only your **drills** break it. Rock is cover, a tunnel is an escape. Violet **bedrock** never breaks.',
         '[[gold:◆ Gold veins]] pay gold to change your upgrade choices. [[green:Green veins]] restore your shield. [[purple:Purple cores]] give ❖ Void Cores.'
       ]
     },
@@ -62,7 +62,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The level-up screen with a NEW WEAPON card and an upgrade card',
       lines: [
         `Kills drop **XP**. Level up and pick a card: a **NEW WEAPON** (up to ${slots}) or an upgrade. Every ${floorStep} levels you **must** add a weapon.`,
-        'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards.'
+        'Every new weapon unlocks a bonus: **more cards to pick from**, more damage. Spend [[gold:◆ gold]] to **REROLL** or **LOCK** cards, or **SKIP** a hand for a little gold.'
       ]
     },
     {
@@ -70,7 +70,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'A boss warping in next to the ship',
       lines: [
         `From wave ${ltWave}, a named **LIEUTENANT** elite hunts you.`,
-        'Every **5th wave** a **BOSS** arrives (a bigger one every **10th**) with new enemies and a supply cache. Wave **50**: beat its boss, clear the field, win.',
+        'Every **5th wave** a **BOSS** arrives. Kill it within **3 minutes** for an **Alien Tech Cache**. Wave **50**: beat its boss, clear the field, win.',
         'A **red lane** or a **marked zone** means a boss attack is coming: **get out of it**.'
       ]
     },
@@ -79,6 +79,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The Void Armory of permanent upgrades',
       lines: [
         'When your shield breaks the run ends, but your ❖ **Void Cores** stay. Spend them in the **VOID ARMORY** on permanent upgrades.',
+        'Small goals (freeze, burn, mine…) **unlock new weapons**: see **🔓 WEAPONS** on the title screen.',
         'For in-depth info, check our handy **📖 FIELD GUIDE**.'
       ]
     }

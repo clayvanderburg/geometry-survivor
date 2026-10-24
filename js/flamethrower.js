@@ -1,5 +1,5 @@
-// Flamethrower: a PRIMARY slot weapon. While firing (like the Autocannon: auto-fire, the mouse, the right
-// stick or touch aim), a nozzle on the turret sprays a short cone of fire along the aim. Every scorch
+// Flamethrower: a PRIMARY slot weapon. A nozzle spins slowly round the ship (it never aims and sprays the
+// whole time it is equipped) and sprays a short cone of fire. Every scorch
 // (W.flameTickRate per second) hits everything inside the cone, near hits full and the tip at
 // 1 - W.flameEdgeFalloff, with source 'flame': status-effects.js sets it on FIRE at the weapon's built-in
 // rank (weapon-levels.js FIXED_ELEMENTS / fixedElementRank), so the STATUS cards and Fire Amplifier work
@@ -29,9 +29,11 @@
 // is simulated from Game.update only, so pause, hit-stop and slow-mo freeze it with the world.
 import { WEAPON_SCALING as W, weaponDamage, flameRange, areaMult } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: the whirl and the pack-seeking nozzle
 
 export const FLAME_RAYS = 9;      // rays across one nozzle's cone, each clipped at the first rock
 const MAX_PUFFS = 240;
+import { setMountSpray } from './hardpoints.js';
 const PUFF_LIFE = 0.32;           // s a flame puff lives (it travels the nozzle's reach in that time)
 const PUFFS_PER_TICK = 3;         // per nozzle per 60 Hz tick
 export const MAX_NOZZLES = 4;     // 1 + Extra Nozzle cards (cap 3)
@@ -94,7 +96,7 @@ export class Flamethrower {
     const p = game.player;
     const k = this.kind;
     const owned = (p.weapons[k.weapon] || 0) > 0;
-    if (owned) this.swing(p, weaponBuild(p, k.weapon), dt);
+    if (owned) this.swing(p, weaponBuild(p, k.weapon), dt, game);
     // No aiming at all: the nozzle spins round the ship and sprays the whole time it's equipped.
     const firing = owned;
     if (!firing && this.count === 0 && this.heat === 0) {
@@ -139,6 +141,7 @@ export class Flamethrower {
         }
       }
       for (const nz of this.nozzles) if (nz.on) this.spray(nz, p);
+      setMountSpray(p, k.weapon, this.swivel, Math.min(MAX_NOZZLES, W.flameNozzles(b)), true); // rim nozzle heads (hardpoints.js)
     } else {
       for (const nz of this.nozzles) nz.on = false;
     }
@@ -164,9 +167,10 @@ export class Flamethrower {
 
   // The nozzle ignores the aim: it turns steadily round the ship (clockwise) at flameTurnRate. Each kind
   // starts a third of a turn apart (`phase`), so two or three sprayers fan out instead of stacking.
-  swing(p, b, dt) {
+  swing(p, b, dt, game = null) {
     if (this.swivel === null) this.swivel = p.angle + (this.kind.phase || 0);
-    this.swivel = wrap(this.swivel + W.flameTurnRate(b) * dt);
+    // Pool Breakthroughs (bt-extras.js) may whirl the nozzle or steer it at the pack.
+    this.swivel = wrap(this.swivel + (game ? BTX.sprayTurn(this, game, p, b, dt, flameRange(p, b)) : W.flameTurnRate(b) * dt));
   }
 
   // Place the nozzles on the turret and clip each ray of their cones at the first rock face.

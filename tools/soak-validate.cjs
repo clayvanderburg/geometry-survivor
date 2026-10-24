@@ -16,7 +16,7 @@ const fs = require('node:fs/promises'), path = require('node:path');
   }catch{await route.fulfill({status:404,body:'Not found'});}
  });
  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:8096');
+ await page.goto('http://127.0.0.1:8096/?unlockall=1');
  await page.evaluate(()=>{const g=__game;g.splash.dismiss();g.startGame({picked:true});g.sound.enabled=false;g.sound.stopMusic();g.autoAim=true;g.__stats={ticks:0,maxEnemies:0,maxBullets:0,maxSparks:0,updates:[],maxPending:0};});
  for(let chunk=0;chunk<60;chunk++) await page.evaluate(chunk=>{
   const g=__game,s=g.__stats;g.keys={};g.keys[['KeyD','KeyS','KeyA','KeyW'][Math.floor(chunk/4)%4]]=true;

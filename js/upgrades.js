@@ -6,8 +6,9 @@ import {
   WEAPONS, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, ownsWeapon, ownedWeapons, ownedTags, freeSlots, unownedWeapons, weaponSlots, weaponLevel, weaponTags
 } from './loadout.js';
 import {
-  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
-  levelCardWeapon, weaponElement, elementsOf
+  STAT_CARDS, STAT_CARD_BY_ID, WEAPON_MAX_LEVEL, WEAPON_BADGE, BREAKTHROUGH_LEVELS, BT_FLATS, transformById, takenTransforms, transformEligible, btOptionId, ELEMENTS, ELEMENT_INFO, ELEMENT_CARDS, ELEMENT_CARD_BY_ID,
+  levelCardWeapon, weaponElement, elementsOf, boostRanks, REPLICATOR_ID, REPLICATOR_MAX_RANKS, COUNT_STATS, countRoom, replicatorBonus, replicatorRanks,
+  GLOBAL_CARDS, GLOBAL_MAX_RANKS, globalReaches
 } from './weapon-levels.js';
 import { BREAKTHROUGH_SLOT } from './slot-rewards.js';
 
@@ -24,14 +25,15 @@ export const RARITY = {
   weapon: { label: 'NEW WEAPON', color: '#ff8a3d' },
   // Breakthrough choices at weapon LV 6 / 12 / 18 (not level rolls either).
   transform: { label: '⚛ TRANSFORM', color: '#38f2d0' },
-  boost: { label: '⚛ ACROSS THE BOARD', color: '#ffb347' }
+  boost: { label: '⚛ FLAT BOOST', color: '#ffb347' } // the flats: Across the Board, Overtuned Core
 };
 
 const RARITY_BY_JUMP = ['common', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
 
+// `rarityFloor` (a jump size) keeps a card at least that tier: Replicator Array always shows RARE.
 export function rarityFor(upg, jump = 1) {
   if (upg.isSynergy) return 'evolution';
-  return RARITY_BY_JUMP[Math.max(1, Math.min(5, jump))];
+  return RARITY_BY_JUMP[Math.max(1, upg.rarityFloor || 1, Math.min(5, jump))];
 }
 
 // Each slot weapon contributes its equip line (LV 1, installed by acquireWeapon; never offered in a
@@ -46,8 +48,8 @@ const CORE_INFO = {
   lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
   singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
   mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
-  turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload over time.' },
-  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation behind your hull and fire at nearby targets.' },
+  turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload, and the one that fills your bank drops on its own.' },
+  drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation, a pair off your nose and a row behind your hull, and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
   gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship (and a giant cloud every time you dash): enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
   flamethrower: { headline: 'flameRange', summary: 'A nozzle spins slowly round your ship spraying a cone of fire: it scorches everything inside and sets it on FIRE. Asteroids block the flames.' },
@@ -57,7 +59,7 @@ const CORE_INFO = {
   raillance: { headline: 'railDamage', summary: 'Charges for a moment, then fires a hair-thin line down your aim that pierces every enemy and every rock to the edge of the screen. Each enemy behind the first takes a little less. Slow fire, huge hits: line packs up.' },
   glaive: { headline: 'glaiveCount', summary: 'Flings spinning discs at the nearest enemies: each one ricochets from enemy to enemy (and off rocks), losing a little speed every bounce.' },
   nanites: { headline: 'naniteRadius', summary: 'Every few seconds a canister of nanites flies to the densest pack nearby and bursts into a swarm that follows the pack and eats it: it grows with every kill, then disperses. Always CORROSIVE, so STATUS cards boost it.' },
-  harpoon: { headline: 'harpoonRange', summary: 'Fires one of your drill-claws on a tether where you aim: it pierces every enemy on its line, drills through rock (mining it as it goes) and yanks small enemies back into your other claw, which crushes them.' },
+  harpoon: { headline: 'harpoonRange', summary: 'Launches your front drills on a cable where you aim: each one bores through every enemy on its line out and back, and drills through rock, mining it as it goes.' },
   quake: { headline: 'quakeShells', summary: 'Lobs graviton charges at the densest packs: each bursts into a gravity wave that ripples out through space-time, hitting everything it rolls over and shoving it back. Tidal Shear cards and Spacetime Fractures let it break rocks too.' }
 };
 
@@ -72,7 +74,8 @@ function weaponGroup(id) {
   const core = { id: w.levelId, name: w.name, category: w.category, tags, maxLevel: 1, isCore: true, weapon: id, ...CORE_INFO[id], apply: bump };
   const stats = STAT_CARDS[id].map((c) => ({
     id: c.id, name: c.name, category: WEAPON_BADGE[id], owners: [id], tags, maxLevel: c.maxLevel, headline: c.headline,
-    summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump
+    summary: c.summary, statCard: true, weapon: id, stat: c.stat, apply: bump,
+    ...(c.rarityFloor ? { rarityFloor: c.rarityFloor } : {})
   }));
   // Element cards (weapon-levels.js ELEMENT_CARDS): level cards like the stat cards, plus the element's
   // rank in player.weapons. `req` is the element lock: once the weapon has an element, only that one's
@@ -131,6 +134,27 @@ const STATUS_CARDS = [
   elementDamageCard('shock', 'Shock Amplifier')
 ];
 
+// Weapons a global card reaches right now (equipped ones with its stat).
+export const globalReach = (player, kind) => ownedWeapons(player).filter((id) => globalReaches(kind, id));
+// Summaries name only open weapons (js/weapon-unlocks.js); the card's pills list the weapons it reaches.
+function globalCards() {
+  const reaches = (kind) => (player) => globalReach(player, kind).length > 0;
+  const card = (kind, name, category, summary, extra = {}) => ({
+    id: GLOBAL_CARDS[kind].id, name, category, maxLevel: GLOBAL_MAX_RANKS, globalCard: kind, headline: `global_${kind}`,
+    // As often as Reactor Overdrive or a crit card: the weapon-share guard (handWeights) keeps weapon cards at
+    // TUNING.handWeaponShare of a hand, so these no longer have to stay light to protect weapon progression.
+    get weight() { return TUNING.globalCardWeight ?? 1; },
+    req: reaches(kind), summary, apply() {}, ...extra
+  });
+  return [
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks more often, later pickups too: fire, reload, recharge, throw, tick. Not orbiting blades.'),
+    // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
+    card('cooldown', 'Cooldown Matrix', 'UTILITY', 'Your Phase Dash recharges faster, and so do weapons that reload charges, like the Sentry Turret.', { req: undefined }),
+    card('persistence', 'Persistence Field', 'POWER', 'Turrets, clouds, mines and swarms your weapons leave behind last longer, later pickups too. Only lifetime.', { overcharge: false }),
+    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs and more. Only shot speed.', { overcharge: false })
+  ];
+}
+
 // Each entry: headline (the STAT_ROWS id shown enlarged on its card, see upgrade-cards.js),
 // a number-free summary and optional tags (TAG_INFO keys in weapon-scaling.js, shown as chips:
 // the weapon families it belongs to or boosts). Exact numbers always come from the card preview.
@@ -145,20 +169,25 @@ export const MOVE_SPEED_STEP = 1.1;
 export const MAGNET_RADIUS_STEP = Math.pow(Math.pow(1.65, 5) / 2, 1 / 5); // ~1.437 per level
 export const MAGNET_XP_STEP = Math.pow(2, 1 / 5); // ~1.149 per level
 
-// Drill-claw numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
-export const MINING_SPEED_STEP = 1.06; // per Rotary Claw Overclock level
+// Drill numbers (v0.44.0 trim: the old x1.12 / x1.9 stacked to ~6x mining speed with the Armory).
+export const MINING_SPEED_STEP = 1.06; // per Rotary Drill Overclock level
 export const TECTONIC_MINING_SPEED = 1.18;
 export const TECTONIC_MINING_RANGE = 1.15;
 export const TECTONIC_DRILL_SCALE = 1.15;
+// Pulsar Helix also speeds up the Autocannon (stats.fireRate, read by blasterFireRate).
+export const PULSAR_FIRE_RATE = 1.15;
+
+// Overkill Resonator (crit damage) is offered once crit chance reaches this (see its req).
+export const CRIT_DAMAGE_MIN_CHANCE = 0.15;
 
 export const UPGRADE_POOL = [
   {
     id: 'mining_speed',
-    name: 'Rotary Claw Overclock',
-    category: 'DRILL CLAWS',
+    name: 'Rotary Drill Overclock',
+    category: 'DRILLS',
     maxLevel: 10,
     headline: 'miningSpeed',
-    summary: 'Spins the twin drill-claws faster. Only mining speed.',
+    summary: 'Spins the twin drills faster. Only mining speed.',
     apply(player) {
       player.stats.miningSpeed *= MINING_SPEED_STEP;
     }
@@ -169,7 +198,7 @@ export const UPGRADE_POOL = [
     category: 'LUCK',
     maxLevel: 5,
     headline: 'luck',
-    summary: 'Raises the odds of lucky multi-level rolls, supply caches and cache jackpots.',
+    summary: 'Raises the odds of lucky multi-level rolls, evolution cards, Alien Tech Caches and their jackpots.',
     apply(player) {
       player.stats.luck += 0.25;
     }
@@ -179,13 +208,38 @@ export const UPGRADE_POOL = [
     id: 'overdrive',
     name: 'Reactor Overdrive',
     category: 'POWER',
+    // Global: with many weapons one Overdrive rank out-realizes each weapon's best card (+10% vs +7% at 6 weapons,
+    // hand-bench.mjs), so it turns up a little less as the loadout grows (weightFor; 1 up to 3 weapons, 0.8 at a full 5).
+    weightFor: (player) => Math.max(0.5, 1 - (TUNING.overdriveWeightTaper ?? 0.1) * Math.max(0, ownedWeapons(player).length - 3)),
     maxLevel: 5,
     headline: 'allDamage',
-    summary: 'Overclocks the reactor: every weapon hits harder.',
+    summary: 'Overclocks the reactor: every weapon hits harder, ones you pick up later too.',
     apply(player) {
       player.stats.damage *= 1.12;
     }
   },
+  {
+    // Global: +1 rank to the count stat of every equipped weapon that has one (weapon-levels.js COUNT_STATS),
+    // outside the weapon level. Always at least RARE (rarityFloor), never rolls a multi-rank jump, rare in
+    // hands (TUNING.replicatorWeight) and offered only while some equipped weapon can still take a count rank.
+    id: REPLICATOR_ID,
+    name: 'Replicator Array',
+    category: 'POWER',
+    maxLevel: REPLICATOR_MAX_RANKS,
+    rarityFloor: 3,
+    noJump: true,
+    overcharge: false,
+    headline: 'bulletCount', // the card headline lists every weapon's gain (upgrade-cards.js replicatorHeadline)
+    get weight() { return TUNING.replicatorWeight ?? 0.25; },
+    summary: 'Prints a copy of every weapon\'s launcher: one more of whatever each one fires (streams, rockets, drones, turret charges, nozzles...). Never raises a weapon\'s level.',
+    req: (player) => ownedWeapons(player).some((id) => countRoom(player, id) > 0),
+    apply() {} // its rank in upgradeLevels is read by every weaponBuild
+  },
+  // GLOBAL CARDS (v0.46, weapon-levels.js GLOBAL_CARDS): one stat on every equipped weapon that has it, at
+  // about half a weapon card's step. Their ranks in upgradeLevels are read by weaponBuild (and the dash /
+  // shot speed), so apply() changes nothing. Each takes a quarter of a general card's hand weight (like Replicator
+  // Array): the four together weigh one general card, so weapon cards keep their share of hands (tests/loadout.test.js).
+  ...globalCards(),
   ...weaponGroup('rockets'),
   ...weaponGroup('missiles'),
   ...weaponGroup('orbitals'),
@@ -217,19 +271,33 @@ export const UPGRADE_POOL = [
       player.weapons.shrapnel = (player.weapons.shrapnel || 0) + 1;
     }
   },
-  // Geom Attractor Field, per level (compounding): LV 5 is half the old pickup radius (6.1x base, was 12.2x)
-  // and exactly 2x XP (was 3.05x). Armory Vacuum Array / Geom Resonator stack on top.
+  // Geom Attractor Field, per level (compounding): LV 5 is 6.1x the base pickup radius. Pickup radius only
+  // since v0.46: its XP went to Growth Lattice and its Supernova Bomb to a rare drop (main.js BOMB_DROP).
+  // The two cards split the old card's hand weight, like Ion Drive and Phase Nova Thrusters.
+  // Armory Vacuum Array / Geom Resonator stack on top.
   {
     id: 'magnet',
     name: 'Geom Attractor Field',
     category: 'UTILITY',
     maxLevel: 5,
+    weight: 0.5,
     headline: 'magnetRadius',
-    summary: 'Wider Geom vacuum, more XP per Geom, and a spare Supernova Bomb.',
+    summary: 'Wider Geom vacuum. Only pickup radius.',
     apply(player) {
       player.stats.magnetRadius *= MAGNET_RADIUS_STEP;
+    }
+  },
+  {
+    // Vampire Survivors' Crown: XP per Geom (exactly 2x at LV 5, as on the old Attractor card).
+    id: 'xp_growth',
+    name: 'Growth Lattice',
+    category: 'UTILITY',
+    maxLevel: 5,
+    weight: 0.5,
+    headline: 'xpMultiplier',
+    summary: 'More XP from every Geom, so you level up sooner. Only XP gain.',
+    apply(player) {
       player.stats.xpMultiplier *= MAGNET_XP_STEP;
-      player.bombs = Math.min(9, player.bombs + 1);
     }
   },
   {
@@ -253,7 +321,7 @@ export const UPGRADE_POOL = [
     maxLevel: 5,
     weight: 0.5,
     headline: 'novaDamage',
-    summary: 'Phase Dash recharges faster and unleashes a damaging shockwave.',
+    summary: 'Phase Dash unleashes a damaging shockwave. Only the dash nova.',
     apply(player) {
       player.weapons.dashNova = (player.weapons.dashNova || 0) + 1;
     }
@@ -305,7 +373,8 @@ export const UPGRADE_POOL = [
     name: 'Deadeye Targeting Lattice',
     category: 'CRITICAL',
     tags: ['crit'],
-    maxLevel: 6,
+    maxLevel: 5, // 5% base + 5 x 20% reaches 100%
+    req: (player) => (player.stats.critChance ?? 0) < 1, // never offered at 100% (Armory or Supercritical can get there first)
     overchargeReq: (player) => (player.stats.critChance ?? 0) < 1, // nothing past 100%
     headline: 'critChance',
     summary: 'Every weapon finds weak points more often. Crits hit harder and flash gold.',
@@ -320,7 +389,10 @@ export const UPGRADE_POOL = [
     tags: ['crit'],
     maxLevel: 6,
     headline: 'critDamage',
-    summary: 'Critical hits from every weapon land with a heavier multiplier.',
+    // A crit damage rank is worth crit chance x its step: at the base 5% chance it added ~2% (a dead pick next to
+    // Reactor Overdrive), so it waits until the ship crits often enough for it to pay (v0.46).
+    req: (player) => (player.stats.critChance ?? 0) >= CRIT_DAMAGE_MIN_CHANCE,
+    summary: 'Critical hits from every weapon land with a heavier multiplier. Offered once you crit often.',
     apply(player) {
       player.stats.critDamage = (player.stats.critDamage ?? (TUNING.baseCritDamage ?? 1.5)) + W.critDamageStep;
     }
@@ -330,13 +402,14 @@ export const UPGRADE_POOL = [
     id: 'tag_kinetic',
     name: 'Tungsten Penetrators',
     category: 'SPECIALIST',
+    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
     tags: ['kinetic'],
     maxLevel: 5,
     headline: 'kineticDamage',
     req(player) {
       return hasTag(player, 'kinetic');
     },
-    summary: 'KINETIC weapons hit harder: blaster bolts, helix bolts, shrapnel and orbit blades.',
+    summary: 'Every weapon with the KINETIC chip hits harder: bolts, blades, discs, lances, drills and shards.',
     apply(player) {
       addTagDamage(player, 'kinetic');
     }
@@ -345,36 +418,26 @@ export const UPGRADE_POOL = [
     id: 'tag_explosive',
     name: 'Shaped Charges',
     category: 'SPECIALIST',
+    rarityFloor: 2, // always at least UNCOMMON: strong in a one-family build, so rarer (tagCardWeight)
     tags: ['explosive'],
     maxLevel: 5,
     headline: 'explosiveDamage',
     req(player) {
       return hasTag(player, 'explosive') || player.weapons.tectonicBore >= 1;
     },
-    summary: 'EXPLOSIVE weapons hit harder: rockets, missile, grenade and mine blasts, and tectonic drill detonations.',
+    summary: 'Every weapon with the EXPLOSIVE chip hits harder: rockets, missiles, grenades, mines, mortar waves, Siege Battery shells and drill blasts.',
     apply(player) {
       addTagDamage(player, 'explosive');
     }
   },
   {
-    id: 'tag_electric',
-    name: 'Overvolt Coils',
-    category: 'SPECIALIST',
-    tags: ['electric'],
-    maxLevel: 5,
-    headline: 'electricDamage',
-    req(player) {
-      return hasTag(player, 'electric');
-    },
-    summary: 'ELECTRIC weapons hit harder: Tesla arcs, Storm Protocol chains and Shock Field discharges.',
-    apply(player) {
-      addTagDamage(player, 'electric');
-    }
-  },
-  {
+    // The global AREA card (v0.46: it was an AREA specialist): every blast, cloud, cone, field and pull on
+    // every weapon grows, so it sits with the GLOBAL CARDS. Keeps its id; weighted like the other global cards.
     id: 'tag_area',
     name: 'Field Amplifier',
-    category: 'SPECIALIST',
+    category: 'UTILITY',
+    globalCard: 'area',
+    get weight() { return TUNING.globalCardWeight ?? 1; },
     tags: ['area'],
     maxLevel: 5,
     headline: 'areaSize',
@@ -382,7 +445,7 @@ export const UPGRADE_POOL = [
       const w = player.weapons;
       return hasTag(player, 'area') || w.dashNova >= 1 || w.tectonicBore >= 1;
     },
-    summary: 'AREA weapons reach further: rocket, missile, grenade and mine blasts, singularity pull and collapse, dash nova and drill blasts.',
+    summary: 'Every blast, cloud, cone, field and pull grows, on every weapon you carry or pick up later. Only area size.',
     apply(player) {
       player.stats.areaMult = (player.stats.areaMult ?? 1) + W.areaStep;
     }
@@ -392,8 +455,8 @@ export const UPGRADE_POOL = [
   // Golden Synergies / Evolutions
   {
     id: 'evo_tectonic',
-    name: 'SYNERGY: Tectonic Claw Bore',
-    category: 'DRILL CLAWS',
+    name: 'SYNERGY: Tectonic Drill Bore',
+    category: 'DRILLS',
     tags: ['explosive', 'area'],
     isSynergy: true,
     maxLevel: 1,
@@ -401,7 +464,7 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.mining_speed >= 2);
     },
     headline: 'tectonicBlast',
-    summary: 'EVOLUTION: Upgrades your drill-claws (not a new weapon): supercharged drill-claws, and every drilled asteroid detonates into nearby enemies.',
+    summary: 'EVOLUTION: Upgrades your drills (not a new weapon): supercharged drills, and every drilled asteroid detonates into nearby enemies.',
     apply(player) {
       player.weapons.tectonicBore = 1;
       player.stats.miningSpeed *= TECTONIC_MINING_SPEED;
@@ -421,10 +484,10 @@ export const UPGRADE_POOL = [
       return (player.upgradeLevels.multishot >= 2 || player.upgradeLevels.firerate >= 2);
     },
     headline: 'helixBolts',
-    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side.',
+    summary: 'EVOLUTION: Upgrades your Autocannon (not a new weapon): every Autocannon shot also flings big magenta bolts out of your ship in a spinning spiral, hitting enemies on every side. The Autocannon fires faster too.',
     apply(player) {
       player.weapons.pulsarHelix = 1;
-      player.stats.fireRate *= 1.15;
+      player.stats.fireRate *= PULSAR_FIRE_RATE;
     }
   },
   {
@@ -432,7 +495,7 @@ export const UPGRADE_POOL = [
     name: 'SYNERGY: Storm Protocol',
     category: 'MISSILES + TESLA ARC',
     ownersAll: ['missiles', 'lightning'],
-    tags: ['explosive', 'electric'],
+    tags: ['explosive', 'shock'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -467,7 +530,7 @@ export const UPGRADE_POOL = [
     name: 'SYNERGY: EMP Grenades',
     category: 'GRENADES + TESLA ARC',
     ownersAll: ['grenades', 'lightning'],
-    tags: ['explosive', 'electric'],
+    tags: ['explosive', 'shock'],
     isSynergy: true,
     maxLevel: 1,
     req(player) {
@@ -511,6 +574,13 @@ function hasTag(player, tag) {
 }
 
 export const UPGRADE_BY_ID = Object.fromEntries(UPGRADE_POOL.map((u) => [u.id, u]));
+// Non-stat cards that no longer exist, by id: old run stats still name them (stats-dashboard.js). Runs are not
+// saved mid-run, and every lookup walks UPGRADE_POOL, so a leftover rank in upgradeLevels does nothing.
+// tag_electric: Overvolt Coils, retired in v0.46 with the ELECTRIC tag (Clay: "get rid of electric and have
+// shock"): Tesla Arc and the Shock Field are SHOCK, and Shock Amplifier is their damage card.
+export const RETIRED_CARDS = Object.freeze({ tag_electric: 'Overvolt Coils (retired)' });
+// A retired card's ranks carried over where a saved config still holds them (the Weapon Range's mods).
+export const RETIRED_CARD_SUCCESSOR = Object.freeze({ tag_electric: 'shock_damage' });
 
 // What kind of card an upgrade is in a level-up hand: 'weapon' (a stat card: raises an equipped
 // weapon's level), 'element' (a weapon's element card: raises its level too, level-up hands only),
@@ -568,15 +638,40 @@ export function loadoutAllows(player, u) {
 // weight is a TUNING value.
 export function cardWeight(u, luck = 1, player = null) {
   switch (upgradeKind(u)) {
-    case 'weapon': return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[STAT_CARD_BY_ID[u.id].weapon].length || 1);
+    case 'weapon': {
+      const c = STAT_CARD_BY_ID[u.id];
+      return (TUNING.weaponLevelWeight ?? 3) * 2 / (STAT_CARDS[c.weapon].length || 1) * (c.weightMult ?? 1); // RARE_CARD: rarer
+    }
     case 'element': return (TUNING.elementCardWeight ?? 1.5) / (player && weaponElement(player, u.weapon) ? 1 : ELEMENTS.length);
     case 'status': return TUNING.statusCardWeight ?? 0.7;
     case 'core': return 0;
     case 'line': return TUNING.weaponLineWeight ?? 1.5;
-    case 'tag': return TUNING.tagCardWeight ?? 0.7;
+    // A tag card in the hand only for a non-weapon source (the Volatile Shatter shards, Tectonic Bore blasts) is a
+    // weak pick there: TUNING.tagSourceOnlyWeight of the usual weight until a carried weapon has the tag.
+    case 'tag': return (TUNING.tagCardWeight ?? 0.7) * (player && !ownedWeapons(player).some((id) => weaponTags(id).includes(u.tags?.[0])) ? TUNING.tagSourceOnlyWeight ?? 0.4 : 1);
     case 'evolution': return (TUNING.evolutionWeight ?? 1) * luck;
-    default: return u.weight ?? 1;
+    default: return u.weightFor && player ? u.weightFor(player) : u.weight ?? 1;
   }
+}
+
+// HAND COMPOSITION: every equipped weapon brings its own 4-7 cards, so on raw weights the weapon cards' share
+// of a level-up hand followed the loadout (37% of offers with 1 weapon, 68% with 6: tools/hand-composition.mjs)
+// and global cards faded out just when builds should broaden. Level-up hands rescale the weapon cards (stat and
+// element cards) as one group so they hold TUNING.handWeaponShare of the total weight whatever you carry;
+// inside each group the usual weights still decide. Supply caches keep the raw weights.
+export const isWeaponCard = (u) => {
+  const kind = upgradeKind(u);
+  return kind === 'weapon' || kind === 'element';
+};
+export function handWeights(player, pool, luck = player.stats.luck || 1.0, { cache = false } = {}) {
+  const weights = pool.map((u) => cardWeight(u, luck, player));
+  const share = TUNING.handWeaponShare ?? 0.55;
+  if (cache || !(share > 0 && share < 1)) return weights;
+  let weapon = 0, other = 0;
+  pool.forEach((u, i) => { if (isWeaponCard(u)) weapon += weights[i]; else other += weights[i]; });
+  if (!(weapon > 0) || !(other > 0)) return weights; // only one group left: nothing to balance
+  const scale = (share / (1 - share)) * (other / weapon);
+  return pool.map((u, i) => (isWeaponCard(u) ? weights[i] * scale : weights[i]));
 }
 
 // Cumulative roll thresholds (roll < pentaChance → +5, < quadChance → +4, ...), all scaled by Luck.
@@ -604,7 +699,12 @@ export function canOvercharge(u) {
 // Levels a card can still add: its own cap, and for a level card (stat or element) also the room left
 // under the weapon's LV 18 cap (so a +5 roll on a LV 16 weapon installs +2). An OVERCHARGE card has no cap.
 export function levelRoom(player, u) {
-  const own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
+  let own = u.maxLevel - (player.upgradeLevels[u.id] || 0);
+  // A count card shares its cap with the REPLICATOR ARRAY ranks its weapon already gets.
+  const sc = STAT_CARD_BY_ID[u.id];
+  // A capped UTILITY stat shares its cap with the ACROSS THE BOARD ranks the weapon already gets.
+  if (sc?.boostCapped) own -= boostRanks(player, sc.weapon);
+  if (sc && COUNT_STATS[sc.weapon]?.card === u.id) own -= replicatorBonus(sc.weapon, player.upgradeLevels[u.id], replicatorRanks(player));
   const weapon = levelCardWeapon(u.id);
   if (!weapon && own <= 0 && canOvercharge(u) && overchargeReady(player) && (!u.overchargeReq || u.overchargeReq(player))) return Infinity;
   if (!weapon) return Math.max(0, own);
@@ -657,7 +757,9 @@ export function eligibleUpgrades(player, { cache = false } = {}) {
 // excludeId: a card already in the hand (a lock) and kept out of the draw. Up to 4 slots, O(n^slots).
 export function cardInclusionOdds(player, slots = 3, excludeId = null) {
   const luck = player.stats.luck || 1.0;
-  const pool = eligibleUpgrades(player).filter((u) => u.id !== excludeId).map((u) => ({ id: u.id, w: cardWeight(u, luck, player) }));
+  const cards = eligibleUpgrades(player).filter((u) => u.id !== excludeId);
+  const weights = handWeights(player, cards, luck);
+  const pool = cards.map((u, i) => ({ id: u.id, w: weights[i] }));
   const odds = new Map(pool.map((c) => [c.id, 0]));
   const k = Math.min(Math.max(0, Math.floor(slots)), 4, pool.length);
   const total = pool.reduce((a, c) => a + c.w, 0);
@@ -686,8 +788,10 @@ export function rollUpgrades(player, count = 3, { cache = false } = {}) {
   const luck = player.stats.luck || 1.0;
 
   // Weighted sample without replacement: one draw per candidate, key = r^(1/weight), highest keys win.
-  const shuffled = eligibleUpgrades(player, { cache })
-    .map((upgrade) => ({ upgrade, score: Math.pow(Math.random(), 1 / cardWeight(upgrade, luck, player)) }))
+  const pool = eligibleUpgrades(player, { cache });
+  const weights = handWeights(player, pool, luck, { cache });
+  const shuffled = pool
+    .map((upgrade, i) => ({ upgrade, score: Math.pow(Math.random(), 1 / weights[i]) }))
     .sort((a, b) => b.score - a.score)
     .map(({ upgrade }) => upgrade);
 
@@ -696,7 +800,7 @@ export function rollUpgrades(player, count = 3, { cache = false } = {}) {
     const remaining = levelRoom(player, u);
     let levelJump = 1;
 
-    if (!u.isSynergy && remaining > 1) {
+    if (!u.isSynergy && !u.noJump && remaining > 1) {
       const roll = Math.random();
       const c = levelJumpChances(luck);
       // Largest jump whose threshold the roll beats and that still fits under the level cap.
@@ -840,7 +944,7 @@ export function runStartPlayer(bonuses = {}, t = TUNING) {
       drillScale: t.drillScale,
       critChance: (t.baseCritChance ?? 0.05) + (bonuses.critChanceBonus || 0),
       critDamage: (t.baseCritDamage ?? 1.5) + (bonuses.critDamageBonus || 0),
-      tagDamage: { kinetic: 1, explosive: 1, electric: 1 },
+      tagDamage: { kinetic: 1, explosive: 1 },
       areaMult: bonuses.areaMult || 1
     }
   };
@@ -919,7 +1023,7 @@ export function discardWeapon(player, id) {
     }
   }
   if (!player.base && weapon.levelKey) player.weapons[weapon.levelKey] = 0;
-  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds). The slot 6
+  // Its Breakthroughs go with it: re-equipping the weapon starts fresh at LV 1 (no refunds). The slot 5
   // Breakthrough is once per run, so it goes too.
   if (player.breakthroughs) delete player.breakthroughs[id];
   if (player.breakthroughsOffered) delete player.breakthroughsOffered[id];
@@ -932,7 +1036,7 @@ export function discardWeapon(player, id) {
 // Milestones a weapon has reached but not yet chosen a Breakthrough for, lowest first.
 // A milestone already offered this run is never offered again (until the weapon is discarded), even if
 // its choice somehow failed to record: a weapon gets each Breakthrough exactly once. The weapon that
-// filled slot 6 has reached its first milestone from LV 1 (acquireWeapon).
+// filled slot 5 (the last) has reached its first milestone from LV 1 (acquireWeapon).
 export function pendingBreakthroughs(player, id) {
   const lv = weaponLevel(player, id);
   const taken = player.breakthroughs?.[id] || {};
@@ -947,14 +1051,18 @@ export function markBreakthroughOffered(player, id, level) {
   (all[id] || (all[id] = {}))[level] = true;
 }
 
-// Record a Breakthrough choice ('transform' or 'boost') for a weapon at a milestone. Weapon formulas
-// read it straight from player.breakthroughs, so nothing else needs rebuilding.
-export function applyBreakthrough(player, id, level, kind) {
-  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level) || !['transform', 'boost'].includes(kind)) return false;
+// Record a Breakthrough choice for a weapon at a milestone: a flat ('boost' | 'overtuned'), a transform id
+// from its pool, or 'transform' (that milestone's home transform). Stored as given; a transform already
+// installed can't be taken twice, nor one before what it `requires`. Weapon formulas read it straight from player.breakthroughs,
+// so nothing else needs rebuilding.
+export function applyBreakthrough(player, id, level, option) {
+  if (!ownsWeapon(player, id) || !BREAKTHROUGH_LEVELS.includes(level)) return false;
+  const opt = btOptionId(id, level, option);
   const all = player.breakthroughs || (player.breakthroughs = {});
   const mine = all[id] || (all[id] = {});
-  if (mine[level]) return false;
-  mine[level] = kind;
+  if (mine[level] || !opt) return false;
+  if (!BT_FLATS[opt] && (!transformById(id, opt) || !transformEligible(transformById(id, opt), level, takenTransforms(id, mine)))) return false;
+  mine[level] = option;
   return true;
 }
 

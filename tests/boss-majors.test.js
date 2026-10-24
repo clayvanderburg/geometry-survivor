@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Major bosses (js/bosses-major.js) and their hazards (js/boss-hazards.js): each signature attack is
+// Major bosses (js/bosses-major.js) and their hazards (js/boss-telegraphs.js): each signature attack is
 // telegraphed before it can hurt, hits once, lets a dash through, and is no one-shot on its wave.
 globalThis.window = { addEventListener() {} };
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
@@ -17,8 +17,9 @@ const { Game } = await import('../js/main.js');
 const { EnemyManager, waveScaleAt, damageRampAt, contactDamageAt } = await import('../js/enemies.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { BOSS_DEFS, OURO, HIVE, ARCH, COND, PRISM } = await import('../js/bosses.js');
-const { HAZARD, addBlast, addLine, addRing, applyBossHazards, tickBossHazards, inGap } = await import('../js/boss-hazards.js');
-const { BOSS_CUES } = await import('../js/boss-sfx-major.js');
+const { HAZARD_MULT } = await import('../js/bosses-major.js');
+const { MAJOR_HIT, inGap } = await import('../js/boss-telegraphs.js');
+const { BOSS_CUES, playBossCues } = await import('../js/boss-sfx-major.js');
 const { BASE_SHIELD } = await import('../js/upgrades.js');
 const silent = new Proxy({}, { get: () => () => {} });
 const resetTuning = () => Object.assign(TUNING, DEFAULT_TUNING);
@@ -27,75 +28,129 @@ const MAJORS = ['ouroboros', 'hive_carrier', 'architect', 'conductor', 'prism'];
 const step = (m, player, ticks = 1) => {
   for (let i = 0; i < ticks; i++) m.update(1 / 60, player, [], silent, silent, 4200, 4200);
 };
-const hazards = (m, kind, from) => (m.bossHazards || []).filter(h => h.kind === kind && (!from || h.from === from));
+// The major bosses' hazards by look (target circle, blueprint line, shock ring), plus callouts and fx.
+const KIND = { blast: ['zone', 'reticle'], line: ['lane', 'blueprint'], ring: ['wave', 'shock'], label: ['label', null], fx: ['fx', null] };
+const hazards = (m, kind, from) => m.bossTelegraphs.active.filter(h => h.kind === KIND[kind][0] && h.look === KIND[kind][1] && (!from || h.from === from));
 const ship = (x = 2000, y = 2000) => ({ x, y, vx: 0, vy: 0, radius: 15 });
 
+// A stand-in Game around a real EnemyManager: hazards hit through Game.updateEnemyBullets (the plasma-orb
+// callback), exactly as in a run.
 function hazardGame(wave = 30) {
   const m = new EnemyManager();
   const hits = [];
   const g = {
-    enemyManager: m, wave, player: { ...ship(), hp: 500, maxHp: 500, invuln: 0 },
-    enemyBulletDamage: (b) => b.damage * damageRampAt(wave),
-    damagePlayer(dmg, shake, by) { hits.push({ dmg, by }); this.player.hp -= dmg; this.player.invuln = 0.4; return false; },
+    enemyManager: m, wave, player: { ...ship(), hp: 500, maxHp: 500, invuln: 0 }, particles: silent,
+    enemyBulletDamage: Game.prototype.enemyBulletDamage,
+    damagePlayer(dmg, shake, by) { hits.push({ dmg, by, shake }); this.player.hp -= dmg; this.player.invuln = 0.4; return false; },
     endRunIfDead() { return this.player.hp <= 0; }
   };
-  return { m, g, hits };
+  const tick = (n = 1, after = null) => {
+    for (let i = 0; i < n; i++) {
+      m.bossTelegraphs.update(1 / 60);
+      Game.prototype.updateEnemyBullets.call(g, 1 / 60);
+      after?.();
+    }
+  };
+  return { m, g, hits, tick };
 }
+
+const blast = (m, x, y, warn, from = 'hive_carrier') =>
+  m.bossTelegraphs.zone(x, y, 70, { ...MAJOR_HIT, look: 'reticle', warn, live: 0, window: 0, from, damage: TUNING.enemyBulletDamage * HAZARD_MULT.blast });
 
 test('a blast circle hurts only when it detonates, and only a ship inside it', () => {
   resetTuning();
-  const { m, g, hits } = hazardGame(30);
-  addBlast(m, { x: 2000, y: 2000, r: 70, fuse: 1, from: 'hive_carrier' });
-  addBlast(m, { x: 2300, y: 2000, r: 70, fuse: 1, from: 'hive_carrier' });
-  for (let i = 0; i < 50; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); }
+  const { m, hits, tick } = hazardGame(30);
+  blast(m, 2000, 2000, 1);
+  blast(m, 2300, 2000, 1);
+  tick(50);
   assert.equal(hits.length, 0, 'the fuse is a warning, not a hit');
-  for (let i = 0; i < 20; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); }
+  tick(20);
   assert.equal(hits.length, 1, 'one blast, one hit');
   assert.equal(hits[0].by, 'hive_carrier', 'run stats credit the boss');
-  assert.ok(Math.abs(hits[0].dmg - TUNING.enemyBulletDamage * HAZARD.blastMult * damageRampAt(30)) < 1e-6);
+  assert.equal(hits[0].shake, MAJOR_HIT.shake);
+  assert.ok(Math.abs(hits[0].dmg - TUNING.enemyBulletDamage * HAZARD_MULT.blast * damageRampAt(30)) < 1e-6);
+  // Only the moment it goes off counts: a ship flying in during the flash is safe.
+  const { m: m2, g: g2, hits: hits2, tick: tick2 } = hazardGame(30);
+  g2.player.x = 2400;
+  blast(m2, 2000, 2000, 0.1);
+  tick2(8);
+  g2.player.x = 2000;
+  tick2(10);
+  assert.equal(hits2.length, 0);
 });
 
 test('a dash (invulnerability) passes through a hazard', () => {
   resetTuning();
-  const { m, g, hits } = hazardGame(30);
+  const { m, g, hits, tick } = hazardGame(30);
   g.player.invuln = 0.3;
-  addBlast(m, { x: 2000, y: 2000, r: 70, fuse: 0.05 });
-  for (let i = 0; i < 10; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); }
+  blast(m, 2000, 2000, 0.05);
+  tick(10);
   assert.equal(hits.length, 0);
 });
 
 test('blueprint lines are harmless while dashed, then burn once; a held beam may hit again after its rehit time', () => {
   resetTuning();
-  const { m, g, hits } = hazardGame(30);
-  addLine(m, { x1: 1600, y1: 2000, x2: 2400, y2: 2000, width: 18, fuse: 1, burn: 0.4, from: 'architect' });
-  for (let i = 0; i < 55; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); }
+  const { m, g, hits, tick } = hazardGame(30);
+  const line = (o) => m.bossTelegraphs.lane(1600, 2000, 2400, 2000, 18, { ...MAJOR_HIT, look: 'blueprint', damage: 17, ...o });
+  line({ warn: 1, live: 0.4, from: 'architect' });
+  tick(55);
   assert.equal(hits.length, 0);
-  for (let i = 0; i < 30; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); g.player.invuln = 0; }
+  tick(30, () => { g.player.invuln = 0; });
   assert.equal(hits.length, 1, 'burns the ship once');
+  assert.equal(hits[0].by, 'architect');
   assert.equal(hazards(m, 'line').length, 0, 'gone after its burn');
-  addLine(m, { x1: 1600, y1: 2000, x2: 2400, y2: 2000, fuse: 0, burn: 1e9, rehit: 1 });
-  for (let i = 0; i < 130; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); g.player.invuln = 0; }
+  line({ warn: 0, live: 1e9, rehit: 1 });
+  tick(130, () => { g.player.invuln = 0; });
   assert.equal(hits.length, 1 + 3, 'a held beam hits once a second');
+  // Dashed through: that hit is spent, not saved for when the dash ends.
+  m.bossTelegraphs.clear();
+  line({ warn: 0.05, live: 0.4 });
+  g.player.invuln = 0.2;
+  tick(30, () => { g.player.invuln = Math.max(0, g.player.invuln - 1 / 60); });
+  assert.equal(hits.length, 4);
+  // A minor boss's lane (no spend) stays armed through the dash and lands once it ends.
+  m.bossTelegraphs.clear();
+  m.bossTelegraphs.lane(1600, 2000, 2400, 2000, 18, { warn: 0.05, live: 0.4 });
+  g.player.invuln = 0.2;
+  tick(30, () => { g.player.invuln = Math.max(0, g.player.invuln - 1 / 60); });
+  assert.equal(hits.length, 5);
+});
+
+test('hazards wait out their delay, vanish with their owner, and callouts and fx are harmless', () => {
+  resetTuning();
+  const { m, hits, tick } = hazardGame(30);
+  const owner = { x: 0, y: 0, dead: false };
+  const fx = m.bossTelegraphs.fx(2000, 2000, { delay: 0.2, radius: 200 });
+  m.bossTelegraphs.label(2000, 2000, 'SHIELD DOWN!', { life: 0.5 });
+  m.bossTelegraphs.lane(1600, 2000, 2400, 2000, 18, { ...MAJOR_HIT, warn: 0.5, owner });
+  tick(6);
+  assert.ok(m.bossTelegraphs.active.includes(fx), 'still waiting');
+  tick(10);
+  assert.ok(!m.bossTelegraphs.active.includes(fx), 'went off');
+  owner.dead = true;
+  tick(60);
+  assert.equal(hits.length, 0);
+  assert.equal(m.bossTelegraphs.count, 0);
 });
 
 test('a shock ring hits a ship it rolls over, except through a gap', () => {
   resetTuning();
-  const { m, g, hits } = hazardGame(40);
-  addRing(m, { x: 1700, y: 2000, speed: 6, width: 22, maxR: 600, gaps: [], from: 'conductor' });
-  for (let i = 0; i < 120; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); g.player.invuln = 0; }
+  const { m, g, hits, tick } = hazardGame(40);
+  const ring = (gaps) => m.bossTelegraphs.wave(1700, 2000, { ...MAJOR_HIT, look: 'shock', warn: 0, r0: 10, speed: 6, w: 22, rMax: 578, gaps, gapWidth: 0.6, from: 'conductor' });
+  ring([]);
+  tick(120, () => { g.player.invuln = 0; });
   assert.equal(hits.length, 1, 'one hit as it passes');
   // Same ring with a gap facing the ship: it flies through.
-  addRing(m, { x: 1700, y: 2000, speed: 6, width: 22, maxR: 600, gaps: [0], gapW: 0.6, from: 'conductor' });
-  const ring = hazards(m, 'ring')[0];
-  assert.ok(inGap(ring, 0.2) && !inGap(ring, 0.5));
-  for (let i = 0; i < 120; i++) { tickBossHazards(m, 1 / 60, g.player); applyBossHazards(g); g.player.invuln = 0; }
+  const r = ring([0]);
+  assert.ok(inGap(r, 0.2) && !inGap(r, 0.5));
+  tick(120, () => { g.player.invuln = 0; });
   assert.equal(hits.length, 1);
 });
 
 test('no hazard is a one-shot: a hit is under half the boss\'s own contact hit, and under half a bare shield through wave 30', () => {
   resetTuning();
   for (const [id, wave] of [['ouroboros', 10], ['hive_carrier', 20], ['architect', 30], ['conductor', 40], ['prism', 50]]) {
-    for (const mult of [HAZARD.blastMult, HAZARD.lineMult, HAZARD.ringMult]) {
+    for (const mult of Object.values(HAZARD_MULT)) {
       const dmg = TUNING.enemyBulletDamage * mult * damageRampAt(wave);
       assert.ok(dmg < contactDamageAt({ isBoss: true }, wave) * 0.45, `${id} @ W${wave}: ${dmg.toFixed(0)} vs contact`);
       if (wave <= 30) assert.ok(dmg < BASE_SHIELD * 0.5, `${id} @ W${wave}: ${dmg.toFixed(0)} vs a bare shield`);
@@ -172,7 +227,7 @@ test('Hive Carrier: bombing runs drop one shell per bay plus one; exposed, it wa
   for (const b of m.enemies.filter(e => e.mount === h)) { b.dead = true; m.enemies.splice(m.enemies.indexOf(b), 1); }
   step(m, player, 1);
   assert.equal(h.phase, 2);
-  m.bossHazards.length = 0;
+  m.bossTelegraphs.clear();
   for (let i = 0; i < 60 * 6 && !hazards(m, 'blast').length; i++) step(m, player, 1);
   assert.equal(hazards(m, 'blast').length, HIVE.carpetShells, 'a carpet of shells');
 });
@@ -187,8 +242,8 @@ test('Architect: blueprints cross where you are going, two lines then three-line
   for (let i = 0; i < 60 * 6 && !hazards(m, 'line').length; i++) step(m, player, 1);
   const lines = hazards(m, 'line', 'architect');
   assert.equal(lines.length, ARCH.printLines);
-  for (const l of lines) assert.ok(Math.hypot((l.x1 + l.x2) / 2 - player.x, (l.y1 + l.y2) / 2 - player.y) < 5, 'through the ship');
-  m.bossHazards.length = 0;
+  for (const l of lines) assert.ok(Math.hypot((l.x + l.x2) / 2 - player.x, (l.y + l.y2) / 2 - player.y) < 5, 'through the ship');
+  m.bossTelegraphs.clear();
   a.hp = a.maxHp * 0.49;
   for (let i = 0; i < 60 * 4 && !hazards(m, 'line').length; i++) step(m, player, 1);
   assert.equal(hazards(m, 'line').length, ARCH.ragePrintLines);
@@ -221,23 +276,25 @@ test('Conductor: counts in three ticks, then a gapped ring; double rings once en
   step(m, player, 1);
   assert.equal(c.deflect, false);
   assert.ok(hazards(m, 'label').some(l => /SHIELD DOWN/.test(l.text)));
-  m.bossHazards.length = 0;
+  m.bossTelegraphs.clear();
   c.hp = c.maxHp * 0.49;
   for (let i = 0; i < 60 * 6 && hazards(m, 'ring').length < 2; i++) step(m, player, 1);
   assert.equal(hazards(m, 'ring').length, COND.rageRings, 'the crescendo doubles the rings');
 });
 
-test('the game drains boss hits into damagePlayer and cues into sound, every tick', () => {
+test('the game plays queued boss cues every tick, and boss hazards hit through the orb callback', () => {
   resetTuning();
   const played = [];
-  const { m, g, hits } = hazardGame(20);
-  (m.bossCues ||= []).push({ cue: 'cond_tick' });
-  m.bossHazardHits = [{ mult: 1, from: 'prism' }];
-  applyBossHazards(g, (game, c) => played.push(c.cue));
+  const shakes = [];
+  const { m, g } = hazardGame(20);
+  g.addShake = (n) => shakes.push(n);
+  (m.bossCues ||= []).push({ cue: 'cond_tick', x: 2000, y: 2000, shake: 10 });
+  playBossCues(g, (game, c) => played.push(c.cue));
   assert.deepEqual(played, ['cond_tick']);
-  assert.equal(hits.length, 1);
+  assert.deepEqual(shakes, [10]);
   assert.equal(m.bossCues.length, 0);
-  assert.ok(Game.prototype.update.toString().includes('applyBossHazards'), 'wired into Game.update');
+  assert.ok(Game.prototype.update.toString().includes('playBossCues'), 'wired into Game.update');
+  assert.ok(Game.prototype.updateEnemyBullets.toString().includes('bossTelegraphs?.hitPlayer'), 'hits resolve with the orbs');
 });
 
 test('sizes and speeds in the constants match the defs', () => {
@@ -249,7 +306,7 @@ test('sizes and speeds in the constants match the defs', () => {
 test('every sound cue the major bosses queue has a sound', async () => {
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../js/bosses-major.js', import.meta.url), 'utf8');
-  const used = new Set([...src.matchAll(/cue(?:\(m, |: )'([a-z_]+)'/g)].map(x => x[1]));
+  const used = new Set([...src.matchAll(/(?:cue\(m, |sound: )'([a-z_]+)'/g)].map(x => x[1]));
   assert.ok(used.size >= 15, `${used.size} cues`);
   for (const name of used) assert.ok(BOSS_CUES.includes(name), name);
 });

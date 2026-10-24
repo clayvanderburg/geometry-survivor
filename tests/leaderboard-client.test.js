@@ -7,12 +7,13 @@ globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 globalThis.BroadcastChannel = undefined;
 
 const {
-  GlobalLeaderboard, requestJson, buildBoardView, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
+  GlobalLeaderboard, requestJson, buildBoardView, SUBMIT_RETRIES, OUTBOX_KEY, OUTBOX_MAX_AGE_MS, OUTBOX_GAP_MS, describeOutbox, buildRunPayload, describeSubmit, normalizeTab, syncTabButtons, OFFLINE_NOTES, buildVersionOptions, renderVersionOptions, renderBoardView, normalizeBoardVersion,
   renderModeOptions, buildModeOptions
 } = await import('../js/leaderboard.js');
 const { Game } = await import('../js/main.js');
 const { TUNING, DEFAULT_TUNING } = await import('../js/config.js');
 const { GAME_VERSION, LEGACY_VERSION_LABEL } = await import('../js/version.js');
+const { ALL_TIME } = await import('../js/leaderboard-rules.js');
 
 const jsonResponse = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 const htmlResponse = (status, text) => new Response(text, { status, headers: { 'content-type': 'text/html' } });
@@ -129,7 +130,9 @@ test('submit: success remembers the run id, adopts the returned board and report
   const board = new GlobalLeaderboard({ fetchImpl, storage });
   board.setVersion(GAME_VERSION); // filtered to this version, so the returned version board is shown
   const result = await board.submit(RUN);
-  assert.deepEqual(sent, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION, mode: 'normal' });
+  const { nonce, ...fields } = sent;
+  assert.deepEqual(fields, { name: 'MADKING', score: 9000, wave: 5, level: 7, kills: 80, multiplier: 3.2, time: 100.46, version: GAME_VERSION, mode: 'normal' });
+  assert.match(nonce, /^[A-Za-z0-9_-]{16,64}$/, 'every run carries a nonce, so a retry never lands twice');
   assert.equal(result.ok, true);
   assert.equal(result.rank, 12);
   assert.equal(board.status, 'ready');
@@ -144,17 +147,17 @@ test('submit: server refusals map to cooldown / rejected, network failures flip 
     [() => jsonResponse(429, { error: 'slow down' }), 'cooldown', /COOLING DOWN/],
     [() => jsonResponse(422, { error: 'run rejected: wave does not match' }), 'rejected', /REJECTED/],
     [() => jsonResponse(400, { error: 'bad name' }), 'rejected', /REJECTED/],
-    [() => jsonResponse(503, { error: 'busy' }), 'unavailable', /OFFLINE/],
-    [() => { throw new TypeError('offline'); }, 'offline', /OFFLINE/]
+    [() => jsonResponse(503, { error: 'busy' }), 'unavailable', /UNREACHABLE \/\/ RUN QUEUED FOR UPLOAD/],
+    [() => { throw new TypeError('offline'); }, 'offline', /UNREACHABLE \/\/ RUN QUEUED FOR UPLOAD/]
   ];
   for (const [respond, reason, text] of cases) {
-    const board = new GlobalLeaderboard({ fetchImpl: async () => respond(), storage: memoryStorage() });
+    const board = new GlobalLeaderboard({ fetchImpl: async () => respond(), storage: memoryStorage(), sleep: async () => {} });
     const result = await board.submit(RUN);
     assert.equal(result.ok, false);
     assert.equal(result.reason, reason);
     assert.match(describeSubmit(result).text, text);
   }
-  const board = new GlobalLeaderboard({ fetchImpl: async () => { throw new TypeError('offline'); }, storage: memoryStorage() });
+  const board = new GlobalLeaderboard({ fetchImpl: async () => { throw new TypeError('offline'); }, storage: memoryStorage(), sleep: async () => {} });
   await board.submit(RUN);
   assert.equal(buildBoardView({ tab: 'global', board, local: LOCAL }).source, 'local');
 });
@@ -297,7 +300,7 @@ test('GLOBAL opens on the shared ALL-TIME board; the selector filters by version
   assert.deepEqual(board.versions, [GAME_VERSION, '0.0.1']);
   const view = buildBoardView({ tab: 'global', board, local: LOCAL });
   assert.equal(view.board, GAME_VERSION);
-  assert.equal(view.note, `TOP 50 // v${GAME_VERSION}`);
+  assert.equal(view.note, `TOP 100 // v${GAME_VERSION}`);
   assert.ok(view.rows.every(r => r.version === ''), 'a single-version board needs no per-row version');
   assert.deepEqual(view.versions.map(o => [o.label, o.active, o.current]), [
     ['ALL-TIME', false, false], [`v${GAME_VERSION}`, true, true], ['v0.0.1', false, false]
@@ -338,7 +341,7 @@ test('the ALL-TIME view shows each run\'s version; runs from before versioning r
   ];
   const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries, versions: [] }, local: LOCAL });
   assert.equal(view.board, 'all');
-  assert.equal(view.note, 'TOP 50 // ALL-TIME');
+  assert.equal(view.note, 'TOP 100 // ALL-TIME');
   assert.deepEqual(view.rows.map(r => r.version), [`v${GAME_VERSION}`, LEGACY_VERSION_LABEL, LEGACY_VERSION_LABEL]);
   assert.equal(LEGACY_VERSION_LABEL, 'pre-0.9');
   assert.deepEqual(view.versions[0], { id: 'all', label: 'ALL-TIME', current: false, active: true });
@@ -383,7 +386,7 @@ test('submit sends the game version and the game-over line names it; an unknown 
   assert.deepEqual(describeSubmit(refused), { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' });
 });
 
-test('game over on another board (ALL-TIME) re-reads it after the submit so the new run shows there too', async () => {
+test('after a submit only a board the answer did not carry (another version) is re-read', async () => {
   let refreshed = 0;
   const fake = {
     globalBoard: { version: 'all', refresh() { refreshed++; return Promise.resolve(this); }, submit: async () => ({ ok: true, id: 'r', rank: 2, version: GAME_VERSION }) },
@@ -393,11 +396,111 @@ test('game over on another board (ALL-TIME) re-reads it after the submit so the 
   };
   Game.prototype.submitGlobalRun.call(fake, RUN);
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(refreshed, 1);
+  assert.equal(refreshed, 0, 'ALL-TIME came back with the answer: no re-read from the CDN cache');
   fake.globalBoard.version = GAME_VERSION;
   Game.prototype.submitGlobalRun.call(fake, RUN);
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(refreshed, 1, 'the run\'s own board came back with the answer');
+  assert.equal(refreshed, 0, 'nor the run\'s own version board');
+  fake.globalBoard.version = '0.0.1';
+  Game.prototype.submitGlobalRun.call(fake, RUN);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(refreshed, 1, 'a different version board on screen is re-read');
+});
+
+test('submit adopts the all-time board from the answer; a stale CDN copy of it is ignored', async () => {
+  const older = [{ ...GLOBAL[0], id: 'old-top' }];
+  const fresh = [...older, { ...GLOBAL[1], id: 'my-run' }];
+  let gets = 0;
+  const fetchImpl = async (url, init) => {
+    if (init.method === 'POST') {
+      assert.equal(init.cache, 'no-store');
+      return jsonResponse(201, { accepted: true, onBoard: true, rank: 2, allTimeRank: 2, id: 'my-run', version: GAME_VERSION, entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z',
+        allTime: { entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z' }, boardSize: 100 });
+    }
+    gets++;
+    assert.equal(init.cache, 'default', 'GETs may use the CDN cache');
+    // The CDN's copy from before the run landed.
+    return jsonResponse(200, { version: 'all', entries: older, total: 1, updated: '2026-10-17T12:00:00.000Z', boardSize: 100 });
+  };
+  const board = new GlobalLeaderboard({ fetchImpl, storage: memoryStorage(), sleep: async () => {} });
+  assert.equal(board.version, ALL_TIME);
+  const result = await board.submit(RUN);
+  assert.equal(result.ok, true);
+  assert.deepEqual(board.entries.map(e => e.id), ['old-top', 'my-run'], 'shown at once from the answer');
+  await board.refresh();
+  assert.equal(gets, 1);
+  assert.deepEqual(board.entries.map(e => e.id), ['old-top', 'my-run'], 'the older CDN copy does not wipe the run out');
+  assert.equal(board.status, 'ready');
+  // A newer board (someone else's run since) is taken.
+  const newer = new GlobalLeaderboard({ fetchImpl: async () => jsonResponse(200, { version: 'all', entries: older, total: 1, updated: '2026-10-17T13:00:00.000Z' }), storage: memoryStorage() });
+  newer.adopt({ entries: fresh, total: 2, updated: '2026-10-17T12:00:05.000Z' }, ALL_TIME);
+  await newer.refresh();
+  assert.deepEqual(newer.entries.map(e => e.id), ['old-top']);
+});
+
+test('submit retries a busy server or a dropped connection quietly, with the same nonce', async () => {
+  const sent = [];
+  const sleeps = [];
+  const retries = [];
+  const replies = [
+    () => jsonResponse(503, { error: 'leaderboard busy, try again', partial: false }),
+    () => { throw new TypeError('network'); },
+    () => jsonResponse(201, { accepted: true, onBoard: true, rank: 4, allTimeRank: 9, id: 'landed', version: GAME_VERSION, entries: GLOBAL, total: 3 })
+  ];
+  const board = new GlobalLeaderboard({
+    fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body)); return replies[sent.length - 1](); },
+    storage: memoryStorage(),
+    sleep: async (ms) => { sleeps.push(ms); }
+  });
+  const result = await board.submit(RUN, { onRetry: (n) => retries.push(n) });
+  assert.equal(result.ok, true);
+  assert.equal(result.allTimeRank, 9);
+  assert.equal(sent.length, 3);
+  assert.ok(sent.every(p => p.nonce === sent[0].nonce), 'one nonce for every try');
+  assert.deepEqual(retries, [1, 2]);
+  assert.ok(sleeps[0] >= 2000, 'a 503 waits at least its retry-after (2 s)');
+  assert.ok(sleeps[1] >= 1500 && sleeps[1] <= 2500, 'then exponential backoff with jitter');
+  assert.equal(result.retry, undefined, 'internal retry flags stay internal');
+  assert.notEqual(board.status, 'offline');
+  assert.deepEqual(describeSubmit({ pending: true, retrying: 1 }), { text: '◎ GLOBAL BOARD BUSY // RETRYING UPLINK…', tone: 'cyan' });
+});
+
+test('submit gives up visibly after its retries, and a lost answer (429 on a retry) waits out the cooldown once', async () => {
+  let posts = 0;
+  const down = new GlobalLeaderboard({ fetchImpl: async () => { posts++; throw new TypeError('network'); }, storage: memoryStorage(), sleep: async () => {} });
+  const failed = await down.submit(RUN);
+  assert.equal(posts, 1 + SUBMIT_RETRIES);
+  assert.equal(failed.ok, false);
+  assert.equal(down.status, 'offline', 'the GLOBAL tab falls back to local runs');
+  assert.match(describeSubmit(failed).text, /RUN QUEUED FOR UPLOAD/);
+  assert.equal(failed.queued, true);
+  assert.equal(down.pendingUploads, 1, 'kept in the outbox, never dropped silently');
+
+  // No API at all (the local server's 404 page) is not retried.
+  posts = 0;
+  const local = new GlobalLeaderboard({ fetchImpl: async () => { posts++; return { ok: false, status: 404, headers: { get: () => 'text/html' } }; }, storage: memoryStorage(), sleep: async () => { throw Error('no retry'); } });
+  assert.equal((await local.submit(RUN)).reason, 'unavailable');
+  assert.equal(posts, 1);
+
+  // A first-try 429 is a real cooldown: no retry.
+  posts = 0;
+  const cooling = new GlobalLeaderboard({ fetchImpl: async () => { posts++; return jsonResponse(429, { error: 'slow down', retryAfter: 12 }); }, storage: memoryStorage(), sleep: async () => {} });
+  assert.equal((await cooling.submit(RUN)).reason, 'cooldown');
+  assert.equal(posts, 1);
+
+  // A timeout (the run landed, the answer was lost), then the cooldown, then success with the same nonce.
+  const sleeps = [];
+  const seq = [
+    () => { throw Object.assign(new Error('aborted'), { name: 'AbortError' }); },
+    () => jsonResponse(429, { error: 'slow down', retryAfter: 18 }),
+    () => jsonResponse(201, { accepted: true, onBoard: true, rank: 3, id: 'once', version: GAME_VERSION, entries: GLOBAL, total: 3 })
+  ];
+  posts = 0;
+  const lost = new GlobalLeaderboard({ fetchImpl: async () => seq[posts++](), storage: memoryStorage(), sleep: async (ms) => { sleeps.push(ms); } });
+  const ok = await lost.submit(RUN);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.id, 'once');
+  assert.ok(sleeps[1] >= 18_000, 'the retry waited out the cooldown');
 });
 
 test('Game.setBoardVersion switches the board and re-syncs it', () => {
@@ -462,7 +565,9 @@ test('renderVersionOptions: focusable buttons built once, active mark moves with
   const list = new FakeEl('div', fakeDoc);
   const view = buildBoardView({ tab: 'global', board: { status: 'ready', version: 'all', entries: [{ ...GLOBAL[0], version: null }] }, local: [] });
   renderBoardView(list, null, view);
-  const meta = list.children[0].children[2];
+  assert.equal(list.children[0].className, 'hs-head', 'a pinned column head comes first');
+  assert.deepEqual(list.children[0].children.map(c => c.textContent), ['#', 'PILOT', 'RUN', 'SCORE']);
+  const meta = list.children[1].children[2];
   assert.equal(meta.children[0].textContent, LEGACY_VERSION_LABEL);
   assert.equal(meta.children[0].classes.has('legacy'), true);
 });
@@ -525,7 +630,7 @@ test('modes: the switch reads ?mode= boards (NORMAL keeps the old URL) and keeps
   assert.equal(urls[1], '/api/scores?version=all&mode=blitz');
   assert.equal(board.entries.length, 1);
   const view = buildBoardView({ tab: 'global', board, local: LOCAL });
-  assert.equal(view.note, 'TOP 50 // BLITZ // ALL-TIME');
+  assert.equal(view.note, 'TOP 100 // BLITZ // ALL-TIME');
   assert.deepEqual(view.modes.map((m) => [m.label, m.active]), [['NORMAL', false], ['HARDCORE', false], ['BLITZ', true]]);
   assert.deepEqual(view.rows.length, 1);
   assert.equal(board.setMode('blitz'), false);
@@ -563,4 +668,98 @@ test('renderModeOptions: three focusable buttons built once, the active mark mov
   renderModeOptions(container, buildModeOptions('blitz'));
   assert.deepEqual(container.children, first, 'not rebuilt');
   assert.deepEqual(first.slice(1).map(b => b.attrs['aria-pressed']), ['false', 'false', 'true']);
+});
+
+test('renderBoardView: 100 rows under the column head, medal classes, a controller scroll stop and a YOU #n jump', () => {
+  const entries = Array.from({ length: 100 }, (_, i) => ({ ...GLOBAL[0], id: `r${i}`, name: i === 61 ? 'MADKING' : `P${i}`, score: 1e6 - i }));
+  const board = { status: 'ready', version: 'all', entries, boardSize: 100, isMine: (e) => e.name === 'MADKING' };
+  const view = buildBoardView({ tab: 'global', board, local: [], pilotName: 'MADKING' });
+  assert.equal(view.rows.length, 100);
+  assert.equal(view.note, 'TOP 100 // ALL-TIME');
+  const list = new FakeEl('div', fakeDoc);
+  renderBoardView(list, null, view);
+  const rows = list.children.filter(c => c.classes.has('hs-row'));
+  assert.equal(rows.length, 100);
+  assert.deepEqual(rows.slice(0, 4).map(r => ['hs-top1', 'hs-top2', 'hs-top3'].find(c => r.classes.has(c)) || ''), ['hs-top1', 'hs-top2', 'hs-top3', '']);
+  assert.ok(rows[61].classes.has('hs-mine'));
+  const jump = list.children.at(-1);
+  assert.equal(jump.tagName, 'BUTTON');
+  assert.ok(jump.classes.has('hs-jump'));
+  assert.equal(jump.dataset.rank, '62');
+  assert.equal(jump.dataset.target, rows[61].dataset.rowKey);
+  assert.ok('gpScroll' in list.dataset && 'gpNav' in list.dataset, 'the d-pad can focus and scroll the board');
+  // An empty board is no scroll stop.
+  renderBoardView(list, null, buildBoardView({ tab: 'global', board: { ...board, entries: [] }, local: [] }));
+  assert.equal('gpScroll' in list.dataset, false);
+});
+
+test('outbox: a run that fails every retry is kept, sent again with the same nonce, and dropped once it lands', async () => {
+  const storage = memoryStorage();
+  const sent = [];
+  let up = false;
+  const fetchImpl = async (url, init) => {
+    if (init.method !== 'POST') return jsonResponse(200, { entries: [], total: 0 });
+    sent.push(JSON.parse(init.body));
+    if (!up) throw new TypeError('network');
+    return jsonResponse(201, { accepted: true, onBoard: true, rank: 5, allTimeRank: 5, id: 'queued-run', version: GAME_VERSION, entries: GLOBAL, total: 3 });
+  };
+  const first = new GlobalLeaderboard({ fetchImpl, storage, sleep: async () => {} });
+  const failed = await first.submit(RUN);
+  assert.equal(failed.queued, true);
+  assert.equal(first.pendingUploads, 1);
+  assert.equal(describeOutbox(first.pendingUploads), '◌ 1 RUN WAITING TO UPLOAD');
+  assert.equal(describeOutbox(2), '◌ 2 RUNS WAITING TO UPLOAD');
+  assert.equal(describeOutbox(0), '');
+  const nonce = sent[0].nonce;
+
+  // Next launch: the outbox survives a reload and goes up with the same nonce.
+  up = true;
+  const t0 = Date.now();
+  const next = new GlobalLeaderboard({ fetchImpl, storage, sleep: async () => {} });
+  assert.equal(next.pendingUploads, 1);
+  const [a, b] = [next.flushOutbox(t0), next.flushOutbox(t0)];
+  assert.equal(a, b, 'concurrent flushes share one send, so a run is never sent twice at once');
+  const r = await a;
+  assert.equal(r.sent, true);
+  assert.equal(sent.at(-1).nonce, nonce);
+  assert.equal(sent.filter(p => p.nonce === nonce).length, 1 + SUBMIT_RETRIES + 1);
+  assert.equal(next.pendingUploads, 0);
+  assert.deepEqual(JSON.parse(storage.getItem(OUTBOX_KEY)), []);
+  assert.ok(next.myIds.has('queued-run'), 'the landed run is highlighted as the pilot\'s');
+  assert.equal((await next.flushOutbox(t0 + OUTBOX_GAP_MS)).sent, false, 'nothing left to send');
+});
+
+test('outbox: one send per cooldown, a refusal drops the run, a dead network keeps it, and old runs expire', async () => {
+  const t0 = Date.parse('2026-10-20T12:00:00Z');
+  const storage = memoryStorage();
+  const q = (nonce, queuedAt = t0) => ({ payload: { ...RUN, nonce }, queuedAt, tries: 0 });
+  storage.setItem(OUTBOX_KEY, JSON.stringify([q('n-old-xxxxxxxxxxxxx', t0 - OUTBOX_MAX_AGE_MS - 1), q('n-a-xxxxxxxxxxxxxxx'), q('n-b-xxxxxxxxxxxxxxx'), q('n-c-xxxxxxxxxxxxxxx'), { junk: true }]));
+  const replies = [
+    () => jsonResponse(201, { accepted: true, onBoard: false, rank: null, id: 'a', version: GAME_VERSION, entries: [], total: 0 }),
+    () => jsonResponse(422, { error: 'run rejected: score too high' }),
+    () => { throw new TypeError('network'); }
+  ];
+  const sent = [];
+  const board = new GlobalLeaderboard({ fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body).nonce); return replies[sent.length - 1](); }, storage });
+  // Expired and malformed entries are dropped on load (a few days at most).
+  board.outbox = board.loadOutbox(t0);
+  assert.equal(board.pendingUploads, 3);
+  const r1 = await board.flushOutbox(t0);
+  assert.equal(r1.sent, true);
+  assert.equal(r1.retryInMs, OUTBOX_GAP_MS, 'the next one waits out the server cooldown');
+  const early = await board.flushOutbox(t0 + 1000);
+  assert.equal(early.sent, false);
+  assert.equal(sent.length, 1, 'no send inside the gap');
+  const r2 = await board.flushOutbox(t0 + OUTBOX_GAP_MS);
+  assert.equal(r2.sent, false);
+  assert.equal(board.pendingUploads, 1, 'a refused run (422) is dropped');
+  const r3 = await board.flushOutbox(t0 + 2 * OUTBOX_GAP_MS);
+  assert.equal(r3.retryInMs, null, 'a dead network waits for the next launch or board view');
+  assert.equal(board.pendingUploads, 1, 'kept');
+  assert.equal(board.outbox[0].tries, 1);
+  assert.deepEqual(sent, ['n-a-xxxxxxxxxxxxxxx', 'n-b-xxxxxxxxxxxxxxx', 'n-c-xxxxxxxxxxxxxxx']);
+  // A run sits in the outbox at most OUTBOX_MAX_AGE_MS (3 days).
+  await board.flushOutbox(t0 + OUTBOX_MAX_AGE_MS + 1);
+  assert.equal(board.pendingUploads, 0);
+  assert.equal(sent.length, 3, 'an expired run is dropped, not sent');
 });

@@ -17,6 +17,22 @@ export const SCORES_ENDPOINT = '/api/scores';
 export const BOARD_TABS = ['global', 'local'];
 const MY_RUNS_KEY = 'vexolith_global_runs_v1';
 const MY_RUNS_MAX = 100;
+// Quiet retries of a submit the server couldn't take (503 busy), that timed out or met a network error:
+// up to SUBMIT_RETRIES more tries, each after SUBMIT_BACKOFF_MS x 2^n (plus jitter, or the server's
+// retry-after). A retry after a lost answer may meet the cooldown (429): it waits that out once. Every
+// try carries the same nonce, so the server keeps one copy of the run however many times it arrives.
+export const SUBMIT_RETRIES = 3;
+export const SUBMIT_BACKOFF_MS = 1000;
+const MAX_COOLDOWN_WAIT_S = 25;
+// Outbox: a run that still couldn't be sent after its retries (the board unreachable or busy, or the
+// uplink cooling down) is kept on this device and sent again, with the same nonce, on the next launch or
+// when the leaderboard is shown, one run at a time. The server keeps one copy per nonce, so a run that
+// did land (its answer lost) is never counted twice. Runs older than OUTBOX_MAX_AGE_MS, or that the server
+// turns down (a 4xx other than the cooldown), are dropped.
+export const OUTBOX_KEY = 'vexolith_global_outbox_v1';
+export const OUTBOX_MAX = 10;
+export const OUTBOX_MAX_AGE_MS = 3 * 24 * 3600 * 1000;
+export const OUTBOX_GAP_MS = 21_000; // between two outbox sends: just over the server's per-client cooldown
 const FALLBACK_NAME = 'PILOT';
 
 export const OFFLINE_NOTES = {
@@ -47,7 +63,9 @@ export async function requestJson(fetchImpl, url, { method = 'GET', body, timeou
         method,
         headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        cache: 'no-store',
+        // GETs may come from the CDN's short cache (the browser itself never keeps them: the server says
+        // max-age=0). 'no-store' would add a no-cache request header the CDN could honour, skipping it.
+        cache: method === 'GET' ? 'default' : 'no-store',
         credentials: 'same-origin',
         signal: controller?.signal
       });
@@ -70,6 +88,18 @@ export async function requestJson(fetchImpl, url, { method = 'GET', body, timeou
     clearTimeout(timer);
   }
 }
+
+// A random run nonce (the server derives the run's id from it, so retries never land twice).
+export function runNonce(random = Math.random) {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid.replace(/-/g, '');
+  let out = '';
+  for (let i = 0; i < 32; i++) out += Math.floor(random() * 16).toString(16);
+  return out;
+}
+
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const stamp = (value) => (typeof value === 'string' ? Date.parse(value) || 0 : 0);
 
 function cleanEntries(list) {
   return (Array.isArray(list) ? list : []).filter(e => e && typeof e === 'object' && typeof e.name === 'string' && Number.isFinite(e.score));
@@ -121,7 +151,10 @@ export function buildModeOptions(selected = DEFAULT_MODE) {
 const boardId = (mode, version) => `${mode}|${version}`;
 
 export class GlobalLeaderboard {
-  constructor({ endpoint = SCORES_ENDPOINT, fetchImpl, timeoutMs = 4500, storage = defaultStorage(), version = GAME_VERSION } = {}) {
+  constructor({ endpoint = SCORES_ENDPOINT, fetchImpl, timeoutMs = 4500, storage = defaultStorage(), version = GAME_VERSION, sleep = defaultSleep } = {}) {
+    this.sleep = sleep;
+    this.flushing = null;
+    this.nextFlushAt = 0;
     this.endpoint = endpoint;
     this.fetchImpl = fetchImpl !== undefined ? fetchImpl : (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
     this.timeoutMs = timeoutMs;
@@ -130,13 +163,14 @@ export class GlobalLeaderboard {
     this.version = ALL_TIME; // the board on screen: ALL_TIME (default) or a single version as a filter
     this.mode = DEFAULT_MODE; // ...of this game mode (each mode has its own boards)
     this.versions = [];     // versions the server reports runs for
-    this.cache = new Map(); // 'mode|version' -> { entries, total }, so switching back is instant
+    this.cache = new Map(); // 'mode|version' -> { entries, total, updated }, so switching back is instant
     this.status = 'idle'; // idle | loading | ready | offline
     this.reason = '';
     this.entries = [];
     this.total = 0;
     this.boardSize = 100;
     this.myIds = this.loadMyIds();
+    this.outbox = this.loadOutbox();
     this.inflight = null;
     this.inflightBoard = null;
   }
@@ -148,6 +182,60 @@ export class GlobalLeaderboard {
     } catch {
       return new Set();
     }
+  }
+
+  // Queued runs: [{ payload, queuedAt, tries }], oldest first; expired or malformed ones are dropped.
+  loadOutbox(t = Date.now()) {
+    try {
+      const list = JSON.parse(this.storage?.getItem(OUTBOX_KEY) || '[]');
+      return (Array.isArray(list) ? list : [])
+        .filter((q) => q && typeof q.payload === 'object' && typeof q.payload?.nonce === 'string' && Number.isFinite(q.queuedAt) && t - q.queuedAt < OUTBOX_MAX_AGE_MS)
+        .slice(-OUTBOX_MAX);
+    } catch {
+      return [];
+    }
+  }
+
+  saveOutbox() {
+    try { this.storage?.setItem(OUTBOX_KEY, JSON.stringify(this.outbox)); } catch { /* storage blocked: kept for this session */ }
+  }
+
+  // Runs waiting to be sent (the "N RUNS WAITING TO UPLOAD" hint).
+  get pendingUploads() {
+    return this.outbox.length;
+  }
+
+  queueRun(payload, t = Date.now()) {
+    if (this.outbox.some((q) => q.payload.nonce === payload.nonce)) return;
+    this.outbox.push({ payload, queuedAt: t, tries: 0 });
+    if (this.outbox.length > OUTBOX_MAX) this.outbox.splice(0, this.outbox.length - OUTBOX_MAX);
+    this.saveOutbox();
+  }
+
+  // Sends the oldest queued run once (no quiet retries; the next launch or board view tries again).
+  // Resolves { sent, remaining, retryInMs } where retryInMs suggests when another send could go through
+  // (null when the next try should wait for the next launch or board view). Calls share one send.
+  flushOutbox(t = Date.now()) {
+    if (this.flushing) return this.flushing;
+    const fresh = this.outbox.filter((q) => t - q.queuedAt < OUTBOX_MAX_AGE_MS);
+    if (fresh.length !== this.outbox.length) {
+      this.outbox = fresh;
+      this.saveOutbox();
+    }
+    if (!this.outbox.length) return Promise.resolve({ sent: false, remaining: 0, retryInMs: null });
+    if (t < this.nextFlushAt) return Promise.resolve({ sent: false, remaining: this.outbox.length, retryInMs: this.nextFlushAt - t });
+    const item = this.outbox[0];
+    this.flushing = this.submitOnce(item.payload).then((result) => {
+      const drop = result.ok || (result.status >= 400 && result.status < 500 && result.status !== 429);
+      if (drop) this.outbox = this.outbox.filter((q) => q !== item);
+      else item.tries++;
+      this.saveOutbox();
+      const wait = Math.max(OUTBOX_GAP_MS, (result.retryAfter || 0) * 1000);
+      this.nextFlushAt = t + wait;
+      const again = this.outbox.length && (result.ok || result.status === 429) ? wait : null;
+      return { sent: !!result.ok, remaining: this.outbox.length, retryInMs: again, result };
+    }).finally(() => { this.flushing = null; });
+    return this.flushing;
   }
 
   rememberId(id) {
@@ -191,14 +279,21 @@ export class GlobalLeaderboard {
 
   // Takes a server board (a GET or POST answer) for `version` of `mode`. It only replaces what's on
   // screen when that board is the selected one; a late answer for a board the player switched away from
-  // is cached.
+  // is cached. GET answers come through the CDN and may be a few seconds old: one whose `updated` stamp is
+  // older than the copy already held (say, the board a just-posted run came back with) is ignored.
   adopt(data, version = this.version, mode = this.mode) {
     const entries = cleanEntries(data?.entries);
     const total = Number(data?.total) || entries.length;
+    const updated = stamp(data?.updated);
     const shown = version === this.version && mode === this.mode;
     if (Array.isArray(data?.versions) && shown) this.versions = data.versions.filter(isVersionString);
     if (Number(data?.boardSize) > 0) this.boardSize = Number(data.boardSize);
-    this.cache.set(boardId(mode, version), { entries, total });
+    const held = this.cache.get(boardId(mode, version));
+    if (held && updated < held.updated) {
+      if (shown && this.status !== 'offline') this.status = 'ready';
+      return;
+    }
+    this.cache.set(boardId(mode, version), { entries, total, updated });
     if (!shown) return;
     this.entries = entries;
     this.total = total;
@@ -206,7 +301,7 @@ export class GlobalLeaderboard {
     this.reason = '';
   }
 
-  // Loads the top 50 of the selected board. Concurrent calls for the same board share one request.
+  // Loads the selected board (its top 100).  Concurrent calls for the same board share one request.
   // Resolves to this (never rejects).
   refresh() {
     const { version, mode } = this;
@@ -237,16 +332,53 @@ export class GlobalLeaderboard {
 
   // Submits one run, tagged with this client's version and the run's mode. Resolves
   // { ok, rank, allTimeRank, onBoard, id, name, censored, version, mode } or { ok: false, reason, status, error }.
-  // The answer carries the run's own version board, which is adopted (and shown if it's the selected one).
-  async submit(run) {
-    const payload = buildRunPayload({ ...run, version: this.current });
+  // The answer carries every board the run landed on (its version board and the all-time board), which are
+  // adopted, so the run shows at once without re-reading a board from the CDN. A busy server, a timeout or
+  // a network error is retried quietly (SUBMIT_RETRIES) before the game reports it.
+  async submit(run, { onRetry } = {}) {
+    const payload = { ...buildRunPayload({ ...run, version: this.current }), nonce: runNonce() };
     if (payload.score < 1) return { ok: false, reason: 'skipped' };
+    let result = null;
+    let waitedCooldown = false;
+    for (let attempt = 0; attempt <= SUBMIT_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const base = SUBMIT_BACKOFF_MS * 2 ** (attempt - 1);
+        const hinted = result.retryAfter > 0 ? result.retryAfter * 1000 : 0;
+        onRetry?.(attempt);
+        await this.sleep(Math.max(hinted, base * (0.75 + Math.random() * 0.5)));
+      }
+      result = await this.submitOnce(payload);
+      if (result.ok || !result.retry) break;
+      // A 429 on a retry means an earlier try did land and only its answer was lost: wait out the cooldown
+      // once and resubmit (same nonce, so it replaces itself and returns the rank).
+      if (result.status === 429) {
+        if (attempt === 0 || waitedCooldown || !(result.retryAfter <= MAX_COOLDOWN_WAIT_S)) break;
+        waitedCooldown = true;
+      }
+    }
+    if (!result.ok && (result.reason === 'timeout' || result.reason === 'offline')) {
+      // Network trouble: the GLOBAL tab falls back to local runs with the matching OFFLINE note.
+      this.status = 'offline';
+      this.reason = result.reason;
+    }
+    const { retry, retryAfter, ...out } = result;
+    // Still not through (unreachable, busy, cooling down): keep the run and send it again later.
+    if (!result.ok && (retry || result.reason === 'cooldown')) {
+      this.queueRun(payload);
+      out.queued = true;
+    }
+    return out;
+  }
+
+  // One POST of a run. Resolves the submit() result, plus `retry` when trying again may help.
+  async submitOnce(payload) {
     try {
       const res = await requestJson(this.fetchImpl, this.endpoint, { method: 'POST', body: payload, timeoutMs: this.timeoutMs + 1500 });
       if (res.ok && res.data?.accepted) {
         this.rememberId(res.data.id);
         const version = res.data.version === undefined ? payload.version : res.data.version;
         this.adopt(res.data, version || ALL_TIME, payload.mode);
+        if (res.data.allTime && version) this.adopt(res.data.allTime, ALL_TIME, payload.mode);
         return {
           ok: true,
           rank: Number.isInteger(res.data.rank) ? res.data.rank : null,
@@ -264,14 +396,15 @@ export class GlobalLeaderboard {
         const error = typeof res.data?.error === 'string' ? res.data.error : '';
         const reason = res.status === 429 ? 'cooldown' : res.status >= 500 ? 'unavailable'
           : res.status === 422 && /unknown game version/i.test(error) ? 'outdated' : 'rejected';
-        return { ok: false, reason, status: res.status, error };
+        const retryAfter = Number(res.data?.retryAfter) || (res.status === 503 ? 2 : 0);
+        return { ok: false, reason, status: res.status, error, retry: res.status >= 500 || res.status === 429, retryAfter };
       }
-      // Network trouble: the GLOBAL tab falls back to local runs with the matching OFFLINE note.
-      this.status = 'offline';
-      this.reason = res.reason || 'unavailable';
-      return { ok: false, reason: this.reason, status: res.status };
+      // A timeout, a network error or a gateway error page may pass; no API at all (the local server's 404
+      // page, no fetch) won't, so that isn't retried.
+      const reason = res.reason || 'unavailable';
+      return { ok: false, reason, status: res.status, retry: reason === 'timeout' || reason === 'offline' || res.status >= 500, retryAfter: 0 };
     } catch {
-      return { ok: false, reason: 'unavailable', status: 0 };
+      return { ok: false, reason: 'unavailable', status: 0, retry: false, retryAfter: 0 };
     }
   }
 
@@ -344,7 +477,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
     };
   });
   const scope = (modeTag ? `${modeTag} // ` : '') + (allTime ? 'ALL-TIME' : versionLabel(boardVersion));
-  let note = `TOP 50 // ${scope}`;
+  let note = `TOP ${board.boardSize || 100} // ${scope}`;
   if (status !== 'ready') note = 'SYNCING GLOBAL BOARD…';
   else if (!rows.length) note = allTime && !modeTag ? 'NO GLOBAL RUNS YET // BE THE FIRST' : `NO ${scope} RUNS YET // BE THE FIRST`;
   const versions = buildVersionOptions({ current, versions: board.versions, selected: boardVersion });
@@ -354,6 +487,7 @@ export function buildBoardView({ tab, board, local, pilotName = '', newGlobalId 
 // Game-over line for the submit state: { text, tone } where tone is gold | cyan | dim | danger.
 export function describeSubmit(state) {
   if (!state) return { text: '', tone: 'dim' };
+  if (state.pending && state.retrying) return { text: '◎ GLOBAL BOARD BUSY // RETRYING UPLINK…', tone: 'cyan' };
   if (state.pending) return { text: '◎ UPLINKING RUN TO GLOBAL BOARD…', tone: 'cyan' };
   if (state.reason === 'optout') return { text: 'GLOBAL POSTING OFF // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'tainted') return { text: 'DEV TUNER USED // RUN NOT SENT TO GLOBAL BOARD', tone: 'dim' };
@@ -370,10 +504,21 @@ export function describeSubmit(state) {
     if (state.rank && version) return { text: `◎ #${state.rank} ON ${version} // OUTSIDE ALL-TIME TOP ${state.boardSize || 100}${censor}`, tone: 'cyan' };
     return { text: `OUTSIDE GLOBAL TOP ${state.boardSize || 100} // KEEP FLYING${censor}`, tone: 'cyan' };
   }
+  if (state.queued) {
+    return state.reason === 'cooldown'
+      ? { text: 'GLOBAL UPLINK COOLING DOWN // RUN QUEUED FOR UPLOAD', tone: 'dim' }
+      : { text: 'GLOBAL BOARD UNREACHABLE // RUN QUEUED FOR UPLOAD', tone: 'dim' };
+  }
   if (state.reason === 'cooldown') return { text: 'GLOBAL UPLINK COOLING DOWN // RUN SAVED LOCALLY', tone: 'dim' };
   if (state.reason === 'outdated') return { text: 'OUTDATED GAME VERSION // RELOAD TO RANK GLOBALLY', tone: 'danger' };
   if (state.reason === 'rejected') return { text: 'GLOBAL BOARD REJECTED THIS RUN // SAVED LOCALLY', tone: 'danger' };
   return { text: 'OFFLINE // RUN SAVED LOCALLY', tone: 'dim' };
+}
+
+// The outbox hint under the board: '' when nothing waits.
+export function describeOutbox(count) {
+  if (!(count > 0)) return '';
+  return `◌ ${count} RUN${count === 1 ? '' : 'S'} WAITING TO UPLOAD`;
 }
 
 // Marks the active tab on a set of tab buttons ([data-board-tab]).
@@ -447,7 +592,27 @@ export function renderModeOptions(container, options) {
   }
 }
 
-// Draws a view into a list element and its note element (DOM only; logic is in buildBoardView).
+// Column heads pinned to the top of the scrolling list.
+const HEAD_CELLS = [['hs-rank', '#'], ['hs-name', 'PILOT'], ['hs-meta', 'RUN'], ['hs-score', 'SCORE']];
+
+// Where scrollTop puts `row` in the middle of `list`.
+const centredTop = (list, row) => Math.max(0, row.offsetTop - (list.clientHeight - row.offsetHeight) / 2);
+
+// Shows the "jump to me" button while the player's best row is out of sight, pointing the way to it.
+function syncJumpButton(list) {
+  const btn = list.querySelector?.('.hs-jump');
+  if (!btn) return;
+  const row = list.querySelector(`[data-row-key="${btn.dataset.target}"]`);
+  const head = list.querySelector('.hs-head')?.offsetHeight || 0;
+  const top = list.scrollTop + head, bottom = list.scrollTop + list.clientHeight - btn.offsetHeight;
+  const away = !row || list.clientHeight <= 0 ? 0 : row.offsetTop + row.offsetHeight <= top ? -1 : row.offsetTop >= bottom ? 1 : 0;
+  btn.classList.toggle('hidden', away === 0);
+  btn.textContent = `${away < 0 ? '▲' : '▼'} YOU #${btn.dataset.rank}`;
+}
+
+// Draws a view into a list element and its note element (DOM only; logic is in buildBoardView). The list
+// scrolls inside its panel (wheel, touch drag; the controller's d-pad and right stick via [data-gp-scroll])
+// under a pinned column head. When the player's best row is out of sight a "YOU #n" button jumps to it.
 export function renderBoardView(listEl, noteEl, view) {
   if (noteEl) {
     noteEl.textContent = view.note;
@@ -457,16 +622,35 @@ export function renderBoardView(listEl, noteEl, view) {
   const doc = listEl.ownerDocument;
   listEl.replaceChildren();
   if (!view.rows.length) {
+    delete listEl.dataset.gpScroll;
+    delete listEl.dataset.gpNav;
+    listEl.removeAttribute?.('tabindex');
     const empty = doc.createElement('div');
     empty.className = 'hs-empty';
     empty.textContent = view.source === 'global' && view.note.startsWith('SYNCING') ? '· · ·' : 'NO RUNS YET';
     listEl.appendChild(empty);
     return;
   }
+  // A controller focus stop that the d-pad scrolls (gamepad.js MenuNavigator); keyboard-focusable too.
+  listEl.dataset.gpScroll = '';
+  listEl.dataset.gpNav = '';
+  listEl.setAttribute('tabindex', '0');
+  const head = doc.createElement('div');
+  head.className = 'hs-head';
+  head.setAttribute('aria-hidden', 'true');
+  for (const [cls, text] of HEAD_CELLS) {
+    const span = doc.createElement('span');
+    span.className = cls;
+    span.textContent = text;
+    head.appendChild(span);
+  }
+  listEl.appendChild(head);
   let newEl = null;
+  let best = null; // the player's best row on this board
   for (const row of view.rows) {
     const el = doc.createElement('div');
-    el.className = 'hs-row' + (row.isNew ? ' hs-current' : '') + (row.mine ? ' hs-mine' : '');
+    el.className = 'hs-row' + (row.rank <= 3 ? ` hs-top${row.rank}` : '') + (row.isNew ? ' hs-current' : '') + (row.mine ? ' hs-mine' : '');
+    el.dataset.rowKey = row.key;
     if (row.date) el.title = row.date;
     const cell = (cls, text) => {
       const span = doc.createElement('span');
@@ -487,10 +671,31 @@ export function renderBoardView(listEl, noteEl, view) {
     cell('hs-score', row.score.toLocaleString());
     listEl.appendChild(el);
     if (row.isNew) newEl = { el, key: row.key };
+    if (!best && (row.mine || row.isNew)) best = { el, row };
+  }
+  if (best) {
+    const jump = doc.createElement('button');
+    jump.type = 'button';
+    jump.className = 'hs-jump hidden';
+    jump.dataset.target = best.row.key;
+    jump.dataset.rank = String(best.row.rank);
+    jump.title = 'Scroll to your best run on this board';
+    jump.addEventListener?.('click', () => {
+      const row = listEl.querySelector(`[data-row-key="${jump.dataset.target}"]`);
+      if (row) listEl.scrollTo?.({ top: centredTop(listEl, row), behavior: 'smooth' });
+    });
+    listEl.appendChild(jump);
+  }
+  if (!listEl.dataset.jumpBound) {
+    listEl.dataset.jumpBound = '1';
+    listEl.addEventListener?.('scroll', () => syncJumpButton(listEl), { passive: true });
+    // A board drawn while its panel was hidden (the other screen, a closed phone window) re-checks once shown.
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => syncJumpButton(listEl)).observe(listEl);
   }
   // Centre the run just finished once (not on every re-render, so manual scrolling sticks).
   if (newEl && listEl.dataset.scrolledTo !== newEl.key && listEl.clientHeight > 0) {
     listEl.dataset.scrolledTo = newEl.key;
-    listEl.scrollTop = Math.max(0, newEl.el.offsetTop - (listEl.clientHeight - newEl.el.offsetHeight) / 2);
+    listEl.scrollTop = centredTop(listEl, newEl.el);
   }
+  syncJumpButton(listEl);
 }

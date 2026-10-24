@@ -6,15 +6,19 @@
 //   schema 1, version, mode (js/modes.js id; NORMAL when absent), time (s), wave, level, score, kills,
 //   died, cause (enemy kind of the fatal hit)
 //   levelTimes  [seconds at which LV 2, 3, ... were reached]
-//   gold        { earned, spent, rerolls, locks, banishes }
+//   gold        { earned, spent, rerolls, locks, banishes, skips }
 //   loadout     [{ id, lv }] at the end of the run
 //   weapons     { group: { dmg, kills, owned?, from?, curve?, tl?: [[t, lv]], lv?: { L: [secs, dmg,
-//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L)] } } }
+//                 dmg/base, allDmg, kills, allKills, DPS_TARGET(L), allWeaponDmg?, allWeaponKills?, meanTime?] } } }
+//                 (allWeapon* leave out the non-weapon groups: Supernova, ram, ...; meanTime is the mean run time
+//                 the level was held; older runs lack them)
 //   sources     { stat id: damage }  (sub-sources such as burn, helix, collapse, storm, siege)
 //   enemies     { kind: [spawned, killed, ttkSeconds, ttkN, damageToPlayer, hitsOnPlayer] }
 //   cards       { card id: [offered, picked, eligible hands, expected draws, draws] }   weaponPicks { weapon id: same }
 //   armory      { upgrade id: rank } Void Armory ranks held during the run (ranks above 0 only)
 //   armorySpent cores spent on those ranks (js/progression.js armorySpent)
+//   bombs       [Supernova bombs used, enemies they killed] (older runs lack it)
+//   bossEscapes { boss kind: times it escaped (js/boss-escape.js) } (only when one did; older runs lack it)
 // Runs from older clients carry no armory fields: their Armory tier is 'unknown'.
 import { KNOWN_VERSIONS } from './changelog.js';
 import { normalizeMode } from './modes.js';
@@ -88,7 +92,7 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
     levelTimes: (Array.isArray(body.levelTimes) ? body.levelTimes : []).slice(0, L.MAX_LEVEL_TIMES).map((v) => dec(v, t)),
     gold: {
       earned: int(body.gold?.earned, L.MAX_COUNT), spent: int(body.gold?.spent, L.MAX_COUNT),
-      rerolls: int(body.gold?.rerolls, 1e5), locks: int(body.gold?.locks, 1e5), banishes: int(body.gold?.banishes, 1e5)
+      rerolls: int(body.gold?.rerolls, 1e5), locks: int(body.gold?.locks, 1e5), banishes: int(body.gold?.banishes, 1e5), skips: int(body.gold?.skips, 1e5)
     },
     loadout: (Array.isArray(body.loadout) ? body.loadout : [])
       .filter((w) => isObj(w) && typeof w.id === 'string' && STAT_ID.test(w.id)).slice(0, L.MAX_LOADOUT)
@@ -117,12 +121,23 @@ export function sanitizeRunStats(body, versions = KNOWN_VERSIONS) {
         if (!(secs > 0)) continue;
         out.lv[level] = [secs, dec(row[1], L.MAX_DAMAGE, 0), dec(row[2], L.MAX_DAMAGE, 2), dec(row[3], L.MAX_DAMAGE, 0),
           int(row[4], L.MAX_COUNT), int(row[5], L.MAX_COUNT), dec(row[6], 1e9, 2)];
+        if (row.length >= 9) out.lv[level].push(dec(row[7], L.MAX_DAMAGE, 0), int(row[8], L.MAX_COUNT));
+        if (row.length >= 10) out.lv[level].push(dec(row[9], t));
         n++;
       }
     }
     run.weapons[id] = out;
   }
   for (const [id, v] of entries(body.sources, L.MAX_SOURCES)) run.sources[id] = dec(v, L.MAX_DAMAGE, 0);
+  if (Array.isArray(body.bombs)) run.bombs = [int(body.bombs[0], 1e5), int(body.bombs[1], L.MAX_COUNT)];
+  if (body.bossEscapes && typeof body.bossEscapes === 'object') {
+    const esc = {};
+    for (const [id, v] of entries(body.bossEscapes, L.MAX_KINDS)) {
+      const n = int(v, 100);
+      if (n > 0) esc[id] = n;
+    }
+    if (Object.keys(esc).length) run.bossEscapes = esc;
+  }
   for (const [id, v] of entries(body.enemies, L.MAX_KINDS)) {
     if (!Array.isArray(v)) continue;
     const killed = int(v[1], L.MAX_COUNT);

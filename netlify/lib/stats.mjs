@@ -6,7 +6,8 @@
 // Layout of the "stats" store:
 //   runs/<version>/<yyyy-mm-dd>/<random id>.json   one blob per run: never rewritten, so no write conflicts
 //   summary/<version|all>[~<armory tier>].json     cached aggregate, recomputed when older than CACHE_MS
-//   ratelimit/<salted ip hash>                     { t } of the last upload from that client
+//   ratelimit/<window>/<salted ip hash>            { t } of the last upload from that client, one blob per
+//                                                  10-minute window; older windows are swept (./rate-limit.mjs)
 // No callsign and no IP is stored: the rate limit keys on a salted SHA-256 of the IP (same as /api/scores).
 //
 //   POST /api/stats                      one run summary (js/run-stats.js) -> 201 { accepted: true }
@@ -19,7 +20,8 @@ import { KNOWN_VERSIONS } from '../../js/changelog.js';
 import { GAME_VERSION, compareVersions } from '../../js/version.js';
 import { sanitizeRunStats, STATS_LIMITS, ARMORY_TIERS } from '../../js/stats-rules.js';
 import { aggregateRuns } from '../../js/stats-aggregate.js';
-import { clientIp, hashIp, writeConditions } from './leaderboard.mjs';
+import { clientIp, hashIp } from './leaderboard.mjs';
+import { createRateLimiter } from './rate-limit.mjs';
 
 export const STATS_STORE = 'stats';
 export const RUNS_PREFIX = 'runs/';
@@ -30,6 +32,8 @@ export const ALL = 'all';
 export const STATS_SERVER_LIMITS = Object.freeze({
   MAX_BODY_BYTES: STATS_LIMITS.MAX_BODY_BYTES,
   COOLDOWN_MS: 15_000,          // one upload per client every 15 s (a run is at least 20 s long)
+  RATE_WINDOW_MS: 10 * 60_000,  // rate-limit blobs are keyed by this window; older windows are swept
+  SWEEP_MAX_DELETES: 500,
   CACHE_MS: 10 * 60_000,        // the aggregate is recomputed when older than this
   MAX_RUNS_SCANNED: 1500,       // newest runs read per recompute
   MAX_KEYS_LISTED: 20_000,      // list() pages are followed until this many keys
@@ -48,8 +52,9 @@ export function summaryArmory(value) {
 
 export const runKey = (version, date, id) => `${RUNS_PREFIX}${version}/${date.toISOString().slice(0, 10)}/${id}.json`;
 export const summaryKey = (version, armory = null) => `${SUMMARY_PREFIX}${version}${armory ? `~${armory}` : ''}.json`;
-// Bump when the cached summary's shape changes, so stale caches are recomputed (2: armory tiers).
-export const SUMMARY_CACHE_VERSION = 2;
+// Bump when the cached summary's shape changes, so stale caches are recomputed (2: armory tiers; 3: the same-time
+// index, levelIndex and vsAutocannon).
+export const SUMMARY_CACHE_VERSION = 3;
 export const runsPrefix = (version) => (version === ALL ? RUNS_PREFIX : `${RUNS_PREFIX}${version}/`);
 
 // ?version= for the summary: a known game version or 'all' (the default). Returns { version } or { error }.
@@ -139,14 +144,7 @@ export function createStatsHandler({
   currentVersion = GAME_VERSION,
   log = console
 } = {}) {
-  async function claimRateSlot(blobs, ipHash, t) {
-    const key = STATS_RATE_PREFIX + ipHash;
-    const prev = await readJson(blobs, key);
-    const last = Number(prev?.data?.t) || 0;
-    if (prev?.data && t - last < limits.COOLDOWN_MS) return Math.ceil((limits.COOLDOWN_MS - (t - last)) / 1000);
-    const write = await blobs.setJSON(key, { t }, writeConditions(prev?.data ? prev : null));
-    return write?.modified === false ? Math.ceil(limits.COOLDOWN_MS / 1000) : 0;
-  }
+  const rate = createRateLimiter({ prefix: STATS_RATE_PREFIX, cooldownMs: limits.COOLDOWN_MS, windowMs: limits.RATE_WINDOW_MS ?? 10 * 60_000, sweepMaxDeletes: limits.SWEEP_MAX_DELETES ?? 500, log });
 
   async function handlePost(req, context, blobs) {
     const type = req.headers.get('content-type') || '';
@@ -161,7 +159,8 @@ export function createStatsHandler({
     if (error) return json(status, { error, current: currentVersion });
 
     const t = now();
-    const retryAfter = await claimRateSlot(blobs, hashIp(clientIp(req, context), salt), t);
+    const { retryAfter, key: slotKey } = await rate.claim(blobs, hashIp(clientIp(req, context), salt), t);
+    await rate.sweepSoon(blobs, t, context);
     if (retryAfter > 0) return json(429, { error: 'slow down', retryAfter }, { 'retry-after': String(retryAfter) });
 
     const date = new Date(t);
@@ -170,6 +169,7 @@ export function createStatsHandler({
       const write = await blobs.setJSON(key, { ...run, received: date.toISOString() }, { onlyIfNew: true });
       if (write?.modified !== false) return json(201, { accepted: true, version: run.version });
     }
+    await rate.release(blobs, slotKey);
     return json(503, { error: 'stats store busy' }, { 'retry-after': '5' });
   }
 

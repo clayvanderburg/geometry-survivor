@@ -1,5 +1,5 @@
 // Netlify Function (v2): the shared VEXOLITH // SURVIVOR leaderboard at /api/scores.
-//   GET  /api/scores?version=<v>   -> that game version's board: { version, current, versions, entries: top 50, total, boardSize }
+//   GET  /api/scores?version=<v>   -> that game version's board: { version, current, versions, entries: top 100, total, boardSize }
 //   GET  /api/scores?version=all   -> the all-time board (also the default without ?version)
 //   GET  ...&mode=hardcore|blitz   -> the same board of that game mode (NORMAL without ?mode)
 //   POST /api/scores -> submit one run (JSON, with the game's `version` and the run's `mode`, NORMAL when

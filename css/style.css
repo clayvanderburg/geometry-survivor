@@ -421,6 +421,15 @@ html, body {
   font-size: 10px;
   color: #ff77b7;
 }
+/* The last 30 s before a boss escapes (js/boss-escape.js): its title becomes a pulsing red countdown. */
+.boss-bar-epithet.boss-bar-escaping {
+  color: #ff3355;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  animation: boss-escaping 0.8s ease-in-out infinite;
+}
+@keyframes boss-escaping { 50% { opacity: 0.45; } }
 
 .boss-bar-track {
   height: 12px;
@@ -615,6 +624,17 @@ html, body {
   justify-content: center;
   z-index: 30;
   padding: 16px;
+}
+
+/* The world paused behind the pause menu, a level-up / Breakthrough hand or a cache is a still frame
+   (Game.holdFrozenFrame): the layers under the modal are blurred with a filter, which the compositor
+   computes once while they stay still, instead of the backdrop blur, which Chromium redoes over the whole
+   screen on every frame the cards animate. Same 7px blur. */
+body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #chest-modal:not(.hidden)) :is(#pause-modal, #upgrade-modal, #chest-modal) {
+  backdrop-filter: none;
+}
+body.world-frozen:has(#pause-modal:not(.hidden), #upgrade-modal:not(.hidden), #chest-modal:not(.hidden)) :is(#game-canvas, #hud, #hud-hidden-hint, #range-panel, #low-shield-vignette) {
+  filter: blur(7px);
 }
 
 .hidden {
@@ -923,7 +943,7 @@ html, body {
   gap: 6px;
 }
 
-.hs-row {
+.hs-row, .hs-head {
   display: grid;
   grid-template-columns: 32px 1fr auto auto;
   align-items: center;
@@ -946,9 +966,57 @@ html, body {
   color: var(--cyan);
 }
 
-.hs-row:nth-child(1) .hs-rank { color: var(--gold); }
-.hs-row:nth-child(2) .hs-rank { color: #e0e8ff; }
-.hs-row:nth-child(3) .hs-rank { color: #ff9955; }
+.hs-row.hs-top1 .hs-rank { color: var(--gold); }
+.hs-row.hs-top2 .hs-rank { color: #e0e8ff; }
+.hs-row.hs-top3 .hs-rank { color: #ff9955; }
+
+/* "N RUNS WAITING TO UPLOAD": runs the outbox will send when the board is reachable again. */
+.board-outbox {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #e2c6ff;
+}
+.board-outbox.hidden { display: none; }
+
+/* Column head, pinned to the top while the board scrolls under it. */
+.hs-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: #060a18; /* opaque: rows scroll under it */
+  border-color: rgba(0, 243, 255, 0.18);
+  box-shadow: 0 6px 8px -4px rgba(2, 4, 12, 0.9);
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  pointer-events: none;
+}
+.hs-head span { color: var(--text-dim); font-size: inherit; }
+.hs-head .hs-score { text-align: right; }
+
+/* "YOU #n": jumps to the player's best run while it's out of sight. Pinned to the bottom of the list. */
+.hs-jump {
+  position: sticky;
+  bottom: 2px;
+  z-index: 2;
+  align-self: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(181, 101, 255, 0.85);
+  background: rgba(40, 18, 70, 0.95);
+  color: #e2c6ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(181, 101, 255, 0.4);
+}
+.hs-jump:hover, .hs-jump.gp-focus { background: rgba(181, 101, 255, 0.35); color: #fff; }
+.hs-jump.hidden { display: none; }
 
 .hs-name {
   font-weight: 700;
@@ -1034,6 +1102,10 @@ html, body {
   position: relative; /* rows' offsetTop is relative to the list, for scrolling the new run into view */
   max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain; /* a drag or wheel at the end of the board doesn't scroll the page behind */
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 243, 255, 0.4) transparent;
   padding-right: 2px;
@@ -1198,13 +1270,81 @@ html, body {
 .rarity-evolution { --rarity: #ff4fd8; --rarity-soft: rgba(255, 79, 216, 0.4); --rarity-bg: rgba(48, 8, 40, 0.94); }
 .rarity-transform { --rarity: #38f2d0; --rarity-soft: rgba(56, 242, 208, 0.4); --rarity-bg: rgba(6, 40, 36, 0.94); }
 .rarity-boost { --rarity: #ffb347; --rarity-soft: rgba(255, 179, 71, 0.4); --rarity-bg: rgba(46, 30, 8, 0.94); }
-/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special. */
-.upgrade-option.breakthrough-card { animation: breakthrough-pulse 1.8s ease-in-out infinite; }
-@keyframes breakthrough-pulse {
-  0%, 100% { box-shadow: 0 0 14px var(--rarity-soft); }
-  50% { box-shadow: 0 0 32px var(--rarity-soft), 0 0 4px var(--rarity) inset; }
+/* Rarity-floor cards (upgrades.js rarityFloor: Phase Piercer, Extra Nozzles, Split Rails, tag cards,
+   Replicator): pinned to a tier because they're strong. The body stays a normal card; the tier lives
+   on the frame: a rarity border with a slow glow and a light sweeping round it, plus the ◆ ribbon. */
+.upgrade-option.rarity-floored {
+  --rarity-bg: rgba(30, 36, 52, 0.94);
+  /* Deals in like every card; the glow pulses on .card-glow (below) */
+  animation: card-deal 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.07s) backwards;
 }
-@media (prefers-reduced-motion: reduce) { .upgrade-option.breakthrough-card { animation: none; } }
+.upgrade-option.rarity-floored .upg-name { color: #e8eef8; }
+.upgrade-option.rarity-floored::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  border-radius: 12px;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.9) 50%, transparent 65%) 0 0 / 300% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: floor-sheen 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes floor-sheen {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
+}
+.upg-jump-ribbon.upg-floor-ribbon {
+  background: linear-gradient(90deg, var(--rarity), #fff 50%, var(--rarity)) 0 0 / 200% 100%;
+  animation: floor-ribbon 2.4s linear infinite;
+}
+@keyframes floor-ribbon {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .upgrade-option.rarity-floored::before, .upg-jump-ribbon.upg-floor-ribbon { animation: none; }
+}
+
+/* Breakthrough picks: two big cards with a slow pulse so the R&D moment reads as special (.card-glow). */
+
+/* Card glow pulses (rarity floor, Breakthrough, NEW WEAPON): a .card-glow layer first in the card
+   (js/main.js dealInCard) carries the two glows of the pulse as static shadows on ::before (dim) and
+   ::after (bright) and cross-fades their opacity, which the compositor animates without repainting the
+   card. Each sits on the padding box with the 2px border added as spread, so it lines up with the card's
+   own (border-box) shadow, and the bright one's inset glow sits inside the border like the card's. Where
+   the old pulses stopped (REDUCE EFFECTS; reduced motion for the floor and Breakthrough pulses) the layer
+   is off and the card keeps its plain shadow. */
+.card-glow { display: none; position: absolute; inset: 0; border-radius: 10px; pointer-events: none; }
+body:not(.reduce-effects) .upgrade-option.new-weapon-card:has(> .card-glow),
+body:not(.reduce-effects) .upgrade-option.new-weapon-card:has(> .card-glow):hover { box-shadow: none; }
+body:not(.reduce-effects) .new-weapon-card > .card-glow { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  body:not(.reduce-effects) :is(.upgrade-option.rarity-floored, .upgrade-option.breakthrough-card):has(> .card-glow),
+  body:not(.reduce-effects) :is(.upgrade-option.rarity-floored, .upgrade-option.breakthrough-card):has(> .card-glow):hover { box-shadow: none; }
+  body:not(.reduce-effects) :is(.rarity-floored, .breakthrough-card) > .card-glow { display: block; }
+}
+.card-glow::before, .card-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.card-glow::after { opacity: 0; }
+.rarity-floored > .card-glow::before { box-shadow: 0 0 10px 2px var(--rarity-soft); animation: glow-dim 2.4s ease-in-out 0.5s infinite backwards; }
+.rarity-floored > .card-glow::after { box-shadow: 0 0 26px 2px var(--rarity-soft), 0 0 3px var(--rarity) inset; animation: glow-bright 2.4s ease-in-out 0.5s infinite; }
+.breakthrough-card > .card-glow::before { box-shadow: 0 0 14px 2px var(--rarity-soft); animation: glow-dim 1.8s ease-in-out 0.7s infinite backwards; }
+.breakthrough-card > .card-glow::after { box-shadow: 0 0 32px 2px var(--rarity-soft), 0 0 4px var(--rarity) inset; animation: glow-bright 1.8s ease-in-out 0.7s infinite; }
+.new-weapon-card > .card-glow::before { box-shadow: 0 0 12px 2px var(--rarity-soft); animation: glow-fade-out 1.1s ease-in-out infinite alternate; }
+.new-weapon-card > .card-glow::after { box-shadow: 0 0 30px 2px var(--rarity), inset 0 0 18px rgba(255, 138, 61, 0.12); animation: glow-fade-in 1.1s ease-in-out infinite alternate; }
+@keyframes glow-dim { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes glow-bright { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes glow-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes glow-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 .upgrade-option {
   position: relative;
@@ -1422,6 +1562,128 @@ html, body {
 #chest-rewards-grid.compact .upg-summary {
   display: none;
 }
+
+/* Evolution recipes on cards (js/evolution-recipes.js): "⚗ TOWARD …" with a chip per ingredient. */
+.upg-recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0 6px;
+}
+
+.upg-recipe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border-left: 2px solid #ff4fd8;
+  border-radius: 4px;
+  background: rgba(255, 79, 216, 0.07);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.upg-recipe-head {
+  flex-basis: 100%;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #ff8be6;
+}
+
+/* This card finishes the recipe: the evolution can turn up from the next level-up. */
+.upg-recipe.ready {
+  background: rgba(255, 79, 216, 0.16);
+  animation: recipe-ready 1.1s ease-in-out infinite alternate;
+}
+
+.upg-recipe.ready .upg-recipe-head { color: #fff; text-shadow: 0 0 8px #ff4fd8; }
+
+@keyframes recipe-ready {
+  from { box-shadow: 0 0 0 rgba(255, 79, 216, 0); }
+  to { box-shadow: 0 0 14px rgba(255, 79, 216, 0.45); }
+}
+
+.recipe-chip {
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 99px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recipe-chip.ok { color: #5dff9a; background: rgba(93, 255, 154, 0.08); }
+.recipe-chip.adds { color: #ff8be6; background: rgba(255, 79, 216, 0.18); box-shadow: 0 0 8px rgba(255, 79, 216, 0.5); }
+.recipe-chip.miss { color: var(--text-dim); border-style: dashed; }
+.recipe-chip.plain { color: #ffd6f5; }
+.recipe-plus { color: var(--text-dim); font-weight: 900; }
+.recipe-chip .recipe-mark { font-weight: 900; }
+/* A long either/or ingredient wraps inside the card instead of running out of it. */
+.recipe-chip:not(.wpn-pill) { max-width: 100%; white-space: normal; }
+.recipe-chip.ok .recipe-mark { color: #5dff9a; }
+.recipe-chip.adds .recipe-mark { color: #ff8be6; }
+.recipe-chip.miss .recipe-mark { color: var(--text-dim); }
+/* A weapon ingredient is its weapon pill: weapon colour, with the state in its mark and edge. */
+.recipe-chip.wpn-pill { color: var(--wc); border-color: var(--wc); font-size: inherit; padding: 1px 7px; }
+.recipe-chip.wpn-pill.miss { opacity: 0.7; border-style: dashed; }
+.recipe-chip.wpn-pill.adds { box-shadow: 0 0 9px rgba(255, 79, 216, 0.6); }
+
+/* Weapon pills (js/weapon-pills.js): a weapon named on a card, in the weapon's colour. */
+.wpn-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--wc, #8ba3c7);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--wc, #8ba3c7) 16%, rgba(6, 10, 22, 0.85));
+  color: var(--wc, #c9d4e4);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  line-height: 1.35;
+  white-space: nowrap;
+  vertical-align: middle;
+  text-shadow: none;
+}
+/* A non-weapon source a tag or area card boosts (Volatile Shatter, Tectonic Bore, Dash Shockwave): dashed, no slot. */
+.wpn-pill.source-pill { border-style: dashed; }
+.upg-weapons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+/* A global card's scope ("ALL WEAPONS", "EVERY KINETIC WEAPON"): it covers weapons picked up later too,
+   so it leads; the pills after it are the weapons it boosts right now. */
+.upg-reach-scope {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #dfe8f5;
+  color: #0b1020;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.upg-weapons .wpn-pill + .upg-reach-scope { margin-left: 6px; }
+.upg-stat-label .wpn-pill { margin-right: 5px; font-size: 9.5px; padding: 0 6px; }
+/* Replicator: one "pill +N UNIT" part per weapon. */
+.upg-headline-pills { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 17px; }
+.upg-headline-part { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.upg-headline-part .wpn-pill { font-size: 11px; }
+
+.guide-recipe .recipe-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+#chest-rewards-grid.compact .upg-recipes { display: none; }
 
 #chest-rewards-grid.compact .upg-stats {
   margin-bottom: 8px;
@@ -1787,7 +2049,7 @@ html, body {
   .gameover-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .go-global-rank.tone-gold { font-size: 16px; letter-spacing: 1.5px; }
   .name-input { min-width: 0; width: 100%; }
-  .hs-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; padding: 7px 8px; }
+  .hs-row, .hs-head { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; padding: 7px 8px; }
   .hs-meta { font-size: 0; }
   .hs-meta .hs-ver { font-size: 9.5px; margin-right: 0; }
 }
@@ -1808,7 +2070,7 @@ html, body {
     repeating-linear-gradient(135deg, rgba(255, 138, 61, 0.08) 0 10px, transparent 10px 20px),
     linear-gradient(180deg, var(--rarity-bg), rgba(8, 12, 26, 0.97) 60%);
   border-style: dashed;
-  animation: new-weapon-pulse 1.1s ease-in-out infinite alternate;
+  animation: none; /* the glow pulses on .card-glow */
 }
 
 .upgrade-option.new-weapon-card .upg-headline {
@@ -1912,10 +2174,6 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   margin-top: 4px;
 }
 
-@keyframes new-weapon-pulse {
-  from { box-shadow: 0 0 12px var(--rarity-soft); }
-  to { box-shadow: 0 0 30px var(--rarity), inset 0 0 18px rgba(255, 138, 61, 0.12); }
-}
 
 /* HUD strip: one chip per weapon slot, then the other installed upgrades on the next row. */
 .weapon-slot-chip {
@@ -1940,17 +2198,34 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   text-shadow: 0 0 6px var(--ec, transparent);
 }
 
-/* Charge gauge along the bottom of a chip (Electric Shield Field recharging; glows once charged). */
+/* Reload sweep along the bottom of a chip (weapon-timers.js): every timed weapon's progress to its next
+   attack, in its colour; READY glows; continuous weapons (sprayers, Gas Trail, Orbit Blades, rapid fire)
+   keep a steady dimmer bar. --pop (0..1, from the mount's bloom as it fires) gives a small kick. */
 .weapon-slot-chip.charge {
   background-image: linear-gradient(90deg, var(--wc) calc(var(--charge, 0) * 100%), rgba(255, 255, 255, 0.08) 0);
-  background-size: 100% 2px;
+  background-size: 100% 3px;
   background-repeat: no-repeat;
   background-position: left bottom;
+  transform: scale(calc(1 + var(--pop, 0) * 0.07));
+  filter: brightness(calc(1 + var(--pop, 0) * 0.5));
+  transition: transform 90ms ease-out, filter 90ms ease-out, box-shadow 120ms ease-out;
 }
 
 .weapon-slot-chip.charge.ready {
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 7px var(--wc);
 }
+
+.weapon-slot-chip.charge.on {
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--wc) 55%, transparent) 100%, transparent 0);
+}
+
+.weapon-slot-chip .chip-pips {
+  color: var(--wc);
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+body.reduce-effects .weapon-slot-chip.charge { transform: none; filter: none; transition: none; }
 
 .weapon-slot-chip.empty {
   border: 1px dashed rgba(122, 139, 168, 0.55);
@@ -3567,6 +3842,8 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 .gold-flash-gain { animation: gold-flash-gain 0.55s ease-out; }
 .gold-flash-spend { animation: gold-flash-spend 0.6s ease-out; }
 .gold-flash-short { animation: gold-flash-short 0.45s ease-out; }
+/* A lock refunded in its own hand (toggleCardLock): the gold springs back with an overshoot pop. */
+.gold-flash-refund { animation: gold-flash-refund 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
 @keyframes gold-flash-gain {
   0% { transform: scale(1.18); background: rgba(255, 204, 0, 0.55); color: #fff; box-shadow: 0 0 22px var(--gold); }
@@ -3575,6 +3852,12 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 
 @keyframes gold-flash-spend {
   0% { transform: scale(0.9); background: rgba(255, 0, 127, 0.35); box-shadow: 0 0 22px rgba(255, 0, 127, 0.8); }
+  100% { transform: scale(1); }
+}
+
+@keyframes gold-flash-refund {
+  0% { transform: scale(0.86); }
+  45% { transform: scale(1.22); background: rgba(255, 220, 90, 0.6); color: #fff; box-shadow: 0 0 26px var(--gold), 0 0 8px rgba(160, 255, 140, 0.7); }
   100% { transform: scale(1); }
 }
 
@@ -3625,6 +3908,30 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
   box-shadow: none;
 }
 
+.neon-btn.hand-skip-btn {
+  padding: 9px 18px;
+  font-size: 14px;
+  border-color: rgba(160, 190, 220, 0.7);
+  color: #dfe9f5;
+  background: rgba(120, 150, 190, 0.12);
+  box-shadow: 0 0 12px rgba(120, 170, 220, 0.2);
+}
+
+.neon-btn.hand-skip-btn.hidden { display: none; }
+
+/* Controller LB armed it: the next LB skips. */
+.neon-btn.hand-skip-btn.armed {
+  border-color: var(--gold);
+  color: #fff6cc;
+  text-shadow: 0 0 10px var(--gold);
+  animation: hand-skip-armed 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes hand-skip-armed {
+  from { box-shadow: 0 0 8px rgba(255, 204, 0, 0.3); transform: scale(1); }
+  to { box-shadow: 0 0 22px rgba(255, 204, 0, 0.75); transform: scale(1.04); }
+}
+
 .hand-key {
   margin-left: 6px;
   font-size: 11px;
@@ -3640,24 +3947,54 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 
 .hand-lock-note.dropped { color: #ff77b7; }
 
-/* Per-card LOCK toggle and LOCKED state: additions around the card, the card design is unchanged. */
-.card-lock-toggle {
-  align-self: flex-end;
-  margin-top: 10px;
-  padding: 3px 10px;
-  font-size: 11px;
+/* A choice card's slot: the card, then (level-up hands) its own LOCK / BANISH strip under it. The strip
+   sits outside the card, past a gap that belongs to neither, so a near-miss on a button never picks the
+   card. Buttons are ~2.5x the old pills (Clay: misclicks picked the card instead of banishing it). */
+.card-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.card-slot > .upgrade-option { flex: 1; }
+.card-actions {
+  display: flex;
+  gap: 10px;
+  animation: card-actions-in 0.3s ease-out calc(0.25s + var(--deal-i, 0) * 0.07s) backwards;
+}
+@keyframes card-actions-in { from { opacity: 0; translate: 0 -8px; } }
+.card-action {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 13px;
   font-weight: 900;
-  letter-spacing: 0.5px;
-  color: var(--gold);
-  border: 1px solid rgba(255, 204, 0, 0.6);
-  border-radius: 99px;
-  background: rgba(0, 0, 0, 0.35);
+  letter-spacing: 0.8px;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+.card-action:hover { transform: translateY(-1px); }
+.card-action:active { transform: scale(0.96); }
+.card-action .act-cost { opacity: 0.85; font-weight: 800; }
+.card-action.hidden { display: none; }
+
+/* LOCK (gold) and the card's LOCKED state: additions around the card, the card design is unchanged. */
+.card-lock-toggle {
+  color: var(--gold);
+  border: 2px solid rgba(255, 204, 0, 0.65);
+  background: rgba(255, 204, 0, 0.08);
 }
 
-.card-lock-toggle:hover { background: rgba(255, 204, 0, 0.2); }
-.card-lock-toggle.on { background: var(--gold); color: #05060f; }
+.card-lock-toggle:hover { background: rgba(255, 204, 0, 0.22); box-shadow: 0 0 14px rgba(255, 204, 0, 0.35); }
+.card-lock-toggle.on { background: var(--gold); color: #05060f; box-shadow: 0 0 16px rgba(255, 204, 0, 0.55); }
 .card-lock-toggle.unaffordable { opacity: 0.4; cursor: not-allowed; }
 
 .upgrade-option.card-locked {
@@ -3844,24 +4181,15 @@ body.touch-mode .nova-callout-title { font-size: 14px; letter-spacing: 1.5px; }
 .consent-check input.gp-focus,
 .consent-check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
-/* BANISH toggle (level-up cards): opposite corner to the LOCK toggle; red, and lit when armed. */
+/* BANISH (level-up cards): beside LOCK in the card's action strip; red, and lit + pulsing when armed. */
 .card-banish-toggle {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 70, 100, 0.65);
+  border: 2px solid rgba(255, 70, 100, 0.7);
   background: rgba(255, 70, 100, 0.1);
   color: #ff8fa3;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  z-index: 2;
 }
-.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.25); }
-.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; }
+.card-banish-toggle:hover { background: rgba(255, 70, 100, 0.26); box-shadow: 0 0 14px rgba(255, 70, 100, 0.4); }
+.card-banish-toggle.armed { background: #ff4664; color: #fff; border-color: #ff4664; animation: banish-armed 0.6s ease-in-out infinite alternate; }
+@keyframes banish-armed { from { box-shadow: 0 0 6px rgba(255, 70, 100, 0.5); } to { box-shadow: 0 0 22px rgba(255, 70, 100, 0.95); } }
 .card-banish-toggle.unaffordable { opacity: 0.45; }
 .card-banish-toggle.hidden { display: none; }
 
@@ -4515,6 +4843,7 @@ body.touch-mode .boss-bar-name,
 body.touch-mode .boss-bar-row + .boss-bar-row .boss-bar-name { font-size: 8px; letter-spacing: 1px; }
 body.touch-mode .boss-bar-epithet,
 body.touch-mode .boss-bar-more { display: none; }
+body.touch-mode .boss-bar-epithet.boss-bar-escaping { display: inline; font-size: 8px; } /* the countdown still shows */
 body.touch-mode .boss-bar-track,
 body.touch-mode .boss-bar-row + .boss-bar-row .boss-bar-track { height: 4px; }
 
@@ -4555,6 +4884,9 @@ body.touch-mode .m-window {
   background: #040712 !important; /* opaque: the menu behind must not bleed through */
   text-align: left;
 }
+/* The leaderboard window gives the board most of the screen; it scrolls inside, under its pinned head. */
+body.touch-mode .m-window #highscore-list,
+body.touch-mode .m-window #go-highscore-list { max-height: max(220px, calc(100dvh - 310px)); }
 body.touch-mode .m-back { position: sticky; top: 0; z-index: 2; margin: 0 0 10px; padding: 9px 16px; font-size: 13px; }
 body.touch-mode .modal-overlay { padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left)); }
 body.touch-mode .modal-card { max-height: 100%; padding: 14px 18px; border-radius: 12px; }
@@ -4633,11 +4965,24 @@ body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward { margin
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward b { font-size: 18px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-label { font-size: 8.5px; letter-spacing: 1.5px; }
 body.touch-mode .upgrade-option:not(.card-detail-card) .upg-slot-reward-text { font-size: 10px; }
+/* Recipes on compact cards: the leading one only, small (MORE shows them all). */
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipes { margin-top: 6px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe:not(:first-child) { display: none; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe { padding: 3px 5px; gap: 3px; font-size: 9px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-recipe-head { font-size: 8px; letter-spacing: 1px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .recipe-chip { padding: 0 5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-weapons { margin: 0 0 4px; gap: 3px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .wpn-pill { font-size: 9.5px; padding: 0 6px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-reach-scope { font-size: 8.5px; padding: 0 5px; letter-spacing: 0.5px; }
+body.touch-mode .upgrade-option:not(.card-detail-card) .upg-headline-pills { font-size: 12px; gap: 3px 6px; }
 body.touch-mode .slot-tip-card { padding: 16px 14px 14px; }
 body.touch-mode .slot-tip-title { font-size: 20px; }
 body.touch-mode .slot-tip-line { font-size: 12.5px; margin-bottom: 10px; }
-body.touch-mode .card-lock-toggle,
-body.touch-mode .card-banish-toggle { font-size: 10px; padding: 3px 8px; margin-top: 6px; }
+/* Phone: the strip stays big enough to hit with a thumb (36px tall), words drop to icon + cost. */
+body.touch-mode .card-slot { gap: 6px; }
+body.touch-mode .card-actions { gap: 6px; }
+body.touch-mode .card-action { min-height: 36px; padding: 4px 6px; font-size: 12px; letter-spacing: 0.3px; gap: 4px; }
+body.touch-mode .card-action .act-word { display: none; }
 body.touch-mode .card-more-btn {
   display: block;
   margin-top: 6px;
@@ -4869,16 +5214,17 @@ body.touch-mode .splash-tap { display: inline; }
 .start-pick-card { max-width: 1100px; width: min(96vw, 1100px); text-align: center; }
 .start-pick-title { margin: 4px 0 2px; font-size: 26px; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 12px rgba(0, 243, 255, 0.6); }
 .start-pick-sub { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
+#start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; } /* 8 starting weapons: two rows of 4 */
 #start-pick-options .upgrade-option.picked { transform: translateY(-5px); box-shadow: 0 8px 30px var(--rarity-soft), 0 0 0 2px #fff, 0 0 26px var(--rarity-soft); }
 .start-pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .start-pick-hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
 body.touch-mode .start-pick-hint { display: none; }
 body.touch-mode .start-pick-title { font-size: 18px; }
 /* Six starting weapons: one row of compact cards on a landscape phone (3 per row when it's narrow). */
-body.touch-mode #start-pick-options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+body.touch-mode #start-pick-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 body.touch-mode #start-pick-options .upgrade-option { padding: 8px 7px 7px; }
 body.touch-mode #start-pick-options .upgrade-title { font-size: 14px; margin: 2px 0 4px; }
-@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { body.touch-mode #start-pick-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Card scope (upgrade-cards.js cardScope): utility cards get a dashed inner edge, global cards a double
    one, each with a small pill on the bottom border. Neutral white so rarity colors stay readable; weapon
@@ -4930,34 +5276,43 @@ body.reduce-effects *::after {
   animation: card-deal 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.07s) backwards;
 }
 .upgrade-option.breakthrough-card {
-  animation: card-deal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.12s) backwards,
-    breakthrough-pulse 1.8s ease-in-out 0.7s infinite;
+  animation: card-deal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--deal-i, 0) * 0.12s) backwards;
 }
 @keyframes card-deal {
   from { opacity: 0; translate: 0 70px; rotate: -7deg; scale: 0.82; }
   60% { opacity: 1; }
   to { opacity: 1; translate: 0 0; rotate: 0deg; scale: 1; }
 }
-/* Rare and better: a light sweep across the face every few seconds, in the rarity colour. */
+/* Rare and better: a light sweep across the face every few seconds, in the rarity colour. The sweep is a
+   band 2.6x the card's width sliding across it (transform, so the compositor moves it without repainting
+   the card): -80% to +18.46% of its width is the 130% to -30% background-position it used to animate. */
 .card-shimmer {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--rarity) 30%, transparent) 50%, transparent 62%) no-repeat;
-  background-size: 260% 100%;
-  background-position: 130% 0;
+  overflow: hidden;
   mix-blend-mode: screen;
+}
+.card-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 260%;
+  background: linear-gradient(115deg, transparent 38%, color-mix(in srgb, var(--rarity) 30%, transparent) 50%, transparent 62%);
+  transform: translateX(-80%);
   animation: card-shimmer 3.2s ease-in-out calc(0.45s + var(--deal-i, 0) * 0.07s) infinite;
 }
-.rarity-epic .card-shimmer, .rarity-evolution .card-shimmer, .rarity-transform .card-shimmer, .rarity-boost .card-shimmer { animation-duration: 2.6s; }
-.rarity-legendary .card-shimmer {
+.rarity-epic .card-shimmer::before, .rarity-evolution .card-shimmer::before, .rarity-transform .card-shimmer::before, .rarity-boost .card-shimmer::before { animation-duration: 2.6s; }
+.rarity-legendary .card-shimmer::before {
   background-image: linear-gradient(115deg, transparent 34%, rgba(255, 236, 150, 0.4) 48%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 236, 150, 0.4) 52%, transparent 66%);
   animation-duration: 2.1s;
 }
 @keyframes card-shimmer {
-  0% { background-position: 130% 0; }
-  45%, 100% { background-position: -30% 0; }
+  0% { transform: translateX(-80%); }
+  45%, 100% { transform: translateX(18.4615%); }
 }
 /* Modals ease in instead of popping. */
 .modal-overlay:not(.hidden) { animation: modal-fade 0.18s ease-out; }
@@ -4965,7 +5320,7 @@ body.reduce-effects *::after {
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-pop { from { opacity: 0; scale: 0.94; translate: 0 10px; } }
 @media (prefers-reduced-motion: reduce) {
-  .upgrade-option, .upgrade-option.breakthrough-card, .card-shimmer,
+  .upgrade-option, .upgrade-option.breakthrough-card, .card-shimmer::before,
   .modal-overlay:not(.hidden), .modal-overlay:not(.hidden) > .modal-card { animation: none; }
 }
 
@@ -5023,23 +5378,32 @@ body.touch-mode .cs-skip-key { display: none; }
 .dialogue-box.dialogue-ready .dialogue-next { opacity: 1; animation: dialogue-next 0.6s steps(2) infinite; }
 @keyframes dialogue-next { 50% { transform: translateY(4px); } }
 
-/* Radio: the same box, small, bottom-left, click-through, above menus (the Breakthrough pick). */
+/* Radio: the same box, small, click-through, above menus (the Breakthrough pick). Centred and raised
+   off the bottom edge so it sits near the ship: you read it without looking away from the fight.
+   Centred with a negative margin (not a transform) so the slide animations keep transform. */
 .radio-box {
-  left: max(14px, env(safe-area-inset-left)); transform: none; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 74px); /* above the shield bar */
-  width: min(600px, calc(100% - 28px)); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
+  --radio-w: min(600px, 37.5vw, calc(100vw - 28px)); /* clears the sector radar on the right */
+  left: 50%; margin-left: calc(var(--radio-w) / -2); transform: none;
+  bottom: max(calc(max(14px, env(safe-area-inset-bottom)) + 54px), calc(16vh - 20px)); /* above the shield bar, inward from the edge */
+  width: var(--radio-w); z-index: 35; pointer-events: none; padding: 8px; gap: 12px;
   box-shadow: 0 0 0 4px var(--speaker), 0 0 22px color-mix(in srgb, var(--speaker) 45%, transparent);
 }
 .radio-box.dialogue-pop { animation: radio-in 0.3s cubic-bezier(0.25, 1.6, 0.5, 1); }
 .radio-box.radio-out { animation: radio-out 0.25s ease-in forwards; }
-@keyframes radio-in { from { transform: translateX(-115%); } to { transform: none; } }
-@keyframes radio-out { to { transform: translateX(-115%); opacity: 0; } }
+@keyframes radio-in { from { transform: translateY(40px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes radio-out { to { transform: translateY(30px); opacity: 0; } }
 .radio-box .dialogue-portrait { width: 144px; height: 144px; } /* 2x the 72 px art: pixel-crisp */
 .radio-box .dialogue-name { font-size: 13px; }
 .radio-box .dialogue-text { font-size: 20px; }
 .radio-box .dialogue-body { padding-bottom: 4px; gap: 5px; }
 body.cutscene-on .radio-box { display: none; }
+/* In play (bottom middle, near the ship) the box itself is see-through: no panel, frame or glow, so it
+   never hides an incoming enemy. Only her words keep a dark backing so they stay readable. */
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) { background: transparent; border-color: transparent; outline: none; box-shadow: none; }
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) .dialogue-frame { background: rgba(0, 0, 0, 0.35); }
+body:not(:has(#upgrade-modal:not(.hidden))) .radio-box:not(.radio-docked) .dialogue-text { align-self: flex-start; padding: 4px 9px; border-radius: 6px; background: rgba(4, 6, 16, 0.78); }
 /* Over the level-up / Breakthrough cards: the free bottom-right corner, sliding in from the right. */
-body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+body:has(#upgrade-modal:not(.hidden)) .radio-box { left: auto; margin-left: 0; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
 body:has(#upgrade-modal:not(.hidden)) .radio-box.dialogue-pop { animation-name: radio-in-right; }
 body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: radio-out-right; }
 @keyframes radio-in-right { from { transform: translateX(115%); } to { transform: none; } }
@@ -5048,7 +5412,7 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
    beside the cards, never over them. Portraits stay at whole multiples of the 72 px art. */
 #upgrade-choices .radio-dock { display: flex; align-items: center; justify-content: center; min-width: 0; pointer-events: none; }
 #upgrade-choices #radio-box.radio-docked {
-  position: relative; left: auto; right: auto; bottom: auto; transform: none; z-index: auto;
+  position: relative; left: auto; right: auto; bottom: auto; margin-left: 0; transform: none; z-index: auto;
   width: 100%; flex-direction: column; align-items: center; text-align: center; padding: 14px 12px; gap: 12px;
 }
 #upgrade-choices #radio-box.radio-docked .dialogue-portrait { width: 216px; height: 216px; }
@@ -5065,7 +5429,7 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
 }
 
 @media (max-width: 700px), (max-height: 520px) {
-  .radio-box { width: min(400px, calc(100% - 28px)); padding: 5px; gap: 9px; box-shadow: 0 0 0 3px var(--speaker); }
+  .radio-box { --radio-w: min(400px, calc(100vw - 28px)); padding: 5px; gap: 9px; box-shadow: 0 0 0 3px var(--speaker); }
   .radio-box .dialogue-frame { padding: 1px; border-width: 2px; }
   .radio-box .dialogue-portrait { width: 72px; height: 72px; }
   .radio-box .dialogue-name { font-size: 10px; padding: 1px 6px; }
@@ -5080,3 +5444,195 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
   .dialogue-box { gap: 10px; padding: 8px; }
   .cs-card-title { font-size: 15px; }
 }
+
+/* ---- Weapon unlocks (js/unlock-ui.js, js/weapon-unlocks.js) ------------------------------------------- */
+/* Mid-run: NEW WEAPON UNLOCKED slams in near the top, rings once, then fades. Never takes input. */
+.unlock-toast {
+  position: absolute;
+  left: 50%;
+  top: 15%;
+  z-index: 26;
+  translate: -50% 0;
+  min-width: min(420px, 86vw);
+  max-width: 92vw;
+  padding: 12px 26px 12px;
+  text-align: center;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 204, 0, 0.85);
+  background: linear-gradient(180deg, rgba(30, 22, 4, 0.92), rgba(8, 8, 18, 0.9));
+  box-shadow: 0 0 28px rgba(255, 204, 0, 0.45), inset 0 0 22px rgba(255, 204, 0, 0.15);
+}
+.unlock-toast.show { animation: unlockToastLife 4.2s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+.unlock-toast-kicker {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.8);
+}
+.unlock-toast-name {
+  margin: 2px 0 1px;
+  font-size: clamp(22px, 3.2vw, 32px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: 0 0 12px var(--wc), 0 0 30px var(--wc);
+}
+.unlock-toast-goal { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #e9f6ff; opacity: 0.85; }
+.unlock-toast-flare {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 48%, transparent 66%);
+  translate: -120% 0;
+}
+.unlock-toast.show .unlock-toast-flare { animation: unlockFlare 0.9s 0.25s ease-out both; }
+@keyframes unlockToastLife {
+  0% { opacity: 0; transform: scale(1.8); filter: brightness(2.4); }
+  9% { opacity: 1; transform: scale(0.94); filter: brightness(1.6); }
+  14% { transform: scale(1.03); filter: brightness(1); }
+  18% { transform: scale(1); }
+  88% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.96) translateY(-10px); }
+}
+@keyframes unlockFlare { to { translate: 120% 0; } }
+
+/* Game over: the reveal cards, before the results. Each clip starts as a black silhouette and lights up. */
+.unlock-reveal-overlay { z-index: 44; }
+.unlock-reveal-panel {
+  width: min(880px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  text-align: center;
+  padding: 22px clamp(14px, 3vw, 30px) 20px;
+  border-color: rgba(255, 204, 0, 0.6);
+  box-shadow: 0 0 40px rgba(255, 204, 0, 0.25);
+}
+.unlock-reveal-title {
+  margin: 4px 0 16px;
+  font-size: clamp(24px, 4vw, 38px);
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(255, 204, 0, 0.8), 0 0 40px rgba(255, 204, 0, 0.4);
+  animation: unlockTitleIn 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.unlock-reveal-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-bottom: 18px; }
+.unlock-reveal-card {
+  flex: 1 1 240px;
+  max-width: 320px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--wc);
+  background: rgba(6, 10, 22, 0.92);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--wc) 45%, transparent);
+  animation: unlockCardIn 0.55s var(--delay) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.unlock-reveal-media { position: relative; }
+.unlock-reveal-media .weapon-clip { border-color: var(--wc); }
+.unlock-reveal-media img { animation: unlockLightUp 0.7s calc(var(--delay) + 0.2s) ease-out both; }
+.unlock-reveal-rays {
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--wc) 70%, white) 0%, transparent 45%);
+  opacity: 0;
+  animation: unlockRays 0.9s calc(var(--delay) + 0.2s) ease-out both;
+}
+.unlock-reveal-kicker { font-size: 10px; font-weight: 900; letter-spacing: 3px; color: var(--gold); }
+.unlock-reveal-name {
+  margin: 2px 0 6px;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 0 0 12px var(--wc);
+}
+.unlock-reveal-what { margin: 0 0 8px; font-size: 12px; line-height: 1.45; color: #c9d8ee; }
+.unlock-reveal-goal { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--emerald); }
+.unlock-reveal-note { margin-top: 4px; font-size: 10px; letter-spacing: 1.5px; color: var(--text-dim); }
+.unlock-continue-btn { min-width: 200px; }
+@keyframes unlockTitleIn { from { opacity: 0; transform: scale(1.6); } to { opacity: 1; transform: none; } }
+@keyframes unlockCardIn { from { opacity: 0; transform: translateY(26px) scale(0.86); } to { opacity: 1; transform: none; } }
+@keyframes unlockLightUp { from { filter: brightness(0) contrast(1.2); } 40% { filter: brightness(2.2); } to { filter: none; } }
+@keyframes unlockRays { 0% { opacity: 0; transform: scale(0.4); } 30% { opacity: 0.9; } 100% { opacity: 0; transform: scale(1.3); } }
+
+/* Goal rows: the results' NEXT UNLOCKS, the Field Guide's locked weapons. */
+.unlock-goal { text-align: left; }
+.unlock-goal-head { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 1px; color: #fff; }
+.unlock-goal-head b { color: var(--wc); text-shadow: 0 0 8px color-mix(in srgb, var(--wc) 60%, transparent); }
+.unlock-lock { font-size: 11px; opacity: 0.85; }
+.unlock-goal-text { margin: 3px 0 4px; font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #e9f6ff; }
+.unlock-goal-hint { margin-top: 4px; font-size: 10px; line-height: 1.35; color: var(--text-dim); }
+.unlock-bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.unlock-bar i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--wc) 60%, black), var(--wc));
+  box-shadow: 0 0 8px var(--wc);
+}
+.go-unlock-goals:empty { display: none; }
+.unlock-teaser { margin: 6px 0 10px; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255, 204, 0, 0.3); background: rgba(20, 16, 4, 0.5); }
+.unlock-teaser-title { font-size: 10px; font-weight: 900; letter-spacing: 3px; color: var(--gold); margin-bottom: 6px; }
+.unlock-teaser-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 18px; }
+.guide-weapon.weapon-locked .weapon-clip img { filter: grayscale(1) brightness(0.5) contrast(1.6) blur(1px); }
+.guide-weapon.weapon-locked .guide-weapon-meta b { color: var(--gold); }
+.guide-weapon.weapon-locked .unlock-goal-head { display: none; }
+.guide-weapon.weapon-locked .weapon-clip { position: relative; border-color: rgba(255, 255, 255, 0.14); }
+.guide-weapon.weapon-locked .weapon-clip::after {
+  content: '🔒';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  opacity: 0.8;
+}
+.guide-weapon.weapon-locked h3 { color: #9aa8bf; }
+.guide-weapon.weapon-locked .unlock-goal { margin-top: 8px; }
+.guide-unlock-summary { margin: 0 0 4px; font-size: 11px; letter-spacing: 1.5px; color: var(--text-dim); }
+.guide-unlock-summary b { color: var(--gold); }
+
+@media (prefers-reduced-motion: reduce) {
+  .unlock-toast.show, .unlock-reveal-card, .unlock-reveal-title, .unlock-reveal-media img, .unlock-reveal-rays, .unlock-toast-flare { animation-duration: 0.01s !important; animation-delay: 0s !important; }
+  .unlock-toast.show { animation: none; opacity: 1; }
+}
+
+/* 💾 SAVE screen (js/save-ui.js) and the one-time recovery-code card */
+.save-card { max-width: 760px; }
+.save-body { display: flex; flex-direction: column; gap: 14px; }
+.save-sec { border: 1px solid rgba(0, 243, 255, 0.18); border-radius: 10px; padding: 12px 14px; background: rgba(8, 14, 30, 0.6); display: flex; flex-direction: column; gap: 8px; }
+.save-h { margin: 0; font-size: 12px; letter-spacing: 0.14em; color: var(--cyan); }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.save-btn { padding: 7px 14px; font-size: 11px; letter-spacing: 0.1em; margin: 0; }
+.save-btn.primary { border-color: var(--gold); color: var(--gold); }
+.save-btn.danger { border-color: rgba(255, 80, 110, 0.7); color: #ff8aa0; }
+.save-btn[disabled] { opacity: 0.4; cursor: default; }
+.save-input { flex: 1 1 220px; min-width: 0; letter-spacing: 0.12em; text-transform: uppercase; }
+.save-text { width: 100%; box-sizing: border-box; resize: vertical; font: 11px/1.4 Consolas, monospace; color: #cfe; background: rgba(2, 6, 16, 0.9); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 6px; padding: 8px; word-break: break-all; }
+.save-file-btn { display: inline-flex; align-items: center; cursor: pointer; }
+.save-status, .save-msg { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
+.save-msg { padding: 8px 10px; border-radius: 6px; background: rgba(0, 243, 255, 0.06); }
+.tone-dim { color: var(--text-dim); }
+.tone-cyan { color: var(--cyan); }
+.tone-good { color: var(--emerald); }
+.tone-danger { color: #ff8aa0; }
+.save-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.save-code-label { font-size: 10px; font-weight: 900; letter-spacing: 0.14em; color: var(--text-dim); }
+.save-code { font: 800 16px/1 Consolas, monospace; letter-spacing: 0.12em; color: var(--gold); padding: 6px 10px; border-radius: 6px; background: rgba(255, 204, 0, 0.08); border: 1px solid rgba(255, 204, 0, 0.35); }
+.save-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-dim); }
+.save-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.save-col { display: flex; flex-direction: column; gap: 3px; font-size: 12px; padding: 10px; border-radius: 8px; background: rgba(16, 24, 46, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); }
+.save-col-h { font-size: 10px; font-weight: 900; letter-spacing: 0.14em; color: var(--cyan); margin-bottom: 2px; }
+.cloud-callout { margin: 8px auto; max-width: 760px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255, 204, 0, 0.55); background: rgba(40, 30, 6, 0.85); box-shadow: 0 0 18px rgba(255, 204, 0, 0.25); display: flex; flex-direction: column; gap: 6px; }
+.cloud-callout.hidden { display: none; }
+.cloud-callout-h { font-size: 11px; font-weight: 900; letter-spacing: 0.14em; color: var(--gold); }
+@media (max-width: 560px) { .save-compare { grid-template-columns: 1fr; } }

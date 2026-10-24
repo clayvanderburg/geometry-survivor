@@ -3,14 +3,18 @@
 // applies at once. Controls are plain buttons, so mouse, keyboard (Tab / Enter) and the controller
 // (Back opens it as a menu, B returns to flying) all work; steppers never disable themselves, so a
 // controller's focus doesn't jump away at a limit.
+import { isWeaponUnlocked, goalText, GOAL_BY_WEAPON } from './weapon-unlocks.js';
 import {
   RANGE_FORMATIONS, RANGE_TARGETS, RANGE_MOD_GROUPS, DUMMY_COUNTS, MAX_WAVE, DPS_WINDOW,
-  autoRanks, clampRanks, entryRanks, entryLevel, entryBuild, entryElement
+  autoRanks, clampRanks, entryRanks, entryLevel, entryBuild, entryElement, rangeBtOptions
 } from './weapon-range.js';
-import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, TRANSFORMS, BOOST_NAME, ELEMENTS, ELEMENT_CARDS, ELEMENT_INFO, ELEMENT_MAX_RANKS } from './weapon-levels.js';
+import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, btOption, BT_FLATS, overtunedSummary, BOOST_NAME, ELEMENTS, ELEMENT_CARDS, ELEMENT_INFO, ELEMENT_MAX_RANKS } from './weapon-levels.js';
 import { WEAPONS, WEAPON_BY_ID, weaponSlots } from './loadout.js';
 import { UPGRADE_BY_ID } from './upgrades.js';
 import { formatCompact } from './run-report.js';
+
+// A weapon the range may equip: unlocked on this save (no save at all, as in tests: everything).
+const rangeUnlocked = (range, id) => { const u = range.game?.progression?.data?.unlocks; return !u || isWeaponUnlocked(u, id); };
 
 // Short names for the stat card ranks (weapon-levels.js STAT_CARDS `stat`).
 const STAT_NAMES = {
@@ -141,7 +145,7 @@ export class RangePanel {
     const dm = cfg.dummies;
     const cycle = (list, cur) => list[(list.indexOf(cur) + step + list.length) % list.length];
     switch (act) {
-      case 'add': if (cfg.weapons.length < weaponSlots()) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {}, element: null, elementRank: 1 }); break;
+      case 'add': if (cfg.weapons.length < weaponSlots() && rangeUnlocked(this.range, v)) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {}, element: null, elementRank: 1 }); break;
       case 'remove': cfg.weapons = cfg.weapons.filter((x) => x.id !== w); break;
       case 'lv': if (entry && !entry.custom) entry.level = Math.max(1, Math.min(WEAPON_MAX_LEVEL, entry.level + step)); break;
       case 'ranks-mode':
@@ -151,7 +155,11 @@ export class RangePanel {
         entry.custom = !entry.custom;
         break;
       case 'rank': if (entry) entry.ranks = clampRanks(entry.id, { ...entry.ranks, [v]: (entry.ranks[v] || 0) + step }); break;
-      case 'bt': if (entry) entry.bt = { ...entry.bt, [v]: entry.bt?.[v] === 'boost' ? 'transform' : 'boost' }; break;
+      case 'bt': if (entry) {
+        // Cycle the milestone through its pool: home transform, the other transforms, then the flats.
+        const opts = rangeBtOptions(entry.id, +v);
+        entry.bt = { ...entry.bt, [v]: opts[(opts.indexOf(entry.bt?.[v] ?? 'transform') + 1) % opts.length] };
+      } break;
       case 'el':
         if (!entry) break;
         // AUTO keeps the stat ranks it had: the element's ranks come on top of the level.
@@ -219,8 +227,11 @@ export class RangePanel {
     const cfg = this.range.config;
     const cards = cfg.weapons.map((w) => this.weaponHtml(w)).join('') || '<div class="rg-empty">No weapons: add one below.</div>';
     const full = cfg.weapons.length >= weaponSlots();
+    // Locked weapons (js/weapon-unlocks.js) show but can't be equipped until their goal is done.
     const add = WEAPONS.filter((x) => !cfg.weapons.some((w) => w.id === x.id))
-      .map((x) => btn('add', `+ ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: full, title: full ? 'Every slot is full' : `Equip ${x.name}` }))
+      .map((x) => (rangeUnlocked(this.range, x.id)
+        ? btn('add', `+ ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: full, title: full ? 'Every slot is full' : `Equip ${x.name}` })
+        : btn('add', `🔒 ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: true, title: `Locked: ${goalText(GOAL_BY_WEAPON[x.id])}` })))
       .join('');
     return `<div class="rg-sec">WEAPONS <span>${cfg.weapons.length} / ${weaponSlots()} SLOTS</span></div>${cards}`
       + `<div class="rg-sec">ADD WEAPON</div><div class="rg-addlist" style="--wc:#00f3ff">${add || '<span class="rg-dim">Every weapon is equipped.</span>'}</div>`;
@@ -245,11 +256,13 @@ export class RangePanel {
     const autoNote = w.custom ? '' : '<span class="rg-dim rg-auto-note">AUTO adds one rank per level, cycling through every stat (lit: this level\'s). CUSTOM picks them.</span>';
     const bt = BREAKTHROUGH_LEVELS.map((m) => {
       const locked = lv < m;
-      const boost = w.bt?.[m] === 'boost';
-      const label = `<b>LV ${m}</b> ${boost ? `⚛ ${BOOST_NAME.toUpperCase()}` : `⚛ ${esc(TRANSFORMS[w.id][m].name)}`}`;
+      const opt = btOption(w.id, m, rangeBtOptions(w.id, m).includes(w.bt?.[m]) ? w.bt[m] : 'transform');
+      const boost = !!BT_FLATS[opt.id];
+      const summary = opt.id === 'boost' ? BOOST_NAME : opt.id === 'overtuned' ? overtunedSummary(WEAPON_BY_ID[w.id].name, w.id, Math.max(m, lv)) : opt.transform.summary;
+      const label = `<b>LV ${m}</b> ⚛ ${boost ? opt.name.toUpperCase() : esc(opt.name)}`;
       return btn('bt', label, {
         w: w.id, v: m, cls: `rg-bt ${boost ? 'is-boost' : 'is-transform'}`, off: locked,
-        title: locked ? `Reach LV ${m} to install` : `${boost ? BOOST_NAME : TRANSFORMS[w.id][m].summary} (click to swap)`
+        title: locked ? `Reach LV ${m} to install` : `${summary} (click for the next option)`
       });
     }).join('');
     const build = entryBuild(w);

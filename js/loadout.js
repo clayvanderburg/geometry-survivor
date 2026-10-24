@@ -59,7 +59,7 @@ export const WEAPONS = [
   {
     id: 'drones', name: 'Escort Drones', hudName: 'Escort Drones', levelId: 'drones', levelKey: 'drones', category: 'DEPLOYABLE', tagSources: ['drone'],
     color: '#b6ff4a',
-    summary: 'Gunship drones fly in formation behind the hull and fire at nearby targets.'
+    summary: 'Gunship drones fly in formation, a pair off your nose and a row behind the hull, and fire at nearby targets.'
   },
   {
     id: 'grenades', name: 'Plasma Grenades', hudName: 'Grenades', levelId: 'grenades', levelKey: 'grenades', category: 'AUTONOMOUS', tagSources: ['grenade'],
@@ -74,7 +74,7 @@ export const WEAPONS = [
   {
     id: 'flamethrower', name: 'Flamethrower', hudName: 'Flamethrower', levelId: 'flamethrower', levelKey: 'flamethrower', category: 'PRIMARY', tagSources: ['flame'],
     color: '#ffa526',
-    summary: 'A short cone of fire sprayed where you aim. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close.'
+    summary: 'A nozzle spins round the ship spraying a short cone of fire. Scorches everything in the cone and sets it on FIRE. Rocks block the flames, so get close. Always FIRE.'
   },
   {
     id: 'cryospray', name: 'Cryo Sprayer', hudName: 'Cryo Sprayer', levelId: 'cryospray', levelKey: 'cryospray', category: 'PRIMARY', tagSources: ['cryo'],
@@ -107,9 +107,9 @@ export const WEAPONS = [
     summary: 'Launches a cloud of nanites at the densest pack nearby: it drifts with the pack and eats it, grows with every kill, then disperses. Always CORROSIVE.'
   },
   {
-    id: 'harpoon', name: 'Claw Harpoon', hudName: 'Claw Harpoon', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
+    id: 'harpoon', name: 'Drill Driver', hudName: 'Drill Driver', levelId: 'harpoon', levelKey: 'harpoon', category: 'PRIMARY', tagSources: ['harpoon'],
     color: '#ffcc00',
-    summary: 'Fires one of your drill-claws on a tether where you aim. It pierces everything on its line, drills through rock (and mines it), and yanks small enemies back into your other claw to be crushed.'
+    summary: 'Launches your front drills on a cable where you aim. Each one bores through everything on its line on the way out and again as it reels back, and drills through rock (mining it as it goes).'
   },
   {
     id: 'quake', name: 'Graviton Mortar', hudName: 'Graviton Mortar', levelId: 'quake', levelKey: 'quake', category: 'AUTONOMOUS', tagSources: ['quake'],
@@ -131,6 +131,16 @@ export const PASSIVES = [
 
 export const PASSIVE_BY_ID = Object.fromEntries(PASSIVES.map((x) => [x.id, x]));
 
+// Damage sources that are not weapons (the passive, the drill and dash evolutions) but carry tags, so a tag or
+// Field Amplifier card can be in the hand for them alone: its card shows them as pills (upgrade-cards.js cardReach).
+// `source` is their WEAPON_TAGS key; `what` names what the card boosts there.
+export const SHIP_SOURCES = [
+  { id: 'shrapnel', name: 'Volatile Shatter', color: '#d6dde8', source: 'shrapnel', what: 'shards', owned: (p) => ownedPassives(p).includes('shrapnel') },
+  { id: 'tectonic', name: 'Tectonic Bore', color: '#ffb347', source: 'tectonic', what: 'drill blasts', owned: (p) => (p.weapons?.tectonicBore || 0) >= 1 },
+  { id: 'nova', name: 'Dash Shockwave', color: '#ffe45c', source: 'nova', what: 'shockwave', owned: (p) => (p.weapons?.dashNova || 0) >= 1 }
+];
+export const shipSourcesWith = (p, tag) => SHIP_SOURCES.filter((s) => s.owned(p) && (WEAPON_TAGS[s.source] || []).includes(tag));
+
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
 // Weapon whose level is each UPGRADE_POOL line ('missiles' -> Swarm Micro-Missiles, ...).
 export const WEAPON_BY_LEVEL_ID = Object.fromEntries(WEAPONS.filter((w) => w.levelId).map((w) => [w.levelId, w]));
@@ -142,7 +152,7 @@ export const STARTING_WEAPONS = ['blaster'];
 
 // The run-start pick: the direct damage dealers (until ships with their own kits arrive). The last pick
 // is remembered on this device and pre-selected next time.
-export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive'];
+export const START_WEAPON_CHOICES = ['blaster', 'rockets', 'missiles', 'raillance', 'harpoon', 'glaive', 'drones', 'turret'];
 export const START_WEAPON_STORAGE_KEY = 'vexolith_start_weapon';
 export const normalizeStartWeapon = (id) => (START_WEAPON_CHOICES.includes(id) ? id : START_WEAPON_CHOICES[0]);
 export function readStartWeapon(storage) {
@@ -160,7 +170,7 @@ export function weaponTags(id) {
   return tags;
 }
 
-export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 6));
+export const weaponSlots = () => Math.max(1, Math.round(TUNING.weaponSlots ?? 5));
 
 // Owned weapons in slot order. Players built before loadouts existed (old test fixtures) own the blaster
 // plus every weapon with a level, so their behaviour is unchanged.
@@ -171,7 +181,11 @@ export function ownedWeapons(p) {
 
 export const ownsWeapon = (p, id) => ownedWeapons(p).includes(id);
 export const freeSlots = (p) => Math.max(0, weaponSlots() - ownedWeapons(p).length);
-export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id)).map((w) => w.id);
+// Weapons this run may draw: `p.weaponPool` (the ids unlocked on this save, js/weapon-unlocks.js), or
+// every weapon when the run carries no pool (the override, old fixtures, the balance tools).
+export const weaponAvailable = (p, id) => !Array.isArray(p?.weaponPool) || p.weaponPool.includes(id);
+// Unequipped weapons the run can still draw (NEW WEAPON picks, the weapon floor, rerolls).
+export const unownedWeapons = (p) => WEAPONS.filter((w) => !ownsWeapon(p, w.id) && weaponAvailable(p, w.id)).map((w) => w.id);
 
 // Weapon level shown on slots, HUD and cards: LV 1 for equipping it plus every rank of its stat cards
 // and its element card (0 when not equipped). Evolution bonus levels (Storm Protocol) are shown separately.

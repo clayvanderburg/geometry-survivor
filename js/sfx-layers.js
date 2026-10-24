@@ -106,6 +106,13 @@ export const SFX_PRESETS = Object.freeze({
     { tone: 2093, dur: 0.16, vol: 0.04, type: 'sine' },
     { tone: 2637, dur: 0.16, vol: 0.035, type: 'sine', delay: 0.05 },
     { tone: 3136, dur: 0.2, vol: 0.03, type: 'sine', delay: 0.1 }
+  ] },
+  // A level-up hand skipped for gold: the cards swish away, then two coins ring in.
+  skipCash: { key: 'skip_cash', gapMs: 120, maxVoices: 1, dur: 0.4, layers: [
+    { noise: 0.12, vol: 0.06, freq: 1800, q: 0.6 },
+    { tone: 520, dur: 0.1, vol: 0.06, type: 'triangle', glideTo: 260 },
+    { tone: 1976, dur: 0.12, vol: 0.05, type: 'square', delay: 0.11 },
+    { tone: 2637, dur: 0.22, vol: 0.045, type: 'square', delay: 0.19 }
   ] }
 });
 

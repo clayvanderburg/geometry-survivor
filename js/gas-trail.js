@@ -20,9 +20,11 @@ import { TUNING } from './config.js';
 import { WEAPON_SCALING as W, weaponDamage, gasCloudRadius } from './weapon-scaling.js';
 import { weaponBuild } from './weapon-levels.js';
 import { isDeployableTarget } from './deployables.js';
+import * as BTX from './bt-extras.js'; // pool Breakthroughs: Toxic Tendrils, Spore Burst
 
 export const GAS_HUE = 122;     // sickly neon green body; rims run teal, bubbles acid
 const RIM_HUE = 166;
+import { kickMount } from './hardpoints.js';
 const BUBBLE_HUE = 92;
 const MAX_PUFFS = 256;          // >= puffs alive at once: life / (spacing x radius / ship speed), oldest recycled past it
 const MAX_POCKETS = 8;          // >= pockets alive at once (one every ~1.2 s, ~1.8 s fuse at most)
@@ -91,6 +93,8 @@ export class GasTrail {
       this.tickEvery = W.gasTick(b);
       this.damage = weaponDamage(p, 'gas', b);
       this.seek = b.t4;
+      this.tendrils = !!b.tf?.has('tendrils');
+      this.spores = !!b.tf?.has('spores');
       this.shroudR = b.t12 ? this.radius * W.shroudRadiusMult : 0;
       this.shroudDamage = this.damage * W.shroudShare;
       this.shipX = p.x;
@@ -140,6 +144,7 @@ export class GasTrail {
     f.vy = Math.sin(t.a) * DRIFT;
     this.last = f;
     this.puffsDropped++;
+    kickMount(p, 'gas', null, 0.5); // the vents puff (hardpoints.js)
     if (this.hissT <= 0) {
       this.hissT = HISS_EVERY;
       game.sound.playGasVent?.();
@@ -188,6 +193,7 @@ export class GasTrail {
       const f = this.puffs[i];
       f.age += dt;
       if (f.age >= f.life) {
+        BTX.gasSpore(game, this, f);
         // Swap-remove keeps live puffs packed; `f` keeps its data until the slot is reused.
         if (this.last === f) this.last = null;
         f.target = null;
@@ -272,6 +278,7 @@ export class GasTrail {
         if ((e.x - sx) ** 2 + (e.y - sy) ** 2 <= r * r) game.hitEnemy(e, this.shroudDamage, 'gas', 0, 0, 0.22, 'gas_shroud');
       }
     }
+    BTX.gasTendrils(game, this);
   }
 
   // Volatile Pockets: a pocket dropped at the tail, worth W.pocketShare of the gas DPS over W.pocketEvery.
