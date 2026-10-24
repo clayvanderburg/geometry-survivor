@@ -200,6 +200,9 @@
         <span class="guide-toast-body"><b>FIELD GUIDE UPDATED</b><span id="guide-toast-text" class="guide-toast-text"></span></span>
       </div>
 
+      <!-- A weapon unlock goal just completed (js/unlock-ui.js): slams in at the top, never blocks play -->
+      <div id="unlock-toast" class="unlock-toast hidden" role="status" aria-live="polite"></div>
+
       <!-- First boss of a run: a big reminder with an arrow to the Supernova bomb counter -->
       <svg id="nova-callout-arrow" class="nova-callout-arrow hidden" aria-hidden="true">
         <defs>
@@ -467,6 +470,7 @@
             <button id="btn-title-guide" class="neon-btn guide-open-btn guide-hub-btn" title="Field Guide [G]">📖 FIELD GUIDE<span id="guide-badge-title" class="guide-btn-badge"></span></button>
             <button id="btn-title-tutorial" class="neon-btn tutorial-open-btn guide-hub-btn" title="A quick look at how to play">🎓 TUTORIAL</button>
             <button id="btn-title-intro" class="neon-btn intro-open-btn guide-hub-btn" title="Replay the opening cutscene">🎬 INTRO</button>
+            <button id="btn-title-unlocks" class="neon-btn unlocks-open-btn guide-hub-btn" title="Weapons unlocked and the goals that unlock the rest">🔓 WEAPONS<span id="unlock-count-title" class="guide-btn-badge"></span></button>
             <div class="wallet-pill">
               <span class="wallet-icon">❖</span>
               <div>
@@ -582,6 +586,16 @@
       </div>
     </div>
 
+    <!-- Weapons unlocked this run, revealed before the results (js/unlock-ui.js) -->
+    <div id="unlock-reveal-modal" class="modal-overlay unlock-reveal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="unlock-reveal-title">
+      <div class="modal-card unlock-reveal-panel">
+        <div class="glitch-subtitle">ARSENAL EXPANDED</div>
+        <h2 id="unlock-reveal-title" class="unlock-reveal-title">NEW WEAPON UNLOCKED</h2>
+        <div id="unlock-reveal-cards" class="unlock-reveal-cards"></div>
+        <button id="btn-unlock-continue" class="neon-btn unlock-continue-btn">CONTINUE ▶</button>
+      </div>
+    </div>
+
     <!-- Campaign victory (js/victory.js): the wave-50 boss is down. Continue for high score in ENDLESS, or end the run. -->
     <div id="victory-modal" class="modal-overlay hidden">
       <div class="modal-card upgrade-card victory-card">
@@ -621,6 +635,7 @@
 
         <div id="gameover-stats" class="gameover-stats"></div>
         <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
+        <div id="go-unlock-goals" class="go-unlock-goals"></div>
 
         <div class="hub-columns">
           <div class="hub-panel go-left-panel" data-m-section="report">

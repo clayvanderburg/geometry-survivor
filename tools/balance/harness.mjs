@@ -32,6 +32,7 @@ const { WEAPON_SCALING: W } = await import('../../js/weapon-scaling.js');
 const { weaponSlots } = await import('../../js/loadout.js');
 const { canOfferNewWeapon } = await import('../../js/upgrades.js');
 const { rerollCost } = await import('../../js/gold.js');
+const { UnlockTracker } = await import('../../js/weapon-unlocks.js');
 
 export { UPGRADE_POOL, TUNING, DEFAULT_TUNING, MODES, W as WEAPON_SCALING };
 
@@ -293,7 +294,9 @@ function installInstrumentation(game, metrics) {
 
 // --- Headless game fixture --------------------------------------------------------------------
 // `mode` (js/modes.js) is the title-screen choice: resetRun(game.selectedMode) flies it, as startGame does.
-export function createHeadlessGame({ metaRank = 0, mode = 'normal' } = {}) {
+// `unlocks`: attach a weapon-unlock tracker (js/weapon-unlocks.js) so runs draw only this save's unlocked
+// weapons and count goal progress. Off by default: the benches and strategies reach all 20 weapons.
+export function createHeadlessGame({ metaRank = 0, mode = 'normal', unlocks = false } = {}) {
   const game = Object.create(Game.prototype);
   Object.assign(game, {
     canvas: null, ctx: null, width: 1280, height: 720,
@@ -311,6 +314,7 @@ export function createHeadlessGame({ metaRank = 0, mode = 'normal' } = {}) {
     updateHUD() {}, updateBossHUD() {}, showBanner() {}, renderHubUI() {}
   });
   game.asteroidManager = new AsteroidManager(game.worldWidth, game.worldHeight);
+  if (unlocks) game.unlocks = new UnlockTracker(game.progression);
   for (const upg of META_UPGRADES) {
     const rank = Math.min(upg.maxRank, metaRank);
     game.progression.data.ranks[upg.id] = rank;
@@ -587,9 +591,10 @@ export const PILOT_SKILLS = { expert: 1, average: 12, novice: 20 };
 // `god` keeps the ship alive (pacing measurements only: how fast XP and levels come in a long run).
 // Gold policy: the bot buys one reroll in any level-up hand that opens while it can afford the base
 // cost (no locks), so `rerolls` estimates how often a player who mines can reroll.
-export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true, kite = 1 }) {
+// `unlocks`: fly with a fresh save's weapon locks and report the run's unlock-goal counters (`unlockStats`).
+export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tuning = {}, weapons = {}, skill = 'average', god = false, mode = 'normal', anticipate = true, kite = 1, unlocks = false }) {
   return withSeed(seed, { tuning, weapons }, () => {
-    const game = createHeadlessGame({ metaRank, mode });
+    const game = createHeadlessGame({ metaRank, mode, unlocks });
     const metrics = createMetrics();
     installInstrumentation(game, metrics);
     const shatter = game.onRockShattered;
@@ -687,6 +692,7 @@ export function simulateRun({ strategy, seed, maxSeconds = 900, metaRank = 0, tu
       wave: game.wave,
       level: game.player.level,
       kills: game.kills,
+      ...(game.unlocks ? { unlockStats: game.unlocks.stats() } : {}),
       score: game.score,
       cores: metrics.cores,
       rocksMined: game.rocksMined,

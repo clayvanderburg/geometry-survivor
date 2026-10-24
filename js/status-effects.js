@@ -243,6 +243,10 @@ function conductShock(game, e, s, p, conduct) {
 // One half-second tick of an enemy's stacks: damage, spreading, freeze rolls, then decay.
 function tickStacks(game, e, s, p, keep) {
   if (!p) return; // fixtures without a player: timers only
+  // Weapon unlock goals count each enemy once per status (js/weapon-unlocks.js).
+  if (s.burn > 0 && !s.burnSeen) { s.burnSeen = true; game.unlocks?.bump('burned'); }
+  if (s.corrode > 0 && !s.corrodeSeen) { s.corrodeSeen = true; game.unlocks?.bump('corroded'); }
+  if (s.shock > 0 && !s.shockSeen) { s.shockSeen = true; game.unlocks?.bump('shocked'); }
   if (s.burn > 0) {
     game.hitEnemy(e, s.burn * dotPerStack(p, 'fire'), 'burn', 0, 0, 0.25, s.burnStat || 'burn');
     if (e.dead) return;
@@ -272,6 +276,7 @@ function tickStacks(game, e, s, p, keep) {
       e.speedScale = 0;
       game.particles?.spawnExplosionSparks?.(e.x, e.y, 8, 192, 0.5, 3, 2);
       game.sound?.playFreeze?.();
+      game.unlocks?.bump('frozen');
       return; // the cold is spent in the freeze (cleared when it thaws)
     }
   }

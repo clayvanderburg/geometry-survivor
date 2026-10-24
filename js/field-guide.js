@@ -28,6 +28,7 @@ import { eliteMiningDps } from './pursuit.js';
 import { goldPerVein, rerollCost, weaponRerollCost, lockCost, banishCost } from './gold.js';
 import { handSizeFor, slotDamageBonus, BREAKTHROUGH_SLOT } from './slot-rewards.js';
 import { weaponFloor, weaponFloorStep } from './weapon-floor.js';
+import { OPEN_WEAPONS, UNLOCK_GOALS, GOAL_BY_WEAPON, goalText } from './weapon-unlocks.js';
 import { WEAPONS, PASSIVES, WEAPON_BY_ID, WEAPON_BY_LEVEL_ID, STARTING_WEAPONS, START_WEAPON_CHOICES, weaponTags, weaponSlots } from './loadout.js';
 import { MODES } from './modes.js';
 
@@ -437,6 +438,7 @@ export const MECHANIC_ENTRIES = [
       `More weapons, more choice: level-ups offer ${[1, 2, 3, 4].map(handSizeFor).join(' / ')} cards with 1 / 2 / 3 / 4+ weapons. Your 3rd and 5th weapons each add ${pct(slotDamageBonus())} damage to every weapon, and your ${BREAKTHROUGH_SLOT}th (the last slot) also arrives with its LV 6 Breakthrough ready to pick (once per run). A discard takes back the hand size and damage. The NEW WEAPON card shows what the next slot unlocks.`,
       'OVERCHARGE: once every weapon you carry is LV 18, general, crit, tag and STATUS cards keep turning up past their max and keep stacking (crit chance stops at 100%). Evolutions, element cards and passives keep their max.',
       'Arsenal: ' + WEAPONS.map((w) => w.name).join(', ') + '.',
+      `WEAPON UNLOCKS: a new pilot flies with ${OPEN_WEAPONS.length} weapons. Each of the other ${UNLOCK_GOALS.length} unlocks from a small goal that teaches it (${goalText(GOAL_BY_WEAPON.cryospray)} for the ${WEAPON_BY_ID.cryospray.name}), counted over all your runs. Locked weapons never turn up in picks; the WEAPONS tab shows every goal and your progress.`,
       ...PASSIVES.map((x) => `${x.name} is a PASSIVE, not a weapon: it takes no slot and is never a NEW WEAPON pick. It turns up in ordinary level-up hands like any general upgrade (with the usual +2…+5 rarity jumps), and owning it unlocks ${passiveTagCards(x.id)}. ${x.summary}`)
     ]
   },

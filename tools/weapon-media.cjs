@@ -123,7 +123,7 @@ async function listWeapons(browser) {
   const context = await openContext(browser);
   try {
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:8096/index.html');
+    await page.goto('http://127.0.0.1:8096/index.html?unlockall=1');
     return await page.evaluate(async () => ({
       weaponIds: (await import('/js/loadout.js')).WEAPONS.map((w) => w.id),
       extras: JSON.parse(JSON.stringify((await import('/js/weapon-levels.js')).EXTRA_TRANSFORMS))
@@ -155,7 +155,7 @@ async function capture(browser, clip, tmp) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   try {
-    await page.goto('http://127.0.0.1:8096/index.html');
+    await page.goto('http://127.0.0.1:8096/index.html?unlockall=1');
     await page.locator('#splash-screen').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape'); // past the splash screen
     await page.locator('#splash-screen').waitFor({ state: 'hidden' });

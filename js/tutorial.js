@@ -79,6 +79,7 @@ export function tutorialSlides(tuning = TUNING) {
       alt: 'The Void Armory of permanent upgrades',
       lines: [
         'When your shield breaks the run ends, but your ❖ **Void Cores** stay. Spend them in the **VOID ARMORY** on permanent upgrades.',
+        'Small goals (freeze, burn, mine…) **unlock new weapons**: see **🔓 WEAPONS** on the title screen.',
         'For in-depth info, check our handy **📖 FIELD GUIDE**.'
       ]
     }

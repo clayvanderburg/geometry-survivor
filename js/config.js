@@ -299,7 +299,9 @@ export const DEFAULT_TUNING = {
   goldLockCost: 5,
   goldBanishCost: 30,
   goldWeaponRerollCost: 40,
-  goldSkipReward: 10
+  goldSkipReward: 10,
+  // Testing: 1 lifts every weapon lock (js/weapon-unlocks.js; ?unlockall=1 does the same for one session).
+  unlockAllWeapons: 0
 };
 
 export const TUNING_SCHEMA = [
@@ -524,6 +526,7 @@ export const TUNING_SCHEMA = [
       { key: 'xpCurveAccel', label: 'XP Curve Bend (× (LV − from)²)', type: 'range', min: 0, max: 20, step: 0.1, unit: '' },
       { key: 'xpCurveAccelFrom', label: 'XP Curve Bends From LV', type: 'range', min: 1, max: 60, step: 1, unit: '' },
       { key: 'weaponSlots', label: 'Weapon Slots', type: 'range', min: 2, max: 10, step: 1, unit: '' },
+      { key: 'unlockAllWeapons', label: 'Unlock All Weapons (testing: 1 = on)', type: 'range', min: 0, max: 1, step: 1, unit: '' },
       { key: 'newWeaponChanceBy1', label: 'NEW WEAPON Chance / Hand (1 Weapon Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponChanceBy2', label: 'NEW WEAPON Chance / Hand (2 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },
       { key: 'newWeaponChanceBy3', label: 'NEW WEAPON Chance / Hand (3 Owned)', type: 'range', min: 0, max: 1, step: 0.01, unit: 'prob' },

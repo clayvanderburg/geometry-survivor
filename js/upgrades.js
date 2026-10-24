@@ -136,6 +136,7 @@ const STATUS_CARDS = [
 
 // Weapons a global card reaches right now (equipped ones with its stat).
 export const globalReach = (player, kind) => ownedWeapons(player).filter((id) => globalReaches(kind, id));
+// Summaries name only open weapons (js/weapon-unlocks.js); the card's pills list the weapons it reaches.
 function globalCards() {
   const reaches = (kind) => (player) => globalReach(player, kind).length > 0;
   const card = (kind, name, category, summary, extra = {}) => ({
@@ -146,11 +147,11 @@ function globalCards() {
     req: reaches(kind), summary, apply() {}, ...extra
   });
   return [
-    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks more often, later pickups too: fire, reload, recharge, throw, tick. Not Orbit Blades.'),
+    card('tempo', 'Tempo Core', 'POWER', 'Every weapon attacks more often, later pickups too: fire, reload, recharge, throw, tick. Not orbiting blades.'),
     // Cooldown also recharges the Phase Dash, so it is never dead (the dash cooldown rode on Phase Nova Thrusters before v0.46).
-    card('cooldown', 'Cooldown Matrix', 'UTILITY', 'Your Phase Dash recharges faster, and so do Sentry Turret charges and Nanite Swarm canisters.', { req: undefined }),
-    card('persistence', 'Persistence Field', 'POWER', 'Singularities, nanite swarms, gas clouds, turrets and mines last longer, later pickups too. Only lifetime.', { overcharge: false }),
-    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs, grenades. Only shot speed.', { overcharge: false })
+    card('cooldown', 'Cooldown Matrix', 'UTILITY', 'Your Phase Dash recharges faster, and so do weapons that reload charges, like the Sentry Turret.', { req: undefined }),
+    card('persistence', 'Persistence Field', 'POWER', 'Turrets, clouds, mines and swarms your weapons leave behind last longer, later pickups too. Only lifetime.', { overcharge: false }),
+    card('velocity', 'Velocity Coils', 'UTILITY', 'Every shot flies faster, later pickups too: bolts, rockets, missiles, discs and more. Only shot speed.', { overcharge: false })
   ];
 }
 

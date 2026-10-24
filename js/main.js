@@ -82,6 +82,8 @@ import { rollLieutenant, lieutenantModLabels, LIEUTENANT_WARMUP, LIEUTENANT_CARD
 import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WARMUP } from './spawn-placement.js';
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
+import { UnlockTracker, unlockOverride } from './weapon-unlocks.js';
+import { UnlockUI } from './unlock-ui.js';
 import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
 import { RunOverview, weaponChipsHtml, weaponReadout, weaponReadoutHtml, loadoutStripHtml } from './run-overview.js';
@@ -327,6 +329,9 @@ export class Game {
     this.sound = new SoundEngine();
     this.progression = new ProgressionManager();
     this.progression.onExternalChange = () => this.renderHubUI();
+    // Weapon unlock goals (js/weapon-unlocks.js): counts during runs; the toast and reveal live in js/unlock-ui.js.
+    this.unlockUI = new UnlockUI(this);
+    this.unlocks = new UnlockTracker(this.progression, { onUnlock: (goal) => this.unlockUI.onUnlock(goal) });
     this.grid = new WarpGrid(this.worldWidth, this.worldHeight, 68);
     this.particles = new ParticleSystem();
     this.particles.tuning = TUNING; // live vfxIntensity / vfxLinger knobs
@@ -568,6 +573,9 @@ export class Game {
 
     // Run-start snapshot (discards rebuild from it), then the ship's starting weapon(s) at LV 1.
     snapshotBase(this.player);
+    // The weapons this save has unlocked become the run's draw pool (none counted in the Weapon Range).
+    this.unlocks?.startRun(this.player, { counting: !this.range?.active });
+    if (unlockOverride()) this.runTainted = true; // every weapon unlocked for testing: off the leaderboard
     for (const id of START_WEAPON_CHOICES.includes(startWeapon) ? [startWeapon] : STARTING_WEAPONS) acquireWeapon(this.player, id);
     this.runStats = new RunStats({ version: GAME_VERSION, mode: this.mode, groups: STAT_GROUPS, dpsTarget: DPS_TARGET, onCurve: (id) => id in POTENTIAL_DPS });
     this.statsTick = 0;
@@ -803,6 +811,7 @@ export class Game {
         if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.deathSeq.skip()) this.revealGameOver();
         return;
       }
+      if (this.unlockUI?.handleKey(e)) return; // the NEW WEAPON UNLOCKED reveal before the results
       if (this.state === 'CUTSCENE') {
         this.cutscene.handleKey(e);
         return;
@@ -1081,6 +1090,7 @@ export class Game {
       document.getElementById(id)?.addEventListener('click', () => this.openTutorial());
     }
     document.getElementById('btn-title-intro')?.addEventListener('click', () => this.playIntro());
+    document.getElementById('btn-title-unlocks')?.addEventListener('click', () => this.openGuide({ tab: 'weapons' }));
     this.syncDamageNumbersButton();
     this.syncRadarButton();
     this.syncShareStatsButton();
@@ -1330,6 +1340,7 @@ export class Game {
 
   renderHubUI() {
     this.syncGuideBadges();
+    this.unlockUI?.renderHub();
     this.syncNotesBadges();
     const cores = this.progression.data.cores;
     const hubCoresEl = document.getElementById('hub-cores-count');
@@ -2100,6 +2111,7 @@ export class Game {
   onRockShattered(rock) {
     const byElite = rock.brokenBy === 'elite';
     if (!byElite) this.rocksMined++;
+    if (!byElite && /_vein$/.test(rock.oreType || '')) this.unlocks?.bump('veins');
     this.sound.playExplosion(0.95);
     this.particles.spawnPolygonShatter(rock.x, rock.y, rock.radius * 0.9, rock.sides, rock.rotation, rock.hue, 0.9);
     // The glowing core breaks up too: smaller inner shards in the crack colour, and a flash.
@@ -2185,6 +2197,7 @@ export class Game {
   triggerDash() {
     const p = this.player;
     if (p.dashCooldown > 0 || this.rifts?.holdsShip()) return;
+    this.unlocks?.bump('dashes');
 
     // Phase Dash Extender cards and the Void Armory's Afterburner Jets stretch the burst (and a blink),
     // with the invulnerability to match.
@@ -2401,9 +2414,10 @@ export class Game {
     enemies.splice(enemyIndex, 1);
     this.kills++;
     if (e.teslaCharge) BTX.conductorDeath(this, e); // Conductor: a charged enemy arcs into its neighbours
+    // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
+    const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
+    this.unlocks?.kill(e, STAT_GROUPS[by] || by);
     if (this.runStats) {
-      // Killing blow: the last hit, or a Supernova sweep / popping on the shield (which takes the rest).
-      const by = fromBomb ? 'supernova' : e.hp <= 0 ? e.lastStat || 'other' : 'ram';
       if (e.hp > 0) this.runStats.damage(by, e.hp);
       this.runStats.kill(by, e, this.elapsedTime);
     }
@@ -5215,6 +5229,7 @@ export class Game {
     }
     this.state = 'GAMEOVER';
     this.updateLowShieldVignette();
+    this.unlocks?.endRun(); // bank the run's unlock progress before the results show it
     // The run is over: the mode's TUNING overlay comes off (this.mode still names the run for the results).
     clearTuningOverlay();
     const rules = modeRules(this);
@@ -5313,6 +5328,7 @@ export class Game {
       </div>
     `;
 
+    this.unlockUI?.renderTeaser();
     this.renderHubUI();
     const cause = this.lastRunSummary?.cause;
     if (dying) this.replayRec?.markDeath();
@@ -5326,7 +5342,8 @@ export class Game {
     if (this.deathSeq) this.deathSeq.revealed = true;
     this.deathSeq = null;
     this.syncDeathContinue();
-    if (this.state === 'GAMEOVER') document.getElementById('gameover-modal').classList.remove('hidden');
+    // Weapons unlocked this run get their reveal card first; the results open behind it when it closes.
+    if (this.state === 'GAMEOVER' && !this.unlockUI?.reveal(() => this.revealGameOver())) document.getElementById('gameover-modal').classList.remove('hidden');
   }
 
   // The death sequence's CONTINUE button: shown once the headline lands, labelled for the input in use.
@@ -5530,6 +5547,10 @@ export class Game {
       this.gpBombLatch = !!gp?.bomb;
       return;
     }
+    if (this.unlockUI?.revealOpen) {
+      if (gp?.pressed(PAD.A) || gp?.pressed(PAD.B) || gp?.pressed(PAD.START)) this.unlockUI.closeReveal();
+      return;
+    }
     if (this.state === 'CUTSCENE') {
       this.cutscene.update(dt, gp);
       this.gpDashLatch = !!gp?.dash;
@@ -5597,6 +5618,8 @@ export class Game {
       this.waveTimer = 0;
       awardWaveBonus(this, this.wave); // survived it (js/score-bonus.js)
       this.wave++;
+      this.unlocks?.reach('wave', this.wave);
+      this.unlocks?.commit(); // bank unlock progress once a wave
       this.coresDroppedThisWave = 0;
       this.sessionCores += 1;
       this.progression.addCores(1);
@@ -6203,6 +6226,7 @@ export class Game {
       progression: this.progression,
       getLevels: () => (this.state === 'PAUSED' ? this.player.upgradeLevels : null),
       getPlayer: () => (this.state === 'PAUSED' ? this.player : null),
+      getUnlockStats: () => this.unlocks?.stats(), // lifetime plus the run in progress
       onClose: () => this.onGuideClosed()
     });
     // Opening with unread entries jumps straight to the first one.

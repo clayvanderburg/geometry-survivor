@@ -3166,6 +3166,27 @@ export class SoundEngine {
     this.sparkle(0.4, 6);
   }
 
+  // Weapon unlocked (js/unlock-ui.js): a lock bolt snapping open (noise click + metal clank), a sub punch,
+  // then a bright rising run into a held chord. Pitch varies a touch each time.
+  playWeaponUnlock() {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    const v = 1 + (Math.random() - 0.5) * 0.04;
+    this.tone(1800 * v, 0, 0.035, 0.09, 'square', 900 * v); // the bolt click
+    this.tone(620 * v, 0.03, 0.12, 0.08, 'triangle', 410 * v); // metal clank
+    this.tone(92, 0.02, 0.45, 0.32, 'sine', 38); // sub punch
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => this.tone(f * v, 0.1 + i * 0.05, 0.24, 0.12, 'triangle'));
+    for (const f of [523.25, 783.99, 1046.5, 1568]) this.tone(f * v, 0.36, 1.1, 0.06, 'sawtooth');
+    this.sparkle(0.42, 5);
+  }
+
+  // The game-over reveal opening: a swelling riser into a low boom (each card adds playWeaponUnlock).
+  playWeaponReveal(count = 1) {
+    if (!this.enabled || !this.ctx || !this.sfxGain) return;
+    this.tone(110, 0, 0.5, 0.08, 'sawtooth', 440);
+    this.tone(55, 0.18, 0.9, 0.3, 'sine', 30);
+    this.sparkle(0.2, Math.min(6, 3 + count));
+  }
+
   // Menu focus move (controller d-pad) and menu confirm.
   playUiSelect() {
     if (!this.enabled || !this.ctx) return;

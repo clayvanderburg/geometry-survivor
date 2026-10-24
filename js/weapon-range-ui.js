@@ -3,6 +3,7 @@
 // applies at once. Controls are plain buttons, so mouse, keyboard (Tab / Enter) and the controller
 // (Back opens it as a menu, B returns to flying) all work; steppers never disable themselves, so a
 // controller's focus doesn't jump away at a limit.
+import { isWeaponUnlocked, goalText, GOAL_BY_WEAPON } from './weapon-unlocks.js';
 import {
   RANGE_FORMATIONS, RANGE_TARGETS, RANGE_MOD_GROUPS, DUMMY_COUNTS, MAX_WAVE, DPS_WINDOW,
   autoRanks, clampRanks, entryRanks, entryLevel, entryBuild, entryElement, rangeBtOptions
@@ -11,6 +12,9 @@ import { WEAPON_MAX_LEVEL, BREAKTHROUGH_LEVELS, STAT_CARDS, btOption, BT_FLATS, 
 import { WEAPONS, WEAPON_BY_ID, weaponSlots } from './loadout.js';
 import { UPGRADE_BY_ID } from './upgrades.js';
 import { formatCompact } from './run-report.js';
+
+// A weapon the range may equip: unlocked on this save (no save at all, as in tests: everything).
+const rangeUnlocked = (range, id) => { const u = range.game?.progression?.data?.unlocks; return !u || isWeaponUnlocked(u, id); };
 
 // Short names for the stat card ranks (weapon-levels.js STAT_CARDS `stat`).
 const STAT_NAMES = {
@@ -141,7 +145,7 @@ export class RangePanel {
     const dm = cfg.dummies;
     const cycle = (list, cur) => list[(list.indexOf(cur) + step + list.length) % list.length];
     switch (act) {
-      case 'add': if (cfg.weapons.length < weaponSlots()) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {}, element: null, elementRank: 1 }); break;
+      case 'add': if (cfg.weapons.length < weaponSlots() && rangeUnlocked(this.range, v)) cfg.weapons.push({ id: v, level: 1, custom: false, ranks: {}, bt: {}, element: null, elementRank: 1 }); break;
       case 'remove': cfg.weapons = cfg.weapons.filter((x) => x.id !== w); break;
       case 'lv': if (entry && !entry.custom) entry.level = Math.max(1, Math.min(WEAPON_MAX_LEVEL, entry.level + step)); break;
       case 'ranks-mode':
@@ -223,8 +227,11 @@ export class RangePanel {
     const cfg = this.range.config;
     const cards = cfg.weapons.map((w) => this.weaponHtml(w)).join('') || '<div class="rg-empty">No weapons: add one below.</div>';
     const full = cfg.weapons.length >= weaponSlots();
+    // Locked weapons (js/weapon-unlocks.js) show but can't be equipped until their goal is done.
     const add = WEAPONS.filter((x) => !cfg.weapons.some((w) => w.id === x.id))
-      .map((x) => btn('add', `+ ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: full, title: full ? 'Every slot is full' : `Equip ${x.name}` }))
+      .map((x) => (rangeUnlocked(this.range, x.id)
+        ? btn('add', `+ ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: full, title: full ? 'Every slot is full' : `Equip ${x.name}` })
+        : btn('add', `🔒 ${esc(x.hudName)}`, { v: x.id, cls: 'rg-add', off: true, title: `Locked: ${goalText(GOAL_BY_WEAPON[x.id])}` })))
       .join('');
     return `<div class="rg-sec">WEAPONS <span>${cfg.weapons.length} / ${weaponSlots()} SLOTS</span></div>${cards}`
       + `<div class="rg-sec">ADD WEAPON</div><div class="rg-addlist" style="--wc:#00f3ff">${add || '<span class="rg-dim">Every weapon is equipped.</span>'}</div>`;
