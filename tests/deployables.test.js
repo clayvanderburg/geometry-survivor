@@ -456,7 +456,7 @@ test('a turret bolt still hits an enemy sitting inside its long barrel', () => {
   assert.ok(close.hp < close.maxHp, 'point-blank enemy takes the bolt');
 });
 
-test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held charge; charges reload; a full bank overflows', () => {
+test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held charge; the charge that fills the bank drops at once', () => {
   const lv = L('turret');
   assert.equal(W.turretCharges(lv), 2);
   assert.equal(W.turretReload(lv), 6);
@@ -471,8 +471,8 @@ test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held char
   tick(parked, 6 - (W.turretStillTime + 0.05 + W.turretDropStill) + 0.05);
   assert.equal(parked.deployables.turretCount, 3, 'a reloaded charge goes straight down while you stand still');
 
-  // On the move nothing is planted while the bank is short of full, and a charge that comes back to a
-  // full bank deploys by itself.
+  // On the move: the first full bank stays held, and every reload that would fill the bank (or overfill it)
+  // deploys right away (v0.46, Clay: no full bank sitting a whole reload without a drop).
   const moving = arena({ enemies: [enemy(2300, 2000)] });
   moving.player.weapons.turret = 1;
   moving.player.vx = 3;
@@ -480,8 +480,20 @@ test('Sentry Turrets (DRG: Survivor rules): stand still to plant every held char
   assert.equal(moving.deployables.turretCount, 0, 'moving: charges stay in the bank');
   assert.equal(moving.deployables.turretCharges, 2);
   tick(moving, 0.2);
-  assert.equal(moving.deployables.turretCount, 1, 'overflow: the reload past a full bank deploys');
+  assert.equal(moving.deployables.turretCount, 1, 'the reload past a full bank deploys');
   assert.equal(moving.deployables.turretCharges, 2);
+  // After a stand-still dump the bank refills on the move to max - 1, and the reload that would fill it drops.
+  const kite = arena({ enemies: [enemy(2300, 2000)] });
+  kite.player.weapons.turret = 1;
+  tick(kite, W.turretStillTime + W.turretDropStill + 0.1);
+  assert.equal(kite.deployables.turretCount, 2, 'stood still: both charges down');
+  kite.player.vx = 3;
+  tick(kite, 6);
+  assert.equal(kite.deployables.turretCharges, 1, 'one charge back: max - 1 is held');
+  assert.equal(kite.deployables.turretCount, 2);
+  tick(kite, 6); // the two planted turrets have broken down by now (10 s)
+  assert.equal(kite.deployables.turretCount, 1, 'the reload that fills the bank drops at once, no extra wait');
+  assert.equal(kite.deployables.turretCharges, 1, 'still one short of full');
 
   // A turret breaks down after its lifetime; Loosen Bolts reloads faster.
   tick(moving, 6);

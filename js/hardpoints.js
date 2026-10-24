@@ -134,14 +134,17 @@ const SWIVEL_HOLD = 0.6; // s a swivel part holds its last aim before drifting h
 
 function fxOf(p, id) {
   const all = (p.mountFx ||= {});
-  return (all[id] ||= { flash: 0, recoil: 0, heat: 0, aim: 0, aimTo: 0, hold: 0, charge: -1, spin: 0, count: 0, swivel: 0 });
+  return (all[id] ||= { flash: 0, recoil: 0, heat: 0, aim: 0, aimTo: 0, hold: 0, charge: -1, spin: 0, count: 0, swivel: 0, since: null });
 }
+// A weapon's mount state, or undefined before anything touched it (weapon-timers.js reads `since` and `charge`).
+export const mountFx = (p, id) => p?.mountFx?.[id];
 
 // One shot, lob or deploy from a weapon's mount: bloom, recoil and heat. `worldAngle` (optional) turns a
 // swivel part toward what it launched at.
 export function kickMount(p, id, worldAngle = null, amount = 1) {
   if (!p) return;
   const fx = fxOf(p, id);
+  fx.since = 0; // s since this mount last fired: weapon-timers.js times the next attack from here
   fx.flash = Math.max(fx.flash, amount);
   fx.recoil = Math.max(fx.recoil, amount);
   fx.heat = Math.min(1, fx.heat + HEAT_PER_SHOT * amount);
@@ -153,7 +156,8 @@ export function kickMount(p, id, worldAngle = null, amount = 1) {
   }
 }
 
-// Steady state written by a weapon each tick: charge 0..1 (rail, shock dish, turret bank, glaive), or
+// Steady state written by a weapon each tick: charge 0..1 (rail, shock dish, turret bank, glaive, and every
+// other timed weapon's progress to its next attack, weapon-timers.js), or
 // for sprayers the nozzle swivel (world radians), nozzle count and heat while spraying.
 export function setMountCharge(p, id, charge) {
   if (p) fxOf(p, id).charge = charge;
@@ -171,6 +175,7 @@ export function updateMounts(p, dt) {
   if (!all || dt <= 0) return;
   for (const id in all) {
     const fx = all[id];
+    if (fx.since != null) fx.since += dt;
     fx.flash = Math.max(0, fx.flash - dt * FLASH_DECAY);
     fx.recoil = Math.max(0, fx.recoil - dt * RECOIL_DECAY);
     fx.heat = Math.max(0, fx.heat - dt * HEAT_DECAY);
@@ -389,6 +394,28 @@ function variantOf(part, fx) {
   return 0;
 }
 
+// Charge on a timed part: a hairline arc round it fills with its progress to the next attack, and a glow
+// builds with the square of that progress (quiet while it reloads, bright just before it fires), holding
+// a soft READY glow; the shot's own bloom is the flare. Kept faint so five weapons don't wash over the
+// hull; the glow halves with REDUCE EFFECTS.
+const GLOW_ALPHA = 0.5;
+const ARC_ALPHA = 0.55;
+function chargeGlow(ctx, color, x, y, scale, fx, size) {
+  if (!fx || !(fx.charge > 0)) return;
+  const c = Math.min(1, fx.charge);
+  drawGlow(ctx, color, x, y, (size + 2) * scale, c * c * GLOW_ALPHA * (isReduceEffects() ? 0.5 : 1));
+  if (c >= 1) return; // READY: the glow alone
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = color;
+  ctx.globalAlpha *= ARC_ALPHA;
+  ctx.lineWidth = 0.7 * scale;
+  ctx.beginPath();
+  ctx.arc(x, y, size * scale, -Math.PI / 2, -Math.PI / 2 + c * Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // Hardpoint parts, rocket pods and sprayer nozzles, drawn in the hull frame (ship-renderer.js calls
 // this after the carapace, before the drills and turret). `bank` squashes the wing parts with the wings.
 export function drawHardpoints(ctx, p, bank, now = 0) {
@@ -408,7 +435,11 @@ export function drawHardpoints(ctx, p, bank, now = 0) {
     const fx = all[id];
     const color = colorOf(id);
     if (m.builtin === 'wingtips') {
-      for (const side of [-1, 1]) drawPart(ctx, 'pod', color, WINGTIP.x * r, side * WINGTIP.y * r * wingLean(bank, side), 0, scale, fx, 0, 5.5);
+      for (const side of [-1, 1]) {
+        const py = side * WINGTIP.y * r * wingLean(bank, side);
+        drawPart(ctx, 'pod', color, WINGTIP.x * r, py, 0, scale, fx, 0, 5.5);
+        chargeGlow(ctx, color, WINGTIP.x * r + 2 * scale, py, scale, fx, 3);
+      }
     } else if (m.builtin === 'rim') {
       const n = Math.max(1, fx?.count || 1);
       const base = (fx ? fx.swivel : 0) - heading;
@@ -424,10 +455,9 @@ export function drawHardpoints(ctx, p, bank, now = 0) {
       if (m.part === 'disc') angle = fx ? fx.spin : now * 0.002;
       if (m.part === 'vents') angle = Math.PI; // gas vents face aft
       drawPart(ctx, m.part, color, hp.x * r, y, angle, scale, fx, variantOf(m.part, fx));
-      // Shock Field dish and Tesla coil glow with their charge.
-      if (fx && fx.charge > 0 && (m.part === 'dish' || m.part === 'coil')) {
-        drawGlow(ctx, color, hp.x * r, y, 5 * scale, fx.charge * fx.charge * (isReduceEffects() ? 0.2 : 0.4));
-      }
+      // Every timed part glows up as its next attack comes round (the turret cradle counts pips instead,
+      // the glaive disc spins up).
+      if (m.part !== 'cradle' && m.part !== 'disc') chargeGlow(ctx, color, hp.x * r, y, scale, fx, m.part === 'dish' || m.part === 'coil' ? 5 : 4);
     }
   }
   ctx.restore();

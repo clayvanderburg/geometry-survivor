@@ -114,6 +114,12 @@ export class Deployables {
     return Math.floor((held / max) * 10) / 10;
   }
 
+  // Turret bank for the HUD chip's pips: { held, max }; null until the turret is equipped.
+  turretBank(p) {
+    if (this.turretCharges === null || !p.weapons?.turret) return null;
+    return { held: this.turretCharges, max: W.turretCharges(weaponBuild(p, 'turret')) };
+  }
+
   get activeCount() {
     return this.mineCount + this.turretCount + this.droneCount;
   }
@@ -244,27 +250,33 @@ export class Deployables {
 
   // ---- Sentry Turrets ----
   // Deep Rock Galactic: Survivor rules: stand still turretStillTime s and every held charge goes down,
-  // turretDropStill s apart. A charge comes back every turretReload s; one that comes back while the bank
-  // is full deploys by itself, wherever the ship is.
+  // turretDropStill s apart. A charge comes back every turretReload s; the one that would fill the bank
+  // deploys the moment it comes back, wherever the ship is (Clay, v0.46: no more waiting a full reload
+  // with a full bank), so on the move you hold max - 1 and a turret lands every reload. With every turret
+  // in the pool out it is banked instead (up to max), and a full bank holds the reload until one breaks down.
   updateTurrets(dt, game, level) {
     const p = game.player;
     if (level) {
       const max = W.turretCharges(level);
       if (this.turretCharges === null) this.turretCharges = max; // first equipped: a full bank
       this.turretCharges = Math.min(this.turretCharges, max);
-      setMountCharge(p, 'turret', this.turretCharges / max); // the cradle's charge pips
       const room = this.turretCount < TURRET_POOL;
       const reload = W.turretReload(level);
       this.turretReloadT += dt;
       if (this.turretReloadT >= reload) {
-        if (this.turretCharges < max) {
+        if (this.turretCharges < max - 1) {
           this.turretCharges++;
           this.turretReloadT -= reload;
         } else if (room) {
-          this.deployTurret(game, level); // overflow: the bank is full, so this one goes straight down
+          this.deployTurret(game, level); // the charge that fills the bank goes straight down
           this.turretReloadT -= reload;
-        } else this.turretReloadT = reload; // every turret in the pool is out: hold it
+        } else if (this.turretCharges < max) {
+          this.turretCharges++; // every turret in the pool is out: bank it for the next drop
+          this.turretReloadT -= reload;
+        } else this.turretReloadT = reload; // full bank and a full pool: hold it
       }
+      // The cradle's charge pips and the HUD sweep: held charges plus the one reloading (weapon-timers.js).
+      setMountCharge(p, 'turret', this.turretCharges >= max ? 1 : (this.turretCharges + Math.min(1, this.turretReloadT / reload)) / max);
       const moving = Math.hypot(p.vx || 0, p.vy || 0) > 0.6;
       this.turretStill = moving ? 0 : this.turretStill + dt;
       this.turretTimer -= dt;

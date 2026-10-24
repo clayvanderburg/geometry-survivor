@@ -48,7 +48,7 @@ const CORE_INFO = {
   lightning: { headline: 'lightningJumps', summary: 'High-voltage chain lightning arcs across packs of nearby swarmers.' },
   singularity: { headline: 'singularityPull', summary: 'Launches gravitational singularities that warp the grid, suck swarms inward, and implode.' },
   mines: { headline: 'mineMaxActive', summary: 'Drops mines in your wake that arm, then burst when an enemy drifts close.' },
-  turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload over time.' },
+  turret: { headline: 'turretCharges', summary: 'Stand still to plant your turret charges: each turret shoots the nearest enemy it can see past asteroid cover until it breaks down. Charges reload, and the one that fills your bank drops on its own.' },
   drones: { headline: 'droneCount', summary: 'Gunship drones fly in formation, a pair off your nose and a row behind your hull, and fire at nearby targets.' },
   grenades: { headline: 'grenadeCount', summary: 'Lobs plasma grenades at the nearest enemies: they land, blink armed for a moment, then burst in an area blast.' },
   gas: { headline: 'gasRadius', summary: 'Vents a lingering trail of corrosive gas behind your ship (and a giant cloud every time you dash): enemies inside take damage over time and CORRODE. Always CORROSIVE, so STATUS cards boost it.' },
