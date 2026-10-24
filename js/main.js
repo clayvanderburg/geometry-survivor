@@ -107,7 +107,8 @@ import { TouchControls, KeyHintScrubber, isTouchDevice } from './touch-controls.
 import { playPreset, semis } from './sfx-layers.js';
 import { GlowSprites } from './glow-sprite.js';
 import { loadReduceEffects, saveReduceEffects, setReduceEffects, isReduceEffects, shakeScale, flashScale, particleDensity, burst, hueOf } from './juice.js';
-import { kickMount, mountWorld, WINGTIP } from './hardpoints.js';
+import { kickMount, mountWorld, WINGTIP, mountFx } from './hardpoints.js';
+import { syncWeaponTimers } from './weapon-timers.js';
 
 // Runs flown with dev-tuner changes aren't comparable, so they stay off the global board.
 // Sector radar minimap: shown by default; the player's show/hide choice persists (storage may be blocked).
@@ -191,6 +192,7 @@ const LOW_SHIELD_PCT = 0.3; // below this share of the shield the screen edges p
 export const BOMB_DROP = Object.freeze({ lieutenant: 0.35, blackhole: 0.04, hulk: 0.02, max: 9 });
 const NOVA_CALLOUT_TIME = 5; // first boss of a run: the "don't forget your bombs" reminder
 const BOSS_BAR_ROWS = 3;
+const CHIP_REFRESH_MS = 66; // HUD weapon chips: live sweeps at about 15 Hz (refreshWeaponChips)
 const CHOICE_CLICK_GUARD_MS = 300; // level-up / weapon-pick cards ignore clicks this soon after appearing
 
 // "WAVE 3 WARDEN", "WAVE 6 SENTINEL", ...: the rank climbs with each scheduled three-wave encounter.
@@ -6097,6 +6099,8 @@ export class Game {
       }
     }
 
+    // Reload / cooldown progress of every weapon, on its hardpoint and its HUD chip (weapon-timers.js).
+    this.weaponTimers = syncWeaponTimers(p, ownedWeapons(p));
     this.updateHUD();
   }
 
@@ -6156,16 +6160,51 @@ export class Game {
     // Loadout strip: one chip per weapon slot (equipped weapons in their colour, free slots dashed), with
     // the cards' level wording ("LV 3"). Rarity belongs to a roll, not a weapon, so chips stay
     // rarity-neutral. Every other upgrade is listed in the pause menu (js/run-overview.js), not here.
-    const barHtml = weaponChipsHtml(p, { shockfield: this.shockField?.hudCharge(), turret: this.deployables?.turretHudCharge(p), raillance: this.railLance?.hudCharge() });
+    // Each timed weapon's chip carries a reload sweep and continuous ones a steady ALWAYS ON bar; the markup
+    // only changes with the loadout, and the sweeps, pops and turret pips are written live (refreshWeaponChips).
+    const kinds = {};
+    for (const [id, t] of Object.entries(this.weaponTimers || {})) kinds[id] = t === 'on' ? 'on' : 0;
+    const barHtml = weaponChipsHtml(p, kinds);
     if (barHtml !== this.weaponBarHtml) {
       this.weaponBarHtml = barHtml;
       document.getElementById('active-weapons-bar').innerHTML = barHtml;
+      this.chipRefreshAt = -Infinity;
     }
+    this.refreshWeaponChips();
 
     this.updateBossHUD(this.getBossHudModel());
     this.updateNovaCallout();
     this.updateLieutenantHUD();
     this.updateGuideToast();
+  }
+
+  // Live HUD chip state at CHIP_REFRESH_MS (about 15 Hz): each timed chip's sweep (--charge, READY once
+  // full), a pop as it fires (--pop, from the mount's bloom; none with REDUCE EFFECTS) and the turret's
+  // held charges as pips. Only style variables and one class change, so no markup is rebuilt.
+  refreshWeaponChips() {
+    const now = globalThis.performance?.now?.() ?? Date.now();
+    if (now - (this.chipRefreshAt ?? -Infinity) < CHIP_REFRESH_MS) return;
+    this.chipRefreshAt = now;
+    const bar = globalThis.document?.getElementById?.('active-weapons-bar');
+    const chips = bar?.querySelectorAll?.('[data-wid]');
+    if (!chips) return;
+    const p = this.player;
+    const calm = isReduceEffects();
+    for (const el of chips) {
+      const id = el.dataset?.wid;
+      const t = this.weaponTimers?.[id];
+      if (typeof t !== 'number') continue;
+      const charge = Math.round(t * 20) / 20;
+      el.style?.setProperty?.('--charge', String(charge));
+      el.classList?.toggle?.('ready', charge >= 1);
+      const pop = calm ? 0 : Math.round(Math.min(1, mountFx(p, id)?.flash || 0) * 4) / 4;
+      el.style?.setProperty?.('--pop', String(pop));
+      if (id === 'turret') {
+        const bank = this.deployables?.turretBank(p);
+        const pips = el.querySelector?.('.chip-pips');
+        if (pips && bank) pips.textContent = '●'.repeat(bank.held) + '○'.repeat(Math.max(0, bank.max - bank.held));
+      }
+    }
   }
 
   // --- Field Guide ---------------------------------------------------------------------------

@@ -2198,17 +2198,34 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   text-shadow: 0 0 6px var(--ec, transparent);
 }
 
-/* Charge gauge along the bottom of a chip (Electric Shield Field recharging; glows once charged). */
+/* Reload sweep along the bottom of a chip (weapon-timers.js): every timed weapon's progress to its next
+   attack, in its colour; READY glows; continuous weapons (sprayers, Gas Trail, Orbit Blades, rapid fire)
+   keep a steady dimmer bar. --pop (0..1, from the mount's bloom as it fires) gives a small kick. */
 .weapon-slot-chip.charge {
   background-image: linear-gradient(90deg, var(--wc) calc(var(--charge, 0) * 100%), rgba(255, 255, 255, 0.08) 0);
-  background-size: 100% 2px;
+  background-size: 100% 3px;
   background-repeat: no-repeat;
   background-position: left bottom;
+  transform: scale(calc(1 + var(--pop, 0) * 0.07));
+  filter: brightness(calc(1 + var(--pop, 0) * 0.5));
+  transition: transform 90ms ease-out, filter 90ms ease-out, box-shadow 120ms ease-out;
 }
 
 .weapon-slot-chip.charge.ready {
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 7px var(--wc);
 }
+
+.weapon-slot-chip.charge.on {
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--wc) 55%, transparent) 100%, transparent 0);
+}
+
+.weapon-slot-chip .chip-pips {
+  color: var(--wc);
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+body.reduce-effects .weapon-slot-chip.charge { transform: none; filter: none; transition: none; }
 
 .weapon-slot-chip.empty {
   border: 1px dashed rgba(122, 139, 168, 0.55);

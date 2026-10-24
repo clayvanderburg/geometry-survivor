@@ -483,8 +483,8 @@ export const WEAPON_SCALING = {
   // --- Sentry Turret (stats: damage, rate, reload, pierce) ---------------------------------------
   // Deep Rock Galactic: Survivor's LMG Gun Platform (v0.43.4). You hold turret CHARGES (2; Extra Capacity
   // +1). Stand still for turretStillTime s and every held charge goes down, turretDropStill s apart, at the
-  // ship. One charge comes back every turretReload s; a charge that comes back while you already hold
-  // the most you can carry deploys by itself (so turrets trickle out on the move too). Each turret fires
+  // ship. One charge comes back every turretReload s; the one that would fill the bank deploys the moment
+  // it comes back (v0.46), so on the move you hold one short of full and a turret lands every reload. Each turret fires
   // for turretDuration s, then breaks down. Planted turrets stay put (Tank Tracks makes them follow you).
   // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can

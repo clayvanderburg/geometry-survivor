@@ -264,7 +264,10 @@ export function damageHtml(runStats) {
 
 // Weapon slot chips (equipped weapons in their colour, free slots dashed): the HUD row and the
 // level-up screen's loadout strip.
-// `charges` ({ weaponId: 0..1 }, optional) adds a charge gauge under a chip (Electric Shield Field's recharge).
+// `charges` ({ weaponId: 0..1 | 'on' }, optional) adds a gauge along a chip's bottom edge: a number is a
+// timed weapon's progress to its next attack (READY once full; the HUD refreshes it live, main.js
+// refreshWeaponChips), 'on' a continuous weapon's steady ALWAYS ON bar. The Sentry Turret's chip also
+// carries pips for its held charges. Every chip names its weapon in data-wid.
 export function weaponChipsHtml(p, charges = null) {
   const owned = ownedWeapons(p);
   const chips = [];
@@ -281,9 +284,10 @@ export function weaponChipsHtml(p, charges = null) {
     const title = el ? `${w.name} (${ELEMENT_INFO[el.element].label} ${el.rank})` : w.name;
     const charge = charges?.[w.id];
     const gauge = typeof charge === 'number';
-    const cls = gauge ? ` charge${charge >= 1 ? ' ready' : ''}` : '';
+    const cls = gauge ? ` charge${charge >= 1 ? ' ready' : ''}` : charge === 'on' ? ' charge on' : '';
     const style = gauge ? `--wc:${w.color};--charge:${charge}` : `--wc:${w.color}`;
-    chips.push(`<span class="weapon-slot-chip${cls}" style="${style}" title="${esc(title)}">${w.hudName}${lv}${elTag}</span>`);
+    const pips = gauge && w.id === 'turret' ? ' <span class="chip-pips"></span>' : '';
+    chips.push(`<span class="weapon-slot-chip${cls}" style="${style}" title="${esc(title)}" data-wid="${w.id}">${w.hudName}${lv}${elTag}${pips}</span>`);
   }
   return chips.join('');
 }
