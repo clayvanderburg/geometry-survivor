@@ -16,10 +16,10 @@ export const CHANGELOG = Object.freeze([
     date: '2026-10-22',
     title: 'Breakthrough Pools',
     notes: [
-      { type: 'new', text: 'Your weapons are on your ship: every weapon you equip mounts a part on the hull (pods, racks, coils, tubes...) that launches its shots and flashes, kicks and glows as it fires.' },
+      { type: 'new', text: 'Your weapons are on your ship: every weapon mounts a part on the hull (pods, racks, coils, tubes...) that fires its shots, kicks as it fires and shows its reload ticking.' },
       { type: 'new', text: 'Weapon unlocks: start with 8 weapons; the other 12 unlock from small goals that teach them (freeze, burn, mine, bosses…). Track them under 🔓 WEAPONS.' },
-      { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
-      { type: 'balance', text: 'Breakthrough cards state what you get once; potential DPS is a stat below. Escort Drones and Glaive Discs offer Overtuned Core and two transforms (no Across the Board).' },
+      { type: 'new', text: 'Save protection: SAVE backs your progress up to the cloud with a recovery code, and exports or imports a save code. Restore on any device, or merge two saves.' },
+      { type: 'new', text: 'Breakthroughs are a draw at LV 6, 12 and 18: a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power). Cards state the effect once, DPS below.' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
       { type: 'new', text: 'The GLOBAL leaderboard shows the full top 100 (tap YOU #n to jump to your run). Busy boards retry on their own, and a run that can\'t upload waits and sends itself later.' },
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
