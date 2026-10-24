@@ -83,6 +83,7 @@ import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WA
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import { UnlockTracker, unlockOverride } from './weapon-unlocks.js';
+import { SpaceBackdrop } from './space-backdrop.js';
 import { UnlockUI } from './unlock-ui.js';
 import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
@@ -7113,6 +7114,10 @@ export class Game {
     const fade = Math.max(0.38, 1 - Math.pow(0.5, (this.frameSeconds ?? 1 / 60) * 60));
     ctx.fillStyle = `rgba(3, 4, 11, ${fade})`;
     ctx.fillRect(0, 0, this.width, this.height);
+    // Deep space behind the grid (js/space-backdrop.js), at the fade's alpha so it holds a steady brightness.
+    this.backdrop ||= new SpaceBackdrop();
+    this.backdrop.update(Math.min(0.1, this.frameSeconds ?? 1 / 60));
+    this.backdrop.draw(ctx, { camX: this.camX, camY: this.camY, w: this.width, h: this.height, rs, alpha: fade, ship: this.player, worldW: this.worldWidth, worldH: this.worldHeight });
 
     ctx.save();
     let offsetX = -this.camX;
