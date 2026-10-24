@@ -8,6 +8,7 @@ Ideas live in [GAME_DESIGN_BACKLOG.md](GAME_DESIGN_BACKLOG.md); this file holds 
 
 | Date | Decision |
 |---|---|
+| 2026-10-24 | **Weapon unlocks (DRG: Survivor-style), v0.46:** a fresh save has 8 open weapons (the run-start choices); each of the other 12 unlocks from one small goal themed to it (`js/unlock-goals.js`), counted over all runs, first unlocks within the first hour, the last around 10 hours. Fresh start for everyone (no grandfathering). `?unlockall=1` or Live Tuning *Unlock All Weapons* lifts every lock for testing. |
 | 2026-10-23 | **5 weapon slots** (Clay: "Max out at 5 weapons. The card pool is already really diluted once you get to 5."). The weapon floor ends at 5 by LV 24; slot 5 is the capstone (+5% damage and the free LV 6 Breakthrough that slot 6 used to give). |
 | 2026-10-20 | **Breakthrough pools (DRG: Survivor overclocks as the model).** Each weapon gets a *pool* of several mechanic-changing TRANSFORMS and several flat boosts (damage, speed+damage, size+damage, …). At each milestone (LV 6/12/18) you're offered a random subset, so LV 6 isn't always the same choice. Balance the offset between flat and transform options the way DRG: Survivor balances its overclock choices. Queued for the overnight swarm. |
 | 2026-10-20 | **Core design principle: everything in sound and animation is SATISFYING.** Punchy feedback, juicy impacts, rewarding pickups and level-ups, smooth easing, weighty audio with pitch variety. If it feels flat, it isn't done; readability and frame rate come first. |

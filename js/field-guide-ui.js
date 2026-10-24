@@ -7,6 +7,9 @@ import {
 import { GuidePreview, drawSilhouette, PREVIEW_DT } from './field-guide-scenes.js';
 import { clipHTML, weaponClip } from './weapon-media.js';
 import { recipeView, recipeChipsHtml } from './evolution-recipes.js';
+import { weaponSlots } from './loadout.js';
+import { GOAL_BY_WEAPON, UNLOCK_GOALS, isWeaponUnlocked } from './weapon-unlocks.js';
+import { goalRowHTML, unlockedCount } from './unlock-ui.js';
 
 export const GUIDE_TABS = [
   { id: 'hostiles', label: 'HOSTILES' },
@@ -68,31 +71,39 @@ export function mechanicsHTML() {
 // An evolution's recipe as chips: ✓ / ✗ against the current run's build, plain on the title screen.
 const recipeHTML = (id, player) => `<div class="guide-recipe"><b>UNLOCKS WITH</b><div class="recipe-chips">${recipeChipsHtml(recipeView(id, player))}</div></div>`;
 
-function upgradeCardHTML(u, category, player = null) {
-  return `<article class="guide-entry guide-weapon${u.evolution ? ' evolution' : ''}${u.owned ? ' owned' : ''}" data-entry="${esc(u.id)}" data-gp-nav tabindex="0">
+// `unlock`: { unlocks, stats } (js/weapon-unlocks.js): a locked weapon shows as a silhouette with its goal.
+function upgradeCardHTML(u, category, player = null, unlock = null) {
+  const locked = !!(u.weapon && unlock && GOAL_BY_WEAPON[u.id] && !isWeaponUnlocked(unlock.unlocks, u.id));
+  return `<article class="guide-entry guide-weapon${u.evolution ? ' evolution' : ''}${u.owned ? ' owned' : ''}${locked ? ' weapon-locked' : ''}" data-entry="${esc(u.id)}" data-gp-nav tabindex="0">
       ${u.weapon ? clipHTML(weaponClip(u.id), `${u.name} in action`) : ''}
       <div class="guide-entry-head"><h3>${esc(u.name.replace(/^SYNERGY:\s*/, ''))}</h3></div>
-      <div class="guide-weapon-meta">${esc(category)} · ${u.owned ? `<b>OWNED LV ${u.owned}</b>` : u.evolution ? 'ONE-SHOT' : `MAX LV ${u.maxLevel}`}</div>
+      <div class="guide-weapon-meta">${esc(category)} · ${locked ? '<b>LOCKED</b>' : u.owned ? `<b>OWNED LV ${u.owned}</b>` : u.evolution ? 'ONE-SHOT' : `MAX LV ${u.maxLevel}`}</div>
       ${u.tags.length ? `<div class="guide-chips">${u.tags.map(chipHTML).join('')}</div>` : ''}
-      <p>${esc(u.summary.replace(/^EVOLUTION:\s*/, ''))}</p>${u.recipe ? recipeHTML(u.recipe, player) : ''}</article>`;
+      <p>${esc(u.summary.replace(/^EVOLUTION:\s*/, ''))}</p>${u.recipe ? recipeHTML(u.recipe, player) : ''}${locked ? goalRowHTML(GOAL_BY_WEAPON[u.id], unlock.stats) : ''}</article>`;
 }
 
-function cardSection(title, list, intro = '', player = null) {
+function cardSection(title, list, intro = '', player = null, unlock = null, extra = '') {
   return list.length
-    ? `<section class="guide-section"><h4 class="guide-section-title">${esc(title)}</h4>${intro ? `<p class="guide-legend-text">${esc(intro)}</p>` : ''}<div class="guide-grid guide-grid-cards">${list.map(x => upgradeCardHTML(x.u, x.category, player)).join('')}</div></section>`
+    ? `<section class="guide-section"><h4 class="guide-section-title">${esc(title)}</h4>${extra}${intro ? `<p class="guide-legend-text">${esc(intro)}</p>` : ''}<div class="guide-grid guide-grid-cards">${list.map(x => upgradeCardHTML(x.u, x.category, player, unlock)).join('')}</div></section>`
     : '';
 }
 
 const allCards = (g) => g.categories.flatMap(c => c.items.map(u => ({ u, category: c.id })));
 
-// WEAPONS: the starting kit, then every weapon that can fill a slot (its own level card).
-export function weaponsHTML(levels = null) {
+// WEAPONS: the starting kit, then every weapon that can fill a slot (its own level card). `unlock`
+// ({ unlocks, stats }) shows locked weapons as silhouettes with their goal and progress; null shows all.
+export function weaponsHTML(levels = null, unlock = null) {
   const g = weaponGuide(levels);
   const kit = g.kit.map(k => `<article class="guide-entry guide-weapon kit" data-entry="kit-${esc(k.key)}" data-gp-nav tabindex="0">
     ${clipHTML(weaponClip(k.key), `${k.name} in action`)}
     <div class="guide-entry-head"><h3>${esc(k.name)}</h3></div><div class="guide-weapon-meta">STARTING WEAPON</div>
     <div class="guide-chips">${k.tags.map(chipHTML).join('')}</div><p>${esc(k.text)}</p></article>`).join('');
-  const arsenal = cardSection('ARSENAL', allCards(g).filter(x => x.u.weapon), 'Pick these from NEW WEAPON cards on level-up. Each takes one of your 6 weapon slots.');
+  const count = unlock ? unlockedCount(unlock.unlocks) : null;
+  const summary = count ? `<p class="guide-unlock-summary"><b>🔓 ${count.have} / ${count.total} WEAPONS UNLOCKED.</b> Locked ones unlock from the goal on their card.</p>` : '';
+  // Unlocked weapons first, then the locked ones in the order their goals usually finish.
+  const lockRank = (id) => (unlock && GOAL_BY_WEAPON[id] && !isWeaponUnlocked(unlock.unlocks, id) ? 1 + UNLOCK_GOALS.indexOf(GOAL_BY_WEAPON[id]) : 0);
+  const weapons = allCards(g).filter(x => x.u.weapon).map((x, i) => ({ x, i })).sort((a, b) => lockRank(a.x.u.id) - lockRank(b.x.u.id) || a.i - b.i).map(({ x }) => x);
+  const arsenal = cardSection('ARSENAL', weapons, `Pick these from NEW WEAPON cards on level-up. Each takes one of your ${weaponSlots()} weapon slots.`, null, unlock, summary);
   return `<section class="guide-section"><h4 class="guide-section-title">STARTING KIT</h4><div class="guide-grid guide-grid-cards">${kit}</div></section>${arsenal}`;
 }
 
@@ -106,9 +117,9 @@ export function upgradesHTML(levels = null, player = null) {
   return cardSection('UPGRADE CARDS', all.filter(x => !x.u.evolution)) + cardSection('EVOLUTIONS', all.filter(x => x.u.evolution), '', player) + legend;
 }
 
-export function tabHTML(tab, { isUnlocked = () => false, isFresh = () => false, levels = null, player = null } = {}) {
+export function tabHTML(tab, { isUnlocked = () => false, isFresh = () => false, levels = null, player = null, unlock = null } = {}) {
   if (tab === 'mechanics') return mechanicsHTML();
-  if (tab === 'weapons') return weaponsHTML(levels);
+  if (tab === 'weapons') return weaponsHTML(levels, unlock);
   if (tab === 'upgrades') return upgradesHTML(levels, player);
   return hostilesHTML(isUnlocked, isFresh);
 }
@@ -117,8 +128,9 @@ export function tabHTML(tab, { isUnlocked = () => false, isFresh = () => false, 
 // upgrade levels (or null on the title screen) for the WEAPONS tab's OWNED marks; `getPlayer()` the run's
 // player (or null) for the evolution recipes' ✓ / ✗.
 export class FieldGuideUI {
-  constructor({ progression, getLevels = () => null, getPlayer = () => null, onClose = null }) {
+  constructor({ progression, getLevels = () => null, getPlayer = () => null, getUnlockStats = null, onClose = null }) {
     this.progression = progression;
+    this.getUnlockStats = getUnlockStats;
     this.getLevels = getLevels;
     this.getPlayer = getPlayer;
     this.onClose = onClose;
@@ -192,7 +204,10 @@ export class FieldGuideUI {
       isUnlocked: id => guide.seen.includes(id),
       isFresh: id => guide.fresh.includes(id),
       levels: this.getLevels(),
-      player: this.getPlayer()
+      player: this.getPlayer(),
+      unlock: this.progression.data.unlocks
+        ? { unlocks: this.progression.data.unlocks, stats: this.getUnlockStats?.() || this.progression.data.unlocks.stats }
+        : null
     });
     this.body.scrollTop = 0;
     this.updateCounts();

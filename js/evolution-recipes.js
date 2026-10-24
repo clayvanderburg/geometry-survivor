@@ -11,7 +11,7 @@
 //   { anyOf: [ingredient, ...] }    any one of these
 // `label` overrides the name shown on chips (kept short for phone-width cards).
 import { UPGRADE_POOL, UPGRADE_BY_ID, ownedElements } from './upgrades.js';
-import { WEAPON_BY_ID, ownsWeapon, weaponLevel } from './loadout.js';
+import { WEAPON_BY_ID, ownsWeapon, weaponLevel, weaponAvailable } from './loadout.js';
 import { weaponPill } from './weapon-pills.js';
 
 export const EVOLUTION_RECIPES = {
@@ -69,13 +69,22 @@ export function recipeView(id, player, after = null) {
   return { id, name: evolutionName(id), parts, ready: player ? parts.every((x) => x.met || x.adds) : false };
 }
 
+// Whether a recipe can still be finished this run: every weapon it names (all options of an anyOf
+// being locked counts as locked) is unlocked on this save (loadout.js weaponAvailable).
+function reachable(player, ing) {
+  if (ing.anyOf) return ing.anyOf.some((o) => reachable(player, o));
+  return !ing.weapon || weaponAvailable(player, ing.weapon);
+}
+export const recipeReachable = (player, id) => (EVOLUTION_RECIPES[id] || []).every((ing) => reachable(player, ing));
+
 // The recipes a level-up card moves forward: evolutions not owned yet where some ingredient gets closer
 // (a card rank, a weapon equipped, an element). `before` / `after` are the player without and with
-// the card (upgrade-cards.js installs it on a copy). Most complete first, at most `max`.
+// the card (upgrade-cards.js installs it on a copy). Most complete first, at most `max`. A recipe that
+// needs a locked weapon is never hinted.
 export function recipesAdvanced(before, after, max = 2) {
   const out = [];
   for (const id of EVOLUTION_IDS) {
-    if (evolutionOwned(before, id)) continue;
+    if (evolutionOwned(before, id) || !recipeReachable(before, id)) continue;
     const recipe = EVOLUTION_RECIPES[id] || [];
     if (!recipe.some((ing) => progress(after, ing) > progress(before, ing))) continue;
     out.push(recipeView(id, before, after));

@@ -1,5 +1,6 @@
 // Persistent Highscore Leaderboard & Meta-Progression (the Void Armory, bought with Void Cores)
 import { MODE_IDS, normalizeMode } from './modes.js';
+import { normalizeUnlocks } from './unlock-goals.js';
 
 const SAVE_KEY = 'vectra_survivor_save_v2';
 // Local highscores ("MY RUNS") kept per game mode.
@@ -280,6 +281,7 @@ export function normalizeSave(value, revisions = ARMORY_REVISIONS) {
     devWipe: DEV_WIPE.id, // the wipe check has run for this save (see DEV_WIPE)
     armoryResetNotice: legacyArmory || source.armoryResetNotice === true,
     guide: normalizeGuide(source.guide),
+    unlocks: normalizeUnlocks(source.unlocks), // weapon unlock goals and progress (js/weapon-unlocks.js)
     highscores: keptScores.length ? topRunsPerMode(keptScores) : DEFAULT_HIGHSCORES.map(entry => ({ ...entry, mode: 'normal' }))
   };
 }

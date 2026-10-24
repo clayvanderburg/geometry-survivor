@@ -186,7 +186,7 @@ async function runScene(browser, id, scene) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   try {
-    await page.goto('http://127.0.0.1:8096/index.html');
+    await page.goto('http://127.0.0.1:8096/index.html?unlockall=1');
     await page.locator('#splash-screen').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
     await page.locator('#splash-screen').waitFor({ state: 'hidden' });
