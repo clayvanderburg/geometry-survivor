@@ -35,7 +35,7 @@ const ZOOM = 1.85; // close enough that the ship, the targets and the weapon's e
 // The ship sits still in a close ring of still targets (wave HP, so they break and come back) and lets the
 // weapon work. Per-weapon tweaks: `drift` flies the ship in a slow loop (trails and dash effects need it),
 // `dash` dashes every N ticks (dash-triggered effects), `dummies` overrides the targets (CHASERS follow),
-// `orbit` circles the start point at that radius, `fixedCam` holds the camera on the start point, `release`
+// `driftFrom` holds the ship still until that tick first (deployables plant), `orbit` circles the start point at that radius, `fixedCam` holds the camera on the start point, `release`
 // turns still targets into chasers at that frame, `frames` lengthens the loop, `warmup` the lead-in before
 // it, `zoom` frames closer, `camShift` holds the camera that far off the start point (world px) so a
 // weapon that reaches far one way (a LINE of targets) keeps the ship and its whole reach in shot.
@@ -62,6 +62,8 @@ const TWEAKS = {
   // A clip's own tweak (by clip name) wins over its weapon's. Parting Gift: turrets live 10 s, so the loop
   // starts just before the first ones expire and blow.
   'turret-gift': { warmup: 570, frames: 48 },
+  // Formation Thrusters: the ship holds still to plant its turrets, then drifts so they fly after it on their jets.
+  'turret-12': { drift: true, driftFrom: 90, dummies: CHASERS, frames: 60 },
   // Static Charge arcs to enemies beside the line: a denser pack gives them somewhere to jump.
   'raillance-static': { dummies: { count: 28 } }
 };
@@ -202,7 +204,7 @@ async function capture(browser, clip, tmp) {
           const vx = -dy / d + (dx / d) * pull, vy = dx / d + (dy / d) * pull;
           g.keys = { KeyD: vx > 0.38, KeyA: vx < -0.38, KeyS: vy > 0.38, KeyW: vy < -0.38 };
         } else {
-          g.keys = tweak.drift ? { KeyD: phase === 0 || phase === 1, KeyS: phase === 1 || phase === 2, KeyA: phase === 2 || phase === 3, KeyW: phase === 3 || phase === 0 } : {};
+          g.keys = tweak.drift && t >= (tweak.driftFrom || 0) ? { KeyD: phase === 0 || phase === 1, KeyS: phase === 1 || phase === 2, KeyA: phase === 2 || phase === 3, KeyW: phase === 3 || phase === 0 } : {};
         }
         if (tweak.dash && t % tweak.dash === tweak.dash - 1) g.triggerDash?.();
         g.update(1 / 60);

@@ -296,6 +296,7 @@ export class ProgressionManager {
     try { revsChanged = JSON.stringify(JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')?.armoryRevs) !== JSON.stringify(this.data.armoryRevs); } catch { /* unreadable */ }
     if (this.data.armoryResetNotice || wipeCheckPending || revsChanged) this.save();
     this.onExternalChange = null;
+    this.onSave = null;
     // Another tab saved: adopt its data so our next save() doesn't overwrite its purchases/scores.
     globalThis.addEventListener?.('storage', (e) => {
       if (e.key !== SAVE_KEY) return;
@@ -320,6 +321,13 @@ export class ProgressionManager {
     } catch (e) {
       console.warn('Failed to save data:', e);
     }
+    this.onSave?.(); // the cloud save notes the change (js/cloud-save.js)
+  }
+
+  // Replaces the whole save (a restored cloud save, an import or a merge: js/save-ui.js).
+  replaceData(save) {
+    this.data = normalizeSave(save);
+    this.save();
   }
 
   setPilotName(name) {

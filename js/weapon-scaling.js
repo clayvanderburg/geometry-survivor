@@ -452,7 +452,7 @@ export const WEAPON_SCALING = {
   mineTriggerRadius: () => 48,
   mineBlastRadius: (b) => 120 * (1 + 0.12 * b.r.radius), // wide, but well inside the old 2x (180)
   // Transforms: Cluster Mines (3 bomblets at 25% each, valued at mineClusterHitShare), Seeker Mines
-  // (armed mines crawl toward the nearest enemy), Minefield Triad (3 mines per drop, sharing the damage,
+  // (armed mines thrust after the nearest enemy), Minefield Triad (3 mines per drop, sharing the damage,
   // tossed toward the nearest enemy).
   mineClusterBomblets: 3,
   mineClusterShare: 0.25,
@@ -485,7 +485,7 @@ export const WEAPON_SCALING = {
   // +1). Stand still for turretStillTime s and every held charge goes down, turretDropStill s apart, at the
   // ship. One charge comes back every turretReload s; the one that would fill the bank deploys the moment
   // it comes back (v0.46), so on the move you hold one short of full and a turret lands every reload. Each turret fires
-  // for turretDuration s, then breaks down. Planted turrets stay put (Tank Tracks makes them follow you).
+  // for turretDuration s, then breaks down. Deployed turrets hold position (Formation Thrusters makes them fly after you).
   // Overflow means no charge is ever wasted, so the turrets out on average are turretDuration /
   // turretReload, whatever the charge count: Reload Speed is POWER, charges only change the burst you can
   // drop at once.
@@ -500,10 +500,10 @@ export const WEAPON_SCALING = {
   // Turrets out on average (the potential counts them; never above the pool).
   turretAverageActive: (b) => Math.min(TURRET_MAX_ACTIVE, W.turretDuration(b) / W.turretReload(b)),
   turretBoltSpeed: 13,
-  // Breakthroughs = DRG's overclocks: Extra Capacity (LV 6: +1 charge), Tank Tracks (LV 12: planted turrets
-  // roll after the ship at turretFollowSpeed px/s, ~43% of its cruising speed as in DRG, into a ring
+  // Breakthroughs = DRG's overclocks: Extra Capacity (LV 6: +1 charge), Formation Thrusters (LV 12: deployed turrets
+  // fly after the ship at turretFollowSpeed px/s, ~43% of its cruising speed as in DRG, into a ring
   // turretFollowRadius px around it), LMG Overload (LV 18: x overloadRate fire rate, each bolt lighter).
-  // Extra Capacity and Tank Tracks add no attacks, so their rescale makes every bolt BT_TRANSFORM_DPS harder.
+  // Extra Capacity and Formation Thrusters add no attacks, so their rescale makes every bolt BT_TRANSFORM_DPS harder.
   turretFollowSpeed: 130, // 43% of the ship's 300 px/s base cruise
   turretFollowRadius: 95,
   overloadRate: 2,

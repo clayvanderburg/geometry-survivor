@@ -83,6 +83,7 @@ import { pickSpawnPoint, pickOnscreenSpawn, packMemberPoint, spawnView, SPAWN_WA
 import { detectEncounters, hostileEntry } from './field-guide.js';
 import { FieldGuideUI } from './field-guide-ui.js';
 import { UnlockTracker, unlockOverride } from './weapon-unlocks.js';
+import { attachSaves } from './save-setup.js';
 import { UnlockUI } from './unlock-ui.js';
 import { WeaponRange } from './weapon-range.js';
 import { RangePanel } from './weapon-range-ui.js';
@@ -403,6 +404,8 @@ export class Game {
     // when there are notes for a version the player hasn't read.
     this.notesOpen = false;
     this.patchNotes = new PatchNotesUI({ onClose: () => this.onNotesClosed() });
+    this.saveOpen = false;
+    this.saves = attachSaves(this); // 💾 SAVE: cloud backup, restore, export / import (js/save-setup.js)
     // First-run tutorial (js/tutorial.js): opens on the first LAUNCH on a device (the run starts when it
     // closes; switched on by the browser boot, enableFirstLaunchTutorial), skippable on every slide,
     // replayed from the TUTORIAL buttons.
@@ -843,6 +846,11 @@ export class Game {
       }
       if (this.notesOpen) {
         this.handleNotesKey(e, onControl);
+        return;
+      }
+      if (this.saveOpen) {
+        // Typing in the SAVE screen's fields never reaches the game; Esc closes it.
+        if (e.code === 'Escape') { e.preventDefault(); this.saves.ui.close(); }
         return;
       }
       if (this.range?.view?.handleKey(e)) return;
@@ -1341,6 +1349,7 @@ export class Game {
   }
 
   renderHubUI() {
+    this.saves?.renderCallouts();
     this.syncGuideBadges();
     this.unlockUI?.renderHub();
     this.syncNotesBadges();
@@ -1435,6 +1444,7 @@ export class Game {
           this.sound.init();
           if (prog.buyUpgrade(upg.id)) {
             this.sound.playLevelUp();
+            this.saves?.afterArmoryChange();
             this.renderHubUI();
           }
         });
@@ -1468,7 +1478,10 @@ export class Game {
       this.sound.playUiSelect?.();
     } else {
       this.armoryRefundArmed = false;
-      if (this.progression.refundAll() > 0) this.sound.playUiConfirm?.();
+      if (this.progression.refundAll() > 0) {
+        this.sound.playUiConfirm?.();
+        this.saves?.afterArmoryChange();
+      }
     }
     this.renderHubUI();
   }
@@ -5264,6 +5277,7 @@ export class Game {
       mode: this.mode
     });
     this.lastRunHighlightId = result.entryId;
+    this.saves?.afterRun(); // cloud backup + (once) persistent storage
     // The board panel shows the races of the mode just flown.
     if (this.globalBoard?.setMode?.(this.mode)) this.refreshGlobalBoard();
     this.submitGlobalRun({
@@ -5413,6 +5427,10 @@ export class Game {
     }
     if (this.notesOpen) {
       this.updateNotesController(gp, dt);
+      return;
+    }
+    if (this.saveOpen) {
+      this.updateSaveController(gp, dt);
       return;
     }
     const menus = {
@@ -6383,6 +6401,43 @@ export class Game {
   syncNotesBadges() {
     const show = !!this.patchNotes?.hasNew();
     document.querySelectorAll?.('[data-notes-badge]').forEach((el) => el.classList.toggle('hidden', !show));
+  }
+
+  // 💾 SAVE screen (js/save-ui.js), from the title.
+  openSave() {
+    if (this.saveOpen || this.guideOpen || this.notesOpen || this.tutorialOpen || this.state !== 'TITLE' || !this.saves) return false;
+    if (!this.saves.ui.open()) return false;
+    this.saveOpen = true;
+    this.saveReturnFocus = document.activeElement;
+    this.resetInput();
+    this.menuNav?.clear();
+    return true;
+  }
+
+  onSaveClosed() {
+    this.saveOpen = false;
+    this.menuNav?.clear();
+    this.menuState = null;
+    this.saves?.renderCallouts();
+    this.saveReturnFocus?.focus?.();
+  }
+
+  // Controller in the SAVE screen: d-pad moves between its buttons, right stick scrolls, A presses, B or
+  // Start goes back.
+  updateSaveController(gp, dt) {
+    const ui = this.saves.ui;
+    if (this.menuState !== 'SAVE') {
+      this.menuState = 'SAVE';
+      this.menuGrace = 0.25;
+      this.menuNav?.clear();
+    }
+    this.menuGrace = Math.max(0, this.menuGrace - dt);
+    if (!gp || !this.gpActive || !this.menuNav || !ui.root) return;
+    this.menuNav.update(ui.root, gp, dt, ui.firstStop());
+    if (gp.aimY) ui.scrollBy(gp.aimY * 16);
+    if (this.menuGrace > 0) return;
+    if (gp.pressed(PAD.B) || gp.pressed(PAD.START)) ui.close();
+    else if (gp.pressed(PAD.A)) { this.sound.init(); this.menuNav.activate(); }
   }
 
   openNotes() {
