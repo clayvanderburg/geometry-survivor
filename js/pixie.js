@@ -76,6 +76,7 @@ export const PIXIE_WEAPON_LINES = Object.freeze({
 // After the pick: Breakthrough-specific reactions ("weapon:transform id").
 export const PIXIE_PICK_LINES = Object.freeze({
   'turret:capacity': ['Extra Capacity! More turrets, more waivers!', 'eureka'],
+  'turret:mobile': ['Formation Thrusters! Turrets with tiny jets!', 'eureka'],
   'missiles:nuke': ['A tactical nuke! For SCIENCE. Mostly science.', 'oops'],
   'singularity:twin': ['TWO black holes? I\'ll update the insurance.', 'oops'],
   'blaster:ricochet': ['Ricochet Rounds! Geometry is on OUR side now!', 'smug'],
