@@ -114,6 +114,12 @@ export class Deployables {
     return Math.floor((held / max) * 10) / 10;
   }
 
+  // Turret bank for the HUD chip's pips: { held, max }; null until the turret is equipped.
+  turretBank(p) {
+    if (this.turretCharges === null || !p.weapons?.turret) return null;
+    return { held: this.turretCharges, max: W.turretCharges(weaponBuild(p, 'turret')) };
+  }
+
   get activeCount() {
     return this.mineCount + this.turretCount + this.droneCount;
   }
@@ -244,27 +250,33 @@ export class Deployables {
 
   // ---- Sentry Turrets ----
   // Deep Rock Galactic: Survivor rules: stand still turretStillTime s and every held charge goes down,
-  // turretDropStill s apart. A charge comes back every turretReload s; one that comes back while the bank
-  // is full deploys by itself, wherever the ship is.
+  // turretDropStill s apart. A charge comes back every turretReload s; the one that would fill the bank
+  // deploys the moment it comes back, wherever the ship is (Clay, v0.46: no more waiting a full reload
+  // with a full bank), so on the move you hold max - 1 and a turret lands every reload. With every turret
+  // in the pool out it is banked instead (up to max), and a full bank holds the reload until one breaks down.
   updateTurrets(dt, game, level) {
     const p = game.player;
     if (level) {
       const max = W.turretCharges(level);
       if (this.turretCharges === null) this.turretCharges = max; // first equipped: a full bank
       this.turretCharges = Math.min(this.turretCharges, max);
-      setMountCharge(p, 'turret', this.turretCharges / max); // the cradle's charge pips
       const room = this.turretCount < TURRET_POOL;
       const reload = W.turretReload(level);
       this.turretReloadT += dt;
       if (this.turretReloadT >= reload) {
-        if (this.turretCharges < max) {
+        if (this.turretCharges < max - 1) {
           this.turretCharges++;
           this.turretReloadT -= reload;
         } else if (room) {
-          this.deployTurret(game, level); // overflow: the bank is full, so this one goes straight down
+          this.deployTurret(game, level); // the charge that fills the bank goes straight down
           this.turretReloadT -= reload;
-        } else this.turretReloadT = reload; // every turret in the pool is out: hold it
+        } else if (this.turretCharges < max) {
+          this.turretCharges++; // every turret in the pool is out: bank it for the next drop
+          this.turretReloadT -= reload;
+        } else this.turretReloadT = reload; // full bank and a full pool: hold it
       }
+      // The cradle's charge pips and the HUD sweep: held charges plus the one reloading (weapon-timers.js).
+      setMountCharge(p, 'turret', this.turretCharges >= max ? 1 : (this.turretCharges + Math.min(1, this.turretReloadT / reload)) / max);
       const moving = Math.hypot(p.vx || 0, p.vy || 0) > 0.6;
       this.turretStill = moving ? 0 : this.turretStill + dt;
       this.turretTimer -= dt;
@@ -298,8 +310,9 @@ export class Deployables {
         t.aim += dt * 6 * (1 - t.life / TURRET_FOLD);
         continue;
       }
-      // Tank Tracks: roll after the ship into a ring around it, each turret at its own spot on the ring.
-      if (lv.t8) this.followShip(t, i, p, dt);
+      // Formation Thrusters: fly after the ship into a ring around it, each turret at its own spot on the ring.
+      t.jet = Math.max(0, (t.jet || 0) - dt * 5);
+      if (lv.t8) this.followShip(game, t, i, p, dt);
       t.target = this.trackTarget(game, t, t.x, t.y, range, TURRET_BOLT_RADIUS, dt);
       const tgt = t.target;
       if (!tgt) {
@@ -324,8 +337,9 @@ export class Deployables {
     }
   }
 
-  // Moves turret `t` (live index `i`) toward its spot on a ring around the ship, at turretFollowSpeed.
-  followShip(t, i, p, dt) {
+  // Moves turret `t` (live index `i`) toward its spot on a ring around the ship, at turretFollowSpeed, on two
+  // thruster jets: they burn opposite the motion (deployables draw) and shed a short exhaust trail.
+  followShip(game, t, i, p, dt) {
     const n = Math.max(1, this.turretCount);
     const a = (i / n) * Math.PI * 2 + (p.hullAngle ?? p.angle ?? 0) + Math.PI; // the ring trails behind
     const tx = p.x + Math.cos(a) * W.turretFollowRadius;
@@ -336,6 +350,16 @@ export class Deployables {
     const step = Math.min(d, W.turretFollowSpeed * dt);
     t.x += (dx / d) * step;
     t.y += (dy / d) * step;
+    if (step < 0.3) return;
+    t.jet = 1;
+    t.jetX = dx / d;
+    t.jetY = dy / d;
+    if (game?.particles && Math.random() < 0.5) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const bx = t.x - t.jetX * 11 * TURRET_SCALE - t.jetY * side * 5 * TURRET_SCALE;
+      const by = t.y - t.jetY * 11 * TURRET_SCALE + t.jetX * side * 5 * TURRET_SCALE;
+      game.particles.addSpark?.(bx, by, -t.jetX * (2 + Math.random() * 2) + (Math.random() - 0.5), -t.jetY * (2 + Math.random() * 2) + (Math.random() - 0.5), 28, 0.22, 1.4, 0.9);
+    }
   }
 
   deployTurret(game, level) {
@@ -707,7 +731,7 @@ export class Deployables {
       if (fold < 1) ctx.rotate((1 - fold) * 1.4); // a twist as it folds away
       // Recoil: every round kicks the whole body back along the aim.
       if (t.flash > 0) ctx.translate(-Math.cos(t.aim) * t.flash * 1.3, -Math.sin(t.aim) * t.flash * 1.3);
-      // Landing flash: a white-hot hex for the first instants on the ground.
+      // Deploy flash: a white-hot hex for the first instants after it locks in place.
       if (age < 0.14) {
         ctx.fillStyle = `hsla(${ht}, 100%, 92%, ${0.85 * (1 - age / 0.14)})`;
         ctx.beginPath();
@@ -742,6 +766,25 @@ export class Deployables {
       }
       ctx.closePath();
       ctx.stroke();
+      // Formation Thrusters: two jets burn at the back of the hex, opposite the way it flies.
+      if (t.jet > 0.05 && t.jetX !== undefined) {
+        const back = Math.atan2(-t.jetY, -t.jetX);
+        const flick = 0.75 + 0.25 * Math.sin(this.time * 47 + i);
+        ctx.save();
+        ctx.rotate(back);
+        ctx.fillStyle = `hsla(32, 100%, 66%, ${0.85 * t.jet})`;
+        for (const off of [-5, 5]) {
+          ctx.beginPath();
+          ctx.moveTo(10, off - 3);
+          ctx.lineTo(10 + 12 * flick * t.jet, off);
+          ctx.lineTo(10, off + 3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.fillStyle = `hsla(48, 100%, 92%, ${0.9 * t.jet})`; // white-hot cores
+        for (const off of [-5, 5]) ctx.fillRect(9, off - 1.1, 4 * flick, 2.2);
+        ctx.restore();
+      }
       // Rotating twin barrel + hub (the barrels slide back on every round and unfold / fold with the body).
       ctx.rotate(t.aim);
       const muzzle = 2 + (TURRET_MUZZLE_UNIT - 2) * unfold - 3.2 * t.flash;

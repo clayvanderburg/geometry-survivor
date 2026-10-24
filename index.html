@@ -360,6 +360,22 @@
     </div>
 
     <!-- Patch notes: every version's changes, newest first (js/patch-notes.js, data in js/changelog.js) -->
+    <!-- 💾 SAVE: cloud backup with a recovery code, restore, export / import (js/save-ui.js) -->
+    <div id="save-modal" class="modal-overlay guide-overlay save-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="save-title">
+      <div class="modal-card guide-card save-card">
+        <div class="guide-header">
+          <div>
+            <div class="glitch-subtitle">PILOT RECORD // BACKUP &amp; TRANSFER</div>
+            <h2 id="save-title" class="guide-title">💾 SAVE DATA</h2>
+            <div class="guide-progress"><span id="save-summary"></span></div>
+          </div>
+          <button id="btn-save-close" class="neon-btn guide-close-btn">◀ BACK [ESC]</button>
+        </div>
+        <div id="save-body" class="guide-body save-body"></div>
+        <div class="guide-foot"><span>Your progress lives in this browser. Back it up to the cloud, or export it, so clearing site data or a new device never costs you a run.</span></div>
+      </div>
+    </div>
+
     <div id="notes-modal" class="modal-overlay guide-overlay notes-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="notes-title">
       <div class="modal-card guide-card notes-card">
         <div class="guide-header">
@@ -471,6 +487,7 @@
             <button id="btn-title-tutorial" class="neon-btn tutorial-open-btn guide-hub-btn" title="A quick look at how to play">🎓 TUTORIAL</button>
             <button id="btn-title-intro" class="neon-btn intro-open-btn guide-hub-btn" title="Replay the opening cutscene">🎬 INTRO</button>
             <button id="btn-title-unlocks" class="neon-btn unlocks-open-btn guide-hub-btn" title="Weapons unlocked and the goals that unlock the rest">🔓 WEAPONS<span id="unlock-count-title" class="guide-btn-badge"></span></button>
+            <button id="btn-title-save" class="neon-btn save-open-btn guide-hub-btn" data-open-save title="Cloud save, recovery code, export and import">💾 SAVE</button>
             <div class="wallet-pill">
               <span class="wallet-icon">❖</span>
               <div>
@@ -481,6 +498,8 @@
           </div>
         </div>
 
+        <!-- One-time card for a new cloud-save recovery code (js/save-ui.js renderCodeCallout) -->
+        <div id="cloud-code-title" class="cloud-callout hidden" role="status"></div>
         <div class="hub-columns">
           <!-- Left: Permanent Armory (Meta-Progression) -->
           <div class="hub-panel" data-m-section="armory">
@@ -542,6 +561,7 @@
           <button class="neon-btn m-btn" data-m-proxy="btn-title-guide">📖 FIELD GUIDE</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-tutorial">🎓 TUTORIAL</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-intro">🎬 INTRO</button>
+          <button class="neon-btn m-btn" data-m-proxy="btn-title-save">💾 SAVE</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-weapon-range">🎯 RANGE</button>
           <button class="neon-btn m-btn" data-m-proxy="btn-title-notes">📜 NOTES<span class="notes-badge hidden" data-notes-badge>NEW</span></button>
           <p class="m-fs-tip hidden">iPhone can't go full screen from the browser: tap Share <b>⎋</b>, then <b>Add to Home Screen</b>, and launch VEXOLITH from your home screen.</p>
@@ -636,6 +656,7 @@
         <div id="gameover-stats" class="gameover-stats"></div>
         <div id="go-global-rank" class="go-global-rank" aria-live="polite"></div>
         <div id="go-unlock-goals" class="go-unlock-goals"></div>
+        <div id="cloud-code-go" class="cloud-callout hidden" role="status"></div>
 
         <div class="hub-columns">
           <div class="hub-panel go-left-panel" data-m-section="report">

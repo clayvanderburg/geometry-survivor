@@ -2198,17 +2198,34 @@ body.touch-mode .upgrade-slot-reward .upg-slot-reward b { font-size: 13px; }
   text-shadow: 0 0 6px var(--ec, transparent);
 }
 
-/* Charge gauge along the bottom of a chip (Electric Shield Field recharging; glows once charged). */
+/* Reload sweep along the bottom of a chip (weapon-timers.js): every timed weapon's progress to its next
+   attack, in its colour; READY glows; continuous weapons (sprayers, Gas Trail, Orbit Blades, rapid fire)
+   keep a steady dimmer bar. --pop (0..1, from the mount's bloom as it fires) gives a small kick. */
 .weapon-slot-chip.charge {
   background-image: linear-gradient(90deg, var(--wc) calc(var(--charge, 0) * 100%), rgba(255, 255, 255, 0.08) 0);
-  background-size: 100% 2px;
+  background-size: 100% 3px;
   background-repeat: no-repeat;
   background-position: left bottom;
+  transform: scale(calc(1 + var(--pop, 0) * 0.07));
+  filter: brightness(calc(1 + var(--pop, 0) * 0.5));
+  transition: transform 90ms ease-out, filter 90ms ease-out, box-shadow 120ms ease-out;
 }
 
 .weapon-slot-chip.charge.ready {
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 7px var(--wc);
 }
+
+.weapon-slot-chip.charge.on {
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--wc) 55%, transparent) 100%, transparent 0);
+}
+
+.weapon-slot-chip .chip-pips {
+  color: var(--wc);
+  font-size: 0.8em;
+  letter-spacing: 1px;
+}
+
+body.reduce-effects .weapon-slot-chip.charge { transform: none; filter: none; transition: none; }
 
 .weapon-slot-chip.empty {
   border: 1px dashed rgba(122, 139, 168, 0.55);
@@ -5588,3 +5605,34 @@ body:has(#upgrade-modal:not(.hidden)) .radio-box.radio-out { animation-name: rad
   .unlock-toast.show, .unlock-reveal-card, .unlock-reveal-title, .unlock-reveal-media img, .unlock-reveal-rays, .unlock-toast-flare { animation-duration: 0.01s !important; animation-delay: 0s !important; }
   .unlock-toast.show { animation: none; opacity: 1; }
 }
+
+/* 💾 SAVE screen (js/save-ui.js) and the one-time recovery-code card */
+.save-card { max-width: 760px; }
+.save-body { display: flex; flex-direction: column; gap: 14px; }
+.save-sec { border: 1px solid rgba(0, 243, 255, 0.18); border-radius: 10px; padding: 12px 14px; background: rgba(8, 14, 30, 0.6); display: flex; flex-direction: column; gap: 8px; }
+.save-h { margin: 0; font-size: 12px; letter-spacing: 0.14em; color: var(--cyan); }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.save-btn { padding: 7px 14px; font-size: 11px; letter-spacing: 0.1em; margin: 0; }
+.save-btn.primary { border-color: var(--gold); color: var(--gold); }
+.save-btn.danger { border-color: rgba(255, 80, 110, 0.7); color: #ff8aa0; }
+.save-btn[disabled] { opacity: 0.4; cursor: default; }
+.save-input { flex: 1 1 220px; min-width: 0; letter-spacing: 0.12em; text-transform: uppercase; }
+.save-text { width: 100%; box-sizing: border-box; resize: vertical; font: 11px/1.4 Consolas, monospace; color: #cfe; background: rgba(2, 6, 16, 0.9); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 6px; padding: 8px; word-break: break-all; }
+.save-file-btn { display: inline-flex; align-items: center; cursor: pointer; }
+.save-status, .save-msg { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
+.save-msg { padding: 8px 10px; border-radius: 6px; background: rgba(0, 243, 255, 0.06); }
+.tone-dim { color: var(--text-dim); }
+.tone-cyan { color: var(--cyan); }
+.tone-good { color: var(--emerald); }
+.tone-danger { color: #ff8aa0; }
+.save-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.save-code-label { font-size: 10px; font-weight: 900; letter-spacing: 0.14em; color: var(--text-dim); }
+.save-code { font: 800 16px/1 Consolas, monospace; letter-spacing: 0.12em; color: var(--gold); padding: 6px 10px; border-radius: 6px; background: rgba(255, 204, 0, 0.08); border: 1px solid rgba(255, 204, 0, 0.35); }
+.save-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-dim); }
+.save-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.save-col { display: flex; flex-direction: column; gap: 3px; font-size: 12px; padding: 10px; border-radius: 8px; background: rgba(16, 24, 46, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); }
+.save-col-h { font-size: 10px; font-weight: 900; letter-spacing: 0.14em; color: var(--cyan); margin-bottom: 2px; }
+.cloud-callout { margin: 8px auto; max-width: 760px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255, 204, 0, 0.55); background: rgba(40, 30, 6, 0.85); box-shadow: 0 0 18px rgba(255, 204, 0, 0.25); display: flex; flex-direction: column; gap: 6px; }
+.cloud-callout.hidden { display: none; }
+.cloud-callout-h { font-size: 11px; font-weight: 900; letter-spacing: 0.14em; color: var(--gold); }
+@media (max-width: 560px) { .save-compare { grid-template-columns: 1fr; } }
