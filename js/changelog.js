@@ -17,14 +17,14 @@ export const CHANGELOG = Object.freeze([
     title: 'Breakthrough Pools',
     notes: [
       { type: 'new', text: 'Your weapons are on your ship: every weapon you equip mounts a part on the hull (pods, racks, coils, tubes...) that launches its shots and flashes, kicks and glows as it fires.' },
+      { type: 'new', text: 'Weapon unlocks: start with 8 weapons; the other 12 unlock from small goals that teach them (freeze, burn, mine, bosses…). Track them under 🔓 WEAPONS.' },
       { type: 'new', text: 'Breakthroughs are a draw: at LV 6, 12 and 18 pick a transform, Across the Board (+1-2 utility ranks) or Overtuned Core (raw power: damage, or an extra nozzle, blade or barrel).' },
       { type: 'balance', text: 'Breakthrough cards state what you get once; potential DPS is a stat below. Escort Drones and Glaive Discs offer Overtuned Core and two transforms (no Across the Board).' },
       { type: 'new', text: '40 new Breakthroughs across 20 weapons, like Hot Barrel and White Hole. The Claw Harpoon is now the Drill Driver: its drills fly out on a cable and reel back, boring both ways.' },
       { type: 'new', text: 'The GLOBAL leaderboard shows the full top 100 (tap YOU #n to jump to your run). Busy boards retry on their own, and a run that can\'t upload waits and sends itself later.' },
       { type: 'balance', text: '5 weapon slots (was 6). Your 5th weapon is the capstone: +5% damage to every weapon and its LV 6 Breakthrough ready to pick. The floor tops out at 5.' },
       { type: 'new', text: 'New global cards: Tempo Core (every weapon attacks faster), Cooldown Matrix (dash + turret/nanite charges), Persistence Field, Velocity Coils. Field Amplifier is +10% (was +15%).' },
-      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave, bombs drop from lieutenants. Eight dead cards are retired, so hands never offer dead ranks.' },
-      { type: 'balance', text: 'Phase Piercer, Extra Nozzle and Split Rails are RARE finds at full power. ELECTRIC is gone: Tesla Arc and Shock Field are SHOCK weapons; Overvolt Coils is retired.' },
+      { type: 'balance', text: 'One card, one job: Geom Attractor is pickup only, Phase Nova just the shockwave. Phase Piercer, Extra Nozzle and Split Rails are RARE. ELECTRIC is now SHOCK (Tesla, Shock Field).' },
       { type: 'balance', text: 'Crits reworked, FROST bites, Tesla Arc fires twice as often, the Flamethrower spins faster, Orbit Blades are bigger and hit 50% harder, and Gas Trail\'s top end is trimmed.' },
       { type: 'new', text: 'SKIP a level-up for +10 gold ([K] or LB twice). Moving or removing a LOCK in the same level-up refunds its gold. Cards show evolution recipes, listed in the Field Guide.' },
       { type: 'new', text: 'Bosses escape after 3 minutes, so kill them in time for an Alien Tech Cache. Lancers telegraph clearly: the aim line locks and flashes, then sweeps only to the marked side.' }
