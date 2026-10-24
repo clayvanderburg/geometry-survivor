@@ -18,17 +18,15 @@
 // restore / backup / delete with a code at most one try a second; FAIL_LIMIT wrong codes in a window lock
 // that client out of code lookups until the window ends, so codes can't be guessed.
 import { createHash, randomInt } from 'node:crypto';
-import { validateBundle, MAX_BUNDLE_BYTES } from '../../js/save-transfer.js';
+import { validateBundle, MAX_BUNDLE_BYTES, CODE_ALPHABET, CODE_GROUPS, CODE_GROUP_LEN, normalizeCode } from '../../js/save-transfer.js';
+
+export { CODE_ALPHABET, normalizeCode };
 import { clientIp, hashIp } from './leaderboard.mjs';
 import { createRateLimiter, writeConditions } from './rate-limit.mjs';
 
 export const SAVE_STORE = 'saves';
 export const SAVE_PREFIX = 'save/';
 export const SAVE_SCHEMA = 1;
-export const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // 32 symbols: 5 bits each, no 0 O 1 I
-export const CODE_GROUPS = 3;
-export const CODE_GROUP_LEN = 4;
-
 export const SAVE_LIMITS = Object.freeze({
   MAX_BODY_BYTES: MAX_BUNDLE_BYTES + 1024,
   CREATE_COOLDOWN_MS: 60_000,
@@ -51,17 +49,6 @@ export function newCode(rand = randomInt) {
   return `VX-${groups.join('-')}`;
 }
 
-// A typed code in canonical form (case, spaces and dashes don't matter), or null.
-export function normalizeCode(value) {
-  if (typeof value !== 'string') return null;
-  const s = value.toUpperCase().replace(/[\s-]+/g, '').replace(/^VX/, '');
-  const len = CODE_GROUPS * CODE_GROUP_LEN;
-  if (s.length !== len || [...s].some((c) => !CODE_ALPHABET.includes(c))) return null;
-  const groups = [];
-  for (let g = 0; g < CODE_GROUPS; g++) groups.push(s.slice(g * CODE_GROUP_LEN, (g + 1) * CODE_GROUP_LEN));
-  return `VX-${groups.join('-')}`;
-}
-
 export const codeKey = (code, salt) => SAVE_PREFIX + createHash('sha256').update(`save:${salt}:${code}`).digest('hex');
 
 function json(status, body, headers = {}) {
@@ -76,9 +63,10 @@ export function createSaveHandler({ store, now = () => Date.now(), salt = 'vexol
   const createRate = limiter('create', limits.CREATE_COOLDOWN_MS);
   const backupRate = limiter('backup', limits.BACKUP_COOLDOWN_MS);
   const lookupRate = limiter('lookup', limits.LOOKUP_COOLDOWN_MS);
-  const failPrefix = 'ratelimit/fail/';
-  const failBucket = (t) => Math.floor(t / limits.FAIL_WINDOW_MS);
-  const failKey = (t, ip) => `${failPrefix}${failBucket(t)}/${ip}`;
+  // Wrong-code counters, one blob per client per FAIL_WINDOW_MS window (swept like the cooldowns).
+  const failWindows = createRateLimiter({ prefix: 'ratelimit/fail/', cooldownMs: 0, windowMs: limits.FAIL_WINDOW_MS, log });
+  const failBucket = (t) => failWindows.bucketOf(t);
+  const failKey = (t, ip) => failWindows.keyOf(failBucket(t), ip);
 
   async function failures(blobs, t, ip) {
     const cur = await blobs.getWithMetadata(failKey(t, ip), { type: 'json' });
@@ -125,7 +113,7 @@ export function createSaveHandler({ store, now = () => Date.now(), salt = 'vexol
     const op = body.op;
     const t = now();
     const ip = hashIp(clientIp(req, context), salt);
-    const sweep = Promise.all([createRate, backupRate, lookupRate].map((r) => r.sweep(blobs, t)));
+    const sweep = Promise.all([createRate, backupRate, lookupRate, failWindows].map((r) => r.sweep(blobs, t)));
     if (typeof context?.waitUntil === 'function') context.waitUntil(sweep); else await sweep;
 
     if (op === 'create') {

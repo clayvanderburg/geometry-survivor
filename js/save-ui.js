@@ -240,7 +240,7 @@ export class SaveUI {
         if (r.error) return this.say(r.error, 'danger');
         const checked = validateBundle(r.bundle);
         if (checked.error) return this.say(`That cloud save can't be used: ${checked.error}.`, 'danger');
-        return this.confirm({ source: 'cloud', bundle: checked.bundle, code: r.code.replace(/\s+/g, ''), updated: r.updated });
+        return this.confirm({ source: 'cloud', bundle: checked.bundle, code: r.code, updated: r.updated });
       }
       case 'export': {
         this.exportText = encodeSaveCode(this.bundle());

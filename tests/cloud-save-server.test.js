@@ -143,3 +143,14 @@ test('rate limits: one create a minute; a wrong code costs a failure and FAIL_LI
   advance(SAVE_LIMITS.LOOKUP_COOLDOWN_MS);
   assert.equal((await call(handler, { op: 'restore', code: made.code }, { ip: ip2 })).status, 429);
 });
+
+test('old rate-limit and wrong-code blobs are swept', async () => {
+  const { handler, store, advance } = setup();
+  await call(handler, { op: 'restore', code: newCode() }, { ip: '192.0.2.7' });
+  await call(handler, { op: 'create', bundle: bundle() }, { ip: '192.0.2.7' });
+  assert.ok(store.keys('ratelimit/fail/').length === 1 && store.keys('ratelimit/create/').length === 1);
+  advance(3 * SAVE_LIMITS.FAIL_WINDOW_MS);
+  await call(handler, { op: 'restore', code: newCode() }, { ip: '192.0.2.8' });
+  assert.deepEqual(store.keys('ratelimit/create/'), [], 'old windows are gone');
+  assert.equal(store.keys('ratelimit/fail/').length, 1, 'only the new wrong-code counter is left');
+});

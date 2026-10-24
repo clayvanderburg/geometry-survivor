@@ -9,7 +9,7 @@
 // backup sends `base`, the cloud copy it last saw; when another device changed it meanwhile (409), the two
 // are merged (js/save-transfer.js mergeSaves: the best of each, never doubled cores) and sent again.
 // Turning cloud save off stops every request (nothing is sent); the code is kept so it can be turned on again.
-import { mergeSaves } from './save-transfer.js';
+import { mergeSaves, normalizeCode } from './save-transfer.js';
 
 export const SAVE_ENDPOINT = '/api/save';
 export const CLOUD_STATE_KEY = 'vexolith_cloud_v1';
@@ -190,9 +190,11 @@ export class CloudSave {
   }
 
   // Looks up a save by code (for RESTORE). Resolves { bundle, updated, code } or { error, status }.
-  async fetchByCode(code) {
+  async fetchByCode(typed) {
+    const code = normalizeCode(typed);
+    if (!code) return { error: 'That is not a recovery code (VX-XXXX-XXXX-XXXX).', status: 400 };
     const res = await this.post({ op: 'restore', code });
-    if (res.ok && res.data?.bundle) return { bundle: res.data.bundle, updated: res.data.updated, code: typeof code === 'string' ? code.trim().toUpperCase() : code };
+    if (res.ok && res.data?.bundle) return { bundle: res.data.bundle, updated: res.data.updated, code };
     const error = res.status === 404 ? 'No save under that code. Check it and try again.'
       : res.status === 429 ? (res.data?.locked ? 'Too many wrong codes. Try again in a few minutes.' : 'One moment, then try again.')
         : res.status === 400 ? 'That is not a recovery code (VX-XXXX-XXXX-XXXX).'

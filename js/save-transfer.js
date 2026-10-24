@@ -136,6 +136,23 @@ export function parseSaveText(text) {
   return validateBundle(value);
 }
 
+// --- Recovery codes (the cloud save, netlify/lib/cloud-save.mjs) -----------------------------------
+// VX-XXXX-XXXX-XXXX: 12 symbols from 32 letters and digits without 0 O 1 I (60 bits), made by the server.
+export const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+export const CODE_GROUPS = 3;
+export const CODE_GROUP_LEN = 4;
+
+// A typed code in canonical form (case, spaces and dashes don't matter), or null.
+export function normalizeCode(value) {
+  if (typeof value !== 'string') return null;
+  const s = value.toUpperCase().replace(/[\s-]+/g, '').replace(/^VX/, '');
+  const len = CODE_GROUPS * CODE_GROUP_LEN;
+  if (s.length !== len || [...s].some((c) => !CODE_ALPHABET.includes(c))) return null;
+  const groups = [];
+  for (let g = 0; g < CODE_GROUPS; g++) groups.push(s.slice(g * CODE_GROUP_LEN, (g + 1) * CODE_GROUP_LEN));
+  return `VX-${groups.join('-')}`;
+}
+
 // --- Summary and merge ------------------------------------------------------------------------------
 
 // Cores in the wallet plus cores spent in the Armory: a save's total wealth.
