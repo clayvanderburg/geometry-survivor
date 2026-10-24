@@ -422,12 +422,12 @@ export const TRANSFORMS = {
   },
   mines: {
     6: tf('cluster', 'Cluster Mines', 'Proximity Mines scatter three bomblets that pop just after the main blast.'),
-    12: tf('seeker', 'Seeker Mines', 'Armed Proximity Mines crawl toward the nearest enemy.'),
+    12: tf('seeker', 'Seeker Mines', 'Armed Proximity Mines thrust after the nearest enemy.'),
     18: tf('triad', 'Minefield Triad', 'Proximity Mines drop in triangles of three, tossed out toward the nearest enemy: three times as many mines armed at once, each about 40% as strong.')
   },
   turret: {
     6: tf('capacity', 'Extra Capacity', 'Sentry Turret: carry one more turret charge, and every bolt hits harder.'),
-    12: tf('mobile', 'Tank Tracks', 'Sentry Turrets roll after you instead of staying where they were planted, and their bolts hit harder.'),
+    12: tf('mobile', 'Formation Thrusters', 'Sentry Turrets light up thrusters and fly in formation behind you instead of holding where they were deployed, and their bolts hit harder.'),
     18: tf('overload', 'LMG Overload', 'Sentry Turrets fire twice as fast with a little spray; each bolt about 40% lighter.')
   },
   drones: {
@@ -447,7 +447,7 @@ export const TRANSFORMS = {
   },
   flamethrower: {
     6: tf('fireballs', 'Fireballs', 'Every second each Flamethrower nozzle lobs a fireball that bursts at the tip of its flames, scorching and igniting everything around it, and the nozzle spins faster.'),
-    12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever walks through, and the nozzle spins faster.'),
+    12: tf('napalm', 'Napalm Puddles', 'Flamethrower fuel splashes down at the tip of the flames as burning napalm puddles that keep scorching whatever flies through, and the nozzle spins faster.'),
     18: tf('ring', 'Inferno Ring', 'Every few seconds the Flamethrower vents a ring of fire that rolls out all around you, scorching and shoving back everything it passes.')
   },
   cryospray: {
@@ -467,7 +467,7 @@ export const TRANSFORMS = {
   },
   raillance: {
     6: tf('magnet', 'Magnetic Rail', 'While the Rail Lance charges, its field drags nearby enemies onto the firing line, so every lance skewers more of the pack.'),
-    12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever stands on it or walks through.'),
+    12: tf('wake', 'Ion Wake', 'Every Rail Lance shot leaves a crackling ion line that keeps zapping whatever sits on it or flies through.'),
     18: tf('overload', 'Overload Shot', 'Every third Rail Lance shot is an Overload: a beam three times as wide that hits twice as hard.')
   },
   glaive: {
